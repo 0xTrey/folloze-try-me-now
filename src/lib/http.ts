@@ -1,27 +1,104 @@
+import { randomUUID } from "node:crypto";
+
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { RateLimitError } from "@/lib/rate-limit";
 
-export function apiError(error: unknown): NextResponse {
-  if (error instanceof RateLimitError) {
-    return NextResponse.json(
-      { error: error.message, code: "rate_limited" },
-      { status: 429, headers: { "Retry-After": String(error.retryAfter) } }
-    );
-  }
-  if (error instanceof ZodError) {
-    return NextResponse.json(
-      { error: error.issues[0]?.message ?? "Check the information and try again.", code: "invalid_input" },
-      { status: 400 }
-    );
-  }
-  const message = error instanceof Error ? error.message : "Something went wrong.";
-  const status = /expired|not found/i.test(message) ? 410 : /already been claimed/i.test(message) ? 409 : 400;
-  return NextResponse.json({ error: message, code: "request_failed" }, { status });
-}
-
 export const noStoreHeaders = {
   "Cache-Control": "private, no-store, max-age=0",
   "X-Robots-Tag": "noindex, nofollow"
 };
+
+type LogValue = string | number | boolean | null | undefined;
+
+export type ErrorContext = {
+  route?: string;
+  method?: string;
+  sessionId?: string;
+  operation?: string;
+  status?: number;
+  code?: string;
+  details?: Record<string, LogValue>;
+};
+
+export class HttpError extends Error {
+  readonly status: number;
+  readonly code: string;
+
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function safeLogText(value: string): string {
+  return value
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]")
+    .replace(/https?:\/\/\S+/gi, "[redacted-url]")
+    .replace(/\b[^\s/\\]+\.pdf\b/gi, "[redacted-pdf]")
+    .replace(/\b(?:sk|vercel_blob)_[A-Za-z0-9_-]{12,}\b/g, "[redacted-secret]")
+    .slice(0, 240);
+}
+
+function safeDetails(details: ErrorContext["details"]): Record<string, LogValue> | undefined {
+  if (!details) return undefined;
+  return Object.fromEntries(
+    Object.entries(details).map(([key, value]) => [key, typeof value === "string" ? safeLogText(value) : value])
+  );
+}
+
+export function logServerError(error: unknown, context: ErrorContext = {}): string {
+  const requestId = randomUUID();
+  const errorName = error instanceof Error ? error.name : "UnknownError";
+  const message = error instanceof Error ? error.message : "Unknown server error";
+  console.error(
+    JSON.stringify({
+      type: "try_me_error",
+      at: new Date().toISOString(),
+      requestId,
+      code: context.code ?? "request_failed",
+      status: context.status,
+      route: context.route,
+      method: context.method,
+      sessionId: context.sessionId,
+      operation: context.operation,
+      errorName,
+      message: safeLogText(message),
+      details: safeDetails(context.details)
+    })
+  );
+  return requestId;
+}
+
+export function apiError(error: unknown, context: ErrorContext = {}): NextResponse {
+  let status: number;
+  let code: string;
+  let message: string;
+  const responseHeaders: Record<string, string> = { ...noStoreHeaders };
+
+  if (error instanceof RateLimitError) {
+    status = 429;
+    code = "rate_limited";
+    message = error.message;
+    responseHeaders["Retry-After"] = String(error.retryAfter);
+  } else if (error instanceof ZodError) {
+    status = 400;
+    code = "invalid_input";
+    message = error.issues[0]?.message ?? "Check the information and try again.";
+  } else if (error instanceof HttpError) {
+    status = error.status;
+    code = error.code;
+    message = error.message;
+  } else {
+    message = error instanceof Error ? error.message : "Something went wrong.";
+    status = /expired|not found/i.test(message) ? 410 : /already been claimed/i.test(message) ? 409 : 400;
+    code = "request_failed";
+  }
+
+  const requestId = logServerError(error, { ...context, status, code });
+  responseHeaders["X-Request-Id"] = requestId;
+  return NextResponse.json({ error: message, code, requestId }, { status, headers: responseHeaders });
+}

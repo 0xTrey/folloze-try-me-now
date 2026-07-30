@@ -1,5 +1,6 @@
 "use client";
 
+import { upload as uploadBlob } from "@vercel/blob/client";
 import Image from "next/image";
 import Link from "next/link";
 import { createPortal } from "react-dom";
@@ -41,6 +42,13 @@ import type {
   StageState,
   UseCase
 } from "@/lib/types";
+import {
+  ApiResponseError,
+  friendlyUploadError,
+  readJsonResponse,
+  uploadErrorCode,
+  validatePdfFile
+} from "@/lib/client-response";
 
 type ClientEvent = { action: string; label: string; at: number };
 
@@ -133,9 +141,32 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }
   });
-  const body = (await response.json()) as T & { error?: string };
-  if (!response.ok) throw new Error(body.error ?? "Something went wrong.");
-  return body;
+  return readJsonResponse<T>(response);
+}
+
+function uploadSizeBucket(bytes: number): string {
+  if (bytes < 1024 * 1024) return "under_1mb";
+  if (bytes < 5 * 1024 * 1024) return "1_to_5mb";
+  return "5_to_10mb";
+}
+
+async function reportClientUploadFailure(sessionId: string, file: File, error: unknown): Promise<string | undefined> {
+  try {
+    const response = await fetch(`/api/sessions/${sessionId}/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "try-me.client-upload-error",
+        status: error instanceof ApiResponseError ? error.status : undefined,
+        code: uploadErrorCode(error),
+        fileSize: file.size
+      })
+    });
+    const result = await readJsonResponse<{ requestId?: string }>(response);
+    return result.requestId;
+  } catch {
+    return undefined;
+  }
 }
 
 function CopyButton({ value, label = "Copy URL", className }: { value: string; label?: string; className?: string }) {
@@ -444,11 +475,20 @@ function ProgressiveQuestions({
             <button className="buttonPrimary" disabled={!/^https:\/\//i.test(textValue.trim()) || isSaving}>Use this content<ArrowRight size={17} /></button>
           </form>
         ) : (
-          <label className="uploadBox" role="tabpanel" id="source-panel-pdf" aria-labelledby="source-tab-pdf">
+          <label className="uploadBox" role="tabpanel" id="source-panel-pdf" aria-labelledby="source-tab-pdf" aria-busy={isSaving || undefined}>
             <FileText size={24} />
             <strong>Drop in a PDF</strong>
-            <span>Up to 10 MB. The file is used only to build this experience.</span>
-            <input type="file" accept="application/pdf,.pdf" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onUpload(file); }} />
+            <span>{isSaving ? "Uploading securely…" : "Up to 10 MB. The file is used only to build this experience."}</span>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              disabled={isSaving}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                if (file) void onUpload(file);
+              }}
+            />
           </label>
         )}
       </div>
@@ -825,18 +865,60 @@ export function TryMeNowApp() {
 
   const uploadPdf = async (file: File) => {
     if (!session) return;
+    const activeSession = session;
     setIsSaving(true);
     setError("");
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch(`/api/sessions/${session.id}/upload`, { method: "POST", body: form });
-      const body = (await response.json()) as { session?: PublicTryMeSession; error?: string };
-      if (!response.ok || !body.session) throw new Error(body.error ?? "We could not use that PDF.");
-      setSession(body.session);
-      setAnswers(body.session.answers);
+      await validatePdfFile(file);
+      const uploadId = crypto.randomUUID();
+      const pathname = `try-me/uploads/${activeSession.id}/${uploadId}.pdf`;
+      track("pdf_upload_started", {
+        useCase: activeSession.useCase,
+        sizeBucket: uploadSizeBucket(file.size)
+      });
+
+      await uploadBlob(pathname, file, {
+        access: "private",
+        contentType: "application/pdf",
+        handleUploadUrl: `/api/sessions/${activeSession.id}/upload`,
+        clientPayload: JSON.stringify({
+          sessionId: activeSession.id,
+          uploadId,
+          originalName: file.name
+        })
+      });
+
+      let processedSession: PublicTryMeSession | undefined;
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 350 : 700));
+        const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${activeSession.id}`);
+        if (result.session.answers.sourceName === file.name) {
+          processedSession = result.session;
+          break;
+        }
+      }
+      if (!processedSession) {
+        throw new ApiResponseError(
+          "Your PDF uploaded, but processing is taking longer than expected. Please try again.",
+          { status: 408, code: "upload_processing_timeout" }
+        );
+      }
+
+      setSession(processedSession);
+      setAnswers(processedSession.answers);
+      track("pdf_upload_completed", {
+        useCase: activeSession.useCase,
+        sizeBucket: uploadSizeBucket(file.size)
+      });
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "We could not use that PDF.");
+      const requestId = await reportClientUploadFailure(activeSession.id, file, uploadError);
+      const message = friendlyUploadError(uploadError);
+      setError(requestId ? `${message} Reference: ${requestId.slice(0, 8)}.` : message);
+      track("pdf_upload_failed", {
+        useCase: activeSession.useCase,
+        code: uploadErrorCode(uploadError),
+        sizeBucket: uploadSizeBucket(file.size)
+      });
     } finally {
       setIsSaving(false);
     }
