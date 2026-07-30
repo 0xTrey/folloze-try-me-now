@@ -129,4 +129,18 @@ describe("server error logging", () => {
     expect(logged).not.toContain("person@example.com");
     expect(logged).not.toContain("example.com/private");
   });
+
+  it("does not return an unknown integration error message to the browser", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = apiError(new Error("Provider rejected secret.pdf with internal detail"), {
+      operation: "pdf_upload"
+    });
+    const body = (await response.json()) as { error: string; code: string; requestId: string };
+
+    expect(response.status).toBe(500);
+    expect(body.code).toBe("internal_error");
+    expect(body.error).toBe("We could not complete that request. Please try again.");
+    expect(body.error).not.toContain("internal detail");
+    expect(body.requestId).toBe(response.headers.get("x-request-id"));
+  });
 });

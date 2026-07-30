@@ -151,6 +151,7 @@ function uploadSizeBucket(bytes: number): string {
 }
 
 async function reportClientUploadFailure(sessionId: string, file: File, error: unknown): Promise<string | undefined> {
+  if (error instanceof ApiResponseError && error.requestId) return error.requestId;
   try {
     const response = await fetch(`/api/sessions/${sessionId}/upload`, {
       method: "POST",
@@ -891,8 +892,18 @@ export function TryMeNowApp() {
       let processedSession: PublicTryMeSession | undefined;
       for (let attempt = 0; attempt < 30; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 350 : 700));
-        const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${activeSession.id}`);
-        if (result.session.answers.sourceName === file.name) {
+        const statusResult = await api<{
+          upload: { status: "pending" | "processing" | "complete" | "failed"; errorCode?: string; requestId?: string };
+        }>(`/api/sessions/${activeSession.id}/upload?uploadId=${encodeURIComponent(uploadId)}`);
+        if (statusResult.upload.status === "failed") {
+          throw new ApiResponseError("We could not process that PDF. Try again or choose another file.", {
+            status: 422,
+            code: statusResult.upload.errorCode ?? "upload_processing_failed",
+            requestId: statusResult.upload.requestId
+          });
+        }
+        if (statusResult.upload.status === "complete") {
+          const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${activeSession.id}`);
           processedSession = result.session;
           break;
         }

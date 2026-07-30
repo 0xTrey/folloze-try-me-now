@@ -93,9 +93,27 @@ export function apiError(error: unknown, context: ErrorContext = {}): NextRespon
     code = error.code;
     message = error.message;
   } else {
-    message = error instanceof Error ? error.message : "Something went wrong.";
-    status = /expired|not found/i.test(message) ? 410 : /already been claimed/i.test(message) ? 409 : 400;
-    code = "request_failed";
+    const rawMessage = error instanceof Error ? error.message : "Something went wrong.";
+    const isExpectedInputError = /^(Enter |Use your business email|Only public HTTPS URLs|That domain cannot be fetched safely)/i.test(
+      rawMessage
+    );
+    if (/expired|not found/i.test(rawMessage)) {
+      status = 410;
+      code = "expired";
+      message = rawMessage;
+    } else if (/already been claimed/i.test(rawMessage)) {
+      status = 409;
+      code = "already_claimed";
+      message = rawMessage;
+    } else if (isExpectedInputError) {
+      status = 400;
+      code = "invalid_input";
+      message = rawMessage;
+    } else {
+      status = 500;
+      code = "internal_error";
+      message = "We could not complete that request. Please try again.";
+    }
   }
 
   const requestId = logServerError(error, { ...context, status, code });
