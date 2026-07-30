@@ -1,0 +1,13 @@
+:root {
+  --brand-primary: #1C293F;
+  --brand-accent: #6B7E9D;
+  --brand-text: #111827;
+  --brand-surface: #FFFFFF;
+  --brand-font-display: "Instrument Sans", sans-serif;
+  --brand-font-body: Inter, sans-serif;
+  --brand-button-radius: 0px;
+  --brand-button-padding: 0px;
+  --brand-button-font-weight: 600;
+  --brand-card-radius: 24px;
+  --brand-card-shadow: none;
+}
