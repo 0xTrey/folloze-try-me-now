@@ -153,6 +153,32 @@ describe("deterministic experience copy", () => {
     );
   });
 
+  it("never exposes a promotional or truncated deterministic content headline", () => {
+    const sourceContent = {
+      sourceUrl: "https://example.com/ai-ipaas",
+      title: "How AI-Powered iPaaS Drives Smarter Integration",
+      description:
+        "See what Gartner and other experts are saying about integrating AI—and why it matters.",
+      excerpt:
+        "See what Gartner and other experts are saying about integrating AI—and why it matters."
+    };
+    const answers = {
+      sourceUrl: sourceContent.sourceUrl,
+      audience: "Enterprise integration leaders",
+      objective: "Educate buyers"
+    };
+    const draft = deterministicDraft({
+      brand: jitterbit,
+      useCase: "content",
+      answers,
+      sourceContent
+    });
+
+    expect(draft.headline).toBe(sourceContent.title);
+    expect(draft.headline).not.toMatch(/\u2026|\.\.\.|see what/i);
+    expect(draft.headline.split(/\s+/).length).toBeLessThanOrEqual(11);
+  });
+
   it("rejects title-only content wrapping that ignores the supplied public source", () => {
     const answers = {
       sourceUrl: governedAutomationSource.sourceUrl,

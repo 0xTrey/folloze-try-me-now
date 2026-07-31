@@ -26,7 +26,7 @@ Work begins progressively. Brand extraction starts as soon as the company domain
 | Surface | State |
 | --- | --- |
 | Local source and visual QA | Complete; desktop, mobile, 320px, reduced motion, error, claim, and signal states exercised. |
-| Automated QA | 182 unit tests plus generated-experience Playwright checks cover copy, brands, responsive layouts, keyboard tabs, failure fallbacks, and lead capture. |
+| Automated QA | 183 unit tests plus generated-experience Playwright checks cover copy, brands, responsive layouts, keyboard tabs, failure fallbacks, and lead capture. |
 | Public Vercel app | Deployed at <https://folloze-try-me-now.vercel.app>. |
 | Session durability | Connected private Vercel Blob store with uncached reads, wrapper TTL, and optimistic ETag updates. Blob remains the session store when Redis is also configured; Redis can still provide distributed rate limits. |
 | Brand | Brand-aware fast extractor now rejects unrelated logos and badges, ranks semantic palette roles, discovers live font faces, and selects multiple contextual visual assets; the full remote Brand Harvester is still a later option. |

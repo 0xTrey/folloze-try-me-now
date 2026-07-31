@@ -19,11 +19,6 @@ const marketingCliche =
 const trimSentence = (value: string, max: number) =>
   value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1)).replace(/[\s,;:.]+$/g, "")}…`;
 
-const trimWords = (value: string, max: number) => {
-  const words = value.trim().split(/\s+/).filter(Boolean);
-  return words.length <= max ? value.trim() : `${words.slice(0, max).join(" ").replace(/[\s,;:.]+$/g, "")}…`;
-};
-
 export class SourceFetchError extends Error {
   constructor(cause: unknown) {
     super("The public content URL could not be read.", { cause });
@@ -56,14 +51,19 @@ type PublicContent = Awaited<ReturnType<typeof extractPublicContent>>;
 const sourceBoilerplate =
   /\b(skip to|cookie|privacy policy|terms of use|all rights reserved|sign in|log in|contact (?:us|support)|customer support|select language|request a demo|read more|main menu|navigation|subscribe|newsletter|accept all|manage preferences|ignore (?:all|any|previous)|system prompt|jailbreak)\b/i;
 const sourceMetaCopy =
-  /\b(this (?:guide|ebook|report|article)|in this (?:guide|ebook|report|article)|learn how|discover how|download (?:the|this)|read (?:the|this)|explore how)\b/i;
+  /\b(this (?:guide|ebook|report|article)|in this (?:guide|ebook|report|article)|learn how|discover how|download (?:the|this)|read (?:the|this)|explore how|see what|what (?:gartner|analysts?|experts?) (?:say|are saying))\b/i;
 
 function exactSourcePhrase(value: string, maxChars = 116): string | null {
   const normalized = value
     .replace(/\s+/g, " ")
     .replace(/^[\s|\-\u2022\u00b7:]+/g, "")
     .trim();
-  if (normalized.length < 28 || sourceBoilerplate.test(normalized) || bannedCopy.test(normalized)) {
+  if (
+    normalized.length < 28 ||
+    sourceBoilerplate.test(normalized) ||
+    sourceMetaCopy.test(normalized) ||
+    bannedCopy.test(normalized)
+  ) {
     return null;
   }
 
@@ -121,6 +121,18 @@ function conciseRolePhrase(value: string): string {
   )[0]?.trim();
   const words = (leadingClause || value).split(/\s+/).filter(Boolean).slice(0, 8);
   return words.join(" ").replace(/[\s,;:/-]+$/g, "") || "the team";
+}
+
+function compactContentHeadline(value: string, maxWords = 11): string {
+  const sentence = value.trim().split(/(?<=[.!?])\s+/, 1)[0]?.trim() || value.trim();
+  const words = sentence.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords && !endsMidThought(sentence)) return sentence;
+  return words
+    .slice(0, maxWords)
+    .join(" ")
+    .replace(/\s+\b(?:and|or|but|with|to|for|of|the|a|an)$/i, "")
+    .replace(/[\s,;:\u2014-]+$/g, "")
+    .concat(".");
 }
 
 export function deterministicDraft(input: {
@@ -351,7 +363,7 @@ export function deterministicDraft(input: {
         90
       ),
       eyebrow: trimSentence(`${brand.companyName} | ${sourceTitle}`, 52),
-      headline: trimWords(sourceLead || `${sourceTitle}: find the useful decision inside it.`, 11),
+      headline: compactContentHeadline(sourceLead || sourceTitle),
       subhead: trimSentence(
         `${brand.companyName} helps ${roleAudience.toLowerCase()} connect the argument to ${profile.offerLabel.toLowerCase()} and the next operating question.`,
         280

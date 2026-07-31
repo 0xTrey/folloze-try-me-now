@@ -562,6 +562,21 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         code: generated.fallbackReason ?? "openai_request_failed",
         details: { durationMs: generated.durationMs, model: config.openAIModel }
       });
+    } else if (
+      generated.source === "deterministic-fallback" &&
+      generated.fallbackReason !== "openai_not_configured"
+    ) {
+      console.warn(
+        JSON.stringify({
+          level: "warning",
+          event: "openai_generation_fallback",
+          sessionId: id,
+          useCase: latest.useCase,
+          reason: generated.fallbackReason ?? "unknown",
+          durationMs: generated.durationMs,
+          model: config.openAIModel
+        })
+      );
     }
     const readyAt = Date.now();
     await updateSession(
