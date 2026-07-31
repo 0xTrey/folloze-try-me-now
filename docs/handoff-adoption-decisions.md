@@ -24,16 +24,18 @@ Adopt recommendations that improve the public preview, grounding, analytics proo
 | Curated Add Section composer | Adopt contract; defer public composer | Added curated-section planning metadata. Public add/reorder/remove controls wait for an approved section allowlist and renderer mappings. |
 | Native Folloze draft handoff | Defer | Do not add `Continue editing in Folloze` until claim ownership, draft permissions, retry behavior, and designer URL exposure are approved. |
 | Explicit preview, draft, publish, verification states | Defer lifecycle mutation | Preserve temporary preview and email-save behavior. Do not fold draft creation, publish, and anonymous verification into one apparent success state. |
+| CTA destination in the anonymous preview | Superseded by current direction | The preview now demonstrates CTA intent, label, and visual treatment only. Destination capture belongs to a later claimed-workspace or native-draft step. |
+| Tablet and mobile preview controls | Superseded by current direction | Keep one reliable desktop preview. The generated page can remain responsive, but the builder does not expose device-mode controls. |
 
 ## Analytics and polish handoff
 
 | Recommendation | Decision | v2 action |
 |---|---|---|
-| Durable event sink | Adopt | Add an allowlisted, non-blocking `/api/events` path and storage migration. Telemetry failure must never block the buyer experience. |
+| Durable event sink | Adopt, migration pending | Add an allowlisted, non-blocking `/api/events` path and storage migration. Telemetry failure must never block the buyer experience. Do not call events durable until migration `004_create_try_me_events.sql` is applied and read back from the target database. |
 | Visibility-aware engagement and dwell | Adopt | Generated experiences emit view, heartbeat, and section-dwell events based on visible time. |
 | Buying-group activity demonstration | Adopt with disclosure | Show deterministic example buying-group activity in the analytics panel, prominently labeled as illustrative placeholder data and separated from the visitor's real activity. |
 | Company-name casing fidelity | Adopt | Preserve harvested organization casing through generation, including mixed-case brands such as ServiceNow. |
-| Per-session editor boundary | Keep | Continue using the existing HTTP-only, same-site editor token boundary for mutations. |
+| Per-session editor boundary | Harden before public release | The mutation boundary is HTTP-only and same-site, but the current single `tmn_editor` cookie is overwritten by the next session in the same browser. Move to a per-session cookie name with legacy fallback before relying on multi-tab or multi-account editing. |
 | CI workflow | Defer | Useful hardening, but not required for this UX iteration and intentionally outside the active QA change surface. |
 | Production promotion | Reject for this cycle | The active goal requires an exact-commit Vercel preview and leaves production untouched. |
 
