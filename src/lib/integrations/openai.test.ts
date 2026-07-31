@@ -471,6 +471,30 @@ describe("deterministic experience copy", () => {
     ).toBe("copy_quality_incomplete_thought");
   });
 
+  it("rejects a harvested heading spliced into a sentence", () => {
+    const answers = {
+      targetDomain: "cisco.com",
+      audience: "IT operations and platform teams",
+      objective: "Book a meeting"
+    };
+    const { context, draft } = draftFor("abm", answers, cisco);
+
+    expect(
+      experienceQualityFailure({
+        draft: {
+          ...draft,
+          narrativeArc:
+            "How should Cisco move at Enterprise operations at agentic AI speed?"
+        },
+        brand: jitterbit,
+        targetBrand: cisco,
+        useCase: "abm",
+        answers,
+        context
+      })
+    ).toBe("copy_quality_repeated_preposition");
+  });
+
   it("produces materially different evidence-led stories and audiences for two targets", () => {
     const ciscoAudience = audienceSuggestionsFor(jitterbit, cisco)[0];
     const workdayAudience = audienceSuggestionsFor(jitterbit, workday)[0];

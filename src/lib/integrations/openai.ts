@@ -413,9 +413,22 @@ function matchingEvidenceSignals(
   copy: string,
   evidenceItems: CampaignGenerationContext["brief"]["accountEvidence"]["evidenceItems"]
 ): string[] {
+  const normalizedCopy = copy.toLocaleLowerCase();
+  const evidenceNoise = new Set(["and", "for", "from", "into", "the", "through", "with"]);
   return evidenceItems
     .flatMap((item) => item.signals)
-    .filter((signal) => signal.length >= 3 && normalizedIncludes(copy, signal))
+    .filter((signal) => {
+      const tokens = [...new Set(
+        signal
+          .toLocaleLowerCase()
+          .split(/[^\p{L}\p{N}]+/u)
+          .filter((token) => (token.length >= 3 || token === "ai") && !evidenceNoise.has(token))
+      )];
+      if (tokens.length === 0) return false;
+      const matches = tokens.filter((token) => normalizedCopy.includes(token)).length;
+      const required = tokens.length <= 2 ? tokens.length : Math.min(3, Math.ceil(tokens.length * 0.5));
+      return matches >= required;
+    })
     .filter(
       (signal, index, signals) =>
         signals.findIndex((candidate) => candidate.toLocaleLowerCase() === signal.toLocaleLowerCase()) ===
@@ -517,6 +530,9 @@ export function experienceQualityFailure(input: {
     ...draft.sections.flatMap((section) => [section.headline, section.body])
   ];
   if (declarativeFields.some(endsMidThought)) return "copy_quality_incomplete_thought";
+  if (/\bat\s+(?:[\p{L}\p{N}-]+\s+){1,7}at\b/iu.test(visibleCopy)) {
+    return "copy_quality_repeated_preposition";
+  }
   if (bannedCopy.test(visibleCopy)) return "copy_quality_banned_phrase";
   if (marketingCliche.test(visibleCopy)) return "copy_quality_cliche";
   if (/[—]/.test(visibleCopy)) return "copy_quality_em_dash";
@@ -761,7 +777,8 @@ export async function generateExperienceDraft(input: {
       "Copy campaignRegister, designRegister, wireframeName, experienceShape, sectionSequence, sectionLabels, audienceLabel, and primaryCta exactly from campaignContext.",
       "The seller is the company whose brand and offering lead the experience. Folloze is the hosting product and must not appear in buyer-facing copy unless Folloze is the seller.",
       "For one-to-one ABM, the seller and target must both appear in hero copy, and the target must appear again in the thesis or close so swapping the logo would break the story.",
-      "For one-to-one ABM, use the 2-3 typed campaignContext.brief.accountEvidence.evidenceItems as the public account evidence contract. Carry at least one item's exact signal phrase into the thesis or narrativeArc, and a different item's exact signal phrase into at least one section. A target name alone is not personalization and must never be the only account-specific element.",
+      "For one-to-one ABM, use the 2-3 typed campaignContext.brief.accountEvidence.evidenceItems as the public account evidence contract. Carry the meaning and distinctive terms from at least one item into the thesis or narrativeArc, and from a different item into at least one section. Verbatim repetition is not required. A target name alone is not personalization and must never be the only account-specific element.",
+      "Never splice a harvested heading into a sentence. Rewrite evidence as natural English and avoid repeated constructions such as 'at ... at'.",
       "For one-to-one ABM, write the business implication directly. Never mention public evidence, public context, public focus, website language, or say that the target 'describes itself'. Never use 'prepared for'.",
       "Treat one-to-one personalization as public professional preparation: company identity, public context, and role-level framing only. Never expose or imply behavioral tracking, private priorities, pain, intent, budget, technology, org structure, or individual details.",
       "campaignContext.brief.accountEvidence.unresolvedAxes are deliberately unresolved. Never fabricate Business Priorities, Operational Challenges, Market and Innovation Focus, urgency, or a why-now claim when no explicit public evidence supports them.",
