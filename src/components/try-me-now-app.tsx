@@ -42,7 +42,7 @@ import {
   ContentSourceConfirmation,
   CtaStyleControl,
   EditBriefDrawer,
-  ExampleModeCta,
+  EntryPathMicroDemo,
   ExpirySaveValuePanel,
   ExperienceBlockControl as ExperienceBlockControlPanel,
   InstantBrandLockStrip,
@@ -834,20 +834,18 @@ function UseCasePortals({
   onSelect: (value: UseCase) => void;
 }) {
   return (
-    <div className="entryPathRail largeChoiceGrid" aria-label="Choose what you want to create">
-      {(Object.keys(useCaseContent) as UseCase[]).map((key) => (
-        <article key={key}>
-          <button type="button" onClick={() => onSelect(key)}>
-            <strong>{useCaseContent[key].cta}</strong>
-            <span>{useCaseContent[key].description}</span>
-            <ArrowRight size={16} />
-          </button>
-          <ExampleModeCta
-            label={entryPathOptions[key].exampleLabel}
-            href={entryPathOptions[key].exampleUrl}
-            onClick={() => track("example_opened", { useCase: key })}
-          />
-        </article>
+    <div className="entryPathRail" aria-label="Choose what you want to create">
+      {(Object.keys(entryPathOptions) as UseCase[]).map((key) => (
+        <EntryPathMicroDemo
+          key={key}
+          option={{
+            ...entryPathOptions[key],
+            title: useCaseContent[key].cta,
+            description: useCaseContent[key].description
+          }}
+          onSelect={onSelect}
+          onExampleOpen={(useCase) => track("example_opened", { useCase })}
+        />
       ))}
     </div>
   );
