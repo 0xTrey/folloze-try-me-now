@@ -26,8 +26,10 @@ import {
   type FormEvent,
   type KeyboardEvent,
   useEffect,
-  useRef
+  useRef,
+  useState
 } from "react";
+import Image from "next/image";
 
 import { buildSimulatedEngagement } from "@/lib/simulated-engagement";
 
@@ -115,6 +117,10 @@ export interface BrandLockProfile {
   domain: string;
   logoUrl?: string;
   colors?: string[];
+  primaryColor?: string;
+  accentColor?: string;
+  surfaceColor?: string;
+  source?: "brand-harvester" | "fast-extractor" | "fallback";
   positioning?: string;
   confidenceLabel?: string;
 }
@@ -125,32 +131,146 @@ export interface InstantBrandLockStripProps {
   onInspect?: () => void;
 }
 
+function normalizeBrandColor(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const color = value.trim();
+  if (/^#[0-9a-f]{6}$/i.test(color)) return color.toUpperCase();
+  if (/^#[0-9a-f]{3}$/i.test(color)) {
+    return `#${color.slice(1).split("").map((character) => character.repeat(2)).join("")}`.toUpperCase();
+  }
+  return undefined;
+}
+
+function brandPaletteTokens(brand: BrandLockProfile | undefined) {
+  const colors = [
+    brand?.primaryColor,
+    brand?.accentColor,
+    brand?.surfaceColor,
+    ...(brand?.colors ?? [])
+  ].map(normalizeBrandColor).filter((color): color is string => Boolean(color));
+  const unique = [...new Set(colors)];
+  const primary = normalizeBrandColor(brand?.primaryColor) ?? unique[0];
+  const accent = normalizeBrandColor(brand?.accentColor) ?? unique.find((color) => color !== primary);
+  const surface = normalizeBrandColor(brand?.surfaceColor)
+    ?? unique.find((color) => color === "#FFFFFF")
+    ?? unique.find((color) => color !== primary && color !== accent);
+  const semantic = new Set([primary, accent, surface].filter(Boolean));
+  const support = unique.find((color) => !semantic.has(color));
+  return {
+    colors: unique,
+    primary,
+    accent,
+    surface,
+    support,
+    tokens: [
+      ["Primary", primary],
+      ["Accent", accent],
+      ["Surface", surface],
+      ["Support", support]
+    ].filter((entry): entry is [string, string] => Boolean(entry[1]))
+  };
+}
+
 export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrandLockStripProps) {
   const companyName = brand?.companyName || brand?.domain || "Your brand";
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string>();
+  const palette = brandPaletteTokens(brand);
+  const hasLogo = Boolean(brand?.logoUrl) && failedLogoUrl !== brand?.logoUrl;
+  const isCaptured = status === "locked";
+  const isPreliminary = isCaptured && brand?.source === "fast-extractor";
+  const paletteKind = status === "scanning"
+    ? "Detecting palette"
+    : status === "fallback"
+      ? "Neutral preview palette"
+      : "Harvested palette";
+  const stateTitle = status === "scanning"
+    ? "Scanning public brand"
+    : status === "fallback"
+      ? "Brand scan incomplete"
+      : isPreliminary
+        ? "Public signals captured"
+        : "Public brand system captured";
+  const stateDetail = brand?.positioning || (status === "scanning"
+    ? "Checking logo, palette, typography, and source."
+    : status === "fallback"
+      ? `Using neutral preview styling — not ${companyName} colors.`
+      : `Logo + ${palette.colors.length} colors from ${brand?.domain ?? "the public site"}.`);
+  const statusLabel = brand?.confidenceLabel || (status === "scanning"
+    ? "Scanning"
+    : status === "fallback"
+      ? "Needs verification"
+      : isPreliminary
+        ? "Preliminary"
+        : "Captured");
+  const stripStyle = {
+    "--harvest-primary": palette.primary ?? "#1C293F",
+    "--harvest-accent": palette.accent ?? "#D7DAE4",
+    "--harvest-surface": palette.surface ?? "#FFFFFF",
+    "--harvest-support": palette.support ?? palette.accent ?? "#C6CAD7"
+  } as CSSProperties;
+
   return (
-    <section className={classes(styles.brandStrip, styles[`brand${status}`])} aria-live="polite" aria-busy={status === "scanning"}>
-      <span
-        className={styles.brandMark}
-        style={brand?.logoUrl ? { backgroundImage: `url("${brand.logoUrl}")` } : undefined}
-        aria-hidden="true"
-      >
-        {!brand?.logoUrl && companyName.charAt(0).toUpperCase()}
+    <section
+      className={classes(styles.brandStrip, styles[`brand${status}`])}
+      style={stripStyle}
+      aria-busy={status === "scanning"}
+      data-brand-evidence={status === "fallback" ? "neutral-fallback" : isPreliminary ? "extracted" : isCaptured ? "reviewed" : "scanning"}
+    >
+      <span className={styles.brandMark}>
+        {status === "scanning" ? (
+          <span className={styles.brandLogoSkeleton} aria-hidden="true" />
+        ) : hasLogo ? (
+          <Image
+            className={styles.brandLogo}
+            src={brand?.logoUrl ?? ""}
+            alt={`${companyName} logo`}
+            width={164}
+            height={38}
+            unoptimized
+            onError={() => setFailedLogoUrl(brand?.logoUrl)}
+          />
+        ) : (
+          <span className={styles.brandLogoUnavailable} aria-label={`${companyName} logo unavailable`}>
+            <strong>{companyName}</strong><small>Logo unavailable</small>
+          </span>
+        )}
       </span>
-      <div className={styles.brandIdentity}>
-        <span>{status === "scanning" ? "Reading public brand signals" : status === "fallback" ? "Brand direction reconstructed" : "Brand system locked"}</span>
+      <div className={styles.brandIdentity} role="status" aria-live="polite" aria-atomic="true">
+        <span>{stateTitle}</span>
         <strong>{companyName}</strong>
-        <small>{brand?.positioning || (status === "scanning" ? "Logo, palette, and public positioning are arriving now." : brand?.domain)}</small>
-      </div>
-      <div className={styles.brandPalette} aria-label="Detected brand colors">
-        {(brand?.colors?.length ? brand.colors : ["#e8eaf0", "#d7dae4", "#c6cad7"]).slice(0, 4).map((color, index) => (
-          <i key={`${color}-${index}`} style={{ backgroundColor: color }} />
-        ))}
+        <small>{stateDetail}</small>
       </div>
       <span className={styles.lockStatus}>
         {status === "scanning" ? <span className={styles.orbit} /> : <Check size={14} />}
-        {brand?.confidenceLabel || (status === "scanning" ? "Live" : "Ready")}
+        {statusLabel}
       </span>
-      {onInspect && <button type="button" className={styles.tertiaryAction} onClick={onInspect}>Inspect signals</button>}
+      <div
+        className={styles.brandPalette}
+        aria-label={status === "scanning" ? "Brand palette is being detected" : status === "fallback" ? "Temporary neutral preview palette" : `Harvested ${companyName} brand palette`}
+      >
+        <div className={styles.brandPaletteHeader}>
+          <span>{paletteKind}</span>
+          <small>{status === "scanning" ? "Reading CSS + imagery" : status === "fallback" ? "Temporary only" : `${palette.colors.length} colors captured`}</small>
+        </div>
+        {status === "scanning" ? (
+          <span className={styles.brandPaletteSkeleton} aria-hidden="true"><i /><i /><i /><i /></span>
+        ) : (
+          <>
+            <span className={styles.brandPaletteRail} aria-hidden="true">
+              {palette.colors.slice(0, 6).map((color) => <i key={color} style={{ backgroundColor: color }} />)}
+            </span>
+            <ul className={styles.brandTokenList}>
+              {palette.tokens.map(([label, color]) => (
+                <li key={`${label}-${color}`} data-color={color}>
+                  <i style={{ backgroundColor: color }} aria-hidden="true" />
+                  <span><small>{label}</small><code>{color}</code></span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+      {onInspect && <button type="button" className={styles.tertiaryAction} aria-label={`Inspect ${companyName} brand signals`} onClick={onInspect}>Inspect signals</button>}
     </section>
   );
 }

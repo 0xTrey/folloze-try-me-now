@@ -77,19 +77,47 @@
 .tonecobalt .exampleAction,.toneink .exampleAction { color:rgba(255,255,255,.72) }
 
 /* Immediate brand proof. */
-.brandStrip { min-height:88px;padding:14px 16px;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;align-items:center;gap:14px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(120deg,#fff,#fbfbfe);box-shadow:0 14px 50px rgba(12,24,50,.07);animation:brandArrive .52s var(--ease) both }
+.brandStrip { min-height:224px;padding:22px 18px 17px;display:grid;grid-template-columns:156px minmax(0,1fr);grid-template-areas:"mark identity" "status action" "palette palette";align-items:center;gap:13px 18px;position:relative;overflow:hidden;border:1px solid color-mix(in srgb,var(--harvest-primary) 14%,var(--border));border-radius:22px;background:radial-gradient(circle at 5% 0,color-mix(in srgb,var(--harvest-accent) 11%,transparent),transparent 38%),linear-gradient(120deg,color-mix(in srgb,var(--harvest-surface) 94%,#fff),#fff 68%);box-shadow:0 18px 56px color-mix(in srgb,var(--harvest-primary) 10%,transparent);animation:brandArrive .52s var(--ease) both }
+.brandStrip::before { content:"";height:5px;position:absolute;inset:0 18px auto;border-radius:0 0 6px 6px;background:linear-gradient(90deg,var(--harvest-primary) 0 36%,var(--harvest-accent) 36% 64%,var(--harvest-support) 64% 84%,var(--harvest-surface) 84%);box-shadow:0 1px 0 rgba(7,20,40,.08) }
 @keyframes brandArrive { from{opacity:0;transform:translateY(7px)} }
-.brandMark { width:54px;height:54px;display:grid;place-items:center;overflow:hidden;color:#fff;background-color:var(--deep);background-position:center;background-repeat:no-repeat;background-size:contain;border:7px solid #fff;border-radius:14px;box-shadow:0 0 0 1px var(--border);font:700 18px/1 var(--font-display),Georgia,serif }
-.brandIdentity { min-width:0 }
+.brandMark { width:156px;height:68px;padding:15px 17px;grid-area:mark;display:grid;place-items:center;overflow:hidden;color:#fff;border:1px solid color-mix(in srgb,var(--harvest-primary) 76%,#000);border-radius:17px;background:var(--harvest-primary);box-shadow:0 14px 30px color-mix(in srgb,var(--harvest-primary) 20%,transparent),inset 0 1px 0 rgba(255,255,255,.12) }
+.brandLogo { max-width:100%;max-height:38px;display:block;object-fit:contain }
+.brandLogoUnavailable { max-width:100%;display:grid;gap:5px;text-align:center }
+.brandLogoUnavailable strong { overflow:hidden;text-overflow:ellipsis;color:#fff;font:650 15px/1 var(--font-display),Georgia,serif;white-space:nowrap }
+.brandLogoUnavailable small { color:rgba(255,255,255,.64);font-size:8px;font-weight:750;letter-spacing:.08em;text-transform:uppercase }
+.brandLogoSkeleton { width:104px;height:16px;border-radius:999px;background:linear-gradient(90deg,rgba(255,255,255,.12),rgba(255,255,255,.34),rgba(255,255,255,.12));background-size:200% 100%;animation:brandScan 1.25s linear infinite }
+@keyframes brandScan { to{background-position:-200% 0} }
+.brandIdentity { min-width:0;grid-area:identity }
 .brandIdentity>span { display:block;color:var(--accent);font-size:8px;font-weight:800;letter-spacing:.13em;text-transform:uppercase }
-.brandIdentity strong { display:block;margin:4px 0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 17px/1.05 var(--font-display),Georgia,serif }
-.brandIdentity small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:10px }
-.brandPalette { display:flex;padding-left:4px }
-.brandPalette i { width:21px;height:21px;margin-left:-5px;border:2px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(10,20,44,.13) }
-.lockStatus { min-height:29px;padding:0 10px;display:flex;align-items:center;gap:7px;color:var(--green);background:var(--green-tint);border-radius:999px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase }
+.brandIdentity strong { display:block;margin:5px 0 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 22px/1.02 var(--font-display),Georgia,serif;letter-spacing:-.025em }
+.brandIdentity small { max-width:310px;display:block;color:var(--muted);font-size:10px;line-height:1.35 }
+.brandPalette { min-width:0;grid-area:palette;display:grid;grid-template-columns:1fr;grid-template-areas:"header" "rail" "tokens";align-items:center;gap:8px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--harvest-primary) 11%,var(--border));border-radius:14px;background:rgba(255,255,255,.74);box-shadow:inset 0 1px 0 rgba(255,255,255,.8) }
+.brandPaletteHeader { grid-area:header;display:flex;align-items:center;justify-content:space-between;gap:12px }
+.brandPaletteHeader>span { color:var(--deep);font-size:8px;font-weight:850;letter-spacing:.12em;text-transform:uppercase }
+.brandPaletteHeader>small { color:var(--muted);font-size:8px;font-weight:700 }
+.brandPaletteRail { height:22px;grid-area:rail;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;overflow:hidden;border:1px solid rgba(7,20,40,.11);border-radius:8px;box-shadow:0 4px 11px rgba(7,20,40,.08) }
+.brandPaletteRail i { min-width:16px;box-shadow:inset 0 0 0 1px rgba(7,20,40,.05) }
+.brandTokenList { min-width:0;margin:0;padding:0;grid-area:tokens;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;list-style:none }
+.brandTokenList li { min-width:0;display:grid;grid-template-columns:16px minmax(0,1fr);align-items:center;gap:6px }
+.brandTokenList li>i { width:16px;height:16px;border:1px solid rgba(7,20,40,.14);border-radius:5px;box-shadow:0 2px 5px rgba(7,20,40,.08) }
+.brandTokenList li>span { min-width:0;display:grid;gap:2px }
+.brandTokenList small,.brandTokenList code { overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.brandTokenList small { color:var(--muted);font-size:6px;font-weight:800;letter-spacing:.09em;text-transform:uppercase }
+.brandTokenList code { color:var(--deep);font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace }
+.brandPaletteSkeleton { height:28px;grid-column:1 / -1;display:grid;grid-template-columns:1.2fr .8fr 1fr .7fr;overflow:hidden;border-radius:9px }
+.brandPaletteSkeleton i { background:linear-gradient(90deg,#e8ebf0,#f5f6f8,#e8ebf0);background-size:200% 100%;animation:brandScan 1.25s linear infinite }
+.brandPaletteSkeleton i:nth-child(2) { animation-delay:.12s }.brandPaletteSkeleton i:nth-child(3) { animation-delay:.24s }.brandPaletteSkeleton i:nth-child(4) { animation-delay:.36s }
+.lockStatus { min-height:32px;padding:0 11px;grid-area:status;display:flex;align-items:center;gap:7px;justify-self:start;color:#126a3d;background:#e7f8ef;border:1px solid #c9efda;border-radius:999px;font-size:8px;font-weight:850;letter-spacing:.08em;text-transform:uppercase }
+.brandStrip>.tertiaryAction { grid-area:action;justify-self:end }
 .orbit { width:8px;height:8px;display:inline-block;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:orbit .75s linear infinite }
 @keyframes orbit { to{transform:rotate(360deg)} }
-.brandfallback .lockStatus { color:#9a650a;background:#fff6df }
+.brandfallback { border-color:#d9dee8;background:linear-gradient(120deg,#fff,#f7f8fa);box-shadow:0 16px 42px rgba(12,24,50,.07) }
+.brandfallback::before { background:repeating-linear-gradient(90deg,#cbd1dc 0 24px,#e6e9ef 24px 48px) }
+.brandfallback .brandMark { color:var(--deep);border-color:#d9dee8;background:#eef1f5;box-shadow:none }
+.brandfallback .brandLogoUnavailable strong { color:var(--deep) }
+.brandfallback .brandLogoUnavailable small { color:var(--muted) }
+.brandfallback .lockStatus { color:#8a5a08;border-color:#f2dfb0;background:#fff6df }
+.brandfallback .brandPalette { border-style:dashed;background:#fafbfc }
 
 /* Explainable audience evidence. */
 .evidenceTray,.artifactStream { padding:22px;border:1px solid var(--border);border-radius:20px;background:#fff }
@@ -429,9 +457,11 @@ fieldset.controlCard { min-inline-size:0 }
 
 @media (max-width: 760px) {
   .pathCard { min-height:360px }
-  .brandStrip { grid-template-columns:auto minmax(0,1fr) auto }
-  .brandPalette { display:none }
-  .brandStrip>.tertiaryAction { grid-column:2 / -1;justify-self:start }
+  .brandStrip { grid-template-columns:112px minmax(0,1fr);grid-template-areas:"mark identity" "status action" "palette palette" }
+  .brandMark { width:112px;height:62px;padding:13px }
+  .lockStatus { justify-self:start }
+  .brandStrip>.tertiaryAction { justify-self:end }
+  .brandPalette { grid-template-columns:1fr;grid-template-areas:"header" "rail" "tokens" }
   .sourceCard { grid-template-columns:1fr }
   .sourcePreview { min-height:210px }
   .sourceCopy { padding:5px }
@@ -467,10 +497,12 @@ fieldset.controlCard { min-inline-size:0 }
   .pathCopy h3 { font-size:29px }
   .pathActions { align-items:stretch;flex-direction:column }
   .pathActions>* { width:100% }
-  .brandStrip { padding:12px;grid-template-columns:auto minmax(0,1fr) }
-  .brandMark { width:46px;height:46px }
-  .lockStatus { grid-column:1 / -1;justify-self:start }
-  .brandStrip>.tertiaryAction { grid-column:1 / -1 }
+  .brandStrip { padding:20px 14px 14px;grid-template-columns:1fr;grid-template-areas:"mark" "identity" "status" "palette" "action";gap:12px }
+  .brandMark { width:100%;height:66px }
+  .brandIdentity { text-align:center }
+  .brandIdentity small { margin-inline:auto }
+  .lockStatus,.brandStrip>.tertiaryAction { justify-self:center }
+  .brandTokenList { grid-template-columns:1fr 1fr }
   .audienceTools { padding-left:14px }
   .sourceCard,.evidenceTray,.artifactStream,.controlCard,.qualityReceipt,.savePanel { padding:16px;border-radius:16px }
   .ctaStyleGrid { grid-template-columns:1fr }
@@ -510,7 +542,7 @@ fieldset.controlCard { min-inline-size:0 }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pathCard,.brandStrip,.briefDrawer,.signalPanel,.signalToast,.demoOrigin,.demoResult,.demoSignal,.demoPulse,.orbit,.artifactrunning .artifactGlyph i,.signalPulse,.buildSignal i,.buildCore,.buildVisual::after,.buildCadence i { animation:none!important;transition-duration:.001ms!important }
+  .pathCard,.brandStrip,.brandLogoSkeleton,.brandPaletteSkeleton i,.briefDrawer,.signalPanel,.signalToast,.demoOrigin,.demoResult,.demoSignal,.demoPulse,.orbit,.artifactrunning .artifactGlyph i,.signalPulse,.buildSignal i,.buildCore,.buildVisual::after,.buildCadence i { animation:none!important;transition-duration:.001ms!important }
   .demoOrigin,.demoResult,.demoSignal { opacity:1;transform:none }
   .demoPulse { display:none }
 }

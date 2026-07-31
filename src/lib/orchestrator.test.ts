@@ -59,6 +59,19 @@ describe("public session projection", () => {
         sourceUploadId: "123e4567-e89b-42d3-a456-426614174000",
         sourceUploadReservedAt: "2026-07-30T00:00:00.000Z"
       },
+      brand: {
+        domain: "servicenow.com",
+        companyName: "ServiceNow",
+        logoUrl: "https://www.servicenow.com/content/dam/servicenow-assets/images/naas/servicenow-header-logo.svg",
+        imageUrls: ["https://www.servicenow.com/content/dam/servicenow-assets/public/hero.jpg"],
+        colors: ["#032D42", "#63DF4E", "#FFFFFF", "#00718F"],
+        primaryColor: "#032D42",
+        accentColor: "#63DF4E",
+        surfaceColor: "#FFFFFF",
+        publicTopics: ["Enterprise workflows"],
+        sourceUrl: "https://www.servicenow.com/",
+        source: "brand-harvester"
+      },
       claim: {
         email: "private@example.com",
         emailMasked: "pr•••••@example.com",
@@ -120,6 +133,19 @@ describe("public session projection", () => {
       publishStatus: "published",
       emailStatus: "sent"
     });
+    expect(projected.brand).toEqual({
+      domain: "servicenow.com",
+      companyName: "ServiceNow",
+      logoUrl: "https://www.servicenow.com/content/dam/servicenow-assets/images/naas/servicenow-header-logo.svg",
+      colors: ["#032D42", "#63DF4E", "#FFFFFF", "#00718F"],
+      primaryColor: "#032D42",
+      accentColor: "#63DF4E",
+      surfaceColor: "#FFFFFF",
+      source: "brand-harvester"
+    });
+    expect(projected.brand).not.toHaveProperty("sourceUrl");
+    expect(projected.brand).not.toHaveProperty("imageUrls");
+    expect(projected.brand).not.toHaveProperty("publicTopics");
   });
 });
 

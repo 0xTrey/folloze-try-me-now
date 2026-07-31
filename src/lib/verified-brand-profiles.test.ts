@@ -22,7 +22,7 @@ describe("verified browser-backed brand profiles", () => {
       source: "brand-harvester"
     });
     expect(profile?.imageUrls[0]).toContain("servicenow-assets");
-    expect(profile?.logoUrl).toContain("servicenow-header-logo-white.svg");
+    expect(profile?.logoUrl).toContain("servicenow-header-logo.svg");
     expect(profile && brandPresentationFor(profile)).toMatchObject({
       heroTheme: "dark",
       supportingAccentColor: "#52B8FF",

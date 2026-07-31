@@ -185,7 +185,7 @@ describe("renderExperienceHtml", () => {
       '@font-face{font-family:"Inter";src:url("/api/sessions/servicenow-font/font/body") format("woff2")'
     );
     expect(serviceNowHtml).not.toContain("fonts.gstatic.com");
-    expect(serviceNowHtml).toContain("servicenow-header-logo-white.svg");
+    expect(serviceNowHtml).toContain("servicenow-header-logo.svg");
     expect(serviceNowHtml).toContain("hp-put-ai-to-work-og-image.jpg");
     expect(serviceNowHtml).toContain("radial-gradient(ellipse 80% 48%");
     expect(serviceNowHtml).toContain(

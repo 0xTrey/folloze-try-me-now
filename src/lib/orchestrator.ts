@@ -46,6 +46,7 @@ import type {
   UseCase
 } from "@/lib/types";
 import { assertBusinessEmail, maskEmail, normalizeDomain } from "@/lib/validation";
+import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 
 function opaqueId(): string {
   return randomBytes(24).toString("base64url");
@@ -487,10 +488,17 @@ export async function canEditSession(id: string, editorToken: string | undefined
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
+function needsBrandRefresh(session: Pick<TryMeSession, "brand" | "companyDomain" | "experience">): boolean {
+  if (!session.brand) return true;
+  return !session.experience
+    && session.brand.source === "fallback"
+    && Boolean(verifiedBrandProfileFor(session.companyDomain));
+}
+
 export async function runBrandStage(id: string): Promise<void> {
   assertProductionSessionStore();
   const current = await getSession(id);
-  if (!current || current.brand) return;
+  if (!current || !needsBrandRefresh(current)) return;
   const expectedDomain = current.companyDomain;
   const lease = await acquireSessionLease(id, "seller-brand", 30);
   if (!lease) return;
@@ -506,7 +514,13 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
   let shouldHarvest = false;
   await updateSession(id, (session) => {
     shouldHarvest = false;
-    if (session.companyDomain !== expectedDomain || session.brand) return session;
+    if (session.companyDomain !== expectedDomain || !needsBrandRefresh(session)) return session;
+    if (session.brand?.source === "fallback") {
+      appendEvent(session, "brand_harvest_verified_upgrade_started", {
+        priorSource: session.brand.source
+      });
+      delete session.brand;
+    }
     if (
       session.stages.brand.attemptId &&
       !isStale(session.stages.brand.startedAt, 30_000)
@@ -1168,7 +1182,7 @@ export async function finalizePdfSource(
 export async function runStoryStage(id: string): Promise<void> {
   assertProductionSessionStore();
   let preflight = await getSession(id);
-  if (preflight && !preflight.brand) {
+  if (preflight && needsBrandRefresh(preflight)) {
     await runBrandStage(id);
     preflight = await getSession(id);
     if (!preflight?.brand) return;
@@ -1439,7 +1453,7 @@ export async function recoverSessionWork(id: string): Promise<void> {
       return;
     }
 
-    if (!session.brand) {
+    if (needsBrandRefresh(session)) {
       await runBrandStage(id);
       session = await getSession(id);
       if (!session?.brand) return;

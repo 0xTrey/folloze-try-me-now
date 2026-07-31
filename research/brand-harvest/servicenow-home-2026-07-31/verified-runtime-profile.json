@@ -11,7 +11,13 @@
     "Connect AI, data, workflows, and governance",
     "Meet the autonomous workforce"
   ],
-  "logoUrl": "https://www.servicenow.com/content/dam/servicenow-assets/images/naas/servicenow-header-logo-white.svg",
+  "logoUrl": "https://www.servicenow.com/content/dam/servicenow-assets/images/naas/servicenow-header-logo.svg",
+  "logoDeliveryFallback": {
+    "path": "public/verified-brands/servicenow/homepage-header-logo.png",
+    "sourceScreenshot": "research/brand-harvest/servicenow-home-2026-07-31/screenshots/homepage-desktop-full.png",
+    "crop": { "x": 26, "y": 6, "width": 164, "height": 38 },
+    "reason": "The reviewed first-party SVG is visible in the browser harvest but the source CDN rejects server-side delivery. This exact homepage crop preserves the observed official wordmark without synthesizing a replacement logo."
+  },
   "imageUrls": [
     "https://www.servicenow.com/content/dam/servicenow-assets/public/en-us/images/ds-og-images/hp-put-ai-to-work-og-image.jpg"
   ],

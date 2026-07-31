@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { NextResponse } from "next/server";
 
 import { logServerError } from "@/lib/http";
@@ -52,7 +55,7 @@ const mimeByKind: Record<ImageKind, string> = {
 
 interface OriginalImageFallback {
   bytes: Uint8Array;
-  kind: "svg";
+  kind: ImageKind;
 }
 
 type RequestedArtifactRevision =
@@ -215,11 +218,11 @@ function canonicalDomain(value: string): string {
   return value.trim().toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
 }
 
-function verifiedServiceNowFallback(
+async function verifiedServiceNowFallback(
   session: TryMeSession | null,
   slot: ImageSlot,
   sourceUrl: string
-): OriginalImageFallback | undefined {
+): Promise<OriginalImageFallback | undefined> {
   if (!session) return undefined;
   const profile = slot.startsWith("seller-") ? session.brand : session.targetBrand;
   if (
@@ -241,15 +244,36 @@ function verifiedServiceNowFallback(
       : undefined;
   if (!expectedSource || sourceUrl !== expectedSource) return undefined;
 
+  if (slot.endsWith("-logo")) {
+    try {
+      const bytes = await readFile(join(
+        process.cwd(),
+        "public",
+        "verified-brands",
+        "servicenow",
+        "homepage-header-logo.png"
+      ));
+      return { bytes: new Uint8Array(bytes), kind: "png" };
+    } catch (error) {
+      logServerError(error, {
+        route: "/api/sessions/[id]/image/[slot]",
+        method: "GET",
+        sessionId: session.id,
+        operation: "verified_brand_asset_read",
+        code: "verified_brand_asset_unavailable",
+        details: { slot }
+      });
+      return undefined;
+    }
+  }
+
   const presentation = brandPresentationFor(verified);
   const navy = verified.primaryColor;
   const green = verified.accentColor;
   const blue = presentation?.supportingAccentColor ?? "#52B8FF";
   const white = "#FFFFFF";
   const companyName = verified.companyName.replace(/[&<>"']/g, "");
-  const svg = slot.endsWith("-logo")
-    ? `<svg xmlns="http://www.w3.org/2000/svg" width="420" height="96" viewBox="0 0 420 96" role="img" aria-label="${companyName}"><rect width="420" height="96" rx="18" fill="${navy}"/><circle cx="49" cy="48" r="23" fill="none" stroke="${green}" stroke-width="8"/><path d="M49 29a19 19 0 0 1 16 8" fill="none" stroke="${blue}" stroke-width="8" stroke-linecap="round"/><text x="88" y="61" fill="${white}" font-family="Arial,Helvetica,sans-serif" font-size="38" font-weight="700" letter-spacing="-1">${companyName}</text><circle cx="315" cy="59" r="5" fill="${green}"/></svg>`
-    : `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="${companyName} workflow composition"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${navy}"/><stop offset="1" stop-color="#07556B"/></linearGradient><linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFFFFF" stop-opacity=".98"/><stop offset="1" stop-color="#E8F7FA" stop-opacity=".94"/></linearGradient><radialGradient id="glow"><stop stop-color="${blue}" stop-opacity=".68"/><stop offset="1" stop-color="${blue}" stop-opacity="0"/></radialGradient><filter id="blur"><feGaussianBlur stdDeviation="42"/></filter></defs><rect width="1600" height="900" rx="48" fill="url(#bg)"/><circle cx="1320" cy="160" r="310" fill="url(#glow)" filter="url(#blur)"/><circle cx="190" cy="780" r="260" fill="${green}" opacity=".12" filter="url(#blur)"/><g opacity=".16" stroke="${white}"><path d="M0 180h1600M0 360h1600M0 540h1600M0 720h1600"/><path d="M200 0v900M400 0v900M600 0v900M800 0v900M1000 0v900M1200 0v900M1400 0v900"/></g><text x="104" y="126" fill="${green}" font-family="Arial,Helvetica,sans-serif" font-size="26" font-weight="700" letter-spacing="4">WORKFLOW EXPERIENCE</text><text x="104" y="194" fill="${white}" font-family="Arial,Helvetica,sans-serif" font-size="54" font-weight="700">From enterprise signal to governed action.</text><path d="M278 463C410 302 565 302 690 430S970 572 1120 438 1320 330 1430 438" fill="none" stroke="${blue}" stroke-width="8" stroke-linecap="round" opacity=".9"/><path d="M278 463C410 624 565 624 690 496S970 354 1120 488 1320 596 1430 488" fill="none" stroke="${green}" stroke-width="8" stroke-linecap="round" opacity=".88"/><g font-family="Arial,Helvetica,sans-serif"><g transform="translate(102 366)"><rect width="286" height="194" rx="28" fill="url(#panel)"/><circle cx="54" cy="54" r="18" fill="${blue}"/><text x="86" y="62" fill="${navy}" font-size="25" font-weight="700">Enterprise data</text><text x="34" y="122" fill="#365966" font-size="20">Context enters the flow</text><rect x="34" y="148" width="190" height="12" rx="6" fill="${blue}" opacity=".32"/></g><g transform="translate(657 348)"><rect width="322" height="230" rx="34" fill="${green}"/><circle cx="61" cy="63" r="24" fill="${navy}"/><path d="M52 63l7 7 13-17" fill="none" stroke="${white}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><text x="102" y="72" fill="${navy}" font-size="28" font-weight="700">Governed workflow</text><text x="44" y="132" fill="${navy}" font-size="22">Orchestrate the right action</text><rect x="44" y="166" width="234" height="18" rx="9" fill="${navy}" opacity=".18"/><rect x="44" y="198" width="168" height="12" rx="6" fill="${navy}" opacity=".12"/></g><g transform="translate(1209 366)"><rect width="286" height="194" rx="28" fill="url(#panel)"/><circle cx="54" cy="54" r="18" fill="${green}"/><text x="86" y="62" fill="${navy}" font-size="25" font-weight="700">Buyer outcome</text><text x="34" y="122" fill="#365966" font-size="20">Proof becomes visible</text><rect x="34" y="148" width="190" height="12" rx="6" fill="${green}" opacity=".38"/></g></g><g transform="translate(104 735)" font-family="Arial,Helvetica,sans-serif"><rect width="1392" height="88" rx="24" fill="#001E2B" opacity=".86"/><circle cx="54" cy="44" r="15" fill="${green}"/><text x="86" y="52" fill="${white}" font-size="24" font-weight="700">${companyName}</text><text x="302" y="52" fill="#C8E7EF" font-size="22">Data</text><circle cx="382" cy="44" r="5" fill="${blue}"/><text x="412" y="52" fill="#C8E7EF" font-size="22">Workflow</text><circle cx="525" cy="44" r="5" fill="${blue}"/><text x="555" y="52" fill="#C8E7EF" font-size="22">Security</text><circle cx="661" cy="44" r="5" fill="${blue}"/><text x="691" y="52" fill="#C8E7EF" font-size="22">Measurable action</text></g></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="${companyName} workflow composition"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${navy}"/><stop offset="1" stop-color="#07556B"/></linearGradient><linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFFFFF" stop-opacity=".98"/><stop offset="1" stop-color="#E8F7FA" stop-opacity=".94"/></linearGradient><radialGradient id="glow"><stop stop-color="${blue}" stop-opacity=".68"/><stop offset="1" stop-color="${blue}" stop-opacity="0"/></radialGradient><filter id="blur"><feGaussianBlur stdDeviation="42"/></filter></defs><rect width="1600" height="900" rx="48" fill="url(#bg)"/><circle cx="1320" cy="160" r="310" fill="url(#glow)" filter="url(#blur)"/><circle cx="190" cy="780" r="260" fill="${green}" opacity=".12" filter="url(#blur)"/><g opacity=".16" stroke="${white}"><path d="M0 180h1600M0 360h1600M0 540h1600M0 720h1600"/><path d="M200 0v900M400 0v900M600 0v900M800 0v900M1000 0v900M1200 0v900M1400 0v900"/></g><text x="104" y="126" fill="${green}" font-family="Arial,Helvetica,sans-serif" font-size="26" font-weight="700" letter-spacing="4">WORKFLOW EXPERIENCE</text><text x="104" y="194" fill="${white}" font-family="Arial,Helvetica,sans-serif" font-size="54" font-weight="700">From enterprise signal to governed action.</text><path d="M278 463C410 302 565 302 690 430S970 572 1120 438 1320 330 1430 438" fill="none" stroke="${blue}" stroke-width="8" stroke-linecap="round" opacity=".9"/><path d="M278 463C410 624 565 624 690 496S970 354 1120 488 1320 596 1430 488" fill="none" stroke="${green}" stroke-width="8" stroke-linecap="round" opacity=".88"/><g font-family="Arial,Helvetica,sans-serif"><g transform="translate(102 366)"><rect width="286" height="194" rx="28" fill="url(#panel)"/><circle cx="54" cy="54" r="18" fill="${blue}"/><text x="86" y="62" fill="${navy}" font-size="25" font-weight="700">Enterprise data</text><text x="34" y="122" fill="#365966" font-size="20">Context enters the flow</text><rect x="34" y="148" width="190" height="12" rx="6" fill="${blue}" opacity=".32"/></g><g transform="translate(657 348)"><rect width="322" height="230" rx="34" fill="${green}"/><circle cx="61" cy="63" r="24" fill="${navy}"/><path d="M52 63l7 7 13-17" fill="none" stroke="${white}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><text x="102" y="72" fill="${navy}" font-size="28" font-weight="700">Governed workflow</text><text x="44" y="132" fill="${navy}" font-size="22">Orchestrate the right action</text><rect x="44" y="166" width="234" height="18" rx="9" fill="${navy}" opacity=".18"/><rect x="44" y="198" width="168" height="12" rx="6" fill="${navy}" opacity=".12"/></g><g transform="translate(1209 366)"><rect width="286" height="194" rx="28" fill="url(#panel)"/><circle cx="54" cy="54" r="18" fill="${green}"/><text x="86" y="62" fill="${navy}" font-size="25" font-weight="700">Buyer outcome</text><text x="34" y="122" fill="#365966" font-size="20">Proof becomes visible</text><rect x="34" y="148" width="190" height="12" rx="6" fill="${green}" opacity=".38"/></g></g><g transform="translate(104 735)" font-family="Arial,Helvetica,sans-serif"><rect width="1392" height="88" rx="24" fill="#001E2B" opacity=".86"/><circle cx="54" cy="44" r="15" fill="${green}"/><text x="86" y="52" fill="${white}" font-size="24" font-weight="700">${companyName}</text><text x="302" y="52" fill="#C8E7EF" font-size="22">Data</text><circle cx="382" cy="44" r="5" fill="${blue}"/><text x="412" y="52" fill="#C8E7EF" font-size="22">Workflow</text><circle cx="525" cy="44" r="5" fill="${blue}"/><text x="555" y="52" fill="#C8E7EF" font-size="22">Security</text><circle cx="661" cy="44" r="5" fill="${blue}"/><text x="691" y="52" fill="#C8E7EF" font-size="22">Measurable action</text></g></svg>`;
 
   return { bytes: new TextEncoder().encode(svg), kind: "svg" };
 }
@@ -316,11 +340,9 @@ export async function GET(request: Request, context: RouteContext) {
         Accept: "image/avif,image/webp,image/png,image/jpeg,image/svg+xml,image/gif;q=0.9,application/octet-stream;q=0.3,*/*;q=0.1"
       }
     });
-    if (result.status === 403) {
-      const originalFallback = verifiedServiceNowFallback(session, slot, sourceUrl);
-      if (originalFallback) return imageResponse(originalFallback.bytes, originalFallback.kind);
-    }
     if (result.status !== 200) {
+      const originalFallback = await verifiedServiceNowFallback(session, slot, sourceUrl);
+      if (originalFallback) return imageResponse(originalFallback.bytes, originalFallback.kind);
       return loggedImageError({
         status: 502,
         code: "image_upstream_failed",
@@ -373,6 +395,8 @@ export async function GET(request: Request, context: RouteContext) {
 
     return imageResponse(result.bytes, detected);
   } catch (error) {
+    const originalFallback = await verifiedServiceNowFallback(session, slot, sourceUrl);
+    if (originalFallback) return imageResponse(originalFallback.bytes, originalFallback.kind);
     const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
     const requestId = logServerError(new Error(timedOut ? "Image proxy timed out." : "Image proxy fetch failed."), {
       route: "/api/sessions/[id]/image/[slot]",

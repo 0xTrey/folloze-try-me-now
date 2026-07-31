@@ -54,31 +54,101 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(onExample).toHaveBeenCalledWith("abm");
   });
 
-  it("shows an instant brand lock and confirms source facts", () => {
+  it("shows the harvested logo, semantic palette, and source proof", () => {
     const inspect = vi.fn();
+    const brand = {
+      companyName: "ServiceNow",
+      domain: "servicenow.com",
+      logoUrl: "/api/sessions/servicenow-live-brief/image/seller-logo",
+      colors: ["#032D42", "#63DF4E", "#FFFFFF", "#00718F", "#D7E0E6", "#E0F7DC"],
+      primaryColor: "#032D42",
+      accentColor: "#63DF4E",
+      surfaceColor: "#FFFFFF",
+      source: "brand-harvester" as const
+    };
+    const { rerender } = render(
+      <InstantBrandLockStrip status="locked" brand={brand} onInspect={inspect} />
+    );
+
+    expect(screen.getByText("Public brand system captured")).toBeInTheDocument();
+    expect(screen.getByText("Logo + 6 colors from servicenow.com.")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "ServiceNow logo" }).getAttribute("src")).toContain(brand.logoUrl);
+    expect(screen.getByLabelText("Harvested ServiceNow brand palette")).toBeInTheDocument();
+    expect(screen.getByText("#032D42")).toBeInTheDocument();
+    expect(screen.getByText("#63DF4E")).toBeInTheDocument();
+    expect(screen.getByText("#FFFFFF")).toBeInTheDocument();
+    expect(screen.getByText("#00718F")).toBeInTheDocument();
+    expect(screen.getByText("6 colors captured")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Inspect ServiceNow brand signals" }));
+    expect(inspect).toHaveBeenCalledOnce();
+
+    fireEvent.error(screen.getByRole("img", { name: "ServiceNow logo" }));
+    expect(screen.queryByRole("img", { name: "ServiceNow logo" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("ServiceNow logo unavailable")).toHaveTextContent("Logo unavailable");
+    expect(screen.getByText("#63DF4E")).toBeInTheDocument();
+
+    rerender(
+      <InstantBrandLockStrip
+        status="locked"
+        brand={{ ...brand, logoUrl: "/api/sessions/refreshed/image/seller-logo" }}
+        onInspect={inspect}
+      />
+    );
+    expect(screen.getByRole("img", { name: "ServiceNow logo" }).getAttribute("src")).toContain(
+      "/api/sessions/refreshed/image/seller-logo"
+    );
+  });
+
+  it("keeps scanning and fallback brand states visually honest", () => {
+    const { rerender } = render(
+      <InstantBrandLockStrip
+        status="scanning"
+        brand={{ companyName: "ServiceNow", domain: "servicenow.com" }}
+      />
+    );
+
+    const scanning = screen.getByText("Scanning public brand").closest("section");
+    expect(scanning).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Checking logo, palette, typography, and source.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Brand palette is being detected")).toBeInTheDocument();
+    expect(screen.queryByText("Harvested palette")).not.toBeInTheDocument();
+
+    rerender(
+      <InstantBrandLockStrip
+        status="fallback"
+        brand={{
+          companyName: "ServiceNow",
+          domain: "servicenow.com",
+          colors: ["#1C293F", "#5B5BFF", "#FFFFFF"],
+          primaryColor: "#1C293F",
+          accentColor: "#5B5BFF",
+          surfaceColor: "#FFFFFF",
+          source: "fallback"
+        }}
+      />
+    );
+
+    expect(screen.getByText("Brand scan incomplete")).toBeInTheDocument();
+    expect(screen.getByText("Using neutral preview styling — not ServiceNow colors.")).toBeInTheDocument();
+    expect(screen.getByText("Needs verification")).toBeInTheDocument();
+    expect(screen.getByLabelText("Temporary neutral preview palette")).toBeInTheDocument();
+    expect(screen.queryByText("Public brand system captured")).not.toBeInTheDocument();
+  });
+
+  it("confirms source facts", () => {
     const confirm = vi.fn();
     const replace = vi.fn();
     render(
-      <>
-        <InstantBrandLockStrip
-          status="locked"
-          brand={{ companyName: "Jitterbit", domain: "jitterbit.com", colors: ["#0c2f3d", "#f15b35"], positioning: "Enterprise automation, governed." }}
-          onInspect={inspect}
-        />
-        <ContentSourceConfirmation
-          source={{ title: "Jitterbit MCP for Enterprise AI", sourceLabel: "Public product page", host: "jitterbit.com", facts: ["Governed agent access", "Reusable enterprise capabilities"] }}
-          onConfirm={confirm}
-          onReplace={replace}
-        />
-      </>
+      <ContentSourceConfirmation
+        source={{ title: "Jitterbit MCP for Enterprise AI", sourceLabel: "Public product page", host: "jitterbit.com", facts: ["Governed agent access", "Reusable enterprise capabilities"] }}
+        onConfirm={confirm}
+        onReplace={replace}
+      />
     );
 
-    expect(screen.getByText("Brand system locked")).toBeInTheDocument();
     expect(screen.getByText("Governed agent access")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Inspect signals" }));
     fireEvent.click(screen.getByRole("button", { name: "Use this source" }));
     fireEvent.click(screen.getByRole("button", { name: "Use another source" }));
-    expect(inspect).toHaveBeenCalledOnce();
     expect(confirm).toHaveBeenCalledOnce();
     expect(replace).toHaveBeenCalledOnce();
   });

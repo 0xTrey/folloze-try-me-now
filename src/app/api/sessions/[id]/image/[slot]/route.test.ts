@@ -165,7 +165,7 @@ describe("harvested image delivery route", () => {
     );
   });
 
-  it("returns original first-party ServiceNow artwork when the exact verified CDN asset is forbidden", async () => {
+  it("returns the reviewed ServiceNow homepage logo crop when the exact verified CDN asset is forbidden", async () => {
     const verified = verifiedBrandProfileFor("servicenow.com");
     expect(verified).toBeDefined();
     vi.mocked(getSession).mockResolvedValue({
@@ -175,17 +175,15 @@ describe("harvested image delivery route", () => {
     installImage({ status: 403 });
 
     const logoResponse = await GET(request, context("seller-logo"));
-    const logo = await logoResponse.text();
+    const logo = new Uint8Array(await logoResponse.arrayBuffer());
     const heroResponse = await GET(request, context("seller-image-0"));
     const hero = await heroResponse.text();
 
     expect(logoResponse.status).toBe(200);
-    expect(logoResponse.headers.get("content-type")).toBe("image/svg+xml; charset=utf-8");
+    expect(logoResponse.headers.get("content-type")).toBe("image/png");
     expect(logoResponse.headers.get("referrer-policy")).toBe("no-referrer");
-    expect(logo).toContain("ServiceNow");
-    expect(logo).toContain("#63DF4E");
-    expect(logo).toContain('fill="#FFFFFF"');
-    expect(logo).not.toContain("<script");
+    expect([...logo.slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(logo.byteLength).toBeGreaterThan(3_000);
 
     expect(heroResponse.status).toBe(200);
     expect(heroResponse.headers.get("content-type")).toBe("image/svg+xml; charset=utf-8");
@@ -193,6 +191,19 @@ describe("harvested image delivery route", () => {
     expect(hero).toContain("Governed workflow");
     expect(hero).toContain("#52B8FF");
     expect(hero).not.toContain("https://www.servicenow.com");
+  });
+
+  it("keeps the reviewed ServiceNow logo available when the source CDN times out", async () => {
+    const verified = verifiedBrandProfileFor("servicenow.com");
+    vi.mocked(getSession).mockResolvedValue({ answers: {}, brand: verified } as never);
+    vi.mocked(fetchPinnedPublicBytes).mockRejectedValueOnce(new Error("Image request timed out."));
+
+    const response = await GET(request, context("seller-logo"));
+    const bytes = new Uint8Array(await response.arrayBuffer());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    expect([...bytes.slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   });
 
   it("does not activate the original fallback for near-match domains or unverified asset URLs", async () => {

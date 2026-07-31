@@ -2131,7 +2131,10 @@ export function TryMeNowApp() {
                 domain: session.brand.domain,
                 logoUrl: previewLogoUrl(session),
                 colors: session.brand.colors,
-                confidenceLabel: session.brand.source === "fallback" ? "Reconstructed" : "Public signals"
+                primaryColor: session.brand.primaryColor,
+                accentColor: session.brand.accentColor,
+                surfaceColor: session.brand.surfaceColor,
+                source: session.brand.source
               } : { companyName: displayNameFromDomain(session.companyDomain), domain: session.companyDomain }}
               onInspect={() => setShowProcess(true)}
             />
