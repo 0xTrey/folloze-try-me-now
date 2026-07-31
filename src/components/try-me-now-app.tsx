@@ -1295,6 +1295,19 @@ export function getAssemblyPreviewKey(
   return `${session.id}:${session.experience?.artifactRevision ?? 0}`;
 }
 
+export function previewBoundaryScrollDelta(message: unknown): number | undefined {
+  if (!message || typeof message !== "object") return undefined;
+  const candidate = message as { source?: unknown; action?: unknown; deltaY?: unknown };
+  if (
+    candidate.source !== "folloze-experience"
+    || candidate.action !== "preview_scroll_boundary"
+    || typeof candidate.deltaY !== "number"
+    || !Number.isFinite(candidate.deltaY)
+    || candidate.deltaY === 0
+  ) return undefined;
+  return Math.max(-1_600, Math.min(1_600, candidate.deltaY));
+}
+
 export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; iframeRef?: RefObject<HTMLIFrameElement | null> }) {
   const brandReady = ["complete", "fallback"].includes(session.stages.brand.status);
   const audienceReady = session.stages.audience.status === "complete" || Boolean(session.answers.audience);
@@ -1678,6 +1691,11 @@ export function TryMeNowApp() {
         !event.data ||
         event.data.source !== "folloze-experience"
       ) return;
+      const boundaryDelta = previewBoundaryScrollDelta(event.data);
+      if (boundaryDelta !== undefined) {
+        window.scrollBy({ top: boundaryDelta, left: 0, behavior: "auto" });
+        return;
+      }
       const allowedActions = new Set([
         "anchor_click",
         "cta_click",

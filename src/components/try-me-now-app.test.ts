@@ -9,7 +9,8 @@ import {
   getBuildPanelCopy,
   getGuidedQuestionCopy,
   getRevealCopy,
-  getRevealShellHeadline
+  getRevealShellHeadline,
+  previewBoundaryScrollDelta
 } from "./try-me-now-app";
 
 function brand(domain: string, companyName: string): PublicBrandProfile {
@@ -206,5 +207,33 @@ describe("Try Me Now experience copy", () => {
 
     expect(getAssemblyPreviewKey(analyticsUpdate)).toBe(getAssemblyPreviewKey(initial));
     expect(getAssemblyPreviewKey(regenerated)).not.toBe(getAssemblyPreviewKey(initial));
+  });
+
+  it("accepts only bounded scroll handoffs from the generated preview", () => {
+    expect(previewBoundaryScrollDelta({
+      source: "folloze-experience",
+      action: "preview_scroll_boundary",
+      deltaY: 720
+    })).toBe(720);
+    expect(previewBoundaryScrollDelta({
+      source: "folloze-experience",
+      action: "preview_scroll_boundary",
+      deltaY: 20_000
+    })).toBe(1_600);
+    expect(previewBoundaryScrollDelta({
+      source: "folloze-experience",
+      action: "preview_scroll_boundary",
+      deltaY: -20_000
+    })).toBe(-1_600);
+    expect(previewBoundaryScrollDelta({
+      source: "other-frame",
+      action: "preview_scroll_boundary",
+      deltaY: 500
+    })).toBeUndefined();
+    expect(previewBoundaryScrollDelta({
+      source: "folloze-experience",
+      action: "preview_scroll_boundary",
+      deltaY: Number.NaN
+    })).toBeUndefined();
   });
 });

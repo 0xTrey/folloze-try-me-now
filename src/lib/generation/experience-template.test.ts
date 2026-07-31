@@ -95,9 +95,16 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("overflow-x:auto;overscroll-behavior-inline:contain");
   });
 
-  it("keeps wheel scrolling native inside embedded desktop previews", () => {
+  it("keeps wheel scrolling monotonic and hands preview boundaries to the host page", () => {
     expect(html).toContain("html{scroll-behavior:auto;");
     expect(html).toContain("scrollIntoView({behavior:reducedMotion?'auto':'smooth'");
+    expect(html).toContain("function handOffPreviewWheel(event)");
+    expect(html).toContain("action:'preview_scroll_boundary'");
+    expect(html).toContain("function scrollInlineIntoView(node)");
+    expect(html).toContain("if(active)scrollInlineIntoView(link)");
+    expect(html).toContain("scrollInlineIntoView(tab)");
+    expect(html).not.toContain("link.scrollIntoView");
+    expect(html).not.toContain("tab.scrollIntoView");
   });
 
   // Regression: QA ISSUE-005. Protected Vercel previews require their SSO

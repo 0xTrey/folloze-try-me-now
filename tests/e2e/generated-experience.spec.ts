@@ -279,6 +279,68 @@ test.describe("generated 1:1 experience", () => {
     );
   });
 
+  test("hands wheel scrolling cleanly between an embedded preview and its host page", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Mouse-wheel preview behavior is desktop-only.");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await fulfillFixtureAssets(page);
+    await page.setContent(`
+      <style>
+        html,body{margin:0}
+        .before{height:320px}
+        iframe{width:100%;height:620px;display:block;border:0}
+        .after{height:1200px}
+      </style>
+      <div class="before"></div>
+      <iframe id="preview" title="Generated buyer experience preview"></iframe>
+      <div class="after"></div>
+      <script>
+        window.addEventListener('message', function(event){
+          var frame=document.getElementById('preview');
+          var data=event.data;
+          if(!frame||event.source!==frame.contentWindow||!data||data.source!=='folloze-experience'||data.action!=='preview_scroll_boundary')return;
+          var delta=typeof data.deltaY==='number'&&Number.isFinite(data.deltaY)?Math.max(-1600,Math.min(1600,data.deltaY)):0;
+          if(delta)window.scrollBy({top:delta,left:0,behavior:'auto'});
+        });
+      </script>
+    `);
+
+    const iframe = page.locator("#preview");
+    await iframe.evaluate((node, html) => { (node as HTMLIFrameElement).srcdoc = html; }, generatedExperienceHtml());
+    const frame = page.frameLocator("#preview");
+    await expect(frame.locator(".shell")).toBeVisible();
+
+    const childMetrics = () => frame.locator("html").evaluate(() => {
+      const root = document.scrollingElement ?? document.documentElement;
+      return {
+        top: root.scrollTop,
+        max: Math.max(0, root.scrollHeight - root.clientHeight)
+      };
+    });
+
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await frame.locator("html").evaluate(() => window.scrollTo(0, 0));
+    await page.mouse.move(720, 560);
+    await page.mouse.wheel(0, 700);
+    await expect.poll(async () => (await childMetrics()).top).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    await frame.locator("html").evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.mouse.move(720, 560);
+    await page.mouse.wheel(0, 520);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    const atEnd = await childMetrics();
+    expect(atEnd.top).toBeGreaterThanOrEqual(atEnd.max - 1);
+
+    await page.evaluate(() => window.scrollTo(0, 220));
+    await frame.locator("html").evaluate(() => window.scrollTo(0, 0));
+    const hostBeforeUpwardHandoff = await page.evaluate(() => window.scrollY);
+    await page.mouse.move(720, 300);
+    await page.mouse.wheel(0, -420);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(hostBeforeUpwardHandoff);
+    expect((await childMetrics()).top).toBe(0);
+  });
+
   test("implements an accessible, keyboard-operable tab set", async ({ page }) => {
     await fulfillFixtureAssets(page);
     await loadGeneratedExperience(page);

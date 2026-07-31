@@ -594,6 +594,19 @@ export function renderExperienceHtml(input: {
     };
     window.flzAnalytic('experience_view',{});
 
+    var previewScrollRoot=document.scrollingElement||document.documentElement;
+    function handOffPreviewWheel(event){
+      if(window.parent===window||event.ctrlKey||event.metaKey||typeof event.deltaY!=='number'||!Number.isFinite(event.deltaY)||event.deltaY===0)return;
+      var maxScroll=Math.max(0,previewScrollRoot.scrollHeight-previewScrollRoot.clientHeight);
+      var atStart=previewScrollRoot.scrollTop<=1;
+      var atEnd=previewScrollRoot.scrollTop>=maxScroll-1;
+      if(!((event.deltaY<0&&atStart)||(event.deltaY>0&&atEnd)))return;
+      event.preventDefault();
+      var deltaY=Math.max(-1600,Math.min(1600,event.deltaY));
+      try{window.parent.postMessage({source:'folloze-experience',version:1,action:'preview_scroll_boundary',deltaY:deltaY},parentOrigin)}catch(_scrollBoundaryError){}
+    }
+    window.addEventListener('wheel',handOffPreviewWheel,{passive:false});
+
     function settleImage(image,readyClass){
       var parent=image&&image.parentElement;
       if(!parent)return;
@@ -620,11 +633,23 @@ export function renderExperienceHtml(input: {
     }
 
     var journeyLinks=Array.from(document.querySelectorAll('[data-journey-link]'));
+    function scrollInlineIntoView(node){
+      var rail=node&&node.parentElement;
+      if(!rail)return;
+      var start=rail.scrollLeft;
+      var visibleEnd=start+rail.clientWidth;
+      var nodeStart=node.offsetLeft;
+      var nodeEnd=nodeStart+node.offsetWidth;
+      var next=start;
+      if(nodeStart<start)next=Math.max(0,nodeStart-12);
+      else if(nodeEnd>visibleEnd)next=Math.max(0,nodeEnd-rail.clientWidth+12);
+      if(Math.abs(next-start)>1)rail.scrollTo({left:next,behavior:reducedMotion?'auto':'smooth'});
+    }
     function setActiveSection(sectionId){
       journeyLinks.forEach(function(link){
         var active=link.getAttribute('data-journey-link')===sectionId;
         if(active)link.setAttribute('aria-current','location');else link.removeAttribute('aria-current');
-        if(active)link.scrollIntoView({behavior:reducedMotion?'auto':'smooth',block:'nearest',inline:'nearest'});
+        if(active)scrollInlineIntoView(link);
       });
     }
     document.querySelectorAll('[data-scroll-target]').forEach(function(control){
@@ -659,7 +684,7 @@ export function renderExperienceHtml(input: {
     function selectLens(tab,focus,announce){
       var lensIndex=tabs.indexOf(tab);
       tabs.forEach(function(item){var selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;var panel=document.getElementById(item.getAttribute('aria-controls'));if(panel)panel.hidden=!selected});
-      tab.scrollIntoView({behavior:reducedMotion?'auto':'smooth',block:'nearest',inline:'nearest'});
+      scrollInlineIntoView(tab);
       if(focus)tab.focus();
       if(announce){window.flzAnalytic('topic_select',{area:'decision-lenses',lensIndex:lensIndex,lensId:'lens-'+lensIndex});showSignal('Now exploring '+shortLabel(tab)+'.')}
     }
@@ -771,7 +796,7 @@ export function renderExperienceHtml(input: {
       document.addEventListener('fullscreenchange',syncFullscreen);
       document.addEventListener('fullscreenerror',function(){window.flzAnalytic('fullscreen_change',{state:'unavailable'})});
     }
-    window.addEventListener('pagehide',function(){if(toastTimer)window.clearTimeout(toastTimer);engagementCleanup()},{once:true});
+    window.addEventListener('pagehide',function(){if(toastTimer)window.clearTimeout(toastTimer);window.removeEventListener('wheel',handOffPreviewWheel);engagementCleanup()},{once:true});
   })();
 </script>
 </body>
