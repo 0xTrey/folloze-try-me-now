@@ -74,8 +74,8 @@ describe("Try Me Now experience copy", () => {
 
   it("routes each watch-example action to a verified public Folloze board", () => {
     expect(entryPathOptions.abm).toMatchObject({
-      exampleLabel: "Watch Tribe Connect for HARMAN",
-      exampleUrl: "https://experience.folloze.com/tribe-connect-for-harman"
+      exampleLabel: "Watch the NVIDIA 1:1 experience",
+      exampleUrl: "https://experience.folloze.com/folloze-for-nvidia"
     });
     expect(entryPathOptions.campaign).toMatchObject({
       title: "Launch a Campaign",

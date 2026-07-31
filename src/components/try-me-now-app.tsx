@@ -164,6 +164,8 @@ export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCa
   return Boolean(session.answers.sourceUrl || (session.answers.sourceName && session.answers.sourceTitle));
 }
 
+const NVIDIA_ONE_TO_ONE_EXAMPLE_URL = "https://experience.folloze.com/folloze-for-nvidia";
+
 export const entryPathOptions: Record<UseCase, EntryPathOption> = {
   abm: {
     id: "abm",
@@ -172,8 +174,8 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     title: "Break into one account",
     description: "Watch public account evidence become a credible, one-to-one buyer journey.",
     actionLabel: "Build my 1:1 page",
-    exampleLabel: "Watch Tribe Connect for HARMAN",
-    exampleUrl: "https://experience.folloze.com/tribe-connect-for-harman",
+    exampleLabel: "Watch the NVIDIA 1:1 experience",
+    exampleUrl: NVIDIA_ONE_TO_ONE_EXAMPLE_URL,
     demoSteps: ["Seller", "Account evidence", "1:1 experience"],
     accent: "#645cff",
     tone: "paper"

@@ -1,31 +1,26 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A focused Folloze account experience for NVIDIA marketing and revenue teams.">
-  <title>Folloze for NVIDIA | Make Every Launch Account-Specific</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23071428'/%3E%3Cpath d='M17 32c8-12 22-14 32-5-7-3-16-1-21 6 5-4 12-4 17 0-8 11-21 13-31 4 2-1 4-3 5-5h-2z' fill='%2376b900'/%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.folloze.com/theme/135433/4.css?v=1764160175">
+</head>
+<body>
   <style>
     :root {
-      --ink: #1c293f;
-      --deep: #071428;
-      --action: #0a1230;
-      --body: #2c3d59;
-      --muted: #6b7e9d;
-      --violet: #5b5bff;
-      --violet-dark: #3b3be0;
-      --violet-soft: #eeeeff;
-      --green: #76b900;
-      --green-soft: #eef9dc;
-      --line: #e6e8f0;
-      --canvas: #fafafb;
-      --band: #f4f4fb;
-      --cream: #f4eee1;
-      --white: #fff;
+      --ink: var(--fz-color-neutral-4);
+      --deep: var(--fz-color-neutral-5);
+      --action: var(--fz-color-neutral-5);
+      --body: var(--fz-color-neutral-3);
+      --muted: var(--fz-color-neutral-2);
+      --violet: var(--fz-color-primary-3);
+      --violet-dark: var(--fz-color-primary-4);
+      --violet-soft: var(--fz-color-neutral-1);
+      --green: var(--fz-color-secondary-4);
+      --green-soft: var(--fz-color-success-1);
+      --line: color-mix(in srgb, var(--fz-color-neutral-2) 24%, var(--fz-color-neutral-0));
+      --canvas: var(--fz-color-neutral-0);
+      --band: var(--fz-color-neutral-1);
+      --cream: var(--fz-color-neutral-1);
+      --white: var(--fz-color-neutral-0);
       --ease: cubic-bezier(.645,.045,.355,1);
       --rail: min(1240px, calc(100vw - 64px));
     }
@@ -37,7 +32,7 @@
       overflow-x: hidden;
       color: var(--body);
       background: var(--canvas);
-      font-family: Inter, system-ui, sans-serif;
+      font-family: var(--fz-font-family-1);
       -webkit-font-smoothing: antialiased;
     }
     button, a { font: inherit; }
@@ -46,37 +41,37 @@
     .rail { width: var(--rail); margin-inline: auto; }
     .skip {
       position: fixed; z-index: 1000; left: 18px; top: 14px; transform: translateY(-140%);
-      padding: 10px 15px; border: 0; border-radius: 999px; background: var(--action); color: white;
+      padding: 10px 15px; border: 0; border-radius: 999px; background: var(--action); color: var(--white);
     }
     .skip:focus { transform: none; }
-    :focus-visible { outline: 3px solid color-mix(in srgb, var(--violet) 52%, white); outline-offset: 3px; }
+    :focus-visible { outline: 3px solid color-mix(in srgb, var(--violet) 52%, var(--white)); outline-offset: 3px; }
     .eyebrow {
       margin: 0 0 18px; color: var(--violet); font-size: 12px; line-height: 1;
       font-weight: 700; letter-spacing: .15em; text-transform: uppercase;
     }
-    .eyebrow.on-dark { color: #abaaff; }
-    .display { font-family: "Instrument Sans", system-ui, sans-serif; font-weight: 500; letter-spacing: -.04em; }
+    .eyebrow.on-dark { color: var(--fz-color-primary-1); }
+    .display { font-family: var(--fz-font-family-2); font-weight: var(--fz-weight-medium); letter-spacing: -.04em; }
     .button {
       min-height: 54px; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
       padding: 14px 24px; border: 1px solid var(--action); border-radius: 999px; cursor: pointer;
-      color: white; background: var(--action); text-decoration: none; transition: .2s var(--ease);
+      color: var(--white); background: var(--action); text-decoration: none; transition: .2s var(--ease);
     }
     .button:hover { border-color: var(--violet); background: var(--violet); transform: translateY(-2px); }
-    .button.secondary { color: var(--action); border-color: var(--line); background: white; }
-    .button.secondary:hover { color: var(--violet); border-color: var(--violet); background: white; }
-    .button.light { color: var(--action); border-color: white; background: white; }
-    .button.light:hover { color: white; border-color: var(--violet); background: var(--violet); }
+    .button.secondary { color: var(--action); border-color: var(--line); background: var(--white); }
+    .button.secondary:hover { color: var(--violet); border-color: var(--violet); background: var(--white); }
+    .button.light { color: var(--action); border-color: var(--white); background: var(--white); }
+    .button.light:hover { color: var(--white); border-color: var(--violet); background: var(--violet); }
     .arrow { font-size: 18px; line-height: 1; }
 
     .site-header {
       height: 76px; position: sticky; z-index: 100; top: 0; display: flex; align-items: center;
-      border-bottom: 1px solid rgba(230,232,240,.9); background: rgba(255,255,255,.94); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--white) 94%, transparent); backdrop-filter: blur(16px);
     }
     .header-inner { width: var(--rail); margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 26px; }
     .brand-lockup { display: flex; align-items: center; gap: 17px; min-width: 265px; }
     .folloze-logo { width: 116px; height: auto; display: block; }
     .brand-divider { width: 1px; height: 28px; background: var(--line); }
-    .nvidia-logo { width: 114px; height: auto; display: block; fill: #111; }
+    .nvidia-logo { width: 114px; height: auto; display: block; fill: var(--fz-color-neutral-1000); }
     .nav { display: flex; align-items: center; gap: 6px; }
     .nav button {
       min-height: 42px; padding: 0 13px; border: 0; border-radius: 999px; cursor: pointer;
@@ -85,10 +80,10 @@
     .nav button:hover { color: var(--violet); background: var(--violet-soft); }
     .header-cta { min-height: 42px; padding: 9px 17px; font-size: 14px; }
 
-    .hero { padding: 54px 0 72px; position: relative; background: white; }
+    .hero { padding: 54px 0 72px; position: relative; background: var(--white); }
     .hero::after {
       content: ""; width: 430px; height: 430px; position: absolute; z-index: 0; left: -270px; bottom: -270px;
-      border: 1px solid rgba(91,91,255,.18); border-radius: 50%; box-shadow: 0 0 0 75px rgba(91,91,255,.035), 0 0 0 150px rgba(118,185,0,.025);
+      border: 1px solid color-mix(in srgb, var(--violet) 18%, transparent); border-radius: 50%; box-shadow: 0 0 0 75px color-mix(in srgb, var(--violet) 4%, transparent), 0 0 0 150px color-mix(in srgb, var(--green) 3%, transparent);
     }
     .hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0,.92fr) minmax(560px,1.08fr); gap: 64px; align-items: center; }
     .hero h1 { max-width: 690px; margin: 0; color: var(--ink); font-size: clamp(58px,6vw,84px); line-height: .95; }
@@ -100,16 +95,16 @@
 
     .hero-stage {
       min-height: 590px; position: relative; overflow: hidden; border-radius: 32px;
-      color: white; background: radial-gradient(circle at 76% 10%, rgba(118,185,0,.18), transparent 27%), linear-gradient(150deg,#0c1330,#070b1f 68%);
-      box-shadow: 0 32px 90px rgba(7,20,40,.18);
+      color: var(--white); background: radial-gradient(circle at 76% 10%, color-mix(in srgb, var(--green) 18%, transparent), transparent 27%), linear-gradient(150deg,var(--fz-color-neutral-4),var(--deep) 68%);
+      box-shadow: 0 32px 90px color-mix(in srgb, var(--deep) 18%, transparent);
     }
-    .stage-top { padding: 24px 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .stage-top { padding: 24px 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid color-mix(in srgb, var(--white) 10%, transparent); }
     .stage-top strong { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
-    .live-state { display: flex; align-items: center; gap: 8px; color: #c8d0df; font-size: 11px; }
-    .live-state i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(118,185,0,.12); animation: live 2.2s ease-in-out infinite; }
-    @keyframes live { 50% { box-shadow: 0 0 0 11px rgba(118,185,0,0); } }
+    .live-state { display: flex; align-items: center; gap: 8px; color: var(--fz-color-neutral-1); font-size: 11px; }
+    .live-state i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px color-mix(in srgb, var(--green) 12%, transparent); animation: live 2.2s ease-in-out infinite; }
+    @keyframes live { 50% { box-shadow: 0 0 0 11px transparent; } }
     .stage-canvas { padding: 32px 28px 28px; }
-    .stage-label { color: #9aa7ba; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .stage-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
     .stage-title { max-width: 430px; margin: 10px 0 26px; font: 500 30px/1.08 "Instrument Sans",sans-serif; letter-spacing: -.035em; }
     .flow {
       display: grid; grid-template-columns: 150px 42px minmax(0,1fr); gap: 11px; align-items: stretch;
@@ -117,26 +112,26 @@
     .source-stack, .buyer-stack { display: grid; gap: 9px; }
     .source-card, .buyer-card {
       min-height: 67px; padding: 13px 14px; display: flex; align-items: center; gap: 11px;
-      border: 1px solid rgba(255,255,255,.11); border-radius: 14px; background: rgba(255,255,255,.055);
+      border: 1px solid color-mix(in srgb, var(--white) 11%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--white) 6%, transparent);
     }
     .source-card i { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 2px; background: var(--violet); }
     .source-card span, .buyer-card span { display: block; }
     .source-card strong, .buyer-card strong { display: block; font-size: 11px; line-height: 1.25; }
-    .source-card small, .buyer-card small { display: block; margin-top: 4px; color: #9aa7ba; font-size: 9px; line-height: 1.3; }
+    .source-card small, .buyer-card small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 1.3; }
     .flow-rail { display: grid; place-items: center; position: relative; }
     .flow-rail::before { content: ""; width: 1px; position: absolute; inset: 14px auto; background: linear-gradient(transparent,var(--violet),var(--green),transparent); }
-    .flow-rail b { width: 28px; height: 28px; display: grid; place-items: center; z-index: 1; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: #111a39; color: #b5b4ff; animation: turn 7s linear infinite; }
+    .flow-rail b { width: 28px; height: 28px; display: grid; place-items: center; z-index: 1; border: 1px solid color-mix(in srgb, var(--white) 18%, transparent); border-radius: 50%; background: var(--fz-color-neutral-4); color: var(--fz-color-primary-1); animation: turn 7s linear infinite; }
     @keyframes turn { to { transform: rotate(360deg); } }
-    .buyer-card { position: relative; background: white; color: var(--deep); border-color: white; }
+    .buyer-card { position: relative; background: var(--white); color: var(--deep); border-color: var(--white); }
     .buyer-card::after { content: ""; width: 3px; position: absolute; inset: 12px auto 12px 0; border-radius: 3px; background: var(--green); }
     .buyer-card small { color: var(--muted); }
     .signal-receipt {
       margin-top: 19px; padding: 17px 18px; display: grid; grid-template-columns: auto 1fr auto; gap: 13px; align-items: center;
-      border: 1px solid rgba(118,185,0,.28); border-radius: 16px; background: rgba(118,185,0,.08);
+      border: 1px solid color-mix(in srgb, var(--green) 28%, transparent); border-radius: 16px; background: color-mix(in srgb, var(--green) 8%, transparent);
     }
-    .signal-icon { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: #0b1602; font-weight: 800; }
+    .signal-icon { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: var(--deep); font-weight: 800; }
     .signal-receipt strong { display: block; font-size: 11px; }
-    .signal-receipt small { display: block; margin-top: 4px; color: #a8b2c2; font-size: 9px; }
+    .signal-receipt small { display: block; margin-top: 4px; color: var(--fz-color-neutral-1); font-size: 9px; }
     .signal-receipt em { color: var(--green); font-size: 9px; font-style: normal; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 
     .section { padding: 112px 0; }
@@ -149,30 +144,30 @@
     .path-tabs { display: grid; align-content: start; gap: 9px; }
     .path-tab {
       min-height: 112px; padding: 19px 20px; display: grid; grid-template-columns: 34px 1fr; gap: 13px; text-align: left;
-      border: 1px solid var(--line); border-radius: 18px; cursor: pointer; background: white; transition: .2s var(--ease);
+      border: 1px solid var(--line); border-radius: 18px; cursor: pointer; background: var(--white); transition: .2s var(--ease);
     }
-    .path-tab:hover { transform: translateX(4px); border-color: #c9c9ff; }
-    .path-tab[aria-selected="true"] { color: white; border-color: var(--action); background: var(--action); box-shadow: 0 18px 45px rgba(7,20,40,.15); }
+    .path-tab:hover { transform: translateX(4px); border-color: var(--fz-color-primary-1); }
+    .path-tab[aria-selected="true"] { color: var(--white); border-color: var(--action); background: var(--action); box-shadow: 0 18px 45px color-mix(in srgb, var(--deep) 15%, transparent); }
     .path-num { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; font-weight: 700; opacity: .65; }
     .path-tab strong { display: block; color: inherit; font-size: 16px; }
     .path-tab small { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.4; }
-    .path-tab[aria-selected="true"] small { color: #abb6c7; }
-    .path-panel { min-height: 355px; padding: 38px; display: grid; grid-template-columns: 1fr 280px; gap: 38px; border: 1px solid var(--line); border-radius: 24px; background: white; }
+    .path-tab[aria-selected="true"] small { color: var(--fz-color-neutral-1); }
+    .path-panel { min-height: 355px; padding: 38px; display: grid; grid-template-columns: 1fr 280px; gap: 38px; border: 1px solid var(--line); border-radius: 24px; background: var(--white); }
     .path-panel h3 { margin: 0; color: var(--ink); font: 500 38px/1.04 "Instrument Sans",sans-serif; letter-spacing: -.035em; }
     .path-panel > div > p { margin: 18px 0 0; font-size: 16px; line-height: 1.6; }
     .message-stack { margin-top: 27px; display: grid; gap: 10px; }
     .message-line { padding: 13px 15px; border-left: 3px solid var(--violet); background: var(--canvas); font-size: 12px; line-height: 1.45; }
     .path-side { padding: 20px; border-radius: 18px; background: var(--green-soft); }
-    .path-side span { color: #466e00; font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-    .path-side strong { display: block; margin-top: 10px; color: #193100; font: 500 23px/1.12 "Instrument Sans",sans-serif; }
-    .path-side p { margin: 14px 0 0; color: #3b5a13; font-size: 12px; line-height: 1.5; }
+    .path-side span { color: var(--fz-color-success-4); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .path-side strong { display: block; margin-top: 10px; color: var(--fz-color-success-5); font: var(--fz-weight-medium) 23px/1.12 var(--fz-font-family-2); }
+    .path-side p { margin: 14px 0 0; color: var(--fz-color-success-5); font-size: 12px; line-height: 1.5; }
 
-    .system { background: white; }
+    .system { background: var(--white); }
     .system-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
     .system-card { min-height: 470px; padding: 27px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 24px; overflow: hidden; }
     .system-card.build { background: var(--cream); }
-    .system-card.activate { color: white; border-color: transparent; background: linear-gradient(155deg,#1560ff,#0a2ecc 60%,#061c8f); }
-    .system-card.signal { color: white; border-color: #25283c; background: #0a0a12; }
+    .system-card.activate { color: var(--white); border-color: transparent; background: linear-gradient(155deg,var(--fz-color-primary-2),var(--fz-color-primary-4) 60%,var(--fz-color-primary-5)); }
+    .system-card.signal { color: var(--white); border-color: var(--fz-color-neutral-4); background: var(--deep); }
     .system-index { display: flex; justify-content: space-between; color: inherit; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
     .system-visual { height: 172px; margin: 26px 0; display: grid; place-items: center; position: relative; border: 1px solid color-mix(in srgb,currentColor 14%,transparent); border-radius: 17px; background: color-mix(in srgb,currentColor 5%,transparent); }
     .system-orbit { width: 96px; height: 96px; display: grid; place-items: center; border: 1px solid color-mix(in srgb,currentColor 25%,transparent); border-radius: 50%; }
@@ -184,52 +179,52 @@
     .system-card p { min-height: 70px; margin: 15px 0 0; color: inherit; font-size: 13px; line-height: 1.55; opacity: .72; }
     .system-proof { margin-top: 22px; padding-top: 16px; border-top: 1px solid color-mix(in srgb,currentColor 16%,transparent); color: inherit; font-size: 11px; font-weight: 700; }
 
-    .handoff { color: white; background: linear-gradient(145deg,#0c1330,#070b1f 72%); }
-    .handoff .section-head h2 { color: white; }
-    .handoff .section-lede { color: #aab4c5; }
+    .handoff { color: var(--white); background: linear-gradient(145deg,var(--fz-color-neutral-4),var(--deep) 72%); }
+    .handoff .section-head h2 { color: var(--white); }
+    .handoff .section-lede { color: var(--fz-color-neutral-1); }
     .signal-grid { display: grid; grid-template-columns: minmax(0,.95fr) minmax(520px,1.05fr); gap: 22px; }
-    .field-panel, .console { border: 1px solid rgba(255,255,255,.1); border-radius: 24px; background: rgba(255,255,255,.045); }
+    .field-panel, .console { border: 1px solid color-mix(in srgb, var(--white) 10%, transparent); border-radius: 24px; background: color-mix(in srgb, var(--white) 5%, transparent); }
     .field-panel { padding: 31px; }
-    .field-panel h3, .console h3 { margin: 0; color: white; font: 500 31px/1.08 "Instrument Sans",sans-serif; letter-spacing: -.03em; }
-    .field-panel > p { margin: 15px 0 28px; color: #aab4c5; font-size: 14px; line-height: 1.55; }
+    .field-panel h3, .console h3 { margin: 0; color: var(--white); font: var(--fz-weight-medium) 31px/1.08 var(--fz-font-family-2); letter-spacing: -.03em; }
+    .field-panel > p { margin: 15px 0 28px; color: var(--fz-color-neutral-1); font-size: 14px; line-height: 1.55; }
     .field-steps { display: grid; gap: 10px; }
-    .field-step { padding: 15px; display: grid; grid-template-columns: 30px 1fr; gap: 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.035); }
+    .field-step { padding: 15px; display: grid; grid-template-columns: 30px 1fr; gap: 12px; border: 1px solid color-mix(in srgb, var(--white) 8%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--white) 4%, transparent); }
     .field-step b { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--violet); font-size: 10px; }
     .field-step strong { display: block; font-size: 12px; }
-    .field-step span { display: block; margin-top: 5px; color: #95a2b5; font-size: 10px; line-height: 1.4; }
-    .console { overflow: hidden; background: #080d1d; }
-    .console-head { padding: 24px 26px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid rgba(255,255,255,.09); }
-    .console-head small { color: #7f8da1; font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .field-step span { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+    .console { overflow: hidden; background: var(--deep); }
+    .console-head { padding: 24px 26px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid color-mix(in srgb, var(--white) 9%, transparent); }
+    .console-head small { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
     .console-body { padding: 24px 26px 27px; }
     .signal-tabs { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
-    .signal-tab { min-height: 49px; padding: 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; cursor: pointer; color: #a7b2c2; background: rgba(255,255,255,.035); font-size: 10px; }
-    .signal-tab[aria-pressed="true"] { color: #112000; border-color: var(--green); background: var(--green); font-weight: 800; }
-    .signal-map { min-height: 228px; margin-top: 18px; padding: 22px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 17px; background: radial-gradient(circle at 83% 16%,rgba(118,185,0,.13),transparent 35%),rgba(255,255,255,.025); }
-    .signal-map::before { content: ""; position: absolute; inset: 0; opacity: .12; background-image: linear-gradient(rgba(255,255,255,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.18) 1px,transparent 1px); background-size: 28px 28px; }
+    .signal-tab { min-height: 49px; padding: 9px; border: 1px solid color-mix(in srgb, var(--white) 10%, transparent); border-radius: 12px; cursor: pointer; color: var(--fz-color-neutral-1); background: color-mix(in srgb, var(--white) 4%, transparent); font-size: 10px; }
+    .signal-tab[aria-pressed="true"] { color: var(--deep); border-color: var(--green); background: var(--green); font-weight: 800; }
+    .signal-map { min-height: 228px; margin-top: 18px; padding: 22px; position: relative; overflow: hidden; border: 1px solid color-mix(in srgb, var(--white) 8%, transparent); border-radius: 17px; background: radial-gradient(circle at 83% 16%,color-mix(in srgb, var(--green) 13%, transparent),transparent 35%),color-mix(in srgb, var(--white) 3%, transparent); }
+    .signal-map::before { content: ""; position: absolute; inset: 0; opacity: .12; background-image: linear-gradient(color-mix(in srgb, var(--white) 18%, transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb, var(--white) 18%, transparent) 1px,transparent 1px); background-size: 28px 28px; }
     .signal-content { position: relative; z-index: 1; }
     .signal-kicker { color: var(--green); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-    .signal-content h4 { max-width: 390px; margin: 12px 0 0; color: white; font: 500 28px/1.08 "Instrument Sans",sans-serif; letter-spacing: -.03em; }
-    .signal-content p { max-width: 430px; margin: 15px 0 0; color: #9da8ba; font-size: 12px; line-height: 1.55; }
-    .next-move { margin-top: 22px; padding-top: 17px; display: flex; align-items: center; gap: 11px; border-top: 1px solid rgba(255,255,255,.09); color: white; font-size: 11px; }
-    .next-move i { width: 9px; height: 9px; border-radius: 50%; background: var(--violet); box-shadow: 0 0 0 5px rgba(91,91,255,.12); }
+    .signal-content h4 { max-width: 390px; margin: 12px 0 0; color: var(--white); font: var(--fz-weight-medium) 28px/1.08 var(--fz-font-family-2); letter-spacing: -.03em; }
+    .signal-content p { max-width: 430px; margin: 15px 0 0; color: var(--fz-color-neutral-1); font-size: 12px; line-height: 1.55; }
+    .next-move { margin-top: 22px; padding-top: 17px; display: flex; align-items: center; gap: 11px; border-top: 1px solid color-mix(in srgb, var(--white) 9%, transparent); color: var(--white); font-size: 11px; }
+    .next-move i { width: 9px; height: 9px; border-radius: 50%; background: var(--violet); box-shadow: 0 0 0 5px color-mix(in srgb, var(--violet) 12%, transparent); }
 
     .closing { padding: 108px 0; background: var(--canvas); }
-    .closing-panel { padding: 74px; position: relative; overflow: hidden; border-radius: 32px; color: white; background: linear-gradient(150deg,#0c1740,#070b22); }
-    .closing-panel::after { content: ""; width: 320px; height: 320px; position: absolute; right: -120px; top: -150px; border: 1px solid rgba(118,185,0,.35); border-radius: 50%; box-shadow: 0 0 0 60px rgba(118,185,0,.035),0 0 0 120px rgba(91,91,255,.035); }
+    .closing-panel { padding: 74px; position: relative; overflow: hidden; border-radius: 32px; color: var(--white); background: linear-gradient(150deg,var(--fz-color-neutral-4),var(--deep)); }
+    .closing-panel::after { content: ""; width: 320px; height: 320px; position: absolute; right: -120px; top: -150px; border: 1px solid color-mix(in srgb, var(--green) 35%, transparent); border-radius: 50%; box-shadow: 0 0 0 60px color-mix(in srgb, var(--green) 4%, transparent),0 0 0 120px color-mix(in srgb, var(--violet) 4%, transparent); }
     .closing-panel > * { position: relative; z-index: 1; }
-    .closing-panel h2 { max-width: 850px; margin: 0; color: white; font-size: clamp(48px,5.8vw,76px); line-height: .98; }
-    .closing-panel p { max-width: 650px; margin: 22px 0 0; color: #aab4c5; font-size: 17px; line-height: 1.55; }
+    .closing-panel h2 { max-width: 850px; margin: 0; color: var(--white); font-size: clamp(48px,5.8vw,76px); line-height: .98; }
+    .closing-panel p { max-width: 650px; margin: 22px 0 0; color: var(--fz-color-neutral-1); font-size: 17px; line-height: 1.55; }
     .closing-actions { margin-top: 31px; display: flex; flex-wrap: wrap; gap: 11px; }
-    .source-links { margin-top: 42px; padding-top: 22px; display: flex; flex-wrap: wrap; gap: 19px; border-top: 1px solid rgba(255,255,255,.1); }
-    .source-links a { color: #b7c0cf; font-size: 12px; text-decoration: none; }
-    .source-links a:hover { color: white; }
+    .source-links { margin-top: 42px; padding-top: 22px; display: flex; flex-wrap: wrap; gap: 19px; border-top: 1px solid color-mix(in srgb, var(--white) 10%, transparent); }
+    .source-links a { color: var(--fz-color-neutral-1); font-size: 12px; text-decoration: none; }
+    .source-links a:hover { color: var(--white); }
 
-    .modal { width: min(680px,calc(100vw - 32px)); padding: 0; border: 0; border-radius: 26px; color: var(--body); background: white; box-shadow: 0 35px 110px rgba(3,10,24,.34); }
-    .modal::backdrop { background: rgba(4,10,24,.7); backdrop-filter: blur(6px); }
+    .modal { width: min(680px,calc(100vw - 32px)); padding: 0; border: 0; border-radius: 26px; color: var(--body); background: var(--white); box-shadow: var(--fz-shadow-x-large); }
+    .modal::backdrop { background: color-mix(in srgb, var(--deep) 70%, transparent); backdrop-filter: blur(6px); }
     .modal-inner { padding: 34px; }
     .modal-top { display: flex; justify-content: space-between; gap: 24px; }
     .modal h3 { margin: 0; color: var(--ink); font: 500 38px/1.03 "Instrument Sans",sans-serif; letter-spacing: -.035em; }
-    .modal-close { width: 42px; height: 42px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 50%; cursor: pointer; background: white; font-size: 21px; }
+    .modal-close { width: 42px; height: 42px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 50%; cursor: pointer; background: var(--white); font-size: 21px; }
     .modal-copy { margin: 16px 0 0; line-height: 1.55; }
     .sprint-grid { margin: 25px 0; display: grid; grid-template-columns: repeat(2,1fr); gap: 9px; }
     .sprint-card { padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas); }
@@ -304,10 +299,8 @@
       *, *::before, *::after { animation: none !important; transition-duration: .001ms !important; }
     }
   </style>
-</head>
-<body>
   <div class="page">
-    <button class="skip" type="button" data-scroll-target="main">Skip to content</button>
+    <button class="skip fz-btn fz-btn-link" type="button" data-scroll-target="main">Skip to content</button>
     <header class="site-header">
       <div class="header-inner">
         <div class="brand-lockup" aria-label="Folloze for NVIDIA">
@@ -320,12 +313,12 @@
             <path d="M129.832,124.085v-1.807c.175-.013.353-.022.533-.028,4.941-.155,8.183,4.246,8.183,4.246s-3.5,4.863-7.255,4.863a4.553,4.553,0,0,1-1.461-.234v-5.478c1.924.232,2.31,1.082,3.467,3.01l2.572-2.169a6.81,6.81,0,0,0-5.042-2.462,9.328,9.328,0,0,0-1,.059m0-5.968v2.7c.177-.014.355-.025.533-.032,6.871-.232,11.348,5.635,11.348,5.635s-5.142,6.253-10.5,6.253a7.906,7.906,0,0,1-1.383-.122v1.668a9.1,9.1,0,0,0,1.151.075c4.985,0,8.59-2.546,12.081-5.559.578.463,2.948,1.591,3.435,2.085-3.319,2.778-11.055,5.018-15.44,5.018-.423,0-.829-.026-1.228-.064v2.344h18.947v-20Zm0,13.009v1.424c-4.611-.822-5.89-5.615-5.89-5.615a9.967,9.967,0,0,1,5.89-2.85v1.563h-.007a4.424,4.424,0,0,0-3.437,1.571s.845,3.035,3.444,3.908m-8.189-4.4a11.419,11.419,0,0,1,8.189-4.449v-1.463c-6.043.485-11.277,5.6-11.277,5.6s2.964,8.569,11.277,9.354v-1.555C123.731,133.451,121.643,126.728,121.643,126.728Z" transform="translate(-118.555 -118.117)" fill="#76B900"></path>
           </svg>
         </div>
-        <nav class="nav" aria-label="Primary navigation">
+        <nav class="nav fz-navs-1" aria-label="Primary navigation">
           <button type="button" data-scroll-target="paths">Shape the story</button>
           <button type="button" data-scroll-target="system">Run the campaign</button>
           <button type="button" data-scroll-target="signals">See the next move</button>
         </nav>
-        <button class="button header-cta" type="button" data-open-sprint>Plan the sprint</button>
+        <button class="button header-cta fz-btn fz-btn-primary fz-btn-curved" type="button" data-open-sprint onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'header CTA'}, this)">Plan the sprint</button>
       </div>
     </header>
 
@@ -334,11 +327,11 @@
         <div class="rail hero-grid">
           <div>
             <p class="eyebrow">Folloze for NVIDIA</p>
-            <h1 class="display">Make every NVIDIA launch feel <span>built for the account.</span></h1>
-            <p class="hero-copy">Turn launch content, partner proof, and AI-created campaign assets into governed 1:1 experiences that adapt by buying role, capture first-party engagement, and give the field a clear next move.</p>
+            <h1 class="display fz-heading-1">Make every NVIDIA launch feel <span>built for the account.</span></h1>
+            <p class="hero-copy fz-paragraph-1">Turn launch content, partner proof, and AI-created campaign assets into governed 1:1 experiences that adapt by buying role, capture first-party engagement, and give the field a clear next move.</p>
             <div class="hero-actions">
-              <button class="button" type="button" data-open-sprint>Plan an account sprint <span class="arrow">→</span></button>
-              <button class="button secondary" type="button" data-scroll-target="paths">Explore the account paths <span class="arrow">↓</span></button>
+              <button class="button fz-btn fz-btn-primary fz-btn-curved" type="button" data-open-sprint onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'main hero banner'}, this)">Plan an account sprint <span class="arrow">→</span></button>
+              <button class="button secondary fz-btn fz-btn-tertiary fz-btn-curved" type="button" data-scroll-target="paths">Explore the account paths <span class="arrow">↓</span></button>
             </div>
             <p class="hero-note"><i aria-hidden="true"></i>One global story. A specific entry point for every priority account.</p>
           </div>
@@ -347,7 +340,7 @@
             <div class="stage-top"><strong>Account activation system</strong><span class="live-state"><i></i>Account brief active</span></div>
             <div class="stage-canvas">
               <span class="stage-label">One governed launch system</span>
-              <h2 class="stage-title">From NVIDIA launch assets to buying-group experiences.</h2>
+              <h2 class="stage-title fz-heading-2">From NVIDIA launch assets to buying-group experiences.</h2>
               <div class="flow">
                 <div class="source-stack">
                   <div class="source-card"><i></i><span><strong>Launch story</strong><small>Product + industry narrative</small></span></div>
@@ -371,11 +364,11 @@
         <div class="rail">
           <div class="section-head">
             <p class="eyebrow">Start with the account's real question</p>
-            <h2 class="display">One NVIDIA story. Three very different ways in.</h2>
+            <h2 class="display fz-heading-2">One NVIDIA story. Three very different ways in.</h2>
             <p class="section-lede">A CIO evaluating an AI factory should not see the same proof path as an operations leader exploring physical AI. Choose the entry point and watch the experience sharpen around it.</p>
           </div>
           <div class="path-workbench">
-            <div class="path-tabs" role="tablist" aria-label="NVIDIA campaign entry points">
+            <div class="path-tabs fz-tabs-2" role="tablist" aria-label="NVIDIA campaign entry points">
               <button class="path-tab" type="button" role="tab" aria-selected="true" data-path="factory"><span class="path-num">01</span><span><strong>AI factory modernization</strong><small>Infrastructure, scale, partner confidence</small></span></button>
               <button class="path-tab" type="button" role="tab" aria-selected="false" data-path="enterprise"><span class="path-num">02</span><span><strong>Enterprise AI in production</strong><small>Software, data, governance, adoption</small></span></button>
               <button class="path-tab" type="button" role="tab" aria-selected="false" data-path="physical"><span class="path-num">03</span><span><strong>Physical AI deployment</strong><small>Simulation, edge, operations, ecosystem</small></span></button>
@@ -383,7 +376,7 @@
             <div class="path-panel" role="tabpanel" aria-live="polite">
               <div>
                 <p class="eyebrow" id="pathEyebrow">AI factory account path</p>
-                <h3 id="pathTitle">Make the architecture credible before asking the account to move.</h3>
+                <h3 class="fz-heading-3" id="pathTitle">Make the architecture credible before asking the account to move.</h3>
                 <p id="pathCopy">Lead infrastructure, AI platform, and finance stakeholders through the validated deployment story that matches their operating environment.</p>
                 <div class="message-stack" id="messageStack">
                   <div class="message-line">Open with the account's workload and deployment pressure.</div>
@@ -401,28 +394,28 @@
         <div class="rail">
           <div class="section-head">
             <p class="eyebrow">Build. Activate. Signal.</p>
-            <h2 class="display">A launch should get sharper as it travels.</h2>
+            <h2 class="display fz-heading-2">A launch should get sharper as it travels.</h2>
             <p class="section-lede">Folloze keeps the narrative governed while the experience changes around account, role, partner route, source, and behavior.</p>
           </div>
           <div class="system-grid">
             <article class="system-card build">
               <div class="system-index"><span>01</span><span>Build</span></div>
               <div class="system-visual"><div class="system-orbit"><b>1:1</b></div></div>
-              <h3>Move from launch assets to account-ready.</h3>
+              <h3 class="fz-heading-3">Move from launch assets to account-ready.</h3>
               <p>Bring the brief, product story, partner proof, and AI-created content. Folloze turns them into a governed experience without another web sprint.</p>
               <div class="system-proof">One reusable system, many account-specific versions.</div>
             </article>
             <article class="system-card activate">
               <div class="system-index"><span>02</span><span>Activate</span></div>
               <div class="system-visual"><div class="system-orbit"><b>↗</b></div></div>
-              <h3>Give every buying role the right door.</h3>
+              <h3 class="fz-heading-3">Give every buying role the right door.</h3>
               <p>Change the message, proof, CTA, and content path by account, role, industry, source, or partner while the campaign stays governed.</p>
               <div class="system-proof">Campaign, field, partner, event, and web paths stay connected.</div>
             </article>
             <article class="system-card signal">
               <div class="system-index"><span>03</span><span>Signal</span></div>
               <div class="system-visual"><div class="system-orbit"><b>●</b></div></div>
-              <h3>Show the field what earned attention.</h3>
+              <h3 class="fz-heading-3">Show the field what earned attention.</h3>
               <p>Capture feature interest, content exploration, persona context, CTA activity, and buying-group behavior, then route the next move.</p>
               <div class="system-proof">The campaign becomes a first-party account signal.</div>
             </article>
@@ -434,12 +427,12 @@
         <div class="rail">
           <div class="section-head">
             <p class="eyebrow on-dark">From attention to field action</p>
-            <h2 class="display">The page should tell the NVIDIA team what to do next.</h2>
+            <h2 class="display fz-heading-2">The page should tell the NVIDIA team what to do next.</h2>
             <p class="section-lede">Not another click report. A shared view of the business question the account explored, the proof it trusted, and the conversation the field should open.</p>
           </div>
           <div class="signal-grid">
             <article class="field-panel">
-              <h3>One account motion, handed off cleanly.</h3>
+              <h3 class="fz-heading-3">One account motion, handed off cleanly.</h3>
               <p>Marketing, partners, and sales stay inside the same story while each team gets the action it owns.</p>
               <div class="field-steps">
                 <div class="field-step"><b>1</b><div><strong>Marketing sees the active narrative.</strong><span>Which use case, proof path, and role earned meaningful engagement.</span></div></div>
@@ -448,9 +441,9 @@
               </div>
             </article>
             <article class="console">
-              <div class="console-head"><h3>Illustrative account signal</h3><small>Choose a buying role</small></div>
+              <div class="console-head"><h3 class="fz-heading-3">Illustrative account signal</h3><small>Choose a buying role</small></div>
               <div class="console-body">
-                <div class="signal-tabs" aria-label="Buying role signal selector">
+                <div class="signal-tabs fz-tabs-2" aria-label="Buying role signal selector">
                   <button class="signal-tab" type="button" aria-pressed="true" data-signal="platform">AI platform</button>
                   <button class="signal-tab" type="button" aria-pressed="false" data-signal="infrastructure">Infrastructure</button>
                   <button class="signal-tab" type="button" aria-pressed="false" data-signal="executive">Executive</button>
@@ -458,7 +451,7 @@
                 <div class="signal-map">
                   <div class="signal-content">
                     <span class="signal-kicker" id="signalKicker">Role-level interest</span>
-                    <h4 id="signalTitle">Governed AI software moved to the center of the visit.</h4>
+                    <h4 class="fz-heading-4" id="signalTitle">Governed AI software moved to the center of the visit.</h4>
                     <p id="signalCopy">The account explored the production software and governance path after entering through the AI factory story.</p>
                     <div class="next-move"><i></i><span id="signalAction">Next move: open the production AI operating-model conversation.</span></div>
                   </div>
@@ -472,11 +465,11 @@
       <section class="closing">
         <div class="rail closing-panel">
           <p class="eyebrow on-dark">Start focused</p>
-          <h2 class="display">One NVIDIA launch. One priority account list. Three buying-role paths.</h2>
+          <h2 class="display fz-heading-2">One NVIDIA launch. One priority account list. Three buying-role paths.</h2>
           <p>Use a focused sprint to build the first governed 1:1 experience, align the field handoff, and define the signals that should trigger the next move.</p>
           <div class="closing-actions">
-            <button class="button light" type="button" data-open-sprint>See the sprint plan <span class="arrow">→</span></button>
-            <a class="button secondary" href="https://www.folloze.com/request-demo" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'final CTA', url:this.href}, this)">See Folloze in action <span class="arrow">↗</span></a>
+            <button class="button light fz-btn fz-btn-secondary fz-btn-curved" type="button" data-open-sprint onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'final CTA'}, this)">See the sprint plan <span class="arrow">→</span></button>
+            <a class="button secondary fz-btn fz-btn-fourth fz-btn-curved" href="https://www.folloze.com/request-demo" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'final CTA', url:this.href}, this)">See Folloze in action <span class="arrow">↗</span></a>
           </div>
           <div class="source-links" aria-label="Source links">
             <a href="https://www.nvidia.com/en-us/programs/" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'sources', url:this.href}, this)">NVIDIA Programs ↗</a>
@@ -491,7 +484,7 @@
 
   <dialog class="modal" id="sprintModal" aria-labelledby="sprintTitle">
     <div class="modal-inner">
-      <div class="modal-top"><h3 id="sprintTitle">The first account sprint.</h3><button class="modal-close" type="button" data-close-sprint aria-label="Close sprint plan">×</button></div>
+      <div class="modal-top"><h3 class="fz-heading-3" id="sprintTitle">The first account sprint.</h3><button class="modal-close fz-btn fz-btn-circle" type="button" data-close-sprint aria-label="Close sprint plan">×</button></div>
       <p class="modal-copy">A focused working session turns one NVIDIA launch into a governed 1:1 experience the field can actually use.</p>
       <div class="sprint-grid">
         <div class="sprint-card"><span>Input</span><strong>One launch and priority account list</strong></div>
@@ -500,8 +493,8 @@
         <div class="sprint-card"><span>Signal</span><strong>One trigger for the next move</strong></div>
       </div>
       <div class="modal-actions">
-        <a class="button" href="https://www.folloze.com/request-demo" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'sprint modal', url:this.href}, this)">Plan it with Folloze <span class="arrow">↗</span></a>
-        <button class="button secondary" type="button" data-close-sprint>Keep exploring</button>
+        <a class="button fz-btn fz-btn-primary fz-btn-curved" href="https://www.folloze.com/request-demo" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'sprint modal', url:this.href}, this)">Plan it with Folloze <span class="arrow">↗</span></a>
+        <button class="button secondary fz-btn fz-btn-tertiary fz-btn-curved" type="button" data-close-sprint>Keep exploring</button>
       </div>
     </div>
   </dialog>

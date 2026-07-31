@@ -2,14 +2,17 @@
 
 ## Board Identity
 
-- Save intent: local preview only. No Folloze board has been created or updated.
+- Save intent: net-new Folloze Demo-instance creation authorized by Trey on 2026-07-31.
 - Working title: `Folloze for NVIDIA | Make Every Launch Account-Specific`.
 - Vendor: Folloze.
 - Target account: NVIDIA Corporation.
 - Motion: buyer-facing one-to-one ABM executive workbench.
 - Local source: `public/examples/folloze-for-nvidia-1to1.html`.
-- Folloze theme: pending explicit yes/no authorization before any MCP save. Because Folloze owns the experience, the recommended save mode is to use the Folloze company theme unless the local design conflicts with the current returned theme.
-- Board ID, designer URL, public Folloze URL, and tracker row: not created.
+- Folloze theme: explicitly authorized `yes` by Trey on 2026-07-31. Theme ID `4`; required stylesheet `https://cdn.folloze.com/theme/135433/4.css?v=1764160175`.
+- Folloze board ID: `249131`.
+- Designer URL: `https://app.folloze.com/app/board/249131/designer`.
+- Public vanity URL: `https://experience.folloze.com/folloze-for-nvidia`.
+- Tracking Dock: `Demo Environments!A147:I147` in `MCP Demo Environments - May 2026`.
 
 ## Holistic Buyer Goal
 
@@ -61,7 +64,7 @@ Help NVIDIA enterprise, field, partner, and revenue-marketing leaders see how on
 - Every visible button must scroll, change state, open a useful panel, or link to a live source.
 - External links must use `target="_blank" rel="noopener"` and direct `flzAnalytic('cta_click', ...)` wiring.
 - Local QA must cover 1440px, 390px, and 320px with no horizontal overflow, no broken marks, and no console errors.
-- Folloze save remains blocked until theme mode is explicitly authorized and the current MCP creation guide is read.
+- Folloze save is authorized. The current MCP creation guide was read on 2026-07-31; the upload source now uses theme ID `4`, the required stylesheet, Folloze theme variables/classes, direct external CTA analytics, shell-safe scroll controls, and tracked custom interactions.
 
 ## Current State
 
@@ -78,7 +81,9 @@ Help NVIDIA enterprise, field, partner, and revenue-marketing leaders see how on
   - External destinations: all five bounded link checks returned HTTP 200.
   - Repository gate: `npm run qa` passed (lint, TypeScript, 324 unit tests, Turbopack build, and webpack build).
   - Existing end-to-end suite: 24 passed and 2 intentionally skipped.
-  - Evidence: `output/playwright/folloze-nvidia-1to1-desktop.png`, `output/playwright/folloze-nvidia-1to1-mobile390.png`, and `output/playwright/folloze-nvidia-1to1-mobile320.png`.
-- Folloze save: not requested.
-- Public Folloze deployment: pending.
-- Tracker: not applicable until a first Folloze create.
+  - Evidence: `output/playwright/folloze-nvidia-1to1-desktop.png`, `output/playwright/folloze-nvidia-1to1-mobile390.png`, `output/playwright/folloze-nvidia-1to1-mobile320.png`, `output/playwright/folloze-nvidia-1to1-themed-desktop.png`, and `output/playwright/folloze-nvidia-1to1-themed-mobile390.png`.
+- Folloze save: complete on 2026-07-31 as net-new board `249131`, using Folloze company theme ID `4`.
+- Folloze publish: complete. The board reports `Online`; its public vanity URL is `https://experience.folloze.com/folloze-for-nvidia`.
+- Anonymous verification: passed on 2026-07-31. The public URL returned HTTP 200 without an authenticated Folloze session, the document title was `Folloze for NVIDIA | Make Every Launch Account-Specific | Experience Folloze`, and the rendered page exposed the Folloze and NVIDIA marks plus the account-specific experience content.
+- Tracker: added to `Demo Environments!A147:I147` with board ID `249131`, designer URL, public URL, owner, and publish date. The row was rechecked for a single board-ID match.
+- Try Me Now integration: the 1:1 example label is `Watch the NVIDIA 1:1 experience` and points to the public Folloze vanity URL.
