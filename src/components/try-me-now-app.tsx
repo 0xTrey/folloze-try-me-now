@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
-  Building2,
   Check,
   ChevronDown,
   Clipboard,
@@ -35,8 +34,35 @@ import {
   useState
 } from "react";
 
+import {
+  AnalyticsSignalPanel,
+  AnalyticsSignalToast,
+  AssetPicker,
+  AudienceEvidenceTray,
+  ContentSourceConfirmation,
+  CtaDestinationControl,
+  DevicePreviewToolbar,
+  EditBriefDrawer,
+  EntryPathMicroDemo,
+  ExpirySaveValuePanel,
+  ExperienceBlockControl as ExperienceBlockControlPanel,
+  ExperienceVariantCards,
+  InstantBrandLockStrip,
+  MessageDirectionControl,
+  PersonalizationQualityReceipt,
+  ProgressiveArtifactStream,
+  SavedExperienceCockpit,
+  ToneChips,
+  type AnalyticsSignal,
+  type CtaValue,
+  type EntryPathOption,
+  type PreviewDevice
+} from "@/components/try-me-now-enhancements";
+
 import type {
+  ExperienceBlockControl as SessionExperienceBlockControl,
   PublicTryMeSession,
+  SessionEvidenceItem,
   SessionAnswers,
   StageState,
   UseCase
@@ -50,6 +76,17 @@ import {
 } from "@/lib/client-response";
 
 type ClientEvent = { action: string; label: string; at: number };
+
+type WorkspacePatch = {
+  answers?: SessionAnswers;
+  selectedAudienceRecommendationId?: string | null;
+  evidenceDecisions?: Array<{
+    id: string;
+    disposition: SessionEvidenceItem["disposition"];
+  }>;
+  sourceConfirmation?: "unconfirmed" | "confirmed" | "rejected";
+  blockControls?: SessionExperienceBlockControl[];
+};
 
 type BuildMoment = {
   key: "brand" | "buyer" | "strategy" | "experience";
@@ -115,6 +152,119 @@ const objectives: Record<UseCase, string[]> = {
   campaign: ["Generate demand", "Drive registrations", "Launch or announce", "Book meetings"],
   content: ["Educate buyers", "Increase content engagement", "Capture qualified interest", "Book a meeting"]
 };
+
+const entryPathOptions: Record<UseCase, EntryPathOption> = {
+  abm: {
+    id: "abm",
+    index: "01",
+    eyebrow: "1:1 ABM",
+    title: "Break into one account",
+    description: "Watch public account evidence become a credible, one-to-one buyer journey.",
+    actionLabel: "Build my 1:1 page",
+    exampleLabel: "Watch a Jitterbit × Cisco example",
+    demoSteps: ["Seller", "Account evidence", "1:1 experience"],
+    accent: "#645cff",
+    tone: "paper"
+  },
+  campaign: {
+    id: "campaign",
+    index: "02",
+    eyebrow: "Campaign",
+    title: "Launch a campaign people explore",
+    description: "Turn one offer and one audience into a sharp, measurable campaign front door.",
+    actionLabel: "Build my campaign page",
+    exampleLabel: "Watch a product-launch example",
+    demoSteps: ["Offer", "Buyer objective", "Live campaign"],
+    accent: "#5865ff",
+    tone: "cobalt"
+  },
+  content: {
+    id: "content",
+    index: "03",
+    eyebrow: "Content",
+    title: "Make your best content interactive",
+    description: "Preserve the facts, then reshape a URL or PDF into a guided buyer path.",
+    actionLabel: "Transform my content",
+    exampleLabel: "Watch a report become an experience",
+    demoSteps: ["Source", "Buyer lens", "Magic experience"],
+    accent: "#67e8c5",
+    tone: "ink"
+  }
+};
+
+const exampleSeeds: Record<UseCase, { companyDomain: string; answers: SessionAnswers }> = {
+  abm: {
+    companyDomain: "jitterbit.com",
+    answers: {
+      targetDomain: "cisco.com",
+      audience: "Enterprise architecture and platform leaders",
+      objective: "Book a meeting",
+      exampleMode: true,
+      exampleKey: "jitterbit-cisco-abm",
+      messageBelief: "Integration architecture can become an AI advantage instead of another source of sprawl.",
+      messageAction: "Bring the first enterprise automation use case into a working session.",
+      ctaType: "book-meeting",
+      ctaDestination: "https://www.jitterbit.com/contact/",
+      styleVariant: "brand-led",
+      toneVariant: "executive",
+      layoutVariant: "immersive"
+    }
+  },
+  campaign: {
+    companyDomain: "jitterbit.com",
+    answers: {
+      campaignType: "product",
+      audience: "Enterprise architects and automation leaders",
+      objective: "Launch or announce",
+      exampleMode: true,
+      exampleKey: "jitterbit-product-campaign",
+      messageBelief: "Secure AI agents need an integration foundation built for enterprise systems.",
+      messageAction: "Explore the architecture and identify the first workflow to activate.",
+      ctaType: "explore",
+      styleVariant: "technical",
+      toneVariant: "provocative",
+      layoutVariant: "modular"
+    }
+  },
+  content: {
+    companyDomain: "jitterbit.com",
+    answers: {
+      sourceUrl: "https://www.jitterbit.com/blog/jitterbit-mcp-the-secure-foundation-for-enterprise-ai-agents/",
+      sourceConfirmed: true,
+      audience: "Enterprise architects and AI platform owners",
+      objective: "Increase content engagement",
+      exampleMode: true,
+      exampleKey: "jitterbit-mcp-content",
+      messageBelief: "MCP becomes enterprise-ready when governance and integration are designed together.",
+      messageAction: "Choose the architecture question you want to resolve first.",
+      ctaType: "explore",
+      styleVariant: "editorial",
+      toneVariant: "technical",
+      layoutVariant: "narrative"
+    }
+  }
+};
+
+function uiCtaType(value?: SessionAnswers["ctaType"]): CtaValue["type"] {
+  if (value === "register") return "registration";
+  if (value === "download" || value === "explore") return "content";
+  if (value === "custom" || value === "contact-sales") return "custom";
+  return "meeting";
+}
+
+function serverCtaType(value: CtaValue["type"]): NonNullable<SessionAnswers["ctaType"]> {
+  if (value === "registration") return "register";
+  if (value === "content") return "download";
+  if (value === "custom") return "custom";
+  return "book-meeting";
+}
+
+function defaultCtaLabel(value: CtaValue["type"]): string {
+  if (value === "registration") return "Register now";
+  if (value === "content") return "Explore the content";
+  if (value === "custom") return "Take the next step";
+  return "Book a meeting";
+}
 
 const likelyDomain = /^(?:https?:\/\/)?(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\/?$/i;
 const CEREMONY_DURATION_MS = 4_800;
@@ -557,6 +707,19 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return readJsonResponse<T>(response);
 }
 
+async function recordPreviewSignal(
+  sessionId: string,
+  event: "preview-opened" | "section-viewed" | "lens-selected" | "cta-clicked",
+  elementId?: string,
+  value?: string
+): Promise<PublicTryMeSession> {
+  const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${sessionId}`, {
+    method: "POST",
+    body: JSON.stringify({ operation: "preview-interaction", event, elementId, value })
+  });
+  return result.session;
+}
+
 function uploadSizeBucket(bytes: number): string {
   if (bytes < 1024 * 1024) return "under_1mb";
   if (bytes < 5 * 1024 * 1024) return "1_to_5mb";
@@ -667,59 +830,23 @@ function LiveChecklist({ session, compact = false }: { session?: PublicTryMeSess
   );
 }
 
-function PortalVisual({ useCase }: { useCase: UseCase }) {
-  if (useCase === "abm") {
-    return (
-      <div className="portalVisual abmVisual" aria-hidden="true">
-        <span className="miniLogo"><Building2 size={14} /> Northstar</span>
-        <span className="miniPlus">×</span>
-        <span className="miniLogo isTarget">Axiom</span>
-        <div className="miniHeadline">One account.<br />One clear case.</div>
-      </div>
-    );
-  }
-  if (useCase === "campaign") {
-    return (
-      <div className="portalVisual campaignVisual" aria-hidden="true">
-        <span className="campaignDot" />
-        <div className="campaignLines"><span /><span /><span /></div>
-        <div className="campaignButton">Explore the launch</div>
-      </div>
-    );
-  }
+function UseCasePortals({
+  onSelect,
+  onExample
+}: {
+  onSelect: (value: UseCase) => void;
+  onExample: (value: UseCase) => void;
+}) {
   return (
-    <div className="portalVisual contentVisual" aria-hidden="true">
-      <div className="documentPage"><span /><span /><span /><span /></div>
-      <ArrowRight size={18} />
-      <div className="contentPaths"><span>Role</span><span>Topic</span><span>Next</span></div>
-    </div>
-  );
-}
-
-function UseCasePortals({ onSelect }: { onSelect: (value: UseCase) => void }) {
-  return (
-    <div className="portalRail" aria-label="Choose what you want to create">
-      {(Object.keys(useCaseContent) as UseCase[]).map((key) => {
-        const portal = useCaseContent[key];
-        const Icon = portal.icon;
-        return (
-          <button
-            type="button"
-            key={key}
-            className={`portal ${portal.className}`}
-            onClick={() => onSelect(key)}
-          >
-            <div className="portalTopline"><span>{portal.number}</span><Icon size={19} /></div>
-            <PortalVisual useCase={key} />
-            <div className="portalCopy">
-              <span className="portalKicker">{portal.kicker}</span>
-              <h2>{portal.title}</h2>
-              <p>{portal.description}</p>
-              <span className="portalCta">{portal.cta}<ArrowRight size={16} /></span>
-            </div>
-          </button>
-        );
-      })}
+    <div className="entryPathRail" aria-label="Choose what you want to create">
+      {(Object.keys(entryPathOptions) as UseCase[]).map((key) => (
+        <EntryPathMicroDemo
+          key={key}
+          option={entryPathOptions[key]}
+          onSelect={onSelect}
+          onExample={onExample}
+        />
+      ))}
     </div>
   );
 }
@@ -812,13 +939,17 @@ function ProgressiveQuestions({
   answers,
   isSaving,
   onPatch,
-  onUpload
+  onWorkspacePatch,
+  onUpload,
+  onRestart
 }: {
   session: PublicTryMeSession;
   answers: SessionAnswers;
   isSaving: boolean;
   onPatch: (patch: SessionAnswers) => Promise<void>;
+  onWorkspacePatch: (patch: WorkspacePatch) => Promise<void>;
   onUpload: (file: File) => Promise<void>;
+  onRestart: () => void;
 }) {
   const questionKey =
     session.useCase === "abm" && !answers.targetDomain
@@ -915,11 +1046,54 @@ function ProgressiveQuestions({
               onChange={(event) => {
                 const file = event.currentTarget.files?.[0];
                 event.currentTarget.value = "";
-                if (file) void onUpload(file);
+                if (file) {
+                  setFieldValues((current) => ({ ...current, "content-source": file.name }));
+                  void onUpload(file);
+                }
               }}
             />
           </label>
         )}
+      </div>
+    );
+  }
+
+  if (
+    session.useCase === "content" &&
+    (answers.sourceUrl || answers.sourceName) &&
+    session.sourceConfirmation?.status !== "confirmed"
+  ) {
+    const submittedSource = fieldValues["content-source"] || (answers.sourceName ? "Uploaded PDF" : "Public URL");
+    let sourceHost = answers.sourceName ? "Secure PDF upload" : "Public web source";
+    let sourceTitle = submittedSource.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ");
+    try {
+      const parsed = new URL(submittedSource);
+      sourceHost = parsed.hostname.replace(/^www\./, "");
+      sourceTitle = parsed.pathname
+        .split("/")
+        .filter(Boolean)
+        .pop()
+        ?.replace(/[-_]+/g, " ") || `${brandNameFor(session)} source`;
+    } catch {
+      // Uploaded filenames and the privacy-preserving public placeholder are shown as labels only.
+    }
+    return (
+      <div className="questionCard sourceConfirmationStep">
+        <ContentSourceConfirmation
+          source={{
+            title: trimLabel(sourceTitle, 72),
+            sourceLabel: answers.sourceName ? "Uploaded PDF" : "Public content URL",
+            host: sourceHost,
+            facts: [
+              `Brand context: ${brandNameFor(session)}`,
+              answers.sourceName ? "The uploaded PDF is the factual source." : "The supplied public page is the factual source.",
+              "Generated claims will stay constrained to this source."
+            ]
+          }}
+          confirmed={false}
+          onConfirm={() => void onWorkspacePatch({ sourceConfirmation: "confirmed" })}
+          onReplace={onRestart}
+        />
       </div>
     );
   }
@@ -932,6 +1106,69 @@ function ProgressiveQuestions({
           <span className="questionCount">Next signal · audience</span>
           <h2>{questionCopy.audienceLoadingTitle}</h2>
           <p>{questionCopy.audienceLoadingBody}</p>
+        </div>
+      );
+    }
+    const recommendations = session.audienceRecommendations ?? [];
+    const evidence = new Map((session.evidenceItems ?? []).map((item) => [item.id, item]));
+    if (recommendations.length) {
+      return (
+        <div className="questionCard audienceEvidenceStep">
+          <span className="questionCount">Next signal · audience</span>
+          <h2>{questionCopy.audienceTitle}</h2>
+          <p>{questionCopy.audienceBody}</p>
+          <AudienceEvidenceTray
+            companyName={session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session)}
+            selectedId={session.selectedAudienceRecommendationId}
+            options={recommendations.map((recommendation) => {
+              const supporting = recommendation.evidenceItemIds
+                .map((id) => evidence.get(id))
+                .filter((item): item is SessionEvidenceItem => Boolean(item));
+              return {
+                id: recommendation.id,
+                label: recommendation.label,
+                rationale: recommendation.rationale,
+                pinned: supporting.some((item) => item.disposition === "pinned"),
+                excluded: supporting.length > 0 && supporting.every((item) => item.disposition === "excluded"),
+                evidence: supporting.map((item) => ({
+                  id: item.id,
+                  label: item.label,
+                  detail: item.text,
+                  sourceLabel: item.sourceUrl ? "Public source" : item.type.replaceAll("-", " "),
+                  sourceUrl: item.sourceUrl
+                }))
+              };
+            })}
+            onSelect={(id) => void onWorkspacePatch({ selectedAudienceRecommendationId: id })}
+            onPin={(id, pinned) => {
+              const recommendation = recommendations.find((candidate) => candidate.id === id);
+              if (!recommendation) return;
+              void onWorkspacePatch({
+                evidenceDecisions: recommendation.evidenceItemIds.map((evidenceId) => ({
+                  id: evidenceId,
+                  disposition: pinned ? "pinned" : "available"
+                }))
+              });
+            }}
+            onExclude={(id, excluded) => {
+              const recommendation = recommendations.find((candidate) => candidate.id === id);
+              if (!recommendation) return;
+              void onWorkspacePatch({
+                evidenceDecisions: recommendation.evidenceItemIds.map((evidenceId) => ({
+                  id: evidenceId,
+                  disposition: excluded ? "excluded" : "available"
+                }))
+              });
+            }}
+          />
+          <button
+            className="audienceOtherButton"
+            type="button"
+            disabled={isSaving}
+            onClick={() => void onPatch({ audience: "Other" })}
+          >
+            I have a different audience in mind <ArrowRight size={15} />
+          </button>
         </div>
       );
     }
@@ -1148,46 +1385,6 @@ function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; 
   );
 }
 
-function ClaimBar({ session, onClaim }: { session: PublicTryMeSession; onClaim: (email: string) => Promise<void> }) {
-  const [email, setEmail] = useState("");
-  const [isClaiming, setIsClaiming] = useState(false);
-  const [error, setError] = useState("");
-  const claimed = session.status === "claimed";
-  const emailSent = session.claim?.emailStatus === "sent";
-  return (
-    <section id="save-experience" className={`claimBar ${claimed ? "isClaimed" : ""}`}>
-      <div className="claimCopy">
-        <span className="claimIcon">{claimed ? <Check size={18} /> : <Mail size={18} />}</span>
-        <div>
-          <strong>{claimed ? emailSent ? "Saved. Your live URL is on the way." : "Saved. Your live URL is ready." : "Keep this experience live."}</strong>
-          <span>{claimed ? session.liveUrl : "Enter your business email to save the URL and receive it by email. Otherwise, this private preview expires in 30 minutes."}</span>
-        </div>
-      </div>
-      {claimed ? (
-        <div className="claimActions">
-          <a href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open experience<ExternalLink size={15} /></a>
-          <CopyButton value={session.liveUrl || session.temporaryUrl} label="Copy link" />
-        </div>
-      ) : (
-        <form
-          className="claimForm"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            setError("");
-            setIsClaiming(true);
-            try { await onClaim(email); } catch (claimError) { setError(claimError instanceof Error ? claimError.message : "We could not save this yet."); } finally { setIsClaiming(false); }
-          }}
-        >
-          <label><span className="srOnly">Business email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label>
-          <button className="buttonPrimary" disabled={isClaiming}>{isClaiming ? <LoaderCircle className="spin" size={17} /> : null}Save and email my link</button>
-          {!error && <small className="claimPrivacy">Used to save and email this experience. No newsletter signup.</small>}
-          {error && <small className="fieldError">{error}</small>}
-        </form>
-      )}
-    </section>
-  );
-}
-
 function useDialogBehavior(onClose: () => void) {
   const dialogRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -1281,11 +1478,24 @@ export function TryMeNowApp() {
   const [showSignals, setShowSignals] = useState(false);
   const [showProcess, setShowProcess] = useState(false);
   const [showRevealCeremony, setShowRevealCeremony] = useState(false);
+  const [showEditBrief, setShowEditBrief] = useState(false);
+  const [showAnalyticsPanel, setShowAnalyticsPanel] = useState(false);
+  const [showAnalyticsToast, setShowAnalyticsToast] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
+  const [previewFit, setPreviewFit] = useState(true);
+  const [messageDirection, setMessageDirection] = useState({ enabled: false, belief: "", action: "" });
+  const [ctaValue, setCtaValue] = useState<CtaValue>({ type: "meeting", label: "Book a meeting", destination: "" });
+  const [claimEmail, setClaimEmail] = useState("");
+  const [claimStatus, setClaimStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [claimError, setClaimError] = useState("");
+  const [briefDraft, setBriefDraft] = useState<Record<string, string>>({});
+  const [editingBlockId, setEditingBlockId] = useState<SessionExperienceBlockControl["id"]>();
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([]);
   const [revealedAt, setRevealedAt] = useState<number>();
   const startedDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
   const ceremonySession = useRef<string | undefined>(undefined);
+  const directionSession = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const patchRequestRef = useRef(0);
 
@@ -1299,12 +1509,67 @@ export function TryMeNowApp() {
     setClientEvents([]);
     setRevealedAt(undefined);
     setShowRevealCeremony(false);
+    setShowEditBrief(false);
+    setShowAnalyticsPanel(false);
+    setShowAnalyticsToast(false);
+    setPreviewDevice("desktop");
+    setPreviewFit(true);
+    setMessageDirection({ enabled: false, belief: "", action: "" });
+    setCtaValue({ type: "meeting", label: "Book a meeting", destination: "" });
+    setClaimEmail("");
+    setClaimStatus("idle");
+    setClaimError("");
+    setBriefDraft({});
+    setEditingBlockId(undefined);
     startedDomain.current = undefined;
+    revealTracked.current = false;
     ceremonySession.current = undefined;
+    directionSession.current = undefined;
     track("use_case_selected", { useCase: selected });
   }, []);
 
-  const startSession = useCallback(async (selectedUseCase: UseCase, companyDomain: string) => {
+  const resetExperience = useCallback(() => {
+    setUseCase(undefined);
+    setDomain("");
+    setSession(undefined);
+    setAnswers({});
+    setError("");
+    setConnectionError("");
+    setShowSignals(false);
+    setShowProcess(false);
+    setShowRevealCeremony(false);
+    setShowEditBrief(false);
+    setShowAnalyticsPanel(false);
+    setShowAnalyticsToast(false);
+    setPreviewDevice("desktop");
+    setPreviewFit(true);
+    setMessageDirection({ enabled: false, belief: "", action: "" });
+    setCtaValue({ type: "meeting", label: "Book a meeting", destination: "" });
+    setClaimEmail("");
+    setClaimStatus("idle");
+    setClaimError("");
+    setBriefDraft({});
+    setEditingBlockId(undefined);
+    setClientEvents([]);
+    setRevealedAt(undefined);
+    startedDomain.current = undefined;
+    revealTracked.current = false;
+    ceremonySession.current = undefined;
+    directionSession.current = undefined;
+  }, []);
+
+  const closeEditBrief = useCallback(() => {
+    setShowEditBrief(false);
+    setEditingBlockId(undefined);
+  }, []);
+
+  const closeAnalyticsPanel = useCallback(() => setShowAnalyticsPanel(false), []);
+
+  const startSession = useCallback(async (
+    selectedUseCase: UseCase,
+    companyDomain: string,
+    seed?: SessionAnswers
+  ) => {
     const normalized = companyDomain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
     if (startedDomain.current === normalized || !likelyDomain.test(normalized)) return;
     startedDomain.current = normalized;
@@ -1313,10 +1578,22 @@ export function TryMeNowApp() {
     try {
       const result = await api<{ session: PublicTryMeSession }>("/api/sessions", {
         method: "POST",
-        body: JSON.stringify({ useCase: selectedUseCase, companyDomain: normalized })
+        body: JSON.stringify({
+          useCase: selectedUseCase,
+          companyDomain: normalized,
+          exampleMode: seed?.exampleMode,
+          exampleKey: seed?.exampleKey
+        })
       });
-      setSession(result.session);
-      track("domain_submitted", { useCase: selectedUseCase });
+      const seeded = seed
+        ? await api<{ session: PublicTryMeSession }>(`/api/sessions/${result.session.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ operation: "update-workspace", answers: seed })
+          })
+        : result;
+      setSession(seeded.session);
+      setAnswers(seeded.session.answers);
+      track(seed ? "example_started" : "domain_submitted", { useCase: selectedUseCase });
     } catch (startError) {
       startedDomain.current = undefined;
       setError(startError instanceof Error ? startError.message : "We could not start the build.");
@@ -1324,6 +1601,29 @@ export function TryMeNowApp() {
       setIsStarting(false);
     }
   }, []);
+
+  const startExample = useCallback((selectedUseCase: UseCase) => {
+    const example = exampleSeeds[selectedUseCase];
+    selectUseCase(selectedUseCase);
+    setDomain(example.companyDomain);
+    void startSession(selectedUseCase, example.companyDomain, example.answers);
+  }, [selectUseCase, startSession]);
+
+  useEffect(() => {
+    if (!session || directionSession.current === session.id) return;
+    directionSession.current = session.id;
+    const ctaType = uiCtaType(session.answers.ctaType);
+    setMessageDirection({
+      enabled: Boolean(session.answers.messageBelief || session.answers.messageAction),
+      belief: session.answers.messageBelief || "",
+      action: session.answers.messageAction || ""
+    });
+    setCtaValue({
+      type: ctaType,
+      label: session.blockControls?.find((control) => control.id === "closing")?.ctaLabel || defaultCtaLabel(ctaType),
+      destination: session.answers.ctaDestination || ""
+    });
+  }, [session]);
 
   useEffect(() => {
     if (!useCase || session || !likelyDomain.test(domain.trim())) return;
@@ -1367,6 +1667,9 @@ export function TryMeNowApp() {
     setRevealedAt(revealTime);
     track("experience_revealed", { useCase: session.useCase });
     setClientEvents([{ action: "preview_viewed", label: "You opened the experience", at: revealTime }]);
+    void recordPreviewSignal(session.id, "preview-opened", "experience-preview").then((updated) => {
+      setSession((current) => current?.id === updated.id ? updated : current);
+    }).catch(() => undefined);
   }, [session]);
 
   const hasExperience = Boolean(session?.experience);
@@ -1386,21 +1689,84 @@ export function TryMeNowApp() {
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.source !== previewFrameRef.current?.contentWindow || !event.data || event.data.source !== "folloze-experience") return;
-      const allowedActions = new Set(["anchor_click", "topic_select", "cta_click"]);
+      if (
+        !session ||
+        event.source !== previewFrameRef.current?.contentWindow ||
+        !event.data ||
+        event.data.source !== "folloze-experience"
+      ) return;
+      const allowedActions = new Set([
+        "anchor_click",
+        "cta_click",
+        "topic_select",
+        "signature_select",
+        "question_select",
+        "section_view",
+        "fullscreen_change",
+        "editable_block_select"
+      ]);
       if (typeof event.data.action !== "string" || !allowedActions.has(event.data.action)) return;
-      const rawLabel = event.data.data?.text;
-      const label = typeof rawLabel === "string" && rawLabel.trim() ? rawLabel.trim().slice(0, 120) : "You explored the experience";
+      const payload = event.data.payload && typeof event.data.payload === "object"
+        ? event.data.payload as Record<string, unknown>
+        : event.data.data && typeof event.data.data === "object"
+          ? event.data.data as Record<string, unknown>
+          : {};
+      const labels: Record<string, string> = {
+        anchor_click: "You followed the experience path",
+        cta_click: "You clicked the next step",
+        topic_select: "You chose a decision lens",
+        signature_select: "You selected a starting point",
+        question_select: "You explored a meeting question",
+        section_view: "You reached a new section",
+        fullscreen_change: "You changed the preview view",
+        editable_block_select: "You selected an editable block"
+      };
+      const label = labels[event.data.action] || "You explored the experience";
       const next = { action: event.data.action, label, at: Date.now() };
       setClientEvents((current) => {
         const last = current[current.length - 1];
         if (last && last.action === next.action && last.label === next.label && next.at - last.at < 500) return current;
+        if (event.data.action !== "section_view") setShowAnalyticsToast(true);
         return [...current.slice(-11), next];
       });
+      const elementId = [payload.blockId, payload.ctaId, payload.sectionId, payload.targetId, payload.lensId]
+        .find((candidate): candidate is string => typeof candidate === "string" && candidate.length > 0)
+        ?.slice(0, 80);
+      const serverEvent = event.data.action === "cta_click"
+        ? "cta-clicked"
+        : ["topic_select", "signature_select", "question_select"].includes(event.data.action)
+          ? "lens-selected"
+          : event.data.action === "fullscreen_change"
+            ? "preview-opened"
+            : "section-viewed";
+      void recordPreviewSignal(session.id, serverEvent, elementId).then((updated) => {
+        setSession((current) => current?.id === updated.id ? updated : current);
+      }).catch(() => undefined);
+
+      if (event.data.action === "editable_block_select" && typeof payload.blockId === "string") {
+        const rawBlockId = payload.blockId;
+        const broadBlockId: SessionExperienceBlockControl["id"] = rawBlockId.startsWith("hero")
+          ? "hero"
+          : rawBlockId.startsWith("thesis")
+            ? "thesis"
+            : rawBlockId.startsWith("lens")
+              ? "decision-lenses"
+              : rawBlockId.startsWith("question")
+                ? "guided-questions"
+                : "closing";
+        const existing = session.blockControls?.find((control) => control.id === broadBlockId);
+        setEditingBlockId(broadBlockId);
+        setBriefDraft({
+          headline: existing?.headline || "",
+          body: existing?.body || "",
+          ctaLabel: existing?.ctaLabel || (broadBlockId === "closing" ? ctaValue.label : "")
+        });
+        setShowEditBrief(true);
+      }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, []);
+  }, [ctaValue.label, session]);
 
   const patchAnswers = async (patch: SessionAnswers) => {
     if (!session) return;
@@ -1419,6 +1785,143 @@ export function TryMeNowApp() {
       setError(patchError instanceof Error ? patchError.message : "We could not save that answer.");
     } finally {
       if (requestNumber === patchRequestRef.current) setIsSaving(false);
+    }
+  };
+
+  const patchWorkspace = async (patch: WorkspacePatch) => {
+    if (!session) return;
+    const requestNumber = ++patchRequestRef.current;
+    setIsSaving(true);
+    setError("");
+    try {
+      const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ operation: "update-workspace", ...patch })
+      });
+      if (requestNumber !== patchRequestRef.current) return;
+      setSession(result.session);
+      setAnswers(result.session.answers);
+    } catch (patchError) {
+      setError(patchError instanceof Error ? patchError.message : "We could not update the live brief.");
+    } finally {
+      if (requestNumber === patchRequestRef.current) setIsSaving(false);
+    }
+  };
+
+  const saveCreativeDirection = async () => {
+    const destination = ctaValue.destination.trim();
+    if (destination && !/^https:\/\/[^\s]+$/i.test(destination)) {
+      setError("Use a public HTTPS destination for the CTA.");
+      return;
+    }
+    await patchWorkspace({
+      answers: {
+        messageBelief: messageDirection.enabled && messageDirection.belief.trim()
+          ? messageDirection.belief.trim()
+          : undefined,
+        messageAction: messageDirection.enabled && messageDirection.action.trim()
+          ? messageDirection.action.trim()
+          : undefined,
+        ctaType: serverCtaType(ctaValue.type),
+        ctaDestination: destination || undefined
+      },
+      blockControls: [{
+        id: "closing",
+        visible: true,
+        locked: false,
+        ctaLabel: ctaValue.label.trim() || defaultCtaLabel(ctaValue.type)
+      }]
+    });
+  };
+
+  const openBriefEditor = () => {
+    if (!session) return;
+    setEditingBlockId(undefined);
+    setBriefDraft({
+      audience: session.answers.customAudience || session.answers.audience || "",
+      objective: session.answers.objective || "",
+      belief: session.answers.messageBelief || "",
+      action: session.answers.messageAction || "",
+      ctaDestination: session.answers.ctaDestination || ""
+    });
+    setShowEditBrief(true);
+  };
+
+  const openBlockEditor = (blockId: SessionExperienceBlockControl["id"]) => {
+    const existing = session?.blockControls?.find((control) => control.id === blockId);
+    setEditingBlockId(blockId);
+    setBriefDraft({
+      headline: existing?.headline || "",
+      body: existing?.body || "",
+      ctaLabel: existing?.ctaLabel || (blockId === "closing" ? ctaValue.label : "")
+    });
+    setShowEditBrief(true);
+  };
+
+  const saveBriefEdit = async () => {
+    if (!session) return;
+    if (editingBlockId) {
+      const existing = session.blockControls?.find((control) => control.id === editingBlockId);
+      const headline = briefDraft.headline?.trim();
+      const body = briefDraft.body?.trim();
+      const ctaLabel = briefDraft.ctaLabel?.trim();
+      await patchWorkspace({
+        blockControls: [{
+          id: editingBlockId,
+          visible: existing?.visible ?? true,
+          locked: existing?.locked ?? false,
+          headline: headline && headline.length >= 4 ? headline : undefined,
+          body: body && body.length >= 8 ? body : undefined,
+          ctaLabel: ctaLabel && ctaLabel.length >= 2 ? ctaLabel : undefined
+        }]
+      });
+    } else {
+      await patchWorkspace({
+        answers: {
+          audience: briefDraft.audience?.trim() || session.answers.audience,
+          customAudience: undefined,
+          objective: briefDraft.objective?.trim() || session.answers.objective,
+          messageBelief: briefDraft.belief?.trim() || undefined,
+          messageAction: briefDraft.action?.trim() || undefined,
+          ctaDestination: briefDraft.ctaDestination?.trim() || ""
+        }
+      });
+    }
+    setShowEditBrief(false);
+    setEditingBlockId(undefined);
+  };
+
+  const createVariation = async (mode: "duplicate" | "version" = "version", openEditor = false) => {
+    if (!session) return;
+    setIsSaving(true);
+    setError("");
+    try {
+      const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}`, {
+        method: "POST",
+        body: JSON.stringify({ operation: "duplicate", mode, label: mode === "version" ? "Next version" : "Variation" })
+      });
+      setSession(result.session);
+      setAnswers(result.session.answers);
+      setClientEvents([]);
+      setRevealedAt(undefined);
+      revealTracked.current = false;
+      ceremonySession.current = undefined;
+      directionSession.current = undefined;
+      if (openEditor) {
+        setBriefDraft({
+          audience: result.session.answers.customAudience || result.session.answers.audience || "",
+          objective: result.session.answers.objective || "",
+          belief: result.session.answers.messageBelief || "",
+          action: result.session.answers.messageAction || "",
+          ctaDestination: result.session.answers.ctaDestination || ""
+        });
+        setShowEditBrief(true);
+      }
+      track("experience_variation_created", { useCase: result.session.useCase, mode });
+    } catch (variationError) {
+      setError(variationError instanceof Error ? variationError.message : "We could not create that variation.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1495,29 +1998,60 @@ export function TryMeNowApp() {
 
   const claim = async (email: string) => {
     if (!session) return;
-    const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}/claim`, {
-      method: "POST",
-      body: JSON.stringify({ email })
-    });
-    setSession(result.session);
-    track("experience_claimed", { useCase: result.session.useCase });
+    setClaimStatus("saving");
+    setClaimError("");
+    try {
+      const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}/claim`, {
+        method: "POST",
+        body: JSON.stringify({ email })
+      });
+      setSession(result.session);
+      setClaimStatus("saved");
+      track("experience_claimed", { useCase: result.session.useCase });
+    } catch (claimFailure) {
+      const message = claimFailure instanceof Error ? claimFailure.message : "We could not save this experience.";
+      setClaimStatus("error");
+      setClaimError(message);
+    }
   };
 
   const isReveal = Boolean(session?.experience);
   const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
   const revealCopy = session ? getRevealCopy(session) : undefined;
+  const analyticsSignals: AnalyticsSignal[] = clientEvents.map((event, index) => ({
+    id: `${event.at}-${index}`,
+    label: event.label,
+    detail: event.action === "cta_click"
+      ? "A conversion signal is now available for follow-up."
+      : event.action === "preview_viewed"
+        ? "The private experience entered the viewport."
+        : "The buyer revealed interest inside the guided path.",
+    atLabel: new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(event.at),
+    type: event.action === "cta_click" ? "cta" : event.action === "preview_viewed" ? "view" : "choice"
+  }));
+  const latestAnalyticsSignal = [...analyticsSignals].reverse().find((signal) => signal.type !== "view");
+  const qualityChecks = session?.qualityReceipt?.checks ?? [];
+  const personalizationScore = qualityChecks.length
+    ? Math.round((qualityChecks.reduce((score, check) => score + (check.status === "passed" ? 1 : check.status === "not-applicable" ? 0.85 : 0.55), 0) / qualityChecks.length) * 100)
+    : 86;
+  const expiresLabel = session?.expiresAt
+    ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(session.expiresAt))
+    : "in 30 minutes";
+  const engagementSeconds = revealedAt
+    ? Math.max(1, Math.round((((clientEvents.at(-1)?.at ?? revealedAt) - revealedAt) / 1000)))
+    : 0;
 
   return (
     <>
     <main
       className={`appShell ${isReveal ? "revealMode" : ""}`}
-      aria-hidden={showSignals || showProcess || showRevealCeremony ? true : undefined}
-      inert={showSignals || showProcess || showRevealCeremony ? true : undefined}
+      aria-hidden={showSignals || showProcess || showRevealCeremony || showEditBrief || showAnalyticsPanel ? true : undefined}
+      inert={showSignals || showProcess || showRevealCeremony || showEditBrief || showAnalyticsPanel ? true : undefined}
     >
       <header className="siteHeader">
         <Link href="/" aria-label="Folloze Try Me Now home"><Image src="/brand/folloze-logo.svg" width={101} height={25} alt="Folloze" priority /><span>Try Me Now</span></Link>
         <div className="headerPromise"><span className="liveDot" />A live buyer experience in 30 seconds or less</div>
-        {session && <button className="resetButton" type="button" onClick={() => { setUseCase(undefined); setSession(undefined); setAnswers({}); setDomain(""); setClientEvents([]); setRevealedAt(undefined); setConnectionError(""); setShowRevealCeremony(false); startedDomain.current = undefined; revealTracked.current = false; ceremonySession.current = undefined; }}><RefreshCw size={14} />Start over</button>}
+        {session && <button className="resetButton" type="button" onClick={resetExperience}><RefreshCw size={14} />Start over</button>}
       </header>
 
       {!useCase && (
@@ -1527,7 +2061,7 @@ export function TryMeNowApp() {
             <h1>Give us 30 seconds.<br /><em>Get a live buyer experience.</em></h1>
             <p>Choose what you want to launch. Add a domain and a few signals. Folloze builds it, hosts it, and captures engagement while you watch.</p>
           </div>
-          <UseCasePortals onSelect={selectUseCase} />
+          <UseCasePortals onSelect={selectUseCase} onExample={startExample} />
           <div className="entryFooter"><span>No login. No blank canvas.</span><span>Preview first. Add your email only if you want to keep it.</span></div>
         </section>
       )}
@@ -1541,7 +2075,54 @@ export function TryMeNowApp() {
           <div className="mobileStatus"><button type="button" aria-expanded={showProcess} aria-controls="mobile-process-dialog" onClick={() => setShowProcess(true)}><span className="liveDot" /><strong>{buildPanelCopy.mobileLabel}</strong><span>{buildPanelCopy.mobileStep}</span><ChevronDown size={15} /></button></div>
           <div className="briefPanel">
             <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
-            <ProgressiveQuestions session={session} answers={answers} isSaving={isSaving} onPatch={patchAnswers} onUpload={uploadPdf} />
+            <InstantBrandLockStrip
+              status={!session.brand ? "scanning" : session.brand.source === "fallback" ? "fallback" : "locked"}
+              brand={session.brand ? {
+                companyName: session.brand.companyName,
+                domain: session.brand.domain,
+                logoUrl: session.brand.logoUrl,
+                colors: session.brand.colors,
+                confidenceLabel: session.brand.source === "fallback" ? "Reconstructed" : "Public signals"
+              } : { companyName: displayNameFromDomain(session.companyDomain), domain: session.companyDomain }}
+              onInspect={() => setShowProcess(true)}
+            />
+            <ProgressiveQuestions
+              session={session}
+              answers={answers}
+              isSaving={isSaving}
+              onPatch={patchAnswers}
+              onWorkspacePatch={patchWorkspace}
+              onUpload={uploadPdf}
+              onRestart={resetExperience}
+            />
+            {answers.objective && (
+              <div className="creativeBriefControls">
+                <MessageDirectionControl value={messageDirection} onChange={setMessageDirection} />
+                <CtaDestinationControl
+                  value={ctaValue}
+                  onChange={(next) => {
+                    setCtaValue((current) => ({
+                      ...next,
+                      label: current.type !== next.type && current.label === defaultCtaLabel(current.type)
+                        ? defaultCtaLabel(next.type)
+                        : next.label
+                    }));
+                  }}
+                  destinationError={ctaValue.destination && !/^https:\/\/[^\s]+$/i.test(ctaValue.destination)
+                    ? "Use a public HTTPS destination."
+                    : undefined}
+                />
+                <button
+                  className="buttonSecondary creativeApply"
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => void saveCreativeDirection()}
+                >
+                  {isSaving ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}
+                  Apply direction to the live build
+                </button>
+              </div>
+            )}
             {error && <div className="inlineError" role="alert">{error}</div>}
             {connectionError && <div className="connectionNotice" role="status"><LoaderCircle className="spin" size={15} />{connectionError}</div>}
           </div>
@@ -1550,7 +2131,23 @@ export function TryMeNowApp() {
               <div className="buildTopCopy"><span className="sectionKicker">{buildPanelCopy.kicker}</span><h2>{buildPanelCopy.headline}</h2><p>{buildPanelCopy.supporting}</p></div>
               <span className="tempLink"><span className="liveDot" />{buildPanelCopy.urlLabel}</span>
             </div>
-            <AssemblyPreview session={session} iframeRef={previewFrameRef} />
+            <ProgressiveArtifactStream
+              headline={`Building ${brandNameFor(session)} into a buyer-ready experience`}
+              artifacts={buildMoments(session).map((moment) => ({
+                id: moment.key,
+                phase: moment.phase,
+                title: moment.title,
+                detail: moment.detail,
+                artifact: moment.artifact,
+                status: moment.status === "complete" || moment.status === "fallback"
+                  ? "ready"
+                  : moment.status === "running"
+                    ? "running"
+                    : moment.status === "failed"
+                      ? "failed"
+                      : "queued"
+              }))}
+            />
           </div>
           <aside className="processRail">
             <div><span className="sectionKicker">What Folloze is doing</span><LiveChecklist session={session} /></div>
@@ -1581,7 +2178,125 @@ export function TryMeNowApp() {
           </div>
           <div className="revealGrid">
             <div className="revealPreview">
-              <AssemblyPreview session={session} iframeRef={previewFrameRef} />
+              <div className="previewControlBar">
+                <DevicePreviewToolbar
+                  device={previewDevice}
+                  fit={previewFit}
+                  onDeviceChange={setPreviewDevice}
+                  onFitChange={setPreviewFit}
+                />
+                {session.status !== "claimed" && (
+                  <button className="buttonSecondary editBriefButton" type="button" onClick={openBriefEditor}>
+                    <Sparkles size={15} />Edit the brief
+                  </button>
+                )}
+              </div>
+              <div className={`devicePreviewShell is-${previewDevice} ${previewFit ? "isFit" : "isActual"}`}>
+                <AssemblyPreview session={session} iframeRef={previewFrameRef} />
+              </div>
+              <AnalyticsSignalToast
+                signal={latestAnalyticsSignal}
+                open={showAnalyticsToast && Boolean(latestAnalyticsSignal)}
+                onDismiss={() => setShowAnalyticsToast(false)}
+                onOpenPanel={() => {
+                  setShowAnalyticsToast(false);
+                  setShowAnalyticsPanel(true);
+                }}
+              />
+              {session.status !== "claimed" && (
+                <details className="experienceControlDeck">
+                  <summary><span><Sparkles size={17} />Tune and personalize</span><small>Copy, layout, assets, and blocks</small><ChevronDown size={16} /></summary>
+                  <div className="experienceControlBody">
+                    <ToneChips
+                      label="Message tone"
+                      selectedId={answers.toneVariant || "executive"}
+                      options={[
+                        { id: "executive", label: "Executive", description: "Concise, decision-oriented language." },
+                        { id: "technical", label: "Technical", description: "Precise language for expert buyers." },
+                        { id: "provocative", label: "Provocative", description: "Sharper tension and a bolder point of view." },
+                        { id: "consultative", label: "Consultative", description: "Guided, collaborative language." }
+                      ]}
+                      onChange={(id) => void patchWorkspace({ answers: { toneVariant: id as NonNullable<SessionAnswers["toneVariant"]> } })}
+                    />
+                    <ToneChips
+                      label="Visual direction"
+                      selectedId={answers.styleVariant || "brand-led"}
+                      options={[
+                        { id: "brand-led", label: "Brand-led" },
+                        { id: "editorial", label: "Editorial" },
+                        { id: "technical", label: "Technical" },
+                        { id: "minimal", label: "Minimal" }
+                      ]}
+                      onChange={(id) => void patchWorkspace({ answers: { styleVariant: id as NonNullable<SessionAnswers["styleVariant"]> } })}
+                    />
+                    <ExperienceVariantCards
+                      label="Choose the page rhythm"
+                      selectedId={answers.layoutVariant || "narrative"}
+                      variants={[
+                        { id: "narrative", name: "Narrative arc", eyebrow: "Story first", description: "Build conviction one idea at a time.", kind: "story", previewPattern: "editorial" },
+                        { id: "modular", name: "Modular proof", eyebrow: "Scan and choose", description: "Let buyers enter through the proof that matters.", kind: "layout", previewPattern: "guided" },
+                        { id: "immersive", name: "Immersive reveal", eyebrow: "High impact", description: "Give the hero and visuals more room to work.", kind: "layout", previewPattern: "split" },
+                        { id: "compact", name: "Compact decision", eyebrow: "Fast path", description: "Compress the story for decisive buyers.", kind: "layout", previewPattern: "proof" }
+                      ]}
+                      onSelect={(id) => void patchWorkspace({ answers: { layoutVariant: id as NonNullable<SessionAnswers["layoutVariant"]> } })}
+                    />
+                    {Boolean(session.availableAssets?.length) && (
+                      <AssetPicker
+                        assets={(session.availableAssets ?? []).map((asset) => ({
+                          id: asset.id,
+                          name: asset.label,
+                          type: asset.kind.includes("logo") ? "logo" : "image",
+                          thumbnailUrl: asset.url,
+                          detail: asset.source === "target" ? "Account signal" : "Seller brand"
+                        }))}
+                        selectedIds={answers.selectedAssetIds ?? []}
+                        onToggle={(id, selected) => {
+                          const current = new Set(answers.selectedAssetIds ?? []);
+                          if (selected) current.add(id); else current.delete(id);
+                          void patchWorkspace({ answers: { selectedAssetIds: [...current] } });
+                        }}
+                      />
+                    )}
+                    <div className="blockControlStack">
+                      {([
+                        ["hero", "Hero", "Opening promise, supporting line, and primary action."],
+                        ["thesis", "Campaign thesis", "The reason this audience should care now."],
+                        ["decision-lenses", "Decision paths", "The interactive routes buyers can choose."],
+                        ["guided-questions", "Guided questions", "Prompts that turn content into a conversation."],
+                        ["closing", "Next step", "The closing case and conversion path."]
+                      ] as const).map(([id, label, description]) => {
+                        const control = session.blockControls?.find((candidate) => candidate.id === id);
+                        return (
+                          <ExperienceBlockControlPanel
+                            key={id}
+                            blockId={id}
+                            label={label}
+                            description={description}
+                            locked={control?.locked}
+                            onEdit={() => openBlockEditor(id)}
+                            onGenerateOptions={() => {
+                              const directions: Array<NonNullable<SessionAnswers["styleVariant"]>> = ["brand-led", "editorial", "technical", "minimal"];
+                              const next = directions[(directions.indexOf(answers.styleVariant || "brand-led") + 1) % directions.length];
+                              void patchWorkspace({ answers: { styleVariant: next } });
+                            }}
+                            onLockChange={(_, locked) => void patchWorkspace({
+                              blockControls: [{
+                                id,
+                                visible: control?.visible ?? true,
+                                locked,
+                                eyebrow: control?.eyebrow,
+                                headline: control?.headline,
+                                body: control?.body,
+                                ctaLabel: control?.ctaLabel
+                              }]
+                            })}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                </details>
+              )}
               <a
                 className="mobilePreviewCta"
                 href={session.liveUrl || session.temporaryUrl}
@@ -1592,8 +2307,54 @@ export function TryMeNowApp() {
               </a>
             </div>
             <aside className="revealRail">
-              <ClaimBar session={session} onClaim={claim} />
-              <div className="signalTeaser"><Gauge size={22} /><h3>Built is only step one.</h3><p>See the engagement signal Folloze can capture from this experience.</p><button type="button" onClick={() => { setShowSignals(true); track("signal_preview_opened"); }}>See who engages<ArrowRight size={16} /></button></div>
+              {session.status === "claimed" ? (
+                <SavedExperienceCockpit
+                  title={session.experience?.title || `${brandNameFor(session)} experience`}
+                  url={session.liveUrl || session.temporaryUrl}
+                  updatedLabel={`Saved ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(session.cockpit?.savedAt || session.claimedAt || session.updatedAt))}`}
+                  metrics={[
+                    { label: "Quality", value: session.cockpit?.qualityStatus === "passed" ? "Ready" : "Review", detail: `${personalizationScore}/100 personalization` },
+                    { label: "Signals", value: session.cockpit?.previewInteractions ?? session.previewAnalytics?.totalInteractions ?? clientEvents.length, detail: "Preview interactions" },
+                    { label: "Version", value: `v${session.cockpit?.versionNumber ?? session.lineage?.versionNumber ?? 1}`, detail: `Revision ${session.cockpit?.artifactRevision ?? session.experience?.artifactRevision ?? 1}` }
+                  ]}
+                  onOpen={() => window.open(session.liveUrl || session.temporaryUrl, "_blank", "noopener,noreferrer")}
+                  onCopy={() => void navigator.clipboard.writeText(session.liveUrl || session.temporaryUrl)}
+                  onEdit={() => void createVariation("version", true)}
+                  onDuplicate={() => void createVariation("duplicate")}
+                />
+              ) : (
+                <div id="save-experience">
+                  <ExpirySaveValuePanel
+                    expiresLabel={expiresLabel}
+                    email={claimEmail}
+                    status={claimStatus}
+                    error={claimError}
+                    onEmailChange={setClaimEmail}
+                    onSave={() => void claim(claimEmail)}
+                    benefits={["Permanent live URL", "Email delivery", "Engagement-ready experience"]}
+                  />
+                </div>
+              )}
+              <PersonalizationQualityReceipt
+                score={personalizationScore}
+                companyName={session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session)}
+                layers={qualityChecks.length ? qualityChecks.map((check) => ({
+                  id: check.id,
+                  label: check.label,
+                  detail: check.detail,
+                  status: check.status === "passed" || check.status === "not-applicable"
+                    ? "strong"
+                    : check.status === "warning"
+                      ? "partial"
+                      : "missing"
+                })) : revealCopy.receipts.slice(0, 4).map((receipt) => ({
+                  id: receipt.number,
+                  label: receipt.label,
+                  detail: "Applied to this generated experience.",
+                  status: "strong" as const
+                }))}
+              />
+              <div className="signalTeaser"><Gauge size={22} /><h3>Built is only step one.</h3><p>Interact with the preview, then see the signals Folloze captured.</p><button type="button" onClick={() => { setShowAnalyticsPanel(true); track("signal_preview_opened"); }}>See what Folloze knows<ArrowRight size={16} /></button></div>
               <div className="revealReceipt revealMiniReceipt">
                 <span className="sectionKicker">Built from real signals</span>
                 <div>{revealCopy.receipts.map(({ number, label }) => <span key={number}><i>{number}</i>{label}<Check size={13} /></span>)}</div>
@@ -1607,6 +2368,31 @@ export function TryMeNowApp() {
       {showProcess && session && <MobileProcessDialog session={session} onClose={() => setShowProcess(false)} />}
       {showSignals && revealedAt && <SignalDrawer events={clientEvents} revealedAt={revealedAt} onClose={() => setShowSignals(false)} />}
     </main>
+    <EditBriefDrawer
+      open={showEditBrief}
+      title={editingBlockId ? `Edit the ${editingBlockId.replaceAll("-", " ")} block` : "Edit the live brief"}
+      fields={editingBlockId ? [
+        { id: "headline", label: "Headline override", value: briefDraft.headline || "", hint: "Leave blank to let Folloze regenerate this block." },
+        { id: "body", label: "Supporting copy override", value: briefDraft.body || "", hint: "Use at least eight characters for an override." },
+        ...(editingBlockId === "closing" ? [{ id: "ctaLabel", label: "CTA label", value: briefDraft.ctaLabel || "" }] : [])
+      ] : [
+        { id: "audience", label: "Audience", value: briefDraft.audience || "" },
+        { id: "objective", label: "Objective", value: briefDraft.objective || "" },
+        { id: "belief", label: "What should they believe?", value: briefDraft.belief || "" },
+        { id: "action", label: "What should they do next?", value: briefDraft.action || "" },
+        { id: "ctaDestination", label: "CTA destination", value: briefDraft.ctaDestination || "", type: "url" as const, hint: "Public HTTPS URL only." }
+      ]}
+      saving={isSaving}
+      onFieldChange={(id, value) => setBriefDraft((current) => ({ ...current, [id]: value }))}
+      onSave={() => void saveBriefEdit()}
+      onClose={closeEditBrief}
+    />
+    <AnalyticsSignalPanel
+      open={showAnalyticsPanel}
+      signals={analyticsSignals}
+      engagedSeconds={engagementSeconds}
+      onClose={closeAnalyticsPanel}
+    />
     {showRevealCeremony && session?.experience && <RevealCeremony session={session} onDismiss={() => setShowRevealCeremony(false)} />}
     </>
   );

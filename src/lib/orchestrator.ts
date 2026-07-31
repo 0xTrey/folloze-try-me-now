@@ -3,6 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
 import { config } from "@/lib/config";
 import { targetAccountEvidenceFor } from "@/lib/generation/campaign-context";
+import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import { HttpError, logServerError } from "@/lib/http";
 import { harvestBrand, fallbackBrand } from "@/lib/integrations/brand-harvester";
@@ -70,20 +71,23 @@ function audienceRecommendationsFor(
   evidenceItems: SessionEvidenceItem[]
 ) {
   const usableEvidence = evidenceItems.filter((item) => item.disposition !== "excluded");
+  const companyContext = target ?? seller;
   return suggestions.map((label, index) => {
     const evidence = usableEvidence[index % Math.max(usableEvidence.length, 1)];
-    const targetSpecific = Boolean(target && target.source !== "fallback" && usableEvidence.length);
+    const companySpecific = Boolean(
+      companyContext && companyContext.source !== "fallback" && usableEvidence.length
+    );
     return {
       id: stableId("audience", seller?.domain, target?.domain, label),
       label,
-      rationale: targetSpecific
-        ? `Connects the seller's offer to ${target?.companyName}'s public ${
+      rationale: companySpecific
+        ? `${target ? "Connects the seller's offer" : "Connects the campaign"} to ${companyContext?.companyName}'s public ${
             evidence?.label.toLocaleLowerCase() ?? "operating context"
           }: ${evidence?.signals.slice(0, 2).join(" and ") || "account context"}.`
-        : "A seller-category starting point until public target-account context is available.",
+        : `A ${companyContext?.companyName ?? "company"}-category starting point until stronger public context is available.`,
       evidenceItemIds: evidence ? [evidence.id] : [],
-      confidence: targetSpecific ? (usableEvidence.length >= 2 ? "high" : "medium") : "hypothesis",
-      source: targetSpecific ? "seller-target-synthesis" : "seller-category-fallback"
+      confidence: companySpecific ? (usableEvidence.length >= 2 ? "high" : "medium") : "hypothesis",
+      source: companySpecific ? "seller-target-synthesis" : "seller-category-fallback"
     } as const;
   });
 }
@@ -114,7 +118,7 @@ function assetsFor(brand: BrandProfile | undefined, target: BrandProfile | undef
 }
 
 function syncExperienceFoundation(session: TryMeSession): void {
-  session.evidenceItems = evidenceItemsFor(session.targetBrand, session.evidenceItems);
+  session.evidenceItems = evidenceItemsFor(session.targetBrand ?? session.brand, session.evidenceItems);
   session.audienceRecommendations = audienceRecommendationsFor(
     session.audienceSuggestions,
     session.brand,
@@ -166,6 +170,82 @@ function curatedTargetBrand(session: TryMeSession, targetBrand: BrandProfile | u
       )
     ].filter((topic, index, topics) => topics.indexOf(topic) === index)
   };
+}
+
+function brandsWithSelectedAssets(
+  session: TryMeSession,
+  brand: BrandProfile,
+  targetBrand: BrandProfile | undefined
+): { brand: BrandProfile; targetBrand?: BrandProfile } {
+  const selectedIds = new Set(session.answers.selectedAssetIds ?? []);
+  if (!selectedIds.size) return { brand, targetBrand };
+  const selected = (session.availableAssets ?? []).filter((asset) => selectedIds.has(asset.id));
+  const sellerImages = selected.filter((asset) => asset.kind === "seller-image").map((asset) => asset.url);
+  const targetImages = selected.filter((asset) => asset.kind === "target-image").map((asset) => asset.url);
+  const sellerLogo = selected.find((asset) => asset.kind === "seller-logo")?.url;
+  const targetLogo = selected.find((asset) => asset.kind === "target-logo")?.url;
+  return {
+    brand: {
+      ...brand,
+      logoUrl: sellerLogo ?? brand.logoUrl,
+      imageUrls: sellerImages.length || targetImages.length
+        ? [...sellerImages, ...targetImages]
+        : brand.imageUrls
+    },
+    targetBrand: targetBrand
+      ? {
+          ...targetBrand,
+          logoUrl: targetLogo ?? targetBrand.logoUrl,
+          imageUrls: targetImages.length ? targetImages : targetBrand.imageUrls
+        }
+      : undefined
+  };
+}
+
+function draftWithBlockControls(
+  draft: ExperienceDraft,
+  controls: ExperienceBlockControl[] = []
+): ExperienceDraft {
+  const next = structuredClone(draft);
+  for (const control of controls) {
+    if (control.visible === false) {
+      const sectionByBlock = {
+        thesis: "thesis",
+        "decision-lenses": "decision-lenses",
+        "guided-questions": "guided-questions"
+      } as const;
+      const section = sectionByBlock[control.id as keyof typeof sectionByBlock];
+      if (section) next.sectionSequence = next.sectionSequence.filter((candidate) => candidate !== section);
+    }
+    if (control.id === "hero") {
+      if (control.eyebrow) next.eyebrow = control.eyebrow;
+      if (control.headline) next.headline = control.headline;
+      if (control.body) next.subhead = control.body;
+      if (control.ctaLabel) next.primaryCta = control.ctaLabel;
+    }
+    if (control.id === "thesis") {
+      if (control.eyebrow) next.sectionLabels.thesis = control.eyebrow;
+      if (control.headline) next.thesisHeadline = control.headline;
+      if (control.body) next.thesisBody = control.body;
+    }
+    if (control.id === "decision-lenses") {
+      if (control.eyebrow) next.sectionLabels.lenses = control.eyebrow;
+      if (control.headline) next.sections[0].headline = control.headline;
+      if (control.body) next.sections[0].body = control.body;
+    }
+    if (control.id === "guided-questions") {
+      if (control.eyebrow) next.sectionLabels.journey = control.eyebrow;
+      if (control.headline) next.sections[0].proof = control.headline;
+      if (control.body) next.narrativeArc = control.body;
+    }
+    if (control.id === "closing") {
+      if (control.eyebrow) next.sectionLabels.close = control.eyebrow;
+      if (control.headline) next.closingHeadline = control.headline;
+      if (control.body) next.closingBody = control.body;
+      if (control.ctaLabel) next.primaryCta = control.ctaLabel;
+    }
+  }
+  return next;
 }
 
 function resetGeneratedExperience(session: TryMeSession, detail: string): void {
@@ -229,6 +309,9 @@ function qualityReceiptFor(session: TryMeSession, artifactRevision: number): Qua
       session.answers.eventSource ||
       session.useCase === "abm"
   );
+  const sourceConfirmed = session.useCase === "abm"
+    ? usableEvidence > 0
+    : session.sourceConfirmation?.status === "confirmed";
   const ctaNeedsDestination = Boolean(
     session.answers.ctaType && session.answers.ctaType !== "explore"
   );
@@ -257,14 +340,16 @@ function qualityReceiptFor(session: TryMeSession, artifactRevision: number): Qua
       status:
         !sourceRelevant
           ? "not-applicable"
-          : session.sourceConfirmation?.status === "confirmed"
+          : sourceConfirmed
             ? "passed"
             : "warning",
       detail:
         !sourceRelevant
           ? "No external source confirmation is required."
-          : session.sourceConfirmation?.status === "confirmed"
-            ? "The selected source context was confirmed by the editor."
+          : sourceConfirmed
+            ? session.useCase === "abm"
+              ? "The page is grounded in the current public account evidence set."
+              : "The selected source context was confirmed by the editor."
             : "The editor has not confirmed the selected source context."
     },
     {
@@ -1088,20 +1173,24 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         ? fallbackBrand(latest.answers.targetDomain)
         : undefined);
     const generationTargetBrand = curatedTargetBrand(latest, targetBrand);
+    const selectedBrands = brandsWithSelectedAssets(latest, brand, generationTargetBrand);
     const generated = await generateExperienceDraft({
-      brand,
-      targetBrand: generationTargetBrand,
+      brand: selectedBrands.brand,
+      targetBrand: selectedBrands.targetBrand,
       useCase: latest.useCase,
       answers: latest.answers
     });
+    const controlledDraft = draftWithBlockControls(generated.draft, latest.blockControls);
+    const generationQualityReceipt = qualityReceiptFor(latest, latest.revision + 1);
     const html = renderExperienceHtml({
-      draft: generated.draft,
-      brand,
-      targetBrand: generationTargetBrand,
+      draft: controlledDraft,
+      brand: selectedBrands.brand,
+      targetBrand: selectedBrands.targetBrand,
       useCase: latest.useCase,
       answers: latest.answers,
       themeUrl: process.env.FOLLOZE_THEME_URL,
-      fontDeliveryUrls: fontDeliveryUrls(id, brand)
+      fontDeliveryUrls: fontDeliveryUrls(id, selectedBrands.brand),
+      qualityReceipt: generationQualityReceipt
     });
     if (generated.error) {
       logServerError(generated.error, {
@@ -1148,13 +1237,13 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         session.brand = brand;
         session.targetBrand = targetBrand;
         session.experience = {
-          ...generated.draft,
+          ...controlledDraft,
           html,
           generationSource: generated.source,
           artifactRevision: session.revision + 1,
           artifactDigest: createHash("sha256").update(html).digest("hex")
         };
-        session.qualityReceipt = qualityReceiptFor(session, session.revision + 1);
+        session.qualityReceipt = generationQualityReceipt;
         session.status = "preview_ready_unclaimed";
         session.expiresAt = new Date(readyAt + config.sessionTtlSeconds * 1000).toISOString();
         session.stages.story = {
@@ -1167,7 +1256,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
               : generated.fallbackReason === "openai_not_configured"
                 ? "A reliable fallback story is ready while OpenAI is not configured."
                 : "A source-grounded fallback is ready after the AI draft did not pass our quality checks.",
-          artifact: generated.draft.narrativeArc
+          artifact: controlledDraft.narrativeArc
         };
         appendEvent(session, "generation_completed", {
           source: generated.source,

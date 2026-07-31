@@ -198,6 +198,52 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(sendClaimEmail).not.toHaveBeenCalled();
   });
 
+  it("renders selected assets, block overrides, and the quality receipt into the regenerated preview", async () => {
+    const pending = session({ id: "workspace-render-controls" });
+    pending.answers = {
+      ...pending.answers,
+      ctaType: "explore",
+      selectedAssetIds: ["asset_selected_visual"],
+      layoutVariant: "immersive",
+      styleVariant: "brand-led"
+    };
+    pending.availableAssets = [{
+      id: "asset_selected_visual",
+      kind: "seller-image",
+      label: "Selected platform visual",
+      url: "https://jitterbit.com/selected-platform-visual.jpg",
+      source: "seller"
+    }];
+    pending.blockControls = [
+      {
+        id: "hero",
+        locked: true,
+        headline: "A controlled headline that survives regeneration.",
+        body: "This supporting message is persisted as an explicit workspace override."
+      },
+      {
+        id: "closing",
+        ctaLabel: "Explore the architecture"
+      }
+    ];
+    await putSession(pending);
+
+    await runStoryStage(pending.id);
+
+    const stored = await getSession(pending.id);
+    expect(stored?.experience).toMatchObject({
+      headline: "A controlled headline that survives regeneration.",
+      subhead: "This supporting message is persisted as an explicit workspace override.",
+      primaryCta: "Explore the architecture"
+    });
+    expect(stored?.experience?.html).toContain("selected-platform-visual.jpg");
+    expect(stored?.experience?.html).toContain("data-quality-receipt");
+    expect(stored?.experience?.html).toContain('data-layout-variant="immersive"');
+    expect(stored?.qualityReceipt?.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "cta", status: "passed" })])
+    );
+  });
+
   it("does not start a second generation while the story stage is already running", async () => {
     const running = session({ id: "generation-lease-boundary" });
     running.status = "generating";
