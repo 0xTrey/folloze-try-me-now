@@ -382,6 +382,57 @@ describe("deterministic experience copy", () => {
     ).toBe("copy_quality_unsupported_number");
   });
 
+  it("does not let advisory source grounding mask an invented metric", () => {
+    const answers = {
+      sourceUrl: governedAutomationSource.sourceUrl,
+      audience: "Enterprise architects and platform owners",
+      objective: "Educate buyers"
+    };
+    const context = compileCampaignContext({
+      brand: jitterbit,
+      useCase: "content",
+      answers,
+      sourceContent: governedAutomationSource
+    });
+    const grounded = deterministicDraft({
+      brand: jitterbit,
+      useCase: "content",
+      answers,
+      sourceContent: governedAutomationSource,
+      context
+    });
+    const weaklyGrounded = {
+      ...grounded,
+      headline: "Jitterbit gives automation teams a practical operating path.",
+      thesisBody: "Connect the central idea to one operating decision the team can examine.",
+      closingBody: "Choose a practical action that makes teams move 42% faster.",
+      sections: grounded.sections.map((section, index) => ({
+        ...section,
+        headline: [
+          "Clarify the operating question.",
+          "Connect the question to Jitterbit.",
+          "Choose the next practical action."
+        ][index],
+        body: [
+          "Start with the decision the audience needs to make.",
+          "Jitterbit connects integration and automation to a practical operating lens.",
+          "Carry one focused question into the next team conversation."
+        ][index]
+      })) as typeof grounded.sections
+    };
+
+    expect(
+      experienceQualityFailure({
+        draft: weaklyGrounded,
+        brand: jitterbit,
+        useCase: "content",
+        answers,
+        context,
+        sourceContent: governedAutomationSource
+      })
+    ).toBe("copy_quality_unsupported_number");
+  });
+
   it("adds respectful target-account context without inventing private claims", () => {
     const answers = {
       targetDomain: "cisco.com",

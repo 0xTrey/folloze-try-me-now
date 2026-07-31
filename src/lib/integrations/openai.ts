@@ -619,29 +619,6 @@ export function experienceQualityFailure(input: {
       return "copy_quality_creepy_personalization";
     }
   }
-  if (context.brief.campaignRegister === "content-magic") {
-    const sourceEvidence = sourceEvidencePhrases(sourceContent, context.brief.sourceTitle);
-    if (sourceEvidence.length > 0) {
-      const contentRegions = [
-        heroCopy,
-        `${draft.thesisHeadline} ${draft.thesisBody} ${draft.narrativeArc}`,
-        sectionCopy.join(" ")
-      ];
-      const requiredEvidenceCount = Math.min(2, sourceEvidence.length);
-      const matchedEvidence = sourceEvidence.filter((phrase) =>
-        contentRegions.some((region) => sourcePhraseGrounded(region, phrase))
-      );
-      if (matchedEvidence.length < requiredEvidenceCount) {
-        return "copy_quality_missing_source_grounding";
-      }
-      const groundedRegionCount = contentRegions.filter((region) =>
-        sourceEvidence.some((phrase) => sourcePhraseGrounded(region, phrase))
-      ).length;
-      if (groundedRegionCount < Math.min(2, requiredEvidenceCount)) {
-        return "copy_quality_source_grounding_not_distributed";
-      }
-    }
-  }
   if (context.brief.campaignRegister === "campaign-event" && context.brief.eventContext) {
     const eventCopy = `${draft.title} ${draft.eyebrow} ${draft.headline} ${draft.thesisHeadline} ${draft.narrativeArc}`;
     const sellerTokens = new Set(
@@ -698,6 +675,29 @@ export function experienceQualityFailure(input: {
   }
   if (draft.sections.some((section) => !section.proof.trim().endsWith("?"))) {
     return "copy_quality_missing_decision_question";
+  }
+  if (context.brief.campaignRegister === "content-magic") {
+    const sourceEvidence = sourceEvidencePhrases(sourceContent, context.brief.sourceTitle);
+    if (sourceEvidence.length > 0) {
+      const contentRegions = [
+        heroCopy,
+        `${draft.thesisHeadline} ${draft.thesisBody} ${draft.narrativeArc}`,
+        sectionCopy.join(" ")
+      ];
+      const requiredEvidenceCount = Math.min(2, sourceEvidence.length);
+      const matchedEvidence = sourceEvidence.filter((phrase) =>
+        contentRegions.some((region) => sourcePhraseGrounded(region, phrase))
+      );
+      if (matchedEvidence.length < requiredEvidenceCount) {
+        return "copy_quality_missing_source_grounding";
+      }
+      const groundedRegionCount = contentRegions.filter((region) =>
+        sourceEvidence.some((phrase) => sourcePhraseGrounded(region, phrase))
+      ).length;
+      if (groundedRegionCount < Math.min(2, requiredEvidenceCount)) {
+        return "copy_quality_source_grounding_not_distributed";
+      }
+    }
   }
   return undefined;
 }
