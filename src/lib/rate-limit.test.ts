@@ -14,6 +14,10 @@ type LoadOptions = {
 async function loadRateLimiter(options: LoadOptions = {}) {
   vi.resetModules();
   vi.stubEnv("NODE_ENV", options.environment ?? "production");
+  vi.stubEnv(
+    "DATABASE_URL",
+    options.databaseConfigured ? "postgresql://rate-limit-test.invalid/database" : ""
+  );
 
   const databaseQuery = vi.fn(async () => {
     if (options.databaseError) throw options.databaseError;
