@@ -4,6 +4,7 @@ import {
   experienceDraftSchema,
   type ExperienceDraft
 } from "@/lib/generation/experience-schema";
+import { CANONICAL_EXPERIENCE_STRUCTURE } from "@/lib/generation/campaign-context";
 import {
   PREVIEW_INTERACTION_TYPES,
   type AudienceLensArtifact,
@@ -223,6 +224,7 @@ export function buildExperienceSpec(
   targetBrand?: TryMeSession["targetBrand"]
 ): ExperienceSpecV1 {
   const createdAt = new Date().toISOString();
+  const canonicalDraft = canonicalizeExperienceDraft(draft);
   const payload = {
     schemaVersion: "1.0" as const,
     revision:
@@ -251,11 +253,11 @@ export function buildExperienceSpec(
       surfaceColor: brand.surfaceColor,
       ...(brand.logoUrl ? { logoUrl: brand.logoUrl } : {})
     },
-    draft: structuredClone(draft) as Record<string, unknown>,
+    draft: canonicalDraft as Record<string, unknown>,
     cta: {
       intent: session.answers.ctaType ?? "explore",
       style: session.answers.ctaStyle ?? "solid",
-      label: draft.primaryCta
+      label: canonicalDraft.primaryCta
     },
     selectedAssetIds: [...(session.answers.selectedAssetIds ?? [])],
     evidenceItemIds: (session.evidenceItems ?? [])
@@ -272,5 +274,14 @@ export function buildExperienceSpec(
 }
 
 export function draftFromExperienceSpec(spec: ExperienceSpecV1): ExperienceDraft {
-  return experienceDraftSchema.parse(spec.draft);
+  return canonicalizeExperienceDraft(experienceDraftSchema.parse(spec.draft));
+}
+
+export function canonicalizeExperienceDraft(draft: ExperienceDraft): ExperienceDraft {
+  return {
+    ...structuredClone(draft),
+    wireframeName: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
+    experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
+    sectionSequence: [...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence]
+  };
 }

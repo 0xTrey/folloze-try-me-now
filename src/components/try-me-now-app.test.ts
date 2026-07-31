@@ -4,6 +4,7 @@ import type { PublicBrandProfile, PublicTryMeSession, StageStatus, UseCase } fro
 import {
   ceremonyDuration,
   ctaValueForSession,
+  entryPathOptions,
   getAssemblyPreviewKey,
   getBuildPanelCopy,
   getGuidedQuestionCopy,
@@ -50,6 +51,21 @@ function session(
 }
 
 describe("Try Me Now experience copy", () => {
+  it("routes each watch-example action to a verified public Folloze board", () => {
+    expect(entryPathOptions.abm).toMatchObject({
+      exampleLabel: "Watch Tribe Connect for HARMAN",
+      exampleUrl: "https://experience.folloze.com/tribe-connect-for-harman"
+    });
+    expect(entryPathOptions.campaign).toMatchObject({
+      exampleLabel: "Watch Folloze + Claude launch",
+      exampleUrl: "https://experience.folloze.com/folloze-claude-launch"
+    });
+    expect(entryPathOptions.content).toMatchObject({
+      exampleLabel: "Watch Cisco HMF become an experience",
+      exampleUrl: "https://engage.folloze.com/cisco-hmf-example"
+    });
+  });
+
   it("uses the generated ABM headline and names the seller, account, buyer, and objective", () => {
     const result = getRevealCopy(session("abm", {
       status: "preview_ready_unclaimed",

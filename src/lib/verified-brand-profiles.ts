@@ -1,4 +1,4 @@
-import serviceNowProfile from "../../research/brand-harvest/servicenow-home-2026-07-31/verified-runtime-profile.json";
+import serviceNowProfile from "../../research/brand-harvest/servicenow-home-2026-07-31/verified-runtime-profile.json" with { type: "json" };
 
 import type { BrandProfile } from "@/lib/types";
 

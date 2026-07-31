@@ -28,9 +28,9 @@ import {
 afterEach(() => cleanup());
 
 describe("Try Me Now prospect enhancement components", () => {
-  it("supports a primary entry path and a separate example-mode action", () => {
+  it("supports a primary entry path and a direct public example link", () => {
     const onSelect = vi.fn();
-    const onExample = vi.fn();
+    const onExampleOpen = vi.fn();
     render(
       <EntryPathMicroDemo
         option={{
@@ -41,17 +41,26 @@ describe("Try Me Now prospect enhancement components", () => {
           description: "Build around one company and buying group.",
           actionLabel: "Build a 1:1 experience",
           exampleLabel: "See a Cisco example",
+          exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
           demoSteps: ["Seller", "Account signal", "1:1 experience"]
         }}
         onSelect={onSelect}
-        onExample={onExample}
+        onExampleOpen={onExampleOpen}
       />
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Build a 1:1 experience/i }));
-    fireEvent.click(screen.getByRole("button", { name: /See a Cisco example/i }));
     expect(onSelect).toHaveBeenCalledWith("abm");
-    expect(onExample).toHaveBeenCalledWith("abm");
+    const exampleLink = screen.getByRole("link", { name: /See a Cisco example/i });
+    expect(exampleLink).toHaveAttribute(
+      "href",
+      "https://engage.folloze.com/cisco-hmf-example"
+    );
+    expect(exampleLink).toHaveAttribute("target", "_blank");
+    expect(exampleLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(exampleLink).toHaveAccessibleName("See a Cisco example (opens in a new tab)");
+    fireEvent.click(exampleLink);
+    expect(onExampleOpen).toHaveBeenCalledWith("abm");
   });
 
   it("shows the harvested logo, semantic palette, and source proof", () => {

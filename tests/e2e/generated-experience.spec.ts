@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import {
+  canonicalDesktopExperiences,
   deterministicSvg,
   experienceDraft,
   fixtureAssetOrigin,
@@ -92,6 +93,105 @@ async function majorLayoutOverflow(page: Page): Promise<string[]> {
 }
 
 test.describe("generated 1:1 experience", () => {
+  test("keeps one computed desktop geometry across ABM, campaign, and content", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await fulfillFixtureAssets(page);
+    const fingerprints: Array<Record<string, unknown>> = [];
+    const visibleHeadlines: string[] = [];
+
+    for (const experience of canonicalDesktopExperiences) {
+      await loadGeneratedExperience(page, experience.html);
+      await forceAssetResolution(page);
+      await page.evaluate(() => document.fonts.ready);
+      await expect.poll(() => page.locator(".media.has-asset").count()).toBe(4);
+
+      const snapshot = await page.evaluate(() => {
+        const coreRegionSelectors = [
+          ".hero",
+          ".signature-canonical",
+          ".thesis",
+          ".lens-lab",
+          ".journey",
+          ".close"
+        ];
+        const geometrySelectors = [
+          ".hero",
+          ".signature-canonical",
+          ".lens-panel:not([hidden])",
+          ".journey-grid",
+          ".close"
+        ];
+        const coreRegions = Object.fromEntries(coreRegionSelectors.map((selector) => {
+          const rect = document.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+          return [selector, { x: Math.round(rect.x), width: Math.round(rect.width) }];
+        }));
+        const geometry = Object.fromEntries(geometrySelectors.map((selector) => {
+          const style = getComputedStyle(document.querySelector<HTMLElement>(selector)!);
+          return [selector, {
+            columns: style.gridTemplateColumns,
+            gap: style.gap,
+            paddingLeft: style.paddingLeft,
+            paddingRight: style.paddingRight,
+            minHeight: style.minHeight
+          }];
+        }));
+        return {
+          wireframe: document.body.dataset.wireframe,
+          shape: document.body.dataset.experienceShape,
+          layout: document.body.dataset.layoutVariant,
+          sectionOrder: Array.from(document.querySelectorAll<HTMLElement>("main > section")).map(
+            (section) => section.id || section.className
+          ),
+          counts: {
+            signature: document.querySelectorAll("[data-signature-lens-index]").length,
+            tabs: document.querySelectorAll("[role=tab]").length,
+            panels: document.querySelectorAll("[role=tabpanel]").length,
+            cards: document.querySelectorAll(".journey-card").length,
+            heroActions: document.querySelectorAll(".hero .actions > *").length,
+            liveHeroLinks: document.querySelectorAll(".hero .actions a").length
+          },
+          overflow: Math.max(
+            0,
+            document.documentElement.scrollWidth - window.innerWidth,
+            document.body.scrollWidth - window.innerWidth
+          ),
+          coreRegions,
+          geometry
+        };
+      });
+
+      fingerprints.push(snapshot);
+      visibleHeadlines.push(await page.locator(".hero h1").innerText());
+      expect(await majorLayoutOverflow(page)).toEqual([]);
+    }
+
+    expect(fingerprints[1]).toEqual(fingerprints[0]);
+    expect(fingerprints[2]).toEqual(fingerprints[0]);
+    expect(fingerprints[0]).toMatchObject({
+      wireframe: "canonical-desktop-experience",
+      shape: "guided-buyer-experience",
+      layout: "standard",
+      sectionOrder: [
+        "experience-overview",
+        "signature signature-canonical",
+        "campaign-thesis",
+        "decision-path",
+        "guided-questions",
+        "next-step"
+      ],
+      counts: {
+        signature: 3,
+        tabs: 3,
+        panels: 3,
+        cards: 3,
+        heroActions: 1,
+        liveHeroLinks: 0
+      },
+      overflow: 0
+    });
+    expect(new Set(visibleHeadlines).size).toBe(3);
+  });
+
   for (const viewport of viewports) {
     test(`contains its major layout at ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport);

@@ -45,7 +45,6 @@ import {
   EntryPathMicroDemo,
   ExpirySaveValuePanel,
   ExperienceBlockControl as ExperienceBlockControlPanel,
-  ExperienceVariantCards,
   InstantBrandLockStrip,
   MessageDirectionControl,
   PersonalizationQualityReceipt,
@@ -153,7 +152,7 @@ const objectives: Record<UseCase, string[]> = {
   content: ["Educate buyers", "Increase content engagement", "Capture qualified interest", "Book a meeting"]
 };
 
-const entryPathOptions: Record<UseCase, EntryPathOption> = {
+export const entryPathOptions: Record<UseCase, EntryPathOption> = {
   abm: {
     id: "abm",
     index: "01",
@@ -161,7 +160,8 @@ const entryPathOptions: Record<UseCase, EntryPathOption> = {
     title: "Break into one account",
     description: "Watch public account evidence become a credible, one-to-one buyer journey.",
     actionLabel: "Build my 1:1 page",
-    exampleLabel: "Watch a Jitterbit × Cisco example",
+    exampleLabel: "Watch Tribe Connect for HARMAN",
+    exampleUrl: "https://experience.folloze.com/tribe-connect-for-harman",
     demoSteps: ["Seller", "Account evidence", "1:1 experience"],
     accent: "#645cff",
     tone: "paper"
@@ -173,7 +173,8 @@ const entryPathOptions: Record<UseCase, EntryPathOption> = {
     title: "Launch a campaign people explore",
     description: "Turn one offer and one audience into a sharp, measurable campaign front door.",
     actionLabel: "Build my campaign page",
-    exampleLabel: "Watch a product-launch example",
+    exampleLabel: "Watch Folloze + Claude launch",
+    exampleUrl: "https://experience.folloze.com/folloze-claude-launch",
     demoSteps: ["Offer", "Buyer objective", "Live campaign"],
     accent: "#5865ff",
     tone: "cobalt"
@@ -185,65 +186,11 @@ const entryPathOptions: Record<UseCase, EntryPathOption> = {
     title: "Make your best content interactive",
     description: "Preserve the facts, then reshape a URL or PDF into a guided buyer path.",
     actionLabel: "Transform my content",
-    exampleLabel: "Watch a report become an experience",
+    exampleLabel: "Watch Cisco HMF become an experience",
+    exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
     demoSteps: ["Source", "Buyer lens", "Magic experience"],
     accent: "#67e8c5",
     tone: "ink"
-  }
-};
-
-const exampleSeeds: Record<UseCase, { companyDomain: string; answers: SessionAnswers }> = {
-  abm: {
-    companyDomain: "jitterbit.com",
-    answers: {
-      targetDomain: "cisco.com",
-      audience: "Enterprise architecture and platform leaders",
-      objective: "Book a meeting",
-      exampleMode: true,
-      exampleKey: "jitterbit-cisco-abm",
-      messageBelief: "Integration architecture can become an AI advantage instead of another source of sprawl.",
-      messageAction: "Bring the first enterprise automation use case into a working session.",
-      ctaType: "book-meeting",
-      ctaStyle: "solid",
-      styleVariant: "brand-led",
-      toneVariant: "executive",
-      layoutVariant: "immersive"
-    }
-  },
-  campaign: {
-    companyDomain: "jitterbit.com",
-    answers: {
-      campaignType: "product",
-      audience: "Enterprise architects and automation leaders",
-      objective: "Launch or announce",
-      exampleMode: true,
-      exampleKey: "jitterbit-product-campaign",
-      messageBelief: "Secure AI agents need an integration foundation built for enterprise systems.",
-      messageAction: "Explore the architecture and identify the first workflow to activate.",
-      ctaType: "explore",
-      ctaStyle: "outline",
-      styleVariant: "technical",
-      toneVariant: "provocative",
-      layoutVariant: "modular"
-    }
-  },
-  content: {
-    companyDomain: "jitterbit.com",
-    answers: {
-      sourceUrl: "https://www.jitterbit.com/blog/jitterbit-mcp-the-secure-foundation-for-enterprise-ai-agents/",
-      sourceConfirmed: true,
-      audience: "Enterprise architects and AI platform owners",
-      objective: "Increase content engagement",
-      exampleMode: true,
-      exampleKey: "jitterbit-mcp-content",
-      messageBelief: "MCP becomes enterprise-ready when governance and integration are designed together.",
-      messageAction: "Choose the architecture question you want to resolve first.",
-      ctaType: "explore",
-      ctaStyle: "text",
-      styleVariant: "editorial",
-      toneVariant: "technical",
-      layoutVariant: "narrative"
-    }
   }
 };
 
@@ -542,7 +489,7 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
       targetTitle: `Which account should see itself in ${brandName}'s story?`,
       targetBody: `Add the account domain. We will map its public context against ${brandName}'s value before the page is composed.`,
       campaignTitle: "What are you taking to market?",
-      campaignBody: "The offer changes the page structure and the action buyers should take.",
+      campaignBody: "The offer changes the message emphasis, proof, and action buyers should take.",
       sourceTitle: "Which content should do more work?",
       sourceBody: "Give us a public URL or PDF. We will preserve the facts and reshape the way buyers explore them.",
       audienceLoadingTitle: `Mapping the buying roles that fit ${targetName}.`,
@@ -579,7 +526,7 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
     targetTitle: "Which account should this feel built for?",
     targetBody: "Add the target domain to create an account-specific version.",
     campaignTitle: `What is ${brandName} taking to market?`,
-    campaignBody: "Choose the campaign shape. It will change the page rhythm, proof pattern, and conversion path.",
+    campaignBody: "Choose the campaign format. It will change the message, proof emphasis, and conversion path.",
     sourceTitle: "Which content should do more work?",
     sourceBody: "Give us a public URL or PDF. We will preserve the facts and reshape the way buyers explore them.",
     audienceLoadingTitle: `Finding the buyers this ${brandName} campaign should move.`,
@@ -855,10 +802,10 @@ function LiveChecklist({ session, compact = false }: { session?: PublicTryMeSess
 
 function UseCasePortals({
   onSelect,
-  onExample
+  onExampleOpen
 }: {
   onSelect: (value: UseCase) => void;
-  onExample: (value: UseCase) => void;
+  onExampleOpen: (value: UseCase) => void;
 }) {
   return (
     <div className="entryPathRail" aria-label="Choose what you want to create">
@@ -867,7 +814,7 @@ function UseCasePortals({
           key={key}
           option={entryPathOptions[key]}
           onSelect={onSelect}
-          onExample={onExample}
+          onExampleOpen={onExampleOpen}
         />
       ))}
     </div>
@@ -1615,8 +1562,7 @@ export function TryMeNowApp() {
 
   const startSession = useCallback(async (
     selectedUseCase: UseCase,
-    companyDomain: string,
-    seed?: SessionAnswers
+    companyDomain: string
   ) => {
     const normalized = companyDomain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
     if (startedDomain.current === normalized || !likelyDomain.test(normalized)) return;
@@ -1628,20 +1574,12 @@ export function TryMeNowApp() {
         method: "POST",
         body: JSON.stringify({
           useCase: selectedUseCase,
-          companyDomain: normalized,
-          exampleMode: seed?.exampleMode,
-          exampleKey: seed?.exampleKey
+          companyDomain: normalized
         })
       });
-      const seeded = seed
-        ? await api<{ session: PublicTryMeSession }>(`/api/sessions/${result.session.id}`, {
-            method: "PATCH",
-            body: JSON.stringify({ operation: "update-workspace", answers: seed })
-          })
-        : result;
-      setSession(seeded.session);
-      setAnswers(seeded.session.answers);
-      track(seed ? "example_started" : "domain_submitted", { useCase: selectedUseCase });
+      setSession(result.session);
+      setAnswers(result.session.answers);
+      track("domain_submitted", { useCase: selectedUseCase });
     } catch (startError) {
       startedDomain.current = undefined;
       setError(startError instanceof Error ? startError.message : "We could not start the build.");
@@ -1649,13 +1587,6 @@ export function TryMeNowApp() {
       setIsStarting(false);
     }
   }, []);
-
-  const startExample = useCallback((selectedUseCase: UseCase) => {
-    const example = exampleSeeds[selectedUseCase];
-    selectUseCase(selectedUseCase);
-    setDomain(example.companyDomain);
-    void startSession(selectedUseCase, example.companyDomain, example.answers);
-  }, [selectUseCase, startSession]);
 
   useEffect(() => {
     if (!session || directionSession.current === session.id) return;
@@ -2110,7 +2041,10 @@ export function TryMeNowApp() {
             <h1>Give us 30 seconds.<br /><em>Get a live buyer experience.</em></h1>
             <p>Choose what you want to launch. Add a domain and a few signals. Folloze builds it, hosts it, and captures engagement while you watch.</p>
           </div>
-          <UseCasePortals onSelect={selectUseCase} onExample={startExample} />
+          <UseCasePortals
+            onSelect={selectUseCase}
+            onExampleOpen={(selectedUseCase) => track("example_opened", { useCase: selectedUseCase })}
+          />
           <div className="entryFooter"><span>No login. No blank canvas.</span><span>Preview first. Add your email only if you want to keep it.</span></div>
         </section>
       )}
@@ -2252,7 +2186,7 @@ export function TryMeNowApp() {
               />
               {session.status !== "claimed" && (
                 <details className="experienceControlDeck">
-                  <summary><span><Sparkles size={17} />Tune and personalize</span><small>Copy, layout, CTA, assets, and blocks</small><ChevronDown size={16} /></summary>
+                  <summary><span><Sparkles size={17} />Tune and personalize</span><small>Copy, CTA, assets, and blocks</small><ChevronDown size={16} /></summary>
                   <div className="experienceControlBody">
                     <ToneChips
                       label="Message tone"
@@ -2296,17 +2230,6 @@ export function TryMeNowApp() {
                       {isSaving ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}
                       Apply CTA treatment
                     </button>
-                    <ExperienceVariantCards
-                      label="Choose the page rhythm"
-                      selectedId={answers.layoutVariant || "narrative"}
-                      variants={[
-                        { id: "narrative", name: "Narrative arc", eyebrow: "Story first", description: "Build conviction one idea at a time.", kind: "story", previewPattern: "editorial" },
-                        { id: "modular", name: "Modular proof", eyebrow: "Scan and choose", description: "Let buyers enter through the proof that matters.", kind: "layout", previewPattern: "guided" },
-                        { id: "immersive", name: "Immersive reveal", eyebrow: "High impact", description: "Give the hero and visuals more room to work.", kind: "layout", previewPattern: "split" },
-                        { id: "compact", name: "Compact decision", eyebrow: "Fast path", description: "Compress the story for decisive buyers.", kind: "layout", previewPattern: "proof" }
-                      ]}
-                      onSelect={(id) => void patchWorkspace({ answers: { layoutVariant: id as NonNullable<SessionAnswers["layoutVariant"]> } })}
-                    />
                     {Boolean(session.availableAssets?.length) && (
                       <AssetPicker
                         assets={(session.availableAssets ?? []).map((asset) => ({

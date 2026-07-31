@@ -1,6 +1,6 @@
 import type { ExperienceDraft } from "../../src/lib/generation/experience-schema";
 import { renderExperienceHtml } from "../../src/lib/generation/experience-template";
-import type { BrandProfile } from "../../src/lib/types";
+import type { BrandProfile, SessionAnswers, UseCase } from "../../src/lib/types";
 
 export const fixtureAssetOrigin = "https://assets.example.test";
 
@@ -53,8 +53,8 @@ export const targetBrand: BrandProfile = {
 export const experienceDraft: ExperienceDraft = {
   campaignRegister: "one-to-one-abm",
   designRegister: "source-brand-image-led",
-  wireframeName: "abm-account-microsite",
-  experienceShape: "narrative-workflow",
+  wireframeName: "canonical-desktop-experience",
+  experienceShape: "guided-buyer-experience",
   sectionSequence: ["thesis", "decision-lenses", "guided-questions"],
   sectionLabels: {
     thesis: "The account-level case",
@@ -104,21 +104,170 @@ export const experienceDraft: ExperienceDraft = {
 
 export function generatedExperienceHtml(input: {
   seller?: BrandProfile;
-  target?: BrandProfile;
+  target?: BrandProfile | null;
   draft?: ExperienceDraft;
+  useCase?: UseCase;
+  answers?: SessionAnswers;
 } = {}): string {
+  const resolvedTarget = input.target === null ? undefined : input.target ?? targetBrand;
   return renderExperienceHtml({
     draft: input.draft ?? experienceDraft,
     brand: input.seller ?? sellerBrand,
-    targetBrand: input.target ?? targetBrand,
-    useCase: "abm",
-    answers: {
+    targetBrand: resolvedTarget,
+    useCase: input.useCase ?? "abm",
+    answers: input.answers ?? {
       targetDomain: "cisco.com",
       audience: experienceDraft.audienceLabel,
       objective: "Educate the buying group"
     }
   });
 }
+
+function canonicalExperienceCase(input: {
+  id: "abm" | "campaign" | "content";
+  useCase: UseCase;
+  answers: SessionAnswers;
+  draft: ExperienceDraft;
+  target?: BrandProfile | null;
+}) {
+  return {
+    id: input.id,
+    headline: input.draft.headline,
+    html: generatedExperienceHtml({
+      seller: sellerBrand,
+      target: input.target ?? null,
+      draft: input.draft,
+      useCase: input.useCase,
+      answers: input.answers
+    })
+  };
+}
+
+const campaignExperienceDraft: ExperienceDraft = {
+  ...experienceDraft,
+  campaignRegister: "campaign-product",
+  sectionLabels: {
+    thesis: "The campaign idea",
+    lenses: "Choose the launch lens",
+    journey: "Questions for the next campaign move",
+    close: "Turn the launch into a buyer path"
+  },
+  title: "Jitterbit | Governed AI automation campaign",
+  eyebrow: "For enterprise architects",
+  headline: "Put dependable context behind enterprise AI decisions.",
+  subhead:
+    "Give enterprise architects a focused way to evaluate how governed automation connects applications, data, and workflows for AI-ready operations.",
+  thesisHeadline: "A launch becomes useful when it helps buyers make a decision.",
+  thesisBody:
+    "Lead with the operating question, organize the supporting proof, and give the buying group a clear path into the conversation.",
+  primaryCta: "Explore the launch story",
+  audienceLabel: "Enterprise architects",
+  narrativeArc: "Frame the launch, compare the implications, then choose the first practical evaluation path.",
+  sections: [
+    {
+      eyebrow: "Launch context",
+      headline: "Connect the announcement to an operating priority.",
+      body: "Help buyers see where governed automation fits before asking them to evaluate individual capabilities.",
+      proof: "Which operating priority makes this launch matter now?"
+    },
+    {
+      eyebrow: "Decision proof",
+      headline: "Organize the evidence around the buying question.",
+      body: "Sequence the platform story, governance considerations, and proof so the campaign advances a real decision.",
+      proof: "What evidence would help the buying group move forward?"
+    },
+    {
+      eyebrow: "First action",
+      headline: "Offer one useful way into the launch story.",
+      body: "Let each buyer start with the question closest to their role while keeping the larger narrative intact.",
+      proof: "Which question should open the next campaign conversation?"
+    }
+  ],
+  signalLabels: ["Launch context", "Decision proof", "First action"],
+  closingHeadline: "Choose the launch question worth exploring together.",
+  closingBody: "Bring the campaign into one focused conversation around the outcome, evidence, and next step that matter most."
+};
+
+const contentExperienceDraft: ExperienceDraft = {
+  ...experienceDraft,
+  campaignRegister: "content-magic",
+  sectionLabels: {
+    thesis: "The central idea",
+    lenses: "Choose how to explore it",
+    journey: "Questions the content should answer",
+    close: "Carry the idea into the next conversation"
+  },
+  title: "Jitterbit | Governed automation field guide",
+  eyebrow: "For application leaders",
+  headline: "Turn the governed automation field guide into a decision experience.",
+  subhead:
+    "Preserve the source argument while giving application leaders a faster path through the implications, proof, and questions that matter to them.",
+  thesisHeadline: "The best content should help a buyer think, not just finish a download.",
+  thesisBody:
+    "Reshape the source into a guided experience that keeps its facts intact and makes the most useful decision paths easier to explore.",
+  primaryCta: "Explore the field guide",
+  audienceLabel: "Application leaders",
+  narrativeArc: "Surface the core idea, open role-relevant paths, then carry the strongest question forward.",
+  sections: [
+    {
+      eyebrow: "Core argument",
+      headline: "Start with the decision the source is trying to change.",
+      body: "Translate the field guide into a concise point of view without losing the supporting facts or context.",
+      proof: "What belief should change after someone explores this content?"
+    },
+    {
+      eyebrow: "Evidence path",
+      headline: "Let buyers inspect the proof that matters to their role.",
+      body: "Organize the strongest source material into distinct paths instead of making every reader follow one linear document.",
+      proof: "Which proof should an application leader evaluate first?"
+    },
+    {
+      eyebrow: "Conversation bridge",
+      headline: "Turn reading into a useful next question.",
+      body: "Close with a practical prompt that connects the content to the buyer's environment and priorities.",
+      proof: "Which source insight is worth discussing with the wider team?"
+    }
+  ],
+  signalLabels: ["Core argument", "Evidence path", "Conversation bridge"],
+  closingHeadline: "Choose the field-guide question worth carrying forward.",
+  closingBody: "Use the source as the start of a focused conversation about governed automation, not the end of a download journey."
+};
+
+export const canonicalDesktopExperiences = [
+  canonicalExperienceCase({
+    id: "abm",
+    useCase: "abm",
+    target: targetBrand,
+    draft: experienceDraft,
+    answers: {
+      targetDomain: "cisco.com",
+      audience: "Infrastructure platform leaders",
+      objective: "Book a meeting"
+    }
+  }),
+  canonicalExperienceCase({
+    id: "campaign",
+    useCase: "campaign",
+    draft: campaignExperienceDraft,
+    answers: {
+      campaignType: "product",
+      promotedOffer: "Governed AI automation",
+      audience: "Enterprise architects",
+      objective: "Launch or announce"
+    }
+  }),
+  canonicalExperienceCase({
+    id: "content",
+    useCase: "content",
+    draft: contentExperienceDraft,
+    answers: {
+      sourceName: "The governed automation field guide.pdf",
+      sourceUrl: "https://example.com/governed-automation-guide",
+      audience: "Application leaders",
+      objective: "Educate buyers"
+    }
+  })
+] as const;
 
 export const deterministicSvg = `
   <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">

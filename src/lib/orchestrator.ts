@@ -217,21 +217,30 @@ function brandsWithSelectedAssets(
   };
 }
 
+const CORE_EXPERIENCE_BLOCK_IDS = new Set<ExperienceBlockControl["id"]>([
+  "hero",
+  "thesis",
+  "decision-lenses",
+  "guided-questions",
+  "closing"
+]);
+
+function normalizeCoreBlockControls(
+  controls: ExperienceBlockControl[] = []
+): ExperienceBlockControl[] {
+  return controls.map((control) =>
+    CORE_EXPERIENCE_BLOCK_IDS.has(control.id)
+      ? { ...control, visible: true }
+      : { ...control }
+  );
+}
+
 function draftWithBlockControls(
   draft: ExperienceDraft,
   controls: ExperienceBlockControl[] = []
 ): ExperienceDraft {
   const next = structuredClone(draft);
-  for (const control of controls) {
-    if (control.visible === false) {
-      const sectionByBlock = {
-        thesis: "thesis",
-        "decision-lenses": "decision-lenses",
-        "guided-questions": "guided-questions"
-      } as const;
-      const section = sectionByBlock[control.id as keyof typeof sectionByBlock];
-      if (section) next.sectionSequence = next.sectionSequence.filter((candidate) => candidate !== section);
-    }
+  for (const control of normalizeCoreBlockControls(controls)) {
     if (control.id === "hero") {
       if (control.eyebrow) next.eyebrow = control.eyebrow;
       if (control.headline) next.headline = control.headline;
@@ -904,6 +913,9 @@ export async function patchSessionWorkspace(
         "Create a new version to change a saved experience."
       );
     }
+    if (session.blockControls?.length) {
+      session.blockControls = normalizeCoreBlockControls(session.blockControls);
+    }
     if (patch.answers) applyAnswerPatch(session, patch.answers);
 
     if (patch.selectedAudienceRecommendationId !== undefined) {
@@ -1002,7 +1014,7 @@ export async function patchSessionWorkspace(
       for (const [id, control] of updates) {
         existing.set(id, { ...existing.get(id), ...control } as ExperienceBlockControl);
       }
-      session.blockControls = [...existing.values()];
+      session.blockControls = normalizeCoreBlockControls([...existing.values()]);
       appendEvent(session, "block_controls_updated", {
         count: patch.blockControls.length,
         locked: session.blockControls.filter((control) => control.locked).length
@@ -1215,6 +1227,9 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
   const started = await updateSession(id, (session) => {
     acquiredGeneration = false;
     expectedFingerprint = "";
+    if (session.blockControls?.length) {
+      session.blockControls = normalizeCoreBlockControls(session.blockControls);
+    }
     if (!isGenerationReady(session.useCase, session.answers)) return session;
     if (session.status === "preview_ready_unclaimed" || session.status === "claimed") {
       return session;

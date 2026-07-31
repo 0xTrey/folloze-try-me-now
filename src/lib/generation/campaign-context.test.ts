@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { cleanSourceTitle, compileCampaignContext } from "@/lib/generation/campaign-context";
+import {
+  CANONICAL_EXPERIENCE_STRUCTURE,
+  cleanSourceTitle,
+  compileCampaignContext,
+  experienceShapes,
+  wireframeNames
+} from "@/lib/generation/campaign-context";
 import type { BrandProfile } from "@/lib/types";
 
 const seller: BrandProfile = {
@@ -97,9 +103,10 @@ describe("compileCampaignContext", () => {
       colorSystem: { primary: "#1B3E51", accent: "#F44414", surface: "#FFFFFF" }
     });
     expect(context.wireframe).toMatchObject({
-      name: "abm-account-microsite",
-      experienceShape: "narrative-workflow",
-      sectionSequence: ["thesis", "decision-lenses", "guided-questions"]
+      name: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
+      experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
+      heroMode: CANONICAL_EXPERIENCE_STRUCTURE.heroMode,
+      sectionSequence: CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
     });
   });
 
@@ -132,7 +139,17 @@ describe("compileCampaignContext", () => {
     expect(evidence).not.toMatch(/Products and Services|Featured Resources/i);
   });
 
-  it("gives demand, product, and event campaigns different conversion structures", () => {
+  it("keeps one canonical geometry while preserving distinct register, label, and CTA framing", () => {
+    const abm = compileCampaignContext({
+      brand: seller,
+      targetBrand: target,
+      useCase: "abm",
+      answers: {
+        targetDomain: "cisco.com",
+        audience: "Infrastructure leaders",
+        objective: "Book a meeting"
+      }
+    });
     const demand = compileCampaignContext({
       brand: seller,
       useCase: "campaign",
@@ -153,20 +170,60 @@ describe("compileCampaignContext", () => {
         objective: "Continue event engagement"
       }
     });
+    const content = compileCampaignContext({
+      brand: seller,
+      useCase: "content",
+      answers: {
+        sourceName: "The governed automation field guide.pdf",
+        audience: "Application leaders",
+        objective: "Educate buyers"
+      }
+    });
+    const contexts = [abm, demand, product, event, content];
+    const expectedStructure = {
+      name: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
+      experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
+      heroMode: CANONICAL_EXPERIENCE_STRUCTURE.heroMode,
+      sectionSequence: [...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence]
+    };
 
-    expect([demand.wireframe.name, product.wireframe.name, event.wireframe.name]).toEqual([
-      "demand-generation-landing-page",
-      "product-launch-landing-page",
-      "event-awareness-follow-up"
-    ]);
-    expect(new Set([demand.wireframe.experienceShape, product.wireframe.experienceShape, event.wireframe.experienceShape]).size).toBe(3);
-    expect(new Set([demand.wireframe.sectionSequence.join("|"), product.wireframe.sectionSequence.join("|"), event.wireframe.sectionSequence.join("|")]).size).toBe(3);
-    expect([demand.brief.primaryAction, product.brief.primaryAction, event.brief.primaryAction]).toEqual([
+    expect(contexts.map(({ wireframe }) => ({
+      name: wireframe.name,
+      experienceShape: wireframe.experienceShape,
+      heroMode: wireframe.heroMode,
+      sectionSequence: wireframe.sectionSequence
+    }))).toEqual(contexts.map(() => expectedStructure));
+    expect(new Set(contexts.map(({ brief }) => brief.campaignRegister)).size).toBe(5);
+    expect(new Set(contexts.map(({ wireframe }) => JSON.stringify(wireframe.labels))).size).toBe(5);
+    expect(new Set(contexts.map(({ wireframe }) => wireframe.signatureMoment)).size).toBe(5);
+    expect(new Set(contexts.map(({ wireframe }) => wireframe.finalCtaPattern)).size).toBe(5);
+    expect(contexts.map(({ brief }) => brief.primaryAction)).toEqual([
+      "Plan the working session",
       "Explore the offer",
       "Explore the first use case",
-      "Continue the event conversation"
+      "Continue the event conversation",
+      "Explore the key ideas"
     ]);
     expect(event.brief.eventContext).toBe("Enterprise Automation Summit");
+  });
+
+  it("keeps legacy wireframe and shape literals parseable for stored sessions", () => {
+    expect(wireframeNames).toEqual(expect.arrayContaining([
+      "abm-account-microsite",
+      "demand-generation-landing-page",
+      "product-launch-landing-page",
+      "event-awareness-follow-up",
+      "content-resource-companion",
+      "content-assessment-workbench"
+    ]));
+    expect(experienceShapes).toEqual(expect.arrayContaining([
+      "narrative-workflow",
+      "offer-landing-page",
+      "interactive-workbench",
+      "event-cohort",
+      "resource-companion",
+      "assessment-workbench"
+    ]));
   });
 
   it("turns a registration objective into an attendance experience instead of post-event follow-up", () => {
@@ -218,8 +275,20 @@ describe("compileCampaignContext", () => {
     });
     expect(resource.brief.authority.content).toContain("The governed automation field guide");
     expect(resource.brief.authority.design).toContain(seller.sourceUrl);
-    expect(resource.wireframe.name).toBe("content-resource-companion");
-    expect(assessment.wireframe.name).toBe("content-assessment-workbench");
+    expect(resource.wireframe.name).toBe(CANONICAL_EXPERIENCE_STRUCTURE.wireframeName);
+    expect(assessment.wireframe.name).toBe(CANONICAL_EXPERIENCE_STRUCTURE.wireframeName);
+    expect(resource.wireframe).toMatchObject({
+      experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
+      heroMode: CANONICAL_EXPERIENCE_STRUCTURE.heroMode,
+      sectionSequence: CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
+    });
+    expect(assessment.wireframe).toMatchObject({
+      experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
+      heroMode: CANONICAL_EXPERIENCE_STRUCTURE.heroMode,
+      sectionSequence: CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
+    });
+    expect(resource.wireframe.labels).not.toEqual(assessment.wireframe.labels);
+    expect(resource.wireframe.finalCtaPattern).not.toBe(assessment.wireframe.finalCtaPattern);
     expect(assessment.brief.sourceTitle).toBe("Integration readiness scorecard");
   });
 

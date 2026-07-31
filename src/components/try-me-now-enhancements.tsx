@@ -16,7 +16,6 @@ import {
   Pencil,
   Pin,
   RefreshCw,
-  Sparkles,
   Target,
   WandSparkles,
   X
@@ -49,6 +48,7 @@ export interface EntryPathOption {
   description: string;
   actionLabel: string;
   exampleLabel: string;
+  exampleUrl: string;
   demoSteps: [string, string, string];
   accent?: string;
   tone?: "paper" | "cobalt" | "ink";
@@ -59,7 +59,7 @@ export interface EntryPathMicroDemoProps {
   selected?: boolean;
   demoDurationMs?: number;
   onSelect: (id: ProspectPath) => void;
-  onExample?: (id: ProspectPath) => void;
+  onExampleOpen?: (id: ProspectPath) => void;
 }
 
 export function EntryPathMicroDemo({
@@ -67,7 +67,7 @@ export function EntryPathMicroDemo({
   selected = false,
   demoDurationMs = 4_000,
   onSelect,
-  onExample
+  onExampleOpen
 }: EntryPathMicroDemoProps) {
   const style = {
     "--enh-accent": option.accent ?? "#5b5bff",
@@ -96,19 +96,17 @@ export function EntryPathMicroDemo({
         <button type="button" className={styles.primaryAction} onClick={() => onSelect(option.id)}>
           {option.actionLabel}<ArrowRight size={16} />
         </button>
-        {onExample && (
-          <ExampleModeCta label={option.exampleLabel} onClick={() => onExample(option.id)} />
-        )}
+        <ExampleModeCta label={option.exampleLabel} href={option.exampleUrl} onClick={() => onExampleOpen?.(option.id)} />
       </div>
     </article>
   );
 }
 
-export function ExampleModeCta({ label = "See an example", onClick }: { label?: string; onClick: () => void }) {
+export function ExampleModeCta({ label = "See an example", href, onClick }: { label?: string; href: string; onClick?: () => void }) {
   return (
-    <button type="button" className={styles.exampleAction} onClick={onClick}>
-      <Sparkles size={14} />{label}
-    </button>
+    <a className={styles.exampleAction} href={href} target="_blank" rel="noopener noreferrer" onClick={onClick} aria-label={`${label} (opens in a new tab)`}>
+      <ExternalLink size={14} />{label}
+    </a>
   );
 }
 

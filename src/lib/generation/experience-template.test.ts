@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  CANONICAL_EXPERIENCE_STRUCTURE,
+  compileCampaignContext
+} from "@/lib/generation/campaign-context";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
-import type { BrandProfile } from "@/lib/types";
+import { deterministicDraft } from "@/lib/integrations/openai";
+import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 
 const brand: BrandProfile = {
@@ -30,9 +35,9 @@ const brand: BrandProfile = {
 const draft: ExperienceDraft = {
   campaignRegister: "campaign-product",
   designRegister: "source-brand-editorial",
-  wireframeName: "product-launch-landing-page",
-  experienceShape: "interactive-workbench",
-  sectionSequence: ["decision-lenses", "guided-questions", "thesis"],
+  wireframeName: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
+  experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
+  sectionSequence: [...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence],
   sectionLabels: {
     thesis: "The operating shift",
     lenses: "Explore what changes",
@@ -192,8 +197,10 @@ describe("renderExperienceHtml", () => {
       ".eyebrow,.journey-index{color:var(--brand-accent-on-light)}"
     );
     expect(serviceNowHtml).toContain(
-      "body.brand-hero-dark .hero .eyebrow,.signature-event .eyebrow,.close .eyebrow{color:var(--brand-accent)}"
+      "body.brand-hero-dark .hero .eyebrow,.close .eyebrow{color:var(--brand-accent)}"
     );
+    expect(serviceNowHtml).toContain("body.brand-hero-dark .hero{background:radial-gradient");
+    expect(serviceNowHtml).not.toContain("body.brand-hero-dark .hero{grid-template-columns:1fr");
     expect(serviceNowHtml).not.toContain("--brand-accent:#5B5BFF");
     expect(serviceNowHtml).not.toContain('--display:"Instrument Sans",ui-serif');
   });
@@ -324,7 +331,7 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("@media(forced-colors:active)");
   });
 
-  it("links content experiences back to a sanitized public original", () => {
+  it("uses content provenance without turning the preview into a live source CTA", () => {
     const content = renderExperienceHtml({
       draft: {
         ...draft,
@@ -340,8 +347,12 @@ describe("renderExperienceHtml", () => {
       }
     });
 
-    expect(content).toContain('href="https://example.com/guides/automation"');
-    expect(content).toContain(">Open original</a>");
+    expect(content).toContain('data-source-confirmed="true"');
+    expect(content).toContain("Original source confirmed");
+    expect(content).not.toContain('href="https://example.com/guides/automation"');
+    expect(content.match(/class="actions"/g)).toHaveLength(1);
+    expect(content.match(/class="primary" data-demo-cta/g)).toHaveLength(2);
+    expect(content).not.toContain('class="secondary"');
     expect(content).not.toContain("utm_source=private");
     expect(content).not.toContain("#section");
   });
@@ -369,17 +380,18 @@ describe("renderExperienceHtml", () => {
     expect(prioritized).not.toMatch(/g2-implementation|roadshow-event/i);
   });
 
-  it("uses the approved register and wireframe to change page shape", () => {
+  it("uses the campaign register for messaging while keeping the canonical page shape", () => {
     expect(html).toContain('class="register-campaign-product design-source-brand-editorial variant-standard style-standard cta-solid brand-hero-light"');
-    expect(html).toContain('data-wireframe="product-launch-landing-page"');
+    expect(html).toContain('data-wireframe="canonical-desktop-experience"');
+    expect(html).toContain('data-experience-shape="guided-buyer-experience"');
     expect(html).toContain('data-layout-variant="standard"');
     expect(html).toContain('data-style-variant="standard"');
+    expect(html.indexOf('id="campaign-thesis"')).toBeLessThan(html.indexOf('id="decision-path"'));
     expect(html.indexOf('id="decision-path"')).toBeLessThan(html.indexOf('id="guided-questions"'));
-    expect(html.indexOf('id="guided-questions"')).toBeLessThan(html.indexOf('id="campaign-thesis"'));
     expect(html).toContain("Explore what changes");
   });
 
-  it("supports a selected layout variant and an optional escaped quality receipt", () => {
+  it("ignores legacy layout selections while preserving style and an escaped quality receipt", () => {
     const enhancedAnswers = Object.assign(
       { sourceUrl: "https://example.com/report?token=remove#private" },
       {
@@ -401,20 +413,21 @@ describe("renderExperienceHtml", () => {
       answers: enhancedAnswers
     });
 
-    expect(enhanced).toContain('class="register-content-magic design-source-brand-editorial variant-immersive style-editorial cta-solid brand-hero-light"');
-    expect(enhanced).toContain('data-layout-variant="immersive"');
+    expect(enhanced).toContain('class="register-content-magic design-source-brand-editorial variant-standard style-editorial cta-solid brand-hero-light"');
+    expect(enhanced).toContain('data-layout-variant="standard"');
     expect(enhanced).toContain('data-style-variant="editorial"');
     expect(enhanced).toContain('data-quality-receipt="true"');
     expect(enhanced).toContain("Grounded &amp; reviewed");
     expect(enhanced).toContain("&lt;script&gt;alert(&quot;receipt&quot;)&lt;/script&gt;");
     expect(enhanced).toContain("<strong>100</strong>/100 quality");
-    expect(enhanced).toContain('href="https://example.com/report"');
+    expect(enhanced).toContain('data-source-confirmed="true"');
+    expect(enhanced).not.toContain('href="https://example.com/report"');
     expect(enhanced).not.toContain("token=remove");
     expect(enhanced).not.toContain("Ignored");
     expect(html).not.toContain('data-quality-receipt="true"');
   });
 
-  it("maps every supported layout and style selection into safe presentation classes", () => {
+  it("normalizes every legacy layout choice into the canonical geometry while retaining safe style choices", () => {
     for (const variant of ["narrative", "modular", "immersive", "compact"] as const) {
       const variantHtml = renderExperienceHtml({
         draft,
@@ -422,8 +435,8 @@ describe("renderExperienceHtml", () => {
         useCase: "campaign",
         answers: Object.assign({}, { layoutVariant: variant, styleVariant: "technical" as const })
       });
-      expect(variantHtml).toContain(`variant-${variant} style-technical`);
-      expect(variantHtml).toContain(`data-layout-variant="${variant}"`);
+      expect(variantHtml).toContain("variant-standard style-technical");
+      expect(variantHtml).toContain('data-layout-variant="standard"');
       expect(variantHtml).toContain('data-style-variant="technical"');
     }
 
@@ -494,7 +507,7 @@ describe("renderExperienceHtml", () => {
     expect(fallback).not.toContain("<script>alert(1)</script>");
   });
 
-  it("renders materially different signature interactions for product, ABM, and content", () => {
+  it("keeps one structural fingerprint across product, ABM, and content while tailoring the story", () => {
     const target: BrandProfile = {
       ...brand,
       domain: "cisco.com",
@@ -511,7 +524,7 @@ describe("renderExperienceHtml", () => {
         campaignRegister: "one-to-one-abm",
         wireframeName: "abm-account-microsite",
         experienceShape: "narrative-workflow",
-        sectionSequence: ["thesis", "decision-lenses", "guided-questions"],
+        sectionSequence: ["guided-questions", "thesis", "decision-lenses"],
         sectionLabels: {
           thesis: "The account-level case",
           lenses: "Choose the decision lens",
@@ -531,6 +544,7 @@ describe("renderExperienceHtml", () => {
         wireframeName: "content-resource-companion",
         experienceShape: "resource-companion",
         sectionSequence: ["decision-lenses", "guided-questions", "thesis"],
+        narrativeArc: "How should buyers explore the enterprise automation guide?",
         sectionLabels: {
           thesis: "The idea worth carrying forward",
           lenses: "Choose your reading path",
@@ -540,18 +554,147 @@ describe("renderExperienceHtml", () => {
       },
       brand,
       useCase: "content",
-      answers: { sourceName: "Enterprise automation guide", audience: draft.audienceLabel }
+      answers: {
+        sourceName: "Enterprise automation guide",
+        sourceUrl: "https://example.com/enterprise-automation-guide",
+        audience: draft.audienceLabel
+      }
     });
 
-    expect(html).toContain('class="signature signature-product"');
-    expect(abm).toContain('class="signature signature-abm"');
-    expect(abm).toContain("Three decisions for Cisco");
-    expect(content).toContain('class="signature signature-content"');
-    expect(content).toContain('aria-label="Choose a reading path"');
-    expect(html.match(/data-signature-lens-index=/g)).toHaveLength(3);
-    expect(abm.match(/data-signature-lens-index=/g)).toHaveLength(3);
-    expect(content.match(/data-signature-lens-index=/g)).toHaveLength(3);
-    expect(html.split(draft.narrativeArc)).toHaveLength(2);
+    const fingerprint = (output: string) => ({
+      wireframe: output.match(/data-wireframe="([^"]+)"/)?.[1],
+      shape: output.match(/data-experience-shape="([^"]+)"/)?.[1],
+      layout: output.match(/data-layout-variant="([^"]+)"/)?.[1],
+      signatureClass: output.match(/<section class="([^"]+)" aria-label="Guided decision paths">/)?.[1],
+      signatureButtons: output.match(/data-signature-lens-index=/g)?.length,
+      heroActions: output.match(/<div class="actions">([\s\S]*?)<\/div>/)?.[1].match(/<(?:button|a)\b/g)?.length,
+      liveHeroLinks: output.match(/<div class="actions">([\s\S]*?)<\/div>/)?.[1].match(/<a\b/g)?.length ?? 0,
+      lensTabs: output.match(/<button[^>]*role="tab"/g)?.length,
+      lensPanels: output.match(/class="lens-panel"/g)?.length,
+      questionCards: output.match(/<article class="journey-card/g)?.length,
+      sectionOrder: [...output.matchAll(/<section class="(?:thesis|lens-lab|journey) experience-region" id="([^"]+)"/g)].map((match) => match[1])
+    });
+
+    expect(fingerprint(abm)).toEqual(fingerprint(html));
+    expect(fingerprint(content)).toEqual(fingerprint(html));
+    expect(fingerprint(html)).toEqual({
+      wireframe: "canonical-desktop-experience",
+      shape: "guided-buyer-experience",
+      layout: "standard",
+      signatureClass: "signature signature-canonical",
+      signatureButtons: 3,
+      heroActions: 1,
+      liveHeroLinks: 0,
+      lensTabs: 3,
+      lensPanels: 3,
+      questionCards: 3,
+      sectionOrder: ["campaign-thesis", "decision-path", "guided-questions"]
+    });
+    expect(abm).toContain("Jitterbit × Cisco");
+    expect(abm).toContain("Decision paths for Cisco");
+    expect(html).toContain("Three ways into the launch");
+    expect(content).toContain("Ways into the idea");
+    expect(content).toContain("How should buyers explore the enterprise automation guide?");
+    expect(html).not.toContain("How should buyers explore the enterprise automation guide?");
+  });
+
+  it("renders all five generated campaign registers through one geometry and one preview-only CTA structure", () => {
+    const target: BrandProfile = {
+      ...brand,
+      domain: "cisco.com",
+      companyName: "Cisco",
+      logoUrl: "https://www.cisco.com/cisco-logo.svg",
+      imageUrls: [],
+      primaryColor: "#0D274D",
+      accentColor: "#049FD9",
+      sourceUrl: "https://cisco.com"
+    };
+    const cases: Array<{
+      useCase: UseCase;
+      answers: SessionAnswers;
+      targetBrand?: BrandProfile;
+    }> = [
+      {
+        useCase: "abm",
+        targetBrand: target,
+        answers: {
+          targetDomain: "cisco.com",
+          audience: "Infrastructure platform leaders",
+          objective: "Book a meeting"
+        }
+      },
+      {
+        useCase: "campaign",
+        answers: {
+          campaignType: "demand",
+          promotedOffer: "Enterprise automation platform",
+          audience: "Demand generation leaders",
+          objective: "Generate demand"
+        }
+      },
+      {
+        useCase: "campaign",
+        answers: {
+          campaignType: "product",
+          promotedOffer: "Governed AI automation",
+          audience: "Enterprise architects",
+          objective: "Launch or announce"
+        }
+      },
+      {
+        useCase: "campaign",
+        answers: {
+          campaignType: "event",
+          promotedOffer: "Enterprise Automation Summit",
+          eventSource: "https://example.com/enterprise-automation-summit",
+          audience: "Automation leaders",
+          objective: "Drive registrations"
+        }
+      },
+      {
+        useCase: "content",
+        answers: {
+          sourceName: "The governed automation field guide.pdf",
+          sourceUrl: "https://example.com/governed-automation-guide",
+          audience: "Application leaders",
+          objective: "Educate buyers"
+        }
+      }
+    ];
+    const outputs = cases.map(({ useCase, answers, targetBrand }) => {
+      const context = compileCampaignContext({ brand, targetBrand, useCase, answers });
+      const generatedDraft = deterministicDraft({ brand, targetBrand, useCase, answers, context });
+      return renderExperienceHtml({ draft: generatedDraft, brand, targetBrand, useCase, answers });
+    });
+    const geometryFingerprint = (output: string) => ({
+      wireframe: output.match(/data-wireframe="([^"]+)"/)?.[1],
+      shape: output.match(/data-experience-shape="([^"]+)"/)?.[1],
+      layout: output.match(/data-layout-variant="([^"]+)"/)?.[1],
+      sectionOrder: [...output.matchAll(/<section class="(?:thesis|lens-lab|journey) experience-region" id="([^"]+)"/g)].map((match) => match[1]),
+      signatureButtons: output.match(/data-signature-lens-index=/g)?.length,
+      lensPanels: output.match(/class="lens-panel"/g)?.length,
+      questionCards: output.match(/<article class="journey-card/g)?.length,
+      heroActions: output.match(/<div class="actions">([\s\S]*?)<\/div>/)?.[1].match(/<(?:button|a)\b/g)?.length
+    });
+
+    expect(new Set(outputs.map((output) => JSON.stringify(geometryFingerprint(output)))).size).toBe(1);
+    expect(new Set(outputs.map((output) => output.match(/<h1[^>]*>([^<]+)<\/h1>/)?.[1])).size).toBe(5);
+    expect(new Set(outputs.map((output) => output.match(/<style>([\s\S]*?)<\/style>/)?.[1])).size).toBe(1);
+    for (const output of outputs) {
+      expect(output).not.toContain("body.register-");
+      expect(output).toContain('class="signature signature-canonical"');
+      expect(output).not.toContain('class="secondary"');
+      expect(geometryFingerprint(output)).toEqual({
+        wireframe: "canonical-desktop-experience",
+        shape: "guided-buyer-experience",
+        layout: "standard",
+        sectionOrder: ["campaign-thesis", "decision-path", "guided-questions"],
+        signatureButtons: 3,
+        lensPanels: 3,
+        questionCards: 3,
+        heroActions: 1
+      });
+    }
   });
 
   it("makes external links safe and avoids raw fragment links", () => {

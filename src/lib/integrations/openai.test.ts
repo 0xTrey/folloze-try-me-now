@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
-import { compileCampaignContext } from "@/lib/generation/campaign-context";
+import {
+  CANONICAL_EXPERIENCE_STRUCTURE,
+  compileCampaignContext
+} from "@/lib/generation/campaign-context";
 import {
   deterministicDraft,
   experienceQualityFailure,
   isNonBlockingStyleFailure
 } from "@/lib/integrations/openai";
 import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
+import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 
 const jitterbit: BrandProfile = {
   domain: "jitterbit.com",
@@ -442,8 +446,8 @@ describe("deterministic experience copy", () => {
     const { context, draft } = draftFor("abm", answers, cisco);
     expect(draft.eyebrow).toBe("Jitterbit for Cisco");
     expect(draft.title).toMatch(/Jitterbit for Cisco/i);
-    expect(draft.headline).toMatch(/Cisco: connect networking.*integration and automation/i);
-    expect(draft.subhead).toMatch(/networking.*security/i);
+    expect(draft.headline).toMatch(/integration and automation.*Cisco's networking/i);
+    expect(`${draft.thesisHeadline} ${draft.thesisBody}`).toMatch(/Cisco.*security/i);
     expect(JSON.stringify(draft)).not.toMatch(/we know|your current process|struggles with|intent|budget/i);
     expect(draft.primaryCta).toBe("Plan the working session");
     expect(
@@ -456,6 +460,112 @@ describe("deterministic experience copy", () => {
         context
       })
     ).toBeUndefined();
+  });
+
+  it("falls back to concise target signals instead of turning homepage slogans into copy", () => {
+    const sloganHeavyCisco: BrandProfile = {
+      ...cisco,
+      publicTopics: [
+        "Enterprise operations at agentic AI speed",
+        "The critical infrastructure for the AI era"
+      ]
+    };
+    const answers = {
+      targetDomain: "cisco.com",
+      audience: "Infrastructure architects and platform owners",
+      objective: "Book a working session"
+    };
+    const { draft } = draftFor("abm", answers, sloganHeavyCisco);
+    const visibleCopy = JSON.stringify(draft);
+
+    expect(draft.headline).toBe("Connect integration and automation to Cisco's infrastructure.");
+    expect(draft.thesisHeadline).toContain("Cisco's infrastructure");
+    expect(draft.thesisHeadline).toContain("security");
+    expect(visibleCopy).not.toMatch(/agentic AI speed|critical infrastructure for the AI era/i);
+    expect(visibleCopy).not.toContain("…");
+  });
+
+  it("does not splice imperative ServiceNow homepage headings into an ABM sentence", () => {
+    const serviceNow = verifiedBrandProfileFor("servicenow.com");
+    expect(serviceNow).toBeDefined();
+    const answers = {
+      targetDomain: "servicenow.com",
+      audience: "Enterprise platform and workflow leaders",
+      objective: "Book a working session"
+    };
+    const { draft } = draftFor("abm", answers, serviceNow);
+    const visibleCopy = JSON.stringify(draft);
+
+    expect(draft.headline).toBe(
+      "Connect integration and automation to ServiceNow's data foundation."
+    );
+    expect(draft.thesisHeadline).toContain("AI governance");
+    expect(visibleCopy).not.toMatch(
+      /ServiceNow's (?:put AI to work|connect AI|meet the autonomous workforce)/i
+    );
+  });
+
+  it("keeps fallback decision signals distinct when a public topic matches a category label", () => {
+    const dataAiTarget: BrandProfile = {
+      ...cisco,
+      domain: "example.ai",
+      companyName: "ExampleAI",
+      description: "Enterprise data and AI governance platform.",
+      publicContext: "ExampleAI supports governed data and enterprise AI operations.",
+      publicTopics: ["AI governance"]
+    };
+    const { draft } = draftFor(
+      "abm",
+      {
+        targetDomain: "example.ai",
+        audience: "Data and AI platform leaders",
+        objective: "Book a working session"
+      },
+      dataAiTarget
+    );
+
+    expect(draft.signalLabels[0]).toBe("AI governance");
+    expect(draft.signalLabels[1]).toBe("data foundation");
+    expect(new Set(draft.signalLabels).size).toBe(3);
+    expect(draft.sections[0].eyebrow).not.toBe(draft.sections[1].eyebrow);
+  });
+
+  it("rejects imperative and company-prefixed public topics from possessive ABM copy", () => {
+    const targets: BrandProfile[] = [
+      {
+        ...cisco,
+        domain: "acme.example",
+        companyName: "Acme",
+        description: "Business software for digital operations.",
+        publicContext: "Acme supports business systems and digital operations.",
+        publicTopics: ["Accelerate digital transformation"]
+      },
+      {
+        ...cisco,
+        domain: "snowflake.example",
+        companyName: "Snowflake",
+        description: "Cloud data platform for analytics and enterprise AI.",
+        publicContext: "Snowflake supports cloud data, analytics, and AI governance.",
+        publicTopics: ["Snowflake Cortex AI"]
+      }
+    ];
+
+    for (const target of targets) {
+      const { draft } = draftFor(
+        "abm",
+        {
+          targetDomain: target.domain,
+          audience: "Enterprise platform leaders",
+          objective: "Book a working session"
+        },
+        target
+      );
+      const visibleCopy = JSON.stringify(draft);
+
+      expect(visibleCopy).not.toMatch(/'s accelerate digital transformation/i);
+      expect(visibleCopy).not.toMatch(/'s snowflake cortex AI/i);
+      expect(new Set(draft.signalLabels).size).toBe(3);
+    }
   });
 
   it("rejects target-account copy that flattens harvested company-name casing", () => {
@@ -489,7 +599,7 @@ describe("deterministic experience copy", () => {
     ).toBe("copy_quality_target_name_casing");
   });
 
-  it("routes ABM, demand, product, event, and content into distinct registers and page shapes", () => {
+  it("keeps canonical page geometry while varying register, labels, CTA, and copy", () => {
     const variants = [
       draftFor(
         "abm",
@@ -520,15 +630,56 @@ describe("deterministic experience copy", () => {
     ];
 
     expect(new Set(variants.map((draft) => draft.campaignRegister)).size).toBe(5);
-    expect(new Set(variants.map((draft) => draft.wireframeName)).size).toBe(5);
+    expect(new Set(variants.map((draft) => draft.wireframeName))).toEqual(
+      new Set([CANONICAL_EXPERIENCE_STRUCTURE.wireframeName])
+    );
+    expect(new Set(variants.map((draft) => draft.experienceShape))).toEqual(
+      new Set([CANONICAL_EXPERIENCE_STRUCTURE.experienceShape])
+    );
+    expect(new Set(variants.map((draft) => draft.sectionSequence.join("|")))).toEqual(
+      new Set([CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence.join("|")])
+    );
+    expect(variants.every((draft) => draft.sections.length === 3)).toBe(true);
+    expect(new Set(variants.map((draft) => JSON.stringify(draft.sectionLabels))).size).toBe(5);
+    expect(new Set(variants.map((draft) => draft.primaryCta)).size).toBe(5);
     expect(new Set(variants.map((draft) => draft.headline)).size).toBe(5);
-    expect(variants.map((draft) => draft.experienceShape)).toEqual([
-      "narrative-workflow",
-      "offer-landing-page",
-      "interactive-workbench",
-      "event-cohort",
-      "resource-companion"
-    ]);
+    expect(new Set(variants.map((draft) => JSON.stringify(draft.sections))).size).toBe(5);
+  });
+
+  it("rejects LLM output that mutates any canonical structural field", () => {
+    const answers = {
+      campaignType: "product" as const,
+      promotedOffer: "Governed AI automation",
+      audience: "Enterprise architects",
+      objective: "Launch or announce"
+    };
+    const { context, draft } = draftFor("campaign", answers);
+    const mutations: Array<[string, typeof draft]> = [
+      [
+        "structure_wireframe_mismatch",
+        { ...draft, wireframeName: "product-launch-landing-page" }
+      ],
+      [
+        "structure_shape_mismatch",
+        { ...draft, experienceShape: "interactive-workbench" }
+      ],
+      [
+        "structure_sequence_mismatch",
+        { ...draft, sectionSequence: ["decision-lenses", "thesis", "guided-questions"] }
+      ]
+    ];
+
+    for (const [failure, mutatedDraft] of mutations) {
+      expect(
+        experienceQualityFailure({
+          draft: mutatedDraft,
+          brand: jitterbit,
+          useCase: "campaign",
+          answers,
+          context
+        })
+      ).toBe(failure);
+    }
   });
 
   it("rejects an ABM draft whose target can be swapped out of the narrative", () => {

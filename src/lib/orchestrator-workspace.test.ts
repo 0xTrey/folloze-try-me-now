@@ -6,10 +6,17 @@ import {
   canEditSession,
   duplicateSession,
   patchSessionWorkspace,
-  recordPreviewInteraction
+  recordPreviewInteraction,
+  runStoryStage
 } from "@/lib/orchestrator";
+import { generateExperienceDraft } from "@/lib/integrations/openai";
 import { deleteSession, getSession, putSession } from "@/lib/session-store";
 import type { BrandProfile, TryMeSession } from "@/lib/types";
+
+vi.mock("@/lib/integrations/openai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/integrations/openai")>()),
+  generateExperienceDraft: vi.fn()
+}));
 
 const editorToken = "workspace-editor-token";
 const ids = new Set<string>();
@@ -240,6 +247,151 @@ describe("session workspace foundation", () => {
     ]);
     expect(JSON.stringify(result.session)).not.toContain("private generated artifact");
     expect(JSON.stringify(result.session)).not.toContain("editorTokenHash");
+  });
+
+  it("keeps the canonical core wireframe visible while preserving legacy and API copy controls", async () => {
+    const id = `fixed-core-${Date.now()}`;
+    ids.add(id);
+    const seeded = workspaceSession(id);
+    seeded.blockControls = [
+      {
+        id: "thesis",
+        visible: false,
+        locked: true,
+        eyebrow: "Account imperative",
+        headline: "Keep the operating case intact."
+      }
+    ];
+    await putSession(seeded);
+
+    const result = await patchSessionWorkspace(id, {
+      blockControls: [
+        {
+          id: "guided-questions",
+          visible: false,
+          locked: true,
+          body: "Use these questions to focus the first architecture conversation."
+        }
+      ]
+    });
+    const stored = await getSession(id);
+
+    expect(result.session.blockControls).toEqual([
+      {
+        id: "thesis",
+        visible: true,
+        locked: true,
+        eyebrow: "Account imperative",
+        headline: "Keep the operating case intact."
+      },
+      {
+        id: "guided-questions",
+        visible: true,
+        locked: true,
+        body: "Use these questions to focus the first architecture conversation."
+      }
+    ]);
+    expect(stored?.blockControls).toEqual(result.session.blockControls);
+  });
+
+  it("normalizes legacy hidden controls before generation without removing core sections", async () => {
+    const id = `fixed-core-generation-${Date.now()}`;
+    ids.add(id);
+    const seeded = workspaceSession(id);
+    seeded.status = "collecting";
+    seeded.stages.story = { status: "pending" };
+    seeded.experience = undefined;
+    seeded.qualityReceipt = undefined;
+    seeded.blockControls = [
+      {
+        id: "thesis",
+        visible: false,
+        locked: true,
+        headline: "A controlled operating thesis."
+      },
+      {
+        id: "decision-lenses",
+        visible: false,
+        eyebrow: "Account decisions"
+      },
+      {
+        id: "guided-questions",
+        visible: false,
+        body: "Use these questions to align platform and architecture owners."
+      }
+    ];
+    await putSession(seeded);
+    vi.mocked(generateExperienceDraft).mockResolvedValueOnce({
+      draft: {
+        campaignRegister: "one-to-one-abm",
+        designRegister: "source-brand-technical",
+        wireframeName: "canonical-desktop-experience",
+        experienceShape: "guided-buyer-experience",
+        sectionSequence: ["thesis", "decision-lenses", "guided-questions"],
+        sectionLabels: {
+          thesis: "Why now",
+          lenses: "Decision lenses",
+          journey: "Guided questions",
+          close: "Next step"
+        },
+        title: "Jitterbit for Cisco",
+        eyebrow: "Jitterbit for Cisco",
+        headline: "Connect Cisco workflows through one governed automation layer.",
+        subhead: "A focused path for network and platform leaders evaluating connected automation.",
+        thesisHeadline: "Move from disconnected workflows to accountable automation.",
+        thesisBody: "Connect integration, automation, and governance decisions in one operating model.",
+        primaryCta: "Plan the architecture session",
+        audienceLabel: "Network operations leaders",
+        narrativeArc: "Choose the architecture question that deserves the first working session.",
+        sections: [
+          {
+            eyebrow: "Control",
+            headline: "Govern the automation surface",
+            body: "Make ownership and policy visible across connected systems and workflows.",
+            proof: "Which policy boundary must stay consistent?"
+          },
+          {
+            eyebrow: "Speed",
+            headline: "Remove integration drag",
+            body: "Reuse connection patterns for the workflows that slow delivery today.",
+            proof: "Where does integration repeatedly delay the roadmap?"
+          },
+          {
+            eyebrow: "Scale",
+            headline: "Turn patterns into leverage",
+            body: "Give teams autonomy without losing platform-level governance.",
+            proof: "Which teams need more autonomy first?"
+          }
+        ],
+        signalLabels: ["Control", "Speed", "Scale"],
+        closingHeadline: "Put the first architecture decision on the table.",
+        closingBody: "Bring the platform and integration owners into one focused working session."
+      },
+      source: "deterministic-fallback",
+      durationMs: 1,
+      fallbackReason: "openai_not_configured"
+    });
+
+    await runStoryStage(id);
+
+    const stored = await getSession(id);
+    expect(stored?.blockControls).toEqual([
+      expect.objectContaining({ id: "thesis", visible: true, locked: true }),
+      expect.objectContaining({ id: "decision-lenses", visible: true }),
+      expect.objectContaining({ id: "guided-questions", visible: true })
+    ]);
+    expect(stored?.experienceSpec?.draft.sectionSequence).toEqual([
+      "thesis",
+      "decision-lenses",
+      "guided-questions"
+    ]);
+    expect(stored?.experience).toMatchObject({
+      thesisHeadline: "A controlled operating thesis.",
+      narrativeArc: "Use these questions to align platform and architecture owners."
+    });
+    expect(stored?.experience?.html).toContain('id="campaign-thesis"');
+    expect(stored?.experience?.html).toContain('id="decision-path"');
+    expect(stored?.experience?.html).toContain('id="guided-questions"');
   });
 
   it("records bounded preview interaction aggregates without exposing internal events", async () => {

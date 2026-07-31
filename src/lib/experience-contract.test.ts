@@ -5,9 +5,11 @@ import {
   buildExperienceSpec,
   campaignBriefFor,
   campaignOfferSourceFor,
+  canonicalizeExperienceDraft,
   draftFromExperienceSpec,
   syncCampaignContracts
 } from "@/lib/experience-contract";
+import { CANONICAL_EXPERIENCE_STRUCTURE } from "@/lib/generation/campaign-context";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import { toPublicSession } from "@/lib/session-store";
 import type { BrandProfile, TryMeSession } from "@/lib/types";
@@ -249,7 +251,12 @@ describe("campaign contract", () => {
     });
     expect(spec.artifactDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(spec.curatedSections).toHaveLength(1);
-    expect(draftFromExperienceSpec(spec)).toEqual(draft);
+    expect(spec.draft).toMatchObject({
+      wireframeName: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
+      experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
+      sectionSequence: CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
+    });
+    expect(draftFromExperienceSpec(spec)).toEqual(canonicalizeExperienceDraft(draft));
 
     current.experienceSpec = spec;
     const projection = toPublicSession(current);

@@ -22,7 +22,25 @@ export const designRegisters = [
   "neutral-fallback"
 ] as const;
 
+export const canonicalWireframeName = "canonical-desktop-experience" as const;
+export const canonicalExperienceShape = "guided-buyer-experience" as const;
+export const canonicalHeroMode = "message-led" as const;
+export const canonicalSectionSequence = [
+  "thesis",
+  "decision-lenses",
+  "guided-questions"
+] as const;
+
+export const CANONICAL_EXPERIENCE_STRUCTURE = {
+  wireframeName: canonicalWireframeName,
+  experienceShape: canonicalExperienceShape,
+  heroMode: canonicalHeroMode,
+  sectionSequence: canonicalSectionSequence
+} as const;
+
 export const wireframeNames = [
+  canonicalWireframeName,
+  // Legacy identifiers remain valid so previously generated sessions still parse.
   "abm-account-microsite",
   "demand-generation-landing-page",
   "product-launch-landing-page",
@@ -32,6 +50,8 @@ export const wireframeNames = [
 ] as const;
 
 export const experienceShapes = [
+  canonicalExperienceShape,
+  // Legacy shapes remain valid so previously generated sessions still parse.
   "narrative-workflow",
   "offer-landing-page",
   "interactive-workbench",
@@ -47,6 +67,13 @@ export type DesignRegister = (typeof designRegisters)[number];
 export type WireframeName = (typeof wireframeNames)[number];
 export type ExperienceShape = (typeof experienceShapes)[number];
 export type ExperienceSectionName = (typeof experienceSections)[number];
+export type HeroMode =
+  | typeof canonicalHeroMode
+  | "account-thesis"
+  | "offer-led"
+  | "launch-led"
+  | "event-led"
+  | "source-led";
 export type ProofMode = "source-content" | "public-brand-mechanism" | "mechanism-only";
 
 export interface PublicContentEvidence {
@@ -116,7 +143,7 @@ export interface CampaignGenerationContext {
   wireframe: {
     name: WireframeName;
     experienceShape: ExperienceShape;
-    heroMode: "account-thesis" | "offer-led" | "launch-led" | "event-led" | "source-led";
+    heroMode: HeroMode;
     sectionSequence: [ExperienceSectionName, ExperienceSectionName, ExperienceSectionName];
     signatureMoment: string;
     finalCtaPattern: string;
@@ -392,12 +419,18 @@ function wireframeFor(input: {
   register: CampaignRegister;
   objective: string;
 }): CampaignGenerationContext["wireframe"] {
+  const canonicalStructure = {
+    name: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
+    experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
+    heroMode: CANONICAL_EXPERIENCE_STRUCTURE.heroMode,
+    sectionSequence: [
+      ...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
+    ] as CampaignGenerationContext["wireframe"]["sectionSequence"]
+  };
+
   if (input.register === "one-to-one-abm") {
     return {
-      name: "abm-account-microsite",
-      experienceShape: "narrative-workflow",
-      heroMode: "account-thesis",
-      sectionSequence: ["thesis", "decision-lenses", "guided-questions"],
+      ...canonicalStructure,
       signatureMoment: "Role-level decision lenses translate the seller mechanism into questions the named account can validate.",
       finalCtaPattern: "A focused working session around the first validation question.",
       labels: {
@@ -410,10 +443,7 @@ function wireframeFor(input: {
   }
   if (input.register === "campaign-product") {
     return {
-      name: "product-launch-landing-page",
-      experienceShape: "interactive-workbench",
-      heroMode: "launch-led",
-      sectionSequence: ["decision-lenses", "guided-questions", "thesis"],
+      ...canonicalStructure,
       signatureMoment: "An interactive capability path lets each role start with the operating change it owns.",
       finalCtaPattern: "Move from the launch story to one practical use case.",
       labels: {
@@ -427,10 +457,7 @@ function wireframeFor(input: {
   if (input.register === "campaign-event") {
     const registration = /registr|attend|rsvp/.test(input.objective.toLowerCase());
     return {
-      name: "event-awareness-follow-up",
-      experienceShape: "event-cohort",
-      heroMode: "event-led",
-      sectionSequence: ["thesis", "guided-questions", "decision-lenses"],
+      ...canonicalStructure,
       signatureMoment: registration
         ? "A choose-your-reason module connects the event promise to the questions each role wants answered."
         : "A choose-your-path module turns the event theme into a useful role-specific next step.",
@@ -454,10 +481,7 @@ function wireframeFor(input: {
   }
   if (input.register === "campaign-demand") {
     return {
-      name: "demand-generation-landing-page",
-      experienceShape: "offer-landing-page",
-      heroMode: "offer-led",
-      sectionSequence: ["decision-lenses", "thesis", "guided-questions"],
+      ...canonicalStructure,
       signatureMoment: "An audience-led selector makes the offer relevant without pretending to know the individual visitor.",
       finalCtaPattern: "Route interest into one benefit-led next action.",
       labels: {
@@ -470,12 +494,7 @@ function wireframeFor(input: {
   }
   const assessment = /meeting|qualified|capture|evaluate|decision/i.test(input.objective);
   return {
-    name: assessment ? "content-assessment-workbench" : "content-resource-companion",
-    experienceShape: assessment ? "assessment-workbench" : "resource-companion",
-    heroMode: "source-led",
-    sectionSequence: assessment
-      ? ["thesis", "decision-lenses", "guided-questions"]
-      : ["decision-lenses", "guided-questions", "thesis"],
+    ...canonicalStructure,
     signatureMoment: assessment
       ? "A practical decision-lens workbench helps the buyer apply the source material to its own next question."
       : "A guided explorer turns the source into a few useful paths instead of reproducing it page by page.",
