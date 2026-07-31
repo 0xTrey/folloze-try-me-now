@@ -71,7 +71,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
-    await enforceRateLimit(`operation:${anonymousClientKey(request)}`, 120, 3600);
+    // Preview interactions are session-scoped. Including the session ID prevents
+    // one completed preview (or multiple prospects behind one corporate NAT) from
+    // exhausting the interaction allowance for every other active experience.
+    await enforceRateLimit(`operation:${id}:${anonymousClientKey(request)}`, 120, 3600);
     if (!(await canEditSession(id, editorToken(request, id)))) {
       return NextResponse.json(
         { error: "This editor session is no longer active." },

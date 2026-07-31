@@ -1306,6 +1306,12 @@ function RevealCeremony({ session, onDismiss }: { session: PublicTryMeSession; o
   );
 }
 
+export function getAssemblyPreviewKey(
+  session: Pick<PublicTryMeSession, "id" | "experience">
+): string {
+  return `${session.id}:${session.experience?.artifactRevision ?? 0}`;
+}
+
 function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; iframeRef?: RefObject<HTMLIFrameElement | null> }) {
   const brandReady = ["complete", "fallback"].includes(session.stages.brand.status);
   const audienceReady = session.stages.audience.status === "complete" || Boolean(session.answers.audience);
@@ -1333,7 +1339,7 @@ function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; 
       {storyReady ? (
         <iframe
           ref={iframeRef}
-          key={session.revision}
+          key={getAssemblyPreviewKey(session)}
           src={`/e/${session.id}?embed=1`}
           title="Generated buyer experience preview"
           sandbox="allow-scripts allow-popups"
@@ -1498,6 +1504,7 @@ export function TryMeNowApp() {
   const directionSession = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const patchRequestRef = useRef(0);
+  const persistedSectionSignals = useRef(new Set<string>());
 
   const selectUseCase = useCallback((selected: UseCase) => {
     setUseCase(selected);
@@ -1525,6 +1532,7 @@ export function TryMeNowApp() {
     revealTracked.current = false;
     ceremonySession.current = undefined;
     directionSession.current = undefined;
+    persistedSectionSignals.current.clear();
     track("use_case_selected", { useCase: selected });
   }, []);
 
@@ -1556,6 +1564,7 @@ export function TryMeNowApp() {
     revealTracked.current = false;
     ceremonySession.current = undefined;
     directionSession.current = undefined;
+    persistedSectionSignals.current.clear();
   }, []);
 
   const closeEditBrief = useCallback(() => {
@@ -1667,9 +1676,10 @@ export function TryMeNowApp() {
     setRevealedAt(revealTime);
     track("experience_revealed", { useCase: session.useCase });
     setClientEvents([{ action: "preview_viewed", label: "You opened the experience", at: revealTime }]);
-    void recordPreviewSignal(session.id, "preview-opened", "experience-preview").then((updated) => {
-      setSession((current) => current?.id === updated.id ? updated : current);
-    }).catch(() => undefined);
+    // Preview analytics updates the server-side aggregate, not the rendered artifact.
+    // Keeping that response out of session state prevents analytics-only revisions
+    // from remounting the iframe that emitted the signal.
+    void recordPreviewSignal(session.id, "preview-opened", "experience-preview").catch(() => undefined);
   }, [session]);
 
   const hasExperience = Boolean(session?.experience);
@@ -1739,9 +1749,13 @@ export function TryMeNowApp() {
           : event.data.action === "fullscreen_change"
             ? "preview-opened"
             : "section-viewed";
-      void recordPreviewSignal(session.id, serverEvent, elementId).then((updated) => {
-        setSession((current) => current?.id === updated.id ? updated : current);
-      }).catch(() => undefined);
+      const sectionSignalKey = `${session.id}:${elementId || "unknown"}`;
+      const duplicateSectionView = event.data.action === "section_view"
+        && persistedSectionSignals.current.has(sectionSignalKey);
+      if (!duplicateSectionView) {
+        if (event.data.action === "section_view") persistedSectionSignals.current.add(sectionSignalKey);
+        void recordPreviewSignal(session.id, serverEvent, elementId).catch(() => undefined);
+      }
 
       if (event.data.action === "editable_block_select" && typeof payload.blockId === "string") {
         const rawBlockId = payload.blockId;

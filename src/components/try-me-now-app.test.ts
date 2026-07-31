@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PublicBrandProfile, PublicTryMeSession, StageStatus, UseCase } from "@/lib/types";
 import {
   ceremonyDuration,
+  getAssemblyPreviewKey,
   getBuildPanelCopy,
   getGuidedQuestionCopy,
   getRevealCopy
@@ -124,5 +125,28 @@ describe("Try Me Now experience copy", () => {
   it("bypasses the ceremony when reduced motion is requested", () => {
     expect(ceremonyDuration(true)).toBe(0);
     expect(ceremonyDuration(false)).toBe(4_800);
+  });
+
+  // Regression: QA ISSUE-001. Analytics writes increment the session revision,
+  // but they must not remount the generated preview and emit another section view.
+  it("keeps the preview mounted across analytics-only session revisions", () => {
+    const initial = session("campaign", {
+      revision: 4,
+      experience: {
+        ready: true,
+        title: "Campaign",
+        headline: "A campaign headline",
+        generationSource: "openai",
+        artifactRevision: 2
+      }
+    });
+    const analyticsUpdate = { ...initial, revision: 5 };
+    const regenerated = {
+      ...analyticsUpdate,
+      experience: { ...analyticsUpdate.experience!, artifactRevision: 3 }
+    };
+
+    expect(getAssemblyPreviewKey(analyticsUpdate)).toBe(getAssemblyPreviewKey(initial));
+    expect(getAssemblyPreviewKey(regenerated)).not.toBe(getAssemblyPreviewKey(initial));
   });
 });

@@ -8,6 +8,7 @@ import {
   patchSessionWorkspace,
   recordPreviewInteraction
 } from "@/lib/orchestrator";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
@@ -131,6 +132,11 @@ describe("session workspace API", () => {
     expect(recordPreviewInteraction).toHaveBeenCalledWith(
       sessionId,
       expect.objectContaining({ event: "lens-selected" })
+    );
+    expect(enforceRateLimit).toHaveBeenCalledWith(
+      `operation:${sessionId}:test-client`,
+      120,
+      3600
     );
 
     const duplicateResponse = await POST(
