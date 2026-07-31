@@ -90,7 +90,8 @@ describe("renderExperienceHtml", () => {
   });
 
   it("puts the strongest evergreen product visual in the hero", () => {
-    const hero = html.slice(html.indexOf('<section class="hero">'), html.indexOf('</section>', html.indexOf('<section class="hero">')));
+    const heroStart = html.indexOf('<section class="hero"');
+    const hero = html.slice(heroStart, html.indexOf("</section>", heroStart));
     expect(hero).toContain("HarmonyTitle-HeroImage-Ring.jpg");
     expect(html).toContain("Harmony-Marketecture.png");
   });
@@ -153,6 +154,51 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain(".lens-panel[hidden]{display:none}");
   });
 
+  it("adds a compact sticky journey navigator with active-section and fullscreen behavior", () => {
+    expect(html).toContain('<nav class="journey-nav" aria-label="Experience journey"');
+    expect(html.match(/data-journey-link=/g)).toHaveLength(5);
+    expect(html).toContain('data-journey-link="experience-overview" aria-current="location"');
+    expect(html).toContain('data-journey-section="decision-path"');
+    expect(html).toContain("position:sticky;top:0");
+    expect(html).toContain("IntersectionObserver");
+    expect(html).toContain('data-fullscreen-toggle aria-pressed="false"');
+    expect(html).toContain("document.documentElement.requestFullscreen");
+    expect(html).toContain("body.classList.toggle('is-fullscreen',active)");
+    expect(html).toContain("env(safe-area-inset-bottom)");
+  });
+
+  it("identifies editable copy with stable block IDs and kinds", () => {
+    expect(html.match(/data-flz-editable="true"/g)?.length).toBeGreaterThan(20);
+    expect(html).toContain('data-flz-block-id="hero.headline" data-flz-block-kind="headline"');
+    expect(html).toContain('data-flz-block-id="lens.0.body" data-flz-block-kind="body"');
+    expect(html).toContain('data-flz-block-id="question.2.prompt" data-flz-block-kind="question"');
+    expect(html).toContain('data-flz-block-id="close.primaryCta" data-flz-block-kind="cta"');
+    expect(html).toContain("editable_block_select:true");
+  });
+
+  it("emits versioned, allowlisted parent events without raw copy or URLs", () => {
+    expect(html).toContain("source:'folloze-experience',version:1,event:action,action:action");
+    expect(html).toContain("section_view:true");
+    expect(html).toContain("topic_select:true");
+    expect(html).toContain("cta_click:true");
+    expect(html).toContain("fullscreen_change:true");
+    expect(html).toContain("document.referrer");
+    expect(html).toContain("parentOrigin=referrer.origin");
+    expect(html).toContain("cleanPayload(data)");
+    expect(html).not.toContain("text:this.innerText");
+    expect(html).not.toContain("url:this.href");
+  });
+
+  it("shows a polite first-interaction signal once and honors motion preferences", () => {
+    expect(html).toContain('data-signal-toast role="status" aria-live="polite" aria-atomic="true" hidden');
+    expect(html).toContain("var signalShown=false");
+    expect(html).toContain("if(signalShown||!toast||!toastCopy)return");
+    expect(html).toContain("toastCopy.textContent=message");
+    expect(html).toContain("@media(prefers-reduced-motion:reduce)");
+    expect(html).toContain("transition:none!important");
+    expect(html).toContain("@media(forced-colors:active)");
+  });
+
   it("links content experiences back to a sanitized public original", () => {
     const content = renderExperienceHtml({
       draft: {
@@ -199,11 +245,98 @@ describe("renderExperienceHtml", () => {
   });
 
   it("uses the approved register and wireframe to change page shape", () => {
-    expect(html).toContain('class="register-campaign-product design-source-brand-editorial"');
+    expect(html).toContain('class="register-campaign-product design-source-brand-editorial variant-standard style-standard"');
     expect(html).toContain('data-wireframe="product-launch-landing-page"');
+    expect(html).toContain('data-layout-variant="standard"');
+    expect(html).toContain('data-style-variant="standard"');
     expect(html.indexOf('id="decision-path"')).toBeLessThan(html.indexOf('id="guided-questions"'));
     expect(html.indexOf('id="guided-questions"')).toBeLessThan(html.indexOf('id="campaign-thesis"'));
     expect(html).toContain("Explore what changes");
+  });
+
+  it("supports a selected layout variant and an optional escaped quality receipt", () => {
+    const enhancedAnswers = Object.assign(
+      { sourceUrl: "https://example.com/report?token=remove#private" },
+      {
+        layoutVariant: "immersive" as const,
+        styleVariant: "editorial" as const,
+        qualityReceipt: {
+          title: "Grounded & reviewed",
+          detail: '<script>alert("receipt")</script>',
+          sourceUrl: "https://example.com/report?token=remove#private",
+          score: 108,
+          signals: ["Claims mapped", "Brand checked", "Responsive QA", "Ignored"]
+        }
+      }
+    );
+    const enhanced = renderExperienceHtml({
+      draft: { ...draft, campaignRegister: "content-magic" },
+      brand,
+      useCase: "content",
+      answers: enhancedAnswers
+    });
+
+    expect(enhanced).toContain('class="register-content-magic design-source-brand-editorial variant-immersive style-editorial"');
+    expect(enhanced).toContain('data-layout-variant="immersive"');
+    expect(enhanced).toContain('data-style-variant="editorial"');
+    expect(enhanced).toContain('data-quality-receipt="true"');
+    expect(enhanced).toContain("Grounded &amp; reviewed");
+    expect(enhanced).toContain("&lt;script&gt;alert(&quot;receipt&quot;)&lt;/script&gt;");
+    expect(enhanced).toContain("<strong>100</strong>/100 quality");
+    expect(enhanced).toContain('href="https://example.com/report"');
+    expect(enhanced).not.toContain("token=remove");
+    expect(enhanced).not.toContain("Ignored");
+    expect(html).not.toContain('data-quality-receipt="true"');
+  });
+
+  it("maps every supported layout and style selection into safe presentation classes", () => {
+    for (const variant of ["narrative", "modular", "immersive", "compact"] as const) {
+      const variantHtml = renderExperienceHtml({
+        draft,
+        brand,
+        useCase: "campaign",
+        answers: Object.assign({}, { layoutVariant: variant, styleVariant: "technical" as const })
+      });
+      expect(variantHtml).toContain(`variant-${variant} style-technical`);
+      expect(variantHtml).toContain(`data-layout-variant="${variant}"`);
+      expect(variantHtml).toContain('data-style-variant="technical"');
+    }
+
+    const rejected = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: Object.assign({}, { layoutVariant: "</style><script>" }) as unknown as Parameters<
+        typeof renderExperienceHtml
+      >[0]["answers"]
+    });
+    expect(rejected).toContain("variant-standard style-standard");
+    expect(rejected).not.toContain("</style><script>");
+  });
+
+  it("renders the workspace quality receipt shape when supplied", () => {
+    const checked = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: {},
+      qualityReceipt: {
+        status: "passed",
+        checkedAt: "2026-07-31T10:00:00.000Z",
+        artifactRevision: 4,
+        checks: [
+          { id: "copy", label: "Copy quality", status: "passed", detail: "Complete" },
+          { id: "cta", label: "CTA path", status: "passed", detail: "Complete" },
+          { id: "structure", label: "Structure", status: "not-applicable", detail: "Skipped" }
+        ]
+      }
+    });
+
+    expect(checked).toContain("Quality checks passed");
+    expect(checked).toContain("2 of 2 applicable experience checks passed.");
+    expect(checked).toContain("<strong>100</strong>/100 quality");
+    expect(checked).toContain("Copy quality");
+    expect(checked).toContain("CTA path");
   });
 
   it("renders materially different signature interactions for product, ABM, and content", () => {
