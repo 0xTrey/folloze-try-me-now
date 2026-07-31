@@ -2,6 +2,11 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
 import { config } from "@/lib/config";
+import {
+  buildExperienceSpec,
+  draftFromExperienceSpec,
+  syncCampaignContracts
+} from "@/lib/experience-contract";
 import { targetAccountEvidenceFor } from "@/lib/generation/campaign-context";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
@@ -140,6 +145,7 @@ function syncExperienceFoundation(session: TryMeSession): void {
   ) {
     session.selectedAudienceRecommendationId = undefined;
   }
+  syncCampaignContracts(session);
 }
 
 function curatedTargetBrand(session: TryMeSession, targetBrand: BrandProfile | undefined): BrandProfile | undefined {
@@ -257,6 +263,11 @@ function resetGeneratedExperience(session: TryMeSession, detail: string): void {
     );
   }
   session.experience = undefined;
+  session.experienceSpecRevision = Math.max(
+    session.experienceSpecRevision ?? 0,
+    session.experienceSpec?.revision ?? 0
+  );
+  session.experienceSpec = undefined;
   session.qualityReceipt = undefined;
   session.status = "collecting";
   session.stages.story = { status: "pending", detail };
@@ -293,7 +304,8 @@ function storyInputFingerprint(session: TryMeSession): string {
         evidence: session.evidenceItems?.map(({ id, disposition }) => ({ id, disposition })),
         sourceConfirmation: session.sourceConfirmation?.status,
         selectedAudienceRecommendationId: session.selectedAudienceRecommendationId,
-        blockControls: session.blockControls
+        blockControls: session.blockControls,
+        curatedSections: session.curatedSections
       })
     )
     .digest("hex");
@@ -458,12 +470,14 @@ export async function createSession(
       blockControls: [],
       previewAnalytics: { totalInteractions: 0, counts: {} },
       lineage: { rootSessionId: id, versionNumber: 1 },
+      curatedSections: [],
       events: []
     },
     "company_domain_submitted",
     { useCase: input.useCase, domain: companyDomain }
   );
   appendEvent(session, "temp_url_created");
+  syncCampaignContracts(session);
   await putSession(session, { ttlSeconds: 3600 });
   return { session: toPublicSession(session), editorToken };
 }
@@ -716,8 +730,21 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const sourceUrlWasSupplied = Object.hasOwn(patch, "sourceUrl");
   const eventSourceWasSupplied = Object.hasOwn(patch, "eventSource");
   const ctaDestinationWasSupplied = Object.hasOwn(patch, "ctaDestination");
+  const offerSourceUrlWasSupplied = Object.hasOwn(patch, "offerSourceUrl");
   if (patch.targetDomain) patch.targetDomain = normalizeDomain(patch.targetDomain);
   if (patch.ctaDestination) patch.ctaDestination = new URL(patch.ctaDestination).toString();
+  if (patch.offerSourceUrl) patch.offerSourceUrl = new URL(patch.offerSourceUrl).toString();
+  if (
+    patch.offerSourceConfirmed &&
+    !patch.offerSourceUrl &&
+    !session.answers.offerSourceUrl
+  ) {
+    throw new HttpError(
+      409,
+      "offer_source_missing",
+      "Add a public offer source before confirming it."
+    );
+  }
   if (patch.sourceUrl && (session.answers.sourceName || session.answers.sourceUploadId)) {
     throw new HttpError(
       409,
@@ -737,6 +764,18 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   if (eventSourceWasSupplied && !patch.eventSource) delete session.answers.eventSource;
   if (ctaDestinationWasSupplied && !patch.ctaDestination) {
     delete session.answers.ctaDestination;
+  }
+  if (offerSourceUrlWasSupplied && !patch.offerSourceUrl) {
+    delete session.answers.offerSourceUrl;
+    delete session.answers.offerSourceTitle;
+    delete session.answers.offerSourceConfirmed;
+  }
+  if (
+    offerSourceUrlWasSupplied &&
+    patch.offerSourceUrl !== session.campaignOfferSource?.sourceUrl &&
+    patch.offerSourceConfirmed === undefined
+  ) {
+    delete session.answers.offerSourceConfirmed;
   }
   if (patch.exampleMode !== undefined) {
     session.experienceMode = patch.exampleMode ? "example" : "custom";
@@ -763,6 +802,8 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
       throw new HttpError(400, "unknown_asset", "Choose an asset from the harvested asset list.");
     }
   }
+
+  syncCampaignContracts(session);
 
   if (sourceChanged && patch.sourceConfirmed === undefined) {
     delete session.answers.sourceConfirmed;
@@ -927,6 +968,29 @@ export async function patchSessionWorkspace(
       });
     }
 
+    if (patch.offerSourceConfirmation) {
+      if (!session.answers.offerSourceUrl) {
+        throw new HttpError(
+          409,
+          "offer_source_missing",
+          "Add a public offer source before confirming it."
+        );
+      }
+      session.answers.offerSourceConfirmed = patch.offerSourceConfirmation === "confirmed";
+      session.campaignOfferSource = {
+        ...(session.campaignOfferSource ?? {
+          sourceUrl: session.answers.offerSourceUrl,
+          sourceHost: new URL(session.answers.offerSourceUrl).hostname.replace(/^www\./, "")
+        }),
+        status: patch.offerSourceConfirmation,
+        confirmedAt:
+          patch.offerSourceConfirmation === "confirmed" ? new Date().toISOString() : undefined
+      };
+      appendEvent(session, "offer_source_confirmation_updated", {
+        status: patch.offerSourceConfirmation
+      });
+    }
+
     if (patch.blockControls) {
       const updates = new Map(patch.blockControls.map((control) => [control.id, control]));
       const existing = new Map((session.blockControls ?? []).map((control) => [control.id, control]));
@@ -939,6 +1003,17 @@ export async function patchSessionWorkspace(
         locked: session.blockControls.filter((control) => control.locked).length
       });
     }
+    if (patch.curatedSections) {
+      session.curatedSections = [...patch.curatedSections].sort(
+        (left, right) => left.position - right.position
+      );
+      appendEvent(session, "curated_sections_updated", {
+        count: session.curatedSections.length,
+        locked: session.curatedSections.filter((section) => section.locked).length
+      });
+    }
+
+    syncCampaignContracts(session);
 
     completeInputMutation(session, previousFingerprint);
     return session;
@@ -1030,6 +1105,8 @@ export async function duplicateSession(
       story: stage("pending", "Ready to generate this version from the copied workspace.")
     },
     experience: undefined,
+    experienceSpecRevision: undefined,
+    experienceSpec: undefined,
     qualityReceipt: undefined,
     cockpit: undefined,
     claim: undefined,
@@ -1148,6 +1225,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         priorAttemptId: session.stages.story.attemptId ?? "unknown"
       });
     }
+    syncCampaignContracts(session);
     acquiredGeneration = true;
     expectedFingerprint = storyInputFingerprint(session);
     session.status = "generating";
@@ -1181,9 +1259,17 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       answers: latest.answers
     });
     const controlledDraft = draftWithBlockControls(generated.draft, latest.blockControls);
+    syncCampaignContracts(latest);
+    const experienceSpec = buildExperienceSpec(
+      latest,
+      controlledDraft,
+      selectedBrands.brand,
+      selectedBrands.targetBrand
+    );
+    const webDraft = draftFromExperienceSpec(experienceSpec);
     const generationQualityReceipt = qualityReceiptFor(latest, latest.revision + 1);
     const html = renderExperienceHtml({
-      draft: controlledDraft,
+      draft: webDraft,
       brand: selectedBrands.brand,
       targetBrand: selectedBrands.targetBrand,
       useCase: latest.useCase,
@@ -1237,12 +1323,14 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         session.brand = brand;
         session.targetBrand = targetBrand;
         session.experience = {
-          ...controlledDraft,
+          ...webDraft,
           html,
           generationSource: generated.source,
           artifactRevision: session.revision + 1,
           artifactDigest: createHash("sha256").update(html).digest("hex")
         };
+        session.experienceSpecRevision = experienceSpec.revision;
+        session.experienceSpec = experienceSpec;
         session.qualityReceipt = generationQualityReceipt;
         session.status = "preview_ready_unclaimed";
         session.expiresAt = new Date(readyAt + config.sessionTtlSeconds * 1000).toISOString();

@@ -26,6 +26,26 @@ export const PREVIEW_INTERACTION_TYPES = [
   "share-started",
   "email-prompt-viewed"
 ] as const;
+export const BRIEF_FIELD_PROVENANCE = ["user", "inferred", "research"] as const;
+export const BRIEF_FIELD_KEYS = ["seller", "target", "offer", "audience", "objective"] as const;
+export const EXPERIENCE_DEPENDENCIES = [
+  "seller-brand",
+  "target-research",
+  "audience-lens",
+  "offer-source",
+  "message-spine",
+  "experience-sections",
+  "cta"
+] as const;
+export const CURATED_SECTION_FAMILIES = [
+  "proof",
+  "customer-story",
+  "faq",
+  "resource-carousel",
+  "assessment",
+  "calculator",
+  "cta"
+] as const;
 
 export type UseCase = (typeof USE_CASES)[number];
 export type ExperienceMode = (typeof EXPERIENCE_MODES)[number];
@@ -35,6 +55,10 @@ export type ToneVariant = (typeof TONE_VARIANTS)[number];
 export type LayoutVariant = (typeof LAYOUT_VARIANTS)[number];
 export type ExperienceBlockId = (typeof EXPERIENCE_BLOCK_IDS)[number];
 export type PreviewInteractionType = (typeof PREVIEW_INTERACTION_TYPES)[number];
+export type BriefFieldProvenance = (typeof BRIEF_FIELD_PROVENANCE)[number];
+export type BriefFieldKey = (typeof BRIEF_FIELD_KEYS)[number];
+export type ExperienceDependency = (typeof EXPERIENCE_DEPENDENCIES)[number];
+export type CuratedSectionFamily = (typeof CURATED_SECTION_FAMILIES)[number];
 export type StageKey = "brand" | "audience" | "story";
 export type StageStatus = "pending" | "running" | "complete" | "fallback" | "failed";
 export type SessionStatus =
@@ -91,6 +115,10 @@ export interface SessionAnswers {
   sourceOpenAIFileId?: string;
   sourceUploadId?: string;
   sourceUploadReservedAt?: string;
+  promotedOffer?: string;
+  offerSourceUrl?: string;
+  offerSourceTitle?: string;
+  offerSourceConfirmed?: boolean;
   exampleMode?: boolean;
   exampleKey?: string;
   sourceConfirmed?: boolean;
@@ -106,7 +134,10 @@ export interface SessionAnswers {
 
 export type PublicSessionAnswers = Omit<
   SessionAnswers,
-  "sourceOpenAIFileId" | "sourceUploadId" | "sourceUploadReservedAt"
+  | "sourceOpenAIFileId"
+  | "sourceUploadId"
+  | "sourceUploadReservedAt"
+  | "offerSourceUrl"
 >;
 
 export type PublicStageState = Pick<
@@ -252,6 +283,101 @@ export interface SessionLineage {
   label?: string;
 }
 
+export interface CampaignBriefField {
+  key: BriefFieldKey;
+  label: string;
+  value: string;
+  provenance: BriefFieldProvenance;
+  citations: string[];
+  userEdited: boolean;
+  locked: boolean;
+  required: boolean;
+  dependencies: ExperienceDependency[];
+}
+
+export interface CampaignBrief {
+  revision: number;
+  fingerprint: string;
+  updatedAt: string;
+  fields: Partial<Record<BriefFieldKey, CampaignBriefField>>;
+}
+
+export interface AudienceLensFinding {
+  id: string;
+  category: "priority" | "challenge" | "buyer-concern";
+  label: string;
+  text: string;
+  citationUrl: string;
+  disposition: SessionEvidenceItem["disposition"];
+}
+
+export interface AudienceLensArtifact {
+  status: "researching" | "ready" | "hypothesis";
+  accountDomain: string;
+  accountName: string;
+  preparedAt: string;
+  findings: AudienceLensFinding[];
+}
+
+export interface CampaignOfferSource {
+  title?: string;
+  sourceUrl: string;
+  sourceHost: string;
+  status: "unconfirmed" | "confirmed" | "rejected";
+  confirmedAt?: string;
+}
+
+export type PublicCampaignOfferSource = Omit<CampaignOfferSource, "sourceUrl">;
+
+export interface CuratedSectionControl {
+  id: string;
+  family: CuratedSectionFamily;
+  position: number;
+  visible: boolean;
+  locked: boolean;
+  instruction?: string;
+}
+
+/**
+ * Versioned intermediate artifact shared by renderers. V1 deliberately records
+ * the native Folloze renderer as not requested; creating or publishing a board
+ * remains a separate, explicitly authorized lifecycle operation.
+ */
+export interface ExperienceSpecV1 {
+  schemaVersion: "1.0";
+  revision: number;
+  sourceBriefRevision: number;
+  createdAt: string;
+  artifactDigest: string;
+  identities: {
+    seller: { domain: string; name: string };
+    target?: { domain: string; name: string };
+    offer?: { name: string; sourceHost?: string };
+  };
+  brandTokens: {
+    primaryColor: string;
+    accentColor: string;
+    surfaceColor: string;
+    logoUrl?: string;
+  };
+  draft: Record<string, unknown>;
+  selectedAssetIds: string[];
+  evidenceItemIds: string[];
+  curatedSections: CuratedSectionControl[];
+  analytics: { events: PreviewInteractionType[] };
+  renderers: {
+    web: { status: "ready" };
+    folloze: { status: "not-requested" };
+  };
+}
+
+export type PublicExperienceSpecSummary = Pick<
+  ExperienceSpecV1,
+  "schemaVersion" | "revision" | "sourceBriefRevision" | "artifactDigest" | "renderers"
+> & {
+  sectionCount: number;
+};
+
 export interface ClaimState {
   attemptId?: string;
   startedAt?: string;
@@ -293,6 +419,12 @@ export interface TryMeSession {
   qualityReceipt?: QualityReceipt;
   cockpit?: ClaimCockpitMetadata;
   lineage?: SessionLineage;
+  campaignBrief?: CampaignBrief;
+  audienceLens?: AudienceLensArtifact;
+  campaignOfferSource?: CampaignOfferSource;
+  curatedSections?: CuratedSectionControl[];
+  experienceSpecRevision?: number;
+  experienceSpec?: ExperienceSpecV1;
   experience?: ExperienceModel;
   claim?: ClaimState;
   events: SessionEvent[];
@@ -311,6 +443,9 @@ export type PublicTryMeSession = Omit<
   | "editorTokenHash"
   | "events"
   | "experience"
+  | "experienceSpec"
+  | "experienceSpecRevision"
+  | "campaignOfferSource"
   | "stages"
   | "targetBrand"
 > & {
@@ -319,6 +454,8 @@ export type PublicTryMeSession = Omit<
   targetBrand?: PublicBrandProfile;
   stages: Record<StageKey, PublicStageState>;
   experience?: PublicExperienceSummary;
+  experienceSpec?: PublicExperienceSpecSummary;
+  campaignOfferSource?: PublicCampaignOfferSource;
   claim?: PublicClaimState;
 };
 
@@ -337,7 +474,9 @@ export interface SessionWorkspacePatch {
     disposition: SessionEvidenceItem["disposition"];
   }>;
   sourceConfirmation?: SourceConfirmation["status"];
+  offerSourceConfirmation?: CampaignOfferSource["status"];
   blockControls?: ExperienceBlockControl[];
+  curatedSections?: CuratedSectionControl[];
 }
 
 export interface PreviewInteractionInput {

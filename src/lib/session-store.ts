@@ -228,6 +228,7 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
   delete answers.sourceOpenAIFileId;
   delete answers.sourceUploadId;
   delete answers.sourceUploadReservedAt;
+  delete answers.offerSourceUrl;
   // The browser only needs to know that these sources exist. Raw filenames,
   // source paths/query strings, and pasted event details remain server-side.
   if (answers.sourceName) answers.sourceName = "Uploaded PDF";
@@ -293,6 +294,32 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
     qualityReceipt: session.qualityReceipt ? structuredClone(session.qualityReceipt) : undefined,
     cockpit: session.cockpit ? structuredClone(session.cockpit) : undefined,
     lineage: session.lineage ? structuredClone(session.lineage) : undefined,
+    campaignBrief: session.campaignBrief ? structuredClone(session.campaignBrief) : undefined,
+    audienceLens: session.audienceLens ? structuredClone(session.audienceLens) : undefined,
+    campaignOfferSource: session.campaignOfferSource
+      ? {
+          title: session.campaignOfferSource.title,
+          sourceHost: session.campaignOfferSource.sourceHost,
+          status: session.campaignOfferSource.status,
+          confirmedAt: session.campaignOfferSource.confirmedAt
+        }
+      : undefined,
+    curatedSections: session.curatedSections
+      ? structuredClone(session.curatedSections)
+      : undefined,
+    experienceSpec: session.experienceSpec
+      ? {
+          schemaVersion: session.experienceSpec.schemaVersion,
+          revision: session.experienceSpec.revision,
+          sourceBriefRevision: session.experienceSpec.sourceBriefRevision,
+          artifactDigest: session.experienceSpec.artifactDigest,
+          renderers: structuredClone(session.experienceSpec.renderers),
+          sectionCount:
+            (Array.isArray(session.experienceSpec.draft.sections)
+              ? session.experienceSpec.draft.sections.length
+              : 0)
+        }
+      : undefined,
     experience: session.experience
       ? {
           ready: true,

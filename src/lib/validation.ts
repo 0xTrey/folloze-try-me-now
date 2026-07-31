@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import {
   CTA_TYPES,
+  CURATED_SECTION_FAMILIES,
   EXPERIENCE_BLOCK_IDS,
   LAYOUT_VARIANTS,
   PREVIEW_INTERACTION_TYPES,
@@ -52,6 +53,10 @@ export const answersSchema = z
     campaignType: z.enum(["product", "demand", "event"]).optional(),
     eventSource: z.string().max(1000).optional(),
     sourceUrl: z.string().max(1000).optional(),
+    promotedOffer: z.string().trim().min(2).max(160).optional(),
+    offerSourceUrl: z.union([httpsDestinationSchema, z.literal("")]).optional(),
+    offerSourceTitle: z.string().trim().min(2).max(180).optional(),
+    offerSourceConfirmed: z.boolean().optional(),
     exampleMode: z.boolean().optional(),
     exampleKey: z.string().trim().min(2).max(80).regex(/^[a-z0-9][a-z0-9-]*$/).optional(),
     sourceConfirmed: z.boolean().optional(),
@@ -80,6 +85,17 @@ const blockControlSchema = z
   })
   .strict();
 
+const curatedSectionSchema = z
+  .object({
+    id: assetIdSchema,
+    family: z.enum(CURATED_SECTION_FAMILIES),
+    position: z.number().int().min(0).max(12),
+    visible: z.boolean(),
+    locked: z.boolean(),
+    instruction: z.string().trim().min(4).max(240).optional()
+  })
+  .strict();
+
 export const sessionWorkspacePatchSchema = z
   .object({
     operation: z.literal("update-workspace"),
@@ -97,7 +113,9 @@ export const sessionWorkspacePatchSchema = z
       .max(12)
       .optional(),
     sourceConfirmation: z.enum(["unconfirmed", "confirmed", "rejected"]).optional(),
-    blockControls: z.array(blockControlSchema).max(EXPERIENCE_BLOCK_IDS.length).optional()
+    offerSourceConfirmation: z.enum(["unconfirmed", "confirmed", "rejected"]).optional(),
+    blockControls: z.array(blockControlSchema).max(EXPERIENCE_BLOCK_IDS.length).optional(),
+    curatedSections: z.array(curatedSectionSchema).max(8).optional()
   })
   .strict()
   .refine(
@@ -107,7 +125,9 @@ export const sessionWorkspacePatchSchema = z
           value.selectedAudienceRecommendationId !== undefined ||
           value.evidenceDecisions ||
           value.sourceConfirmation ||
-          value.blockControls
+          value.offerSourceConfirmation ||
+          value.blockControls ||
+          value.curatedSections
       ),
     "Include at least one workspace change."
   )
@@ -119,6 +139,14 @@ export const sessionWorkspacePatchSchema = z
     const blockIds = value.blockControls?.map((control) => control.id) ?? [];
     if (new Set(blockIds).size !== blockIds.length) {
       context.addIssue({ code: "custom", message: "Block controls must be unique." });
+    }
+    const sectionIds = value.curatedSections?.map((section) => section.id) ?? [];
+    if (new Set(sectionIds).size !== sectionIds.length) {
+      context.addIssue({ code: "custom", message: "Curated section IDs must be unique." });
+    }
+    const sectionPositions = value.curatedSections?.map((section) => section.position) ?? [];
+    if (new Set(sectionPositions).size !== sectionPositions.length) {
+      context.addIssue({ code: "custom", message: "Curated section positions must be unique." });
     }
   });
 
