@@ -2405,6 +2405,8 @@ export function TryMeNowApp() {
       open={showAnalyticsPanel}
       signals={analyticsSignals}
       engagedSeconds={engagementSeconds}
+      sessionId={session?.id}
+      audienceLabel={answers.customAudience || answers.audience}
       onClose={closeAnalyticsPanel}
     />
     {showRevealCeremony && session?.experience && <RevealCeremony session={session} onDismiss={() => setShowRevealCeremony(false)} />}
