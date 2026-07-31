@@ -186,8 +186,8 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
     : status === "fallback"
       ? "Brand scan incomplete"
       : isPreliminary
-        ? "Public signals captured"
-        : "Public brand system captured";
+        ? "Identity matched · brand scan continuing"
+        : "Identity and brand matched";
   const stateDetail = brand?.positioning || (status === "scanning"
     ? "Checking logo, palette, typography, and source."
     : status === "fallback"
@@ -238,6 +238,7 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
         <span>{stateTitle}</span>
         <strong>{companyName}</strong>
         <small>{stateDetail}</small>
+        {isCaptured && <em className={styles.identityProof}><Check size={11} />Domain matched to the public company site</em>}
       </div>
       <span className={styles.lockStatus}>
         {status === "scanning" ? <span className={styles.orbit} /> : <Check size={14} />}
@@ -269,7 +270,7 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
           </>
         )}
       </div>
-      {onInspect && <button type="button" className={styles.tertiaryAction} aria-label={`Inspect ${companyName} brand signals`} onClick={onInspect}>Inspect signals</button>}
+      {onInspect && <button type="button" className={styles.tertiaryAction} aria-label={`Inspect ${companyName} brand signals`} onClick={onInspect}>Review evidence</button>}
     </section>
   );
 }
@@ -686,7 +687,7 @@ export interface ExperienceBlockControlProps {
   description?: string;
   locked?: boolean;
   onEdit: (blockId: string) => void;
-  onGenerateOptions: (blockId: string) => void;
+  onGenerateOptions?: (blockId: string) => void;
   onLockChange: (blockId: string, locked: boolean) => void;
 }
 
@@ -696,7 +697,7 @@ export function ExperienceBlockControl({ blockId, label, description, locked = f
       <div><span>{locked ? "Locked in the brief" : "Editable block"}</span><strong>{label}</strong>{description && <small>{description}</small>}</div>
       <div className={styles.blockActions}>
         <button type="button" disabled={locked} onClick={() => onEdit(blockId)}><Pencil size={14} />Edit</button>
-        <button type="button" disabled={locked} onClick={() => onGenerateOptions(blockId)}><WandSparkles size={14} />Generate options</button>
+        {onGenerateOptions && <button type="button" disabled={locked} onClick={() => onGenerateOptions(blockId)}><WandSparkles size={14} />Generate 3 options</button>}
         <button type="button" aria-pressed={locked} onClick={() => onLockChange(blockId, !locked)}>{locked ? <Check size={14} /> : <Lock size={14} />}{locked ? "Locked" : "Lock"}</button>
       </div>
     </section>
@@ -846,7 +847,49 @@ export interface QualityLayer {
   id: string;
   label: string;
   detail: string;
-  status: "strong" | "partial" | "missing";
+  status: "strong" | "partial" | "missing" | "not-applicable";
+}
+
+export interface FollozeValueReceiptProps {
+  companyName: string;
+  audienceLabel: string;
+  objectiveLabel: string;
+  interactionCount: number;
+  onOpenSignals: () => void;
+}
+
+export function FollozeValueReceipt({
+  companyName,
+  audienceLabel,
+  objectiveLabel,
+  interactionCount,
+  onOpenSignals
+}: FollozeValueReceiptProps) {
+  return (
+    <section className={styles.valueReceipt} aria-labelledby="folloze-value-title">
+      <div className={styles.valueReceiptHeader}>
+        <span>What Folloze just did</span>
+        <h3 id="folloze-value-title">From three signals to a measurable buyer journey.</h3>
+      </div>
+      <ol className={styles.valueLayers}>
+        <li>
+          <span><Globe2 size={16} /></span>
+          <div><small>01 · Enriched</small><strong>{companyName} context found</strong><p>Identity, brand cues, and public company evidence shaped the brief.</p></div>
+        </li>
+        <li>
+          <span><Target size={16} /></span>
+          <div><small>02 · Personalized</small><strong>Built for {audienceLabel}</strong><p>The story and visual next step are aligned to {objectiveLabel.toLowerCase()}.</p></div>
+        </li>
+        <li>
+          <span><Gauge size={16} /></span>
+          <div><small>03 · Measured</small><strong>{interactionCount ? `${interactionCount} live signal${interactionCount === 1 ? "" : "s"} captured` : "Engagement is ready"}</strong><p>Explore the preview to reveal interest, depth, and next-step intent.</p></div>
+        </li>
+      </ol>
+      <button type="button" className={styles.valueSignalAction} onClick={onOpenSignals}>
+        {interactionCount ? "Review captured engagement" : "See how engagement appears"}<ArrowRight size={15} />
+      </button>
+    </section>
+  );
 }
 
 export function PersonalizationQualityReceipt({ score, companyName, layers }: { score: number; companyName: string; layers: QualityLayer[] }) {
@@ -854,7 +897,7 @@ export function PersonalizationQualityReceipt({ score, companyName, layers }: { 
   return (
     <section className={styles.qualityReceipt} aria-labelledby="quality-receipt-title">
       <div className={styles.qualityScore} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={safeScore} aria-label="Personalization quality score" style={{ "--quality-score": `${safeScore * 3.6}deg` } as CSSProperties}><strong>{safeScore}</strong><span>/100</span></div>
-      <div className={styles.qualityCopy}><span>Personalization quality</span><h3 id="quality-receipt-title">Why this feels built for {companyName}</h3><div>{layers.map((layer) => <span key={layer.id} className={styles[`quality${layer.status}`]}><i>{layer.status === "strong" ? <Check size={12} /> : layer.status === "partial" ? "~" : "!"}</i><strong>{layer.label}</strong><small>{layer.detail}</small></span>)}</div></div>
+      <div className={styles.qualityCopy}><span>Personalization quality</span><h3 id="quality-receipt-title">Why this feels built for {companyName}</h3><div>{layers.map((layer) => <span key={layer.id} className={styles[`quality${layer.status}`]}><i>{layer.status === "strong" ? <Check size={12} /> : layer.status === "partial" ? "~" : layer.status === "not-applicable" ? "—" : "!"}</i><strong>{layer.label}</strong><small>{layer.detail}</small></span>)}</div></div>
     </section>
   );
 }
@@ -896,8 +939,12 @@ export interface SavedExperienceCockpitProps {
 export function SavedExperienceCockpit({ title, url, updatedLabel, metrics, onOpen, onCopy, onEdit, onDuplicate }: SavedExperienceCockpitProps) {
   return (
     <section className={styles.savedCockpit} aria-labelledby="saved-cockpit-title">
-      <div className={styles.cockpitTopline}><span><i />Saved experience</span><small>{updatedLabel}</small></div>
-      <div className={styles.cockpitHero}><div><span>Live · shareable · measurable</span><h2 id="saved-cockpit-title">{title}</h2><code title={url}>{url}</code></div><div className={styles.cockpitActions}><button type="button" className={styles.primaryAction} aria-label="Open experience" onClick={onOpen}>Open<ExternalLink size={15} /></button><button type="button" className={styles.secondaryAction} aria-label="Copy experience URL" onClick={onCopy}><Copy size={15} />Copy URL</button></div></div>
+      <div className={styles.cockpitTopline}><span><i />Saved successfully</span><small>{updatedLabel}</small></div>
+      <div className={styles.cockpitHero}>
+        <span className={styles.savedSuccessMark} aria-hidden="true"><Check size={22} /></span>
+        <div><span>Permanent URL created</span><h2 id="saved-cockpit-title">{title}</h2><p>Your private preview is now a shareable, measurable experience.</p><code title={url}>{url}</code></div>
+      </div>
+      <div className={styles.cockpitActions}><button type="button" className={styles.primaryAction} aria-label="Open experience" onClick={onOpen}>Open experience<ExternalLink size={15} /></button><button type="button" className={styles.secondaryAction} aria-label="Copy experience URL" onClick={onCopy}><Copy size={15} />Copy URL</button></div>
       <div className={styles.cockpitMetrics}>{metrics.map((metric) => <div key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong>{metric.detail && <small>{metric.detail}</small>}</div>)}</div>
       {(onEdit || onDuplicate) && <div className={styles.cockpitFooter}><span><Target size={14} />Ready for activation</span>{onEdit && <button type="button" onClick={onEdit}><Pencil size={14} />Edit brief</button>}{onDuplicate && <button type="button" onClick={onDuplicate}><RefreshCw size={14} />Create variation</button>}</div>}
     </section>
@@ -919,6 +966,7 @@ export type EnhancementComponent =
   | typeof AssetPicker
   | typeof AnalyticsSignalToast
   | typeof AnalyticsSignalPanel
+  | typeof FollozeValueReceipt
   | typeof PersonalizationQualityReceipt
   | typeof ExpirySaveValuePanel
   | typeof SavedExperienceCockpit;

@@ -411,6 +411,7 @@ fieldset.controlCard { min-inline-size:0 }
 .qualityCopy>div strong { font-size:9px }
 .qualityCopy>div small { grid-column:2;color:var(--muted);font-size:7px }
 .qualitypartial i { background:#b8770d!important }
+.qualitynot-applicable i { background:#8290a7!important }
 .qualitymissing i { background:#b42318!important }
 .savePanel { min-width:0;padding:22px;display:grid;grid-template-columns:1fr;align-items:stretch;gap:18px;border:1px solid var(--border);border-radius:20px;background:radial-gradient(circle at 88% 0,var(--accent-tint),transparent 32%),#fff;box-shadow:0 18px 55px rgba(10,22,48,.07) }
 .savePanel.isSaved { border-color:#aee3c7;background:#f7fcf8 }
@@ -769,4 +770,128 @@ fieldset.controlCard { min-inline-size:0 }
   .qualityCopy>div {
     grid-template-columns: 1fr;
   }
+}
+
+/* Guided experience trust, value, and saved-success surfaces. */
+.identityProof {
+  width: max-content;
+  max-width: 100%;
+  margin-top: 7px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #087448;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 750;
+  letter-spacing: .03em;
+}
+
+.valueReceipt {
+  padding: 22px;
+  overflow: hidden;
+  position: relative;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 100% 0,rgba(91,91,255,.24),transparent 37%),
+    linear-gradient(145deg,#102640,#071428 72%);
+  box-shadow: 0 20px 56px rgba(7,20,40,.18);
+}
+.valueReceipt::after {
+  content: "";
+  width: 170px;
+  height: 170px;
+  position: absolute;
+  right: -92px;
+  bottom: -108px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 50%;
+  box-shadow: 0 0 0 32px rgba(255,255,255,.018),0 0 0 64px rgba(255,255,255,.012);
+  pointer-events: none;
+}
+.valueReceiptHeader { position: relative; z-index: 1; }
+.valueReceiptHeader > span { color: #82efb8; font-size: 8px; font-weight: 850; letter-spacing: .14em; text-transform: uppercase; }
+.valueReceiptHeader h3 { margin: 7px 0 0; font: 580 23px/1.04 var(--font-display),Georgia,serif; letter-spacing: -.03em; }
+.valueLayers { margin: 20px 0 0; padding: 0; display: grid; list-style: none; }
+.valueLayers li { min-height: 78px; padding: 13px 0; display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 10px; position: relative; z-index: 1; border-top: 1px solid rgba(255,255,255,.1); }
+.valueLayers li > span { width: 31px; height: 31px; display: grid; place-items: center; color: #071428; border-radius: 10px; background: #82efb8; }
+.valueLayers small,.valueLayers strong,.valueLayers p { display: block; }
+.valueLayers small { color: #929dff; font-size: 7px; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
+.valueLayers strong { margin-top: 4px; color: #fff; font-size: 11px; }
+.valueLayers p { margin: 4px 0 0; color: #aebcd0; font-size: 9px; line-height: 1.45; }
+.valueSignalAction { width: 100%; min-height: 44px; padding: 10px 0 0; display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 1; color: #fff; border: 0; border-top: 1px solid rgba(255,255,255,.14); background: transparent; cursor: pointer; font-size: 10px; font-weight: 750; }
+.valueSignalAction:hover { color: #82efb8; }
+
+.blockActions { flex-wrap: wrap; }
+
+.savedCockpit {
+  color: var(--ink);
+  border-color: #b7e7ce;
+  background:
+    radial-gradient(circle at 98% 0,rgba(37,217,132,.1),transparent 34%),
+    #fff;
+  box-shadow: 0 22px 64px rgba(7,20,40,.1);
+}
+.cockpitTopline {
+  color: #557565;
+  border-bottom-color: #d8eee2;
+  background: #f5fcf8;
+}
+.cockpitTopline > span { color: #087448; }
+.cockpitTopline i { background: #11b86a; }
+.cockpitHero {
+  padding: 24px 24px 17px;
+  display: grid;
+  grid-template-columns: 48px minmax(0,1fr);
+  align-items: start;
+  justify-content: stretch;
+  gap: 14px;
+}
+.cockpitHero > div { min-width: 0; }
+.savedSuccessMark {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: 15px;
+  background: #11b86a;
+  box-shadow: 0 11px 28px rgba(17,184,106,.2);
+}
+.cockpitHero > div > span { color: #087448; font-size: 7px; font-weight: 850; letter-spacing: .13em; text-transform: uppercase; }
+.cockpitHero h2 { max-width: 100%; margin: 7px 0 8px; color: var(--ink); font-size: clamp(25px,4cqi,38px); line-height: 1; overflow-wrap: anywhere; }
+.cockpitHero p { margin: 0 0 12px; color: var(--body); font-size: 10px; line-height: 1.45; }
+.cockpitHero code { padding: 8px 9px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #5c6b7f; border: 1px solid var(--border); border-radius: 9px; background: #f8f9fb; font-size: 8px; }
+.savedCockpit > .cockpitActions { padding: 0 24px 20px 86px; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; }
+.savedCockpit .primaryAction,.savedCockpit .secondaryAction { width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; justify-content: center; border-radius: 999px; font-size: 9px; white-space: nowrap; }
+.savedCockpit .primaryAction { color: #fff; border-color: var(--deep); background: var(--deep); }
+.savedCockpit .secondaryAction { color: var(--deep); border-color: var(--border); background: #fff; }
+.cockpitMetrics { border-top-color: var(--border); border-bottom-color: var(--border); background: #fbfcfd; }
+.cockpitMetrics > div:not(:last-child) { border-right-color: var(--border); }
+.cockpitMetrics span { color: var(--muted); }
+.cockpitMetrics strong { color: var(--ink); }
+.cockpitMetrics small { color: var(--muted); }
+.cockpitFooter { color: var(--muted); }
+.cockpitFooter > span { color: #087448; }
+.cockpitFooter button { color: var(--body); }
+.cockpitFooter button:hover { color: var(--accent); }
+
+@container saved-cockpit (max-width: 460px) {
+  .cockpitHero { padding: 20px 17px 15px; grid-template-columns: 40px minmax(0,1fr); gap: 11px; }
+  .savedSuccessMark { width: 40px; height: 40px; border-radius: 12px; }
+  .cockpitHero h2 { font-size: clamp(23px,8cqi,30px); }
+  .savedCockpit > .cockpitActions { padding: 0 17px 17px; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .cockpitMetrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+
+@media (max-width: 430px) {
+  .valueReceipt { padding: 18px; }
+  .valueReceiptHeader h3 { font-size: 21px; }
+  .blockActions { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .valueReceipt,.savedSuccessMark { animation: none!important; transition: none!important; }
 }

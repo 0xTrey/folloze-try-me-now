@@ -293,6 +293,44 @@ describe("compileCampaignContext", () => {
     expect(assessment.brief.sourceTitle).toBe("Integration Readiness Assessment");
   });
 
+  it("keeps source topics separate from the seller category for unrelated content", () => {
+    const context = compileCampaignContext({
+      brand: seller,
+      useCase: "content",
+      answers: {
+        sourceUrl: "https://example.org/elder-care-robots",
+        audience: "Senior living operators",
+        objective: "Increase content engagement"
+      },
+      sourceContent: {
+        sourceUrl: "https://example.org/elder-care-robots",
+        title: "How robots support elder care teams",
+        description: "Care robots can help senior living teams with routine support while preserving human oversight.",
+        excerpt:
+          "Elder care teams are testing assistive robotics for routine delivery, resident support, and staff capacity. Human caregivers remain responsible for judgment and relationships."
+      }
+    });
+
+    expect(context.brief.sourceGrounding).toMatchObject({
+      kind: "public-url",
+      confidence: "high",
+      confirmationStatus: "confirmed"
+    });
+    expect(context.brief.sourceGrounding.topics.join(" ")).toMatch(/robots|elder care/i);
+    expect(context.brief.offerOrSource).toMatchObject({
+      kind: "source",
+      name: "How robots support elder care teams",
+      sourceHost: "example.org"
+    });
+    expect(context.brief.messageSpine.whyChange).toMatch(/robots|elder care/i);
+    expect(context.brief.messageSpine.whyChange).not.toMatch(/integration|automation|API/i);
+    expect(context.brief.seller).toMatchObject({
+      domain: "jitterbit.com",
+      name: "Jitterbit"
+    });
+    expect(context.brief.targetAccount).toBeNull();
+  });
+
   it("falls back to mechanism-only proof and neutral design when no public evidence exists", () => {
     const sparse: BrandProfile = {
       ...seller,

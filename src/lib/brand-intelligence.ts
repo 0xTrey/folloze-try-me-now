@@ -1,4 +1,8 @@
-import type { BrandProfile } from "@/lib/types";
+import type {
+  BrandProfile,
+  EntityIdentity,
+  IntelligenceConfidence
+} from "@/lib/types";
 
 export type BrandCategory =
   | "buyer-experience"
@@ -41,6 +45,143 @@ interface TargetAudienceLens {
   systemsContext: string;
   workflowContext: string;
   dataContext: string;
+}
+
+const unsafeIntelligenceText =
+  /\b(ignore|disregard|override|instructions?|system prompt|developer message|assistant|password|secret|api key|jailbreak)\b/i;
+
+function canonicalDomain(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split(/[/?#]/)[0] ?? "";
+}
+
+function identityKey(value: string): string {
+  return value.toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function domainIdentityKey(domain: string): string {
+  return identityKey(canonicalDomain(domain).split(".")[0] ?? "");
+}
+
+function withoutDomainPrefix(value: string): string {
+  let result = value;
+  for (const prefix of ["hello", "get", "use", "try", "join", "with", "meet", "my", "the"]) {
+    if (result.startsWith(prefix) && result.length - prefix.length >= 4) {
+      result = result.slice(prefix.length);
+      break;
+    }
+  }
+  return result;
+}
+
+function sourceHostMatches(sourceUrl: string, expectedDomain: string): boolean {
+  try {
+    const host = canonicalDomain(new URL(sourceUrl).hostname);
+    const expected = canonicalDomain(expectedDomain);
+    return host === expected || host.endsWith(`.${expected}`);
+  } catch {
+    return false;
+  }
+}
+
+function descriptiveLogoOwner(logoUrl: string | undefined): string | null {
+  if (!logoUrl) return null;
+  try {
+    const pathname = decodeURIComponent(new URL(logoUrl).pathname).toLocaleLowerCase();
+    const file = pathname.split("/").at(-1)?.replace(/\.[a-z0-9]+$/i, "") ?? "";
+    const match = file.match(/(?:^|[-_])([a-z0-9]{4,})(?:[-_])?logo(?:[-_]|$)|(?:^|[-_])logo(?:[-_])?([a-z0-9]{4,})(?:[-_]|$)/i);
+    const owner = identityKey(match?.[1] || match?.[2] || "");
+    return owner && !new Set(["brand", "company", "header", "primary", "footer", "white", "black", "color", "desktop", "mobile"]).has(owner)
+      ? owner
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Assess harvested identity independently from copy/category inference. A
+ * profile can be useful for neutral styling while still requiring a person to
+ * confirm that the company or logo is correct.
+ */
+export function assessBrandIdentity(
+  profile: BrandProfile,
+  expectedDomain: string,
+  userConfirmed = false
+): EntityIdentity {
+  const expected = canonicalDomain(expectedDomain);
+  const actual = canonicalDomain(profile.domain);
+  const domainKey = domainIdentityKey(expected);
+  const nameKey = identityKey(profile.companyName);
+  const relaxedDomainKey = withoutDomainPrefix(domainKey);
+  const nameMatches = Boolean(
+    nameKey &&
+      (nameKey === domainKey ||
+        nameKey === relaxedDomainKey ||
+        (Math.min(nameKey.length, domainKey.length) >= 4 &&
+          (nameKey.includes(domainKey) || domainKey.includes(nameKey))) ||
+        (Math.min(nameKey.length, relaxedDomainKey.length) >= 4 &&
+          (nameKey.includes(relaxedDomainKey) || relaxedDomainKey.includes(nameKey))))
+  );
+  const domainMatches = actual === expected;
+  const sourceMatches = sourceHostMatches(profile.sourceUrl, expected);
+  const logoOwner = descriptiveLogoOwner(profile.logoUrl);
+  const logoMatches = !logoOwner || [domainKey, relaxedDomainKey, nameKey].some(
+    (key) => key.length >= 3 && (logoOwner.includes(key) || key.includes(logoOwner))
+  );
+  const reasons: string[] = [];
+  if (domainMatches) reasons.push("The harvested profile matches the submitted domain.");
+  else reasons.push(`The harvested profile belongs to ${actual || "an unknown domain"}, not ${expected}.`);
+  if (sourceMatches) reasons.push("The public evidence came from the submitted company domain.");
+  else reasons.push("The public evidence URL does not match the submitted company domain.");
+  if (nameMatches) reasons.push("The public company name matches the submitted domain.");
+  else reasons.push("The public company name could not be reconciled with the submitted domain.");
+  if (!logoMatches) reasons.push("The harvested logo filename appears to name a different company.");
+  if (profile.source === "fallback") reasons.push("Only deterministic fallback identity is available.");
+
+  let confidence: IntelligenceConfidence = "low";
+  if (domainMatches && sourceMatches && nameMatches && logoMatches && profile.source !== "fallback") {
+    confidence = "high";
+  } else if (domainMatches && nameMatches && logoMatches && profile.source !== "fallback") {
+    confidence = "medium";
+  }
+  const rejected = !domainMatches || (!nameMatches && profile.source !== "fallback") || !logoMatches;
+  return {
+    expectedDomain: expected,
+    canonicalDomain: rejected ? expected : actual,
+    canonicalName: profile.companyName,
+    confidence: userConfirmed ? "high" : confidence,
+    confirmationStatus: userConfirmed ? "confirmed" : rejected ? "rejected" : confidence === "low" ? "needs-confirmation" : "confirmed",
+    confirmedBy: userConfirmed ? "user" : confidence === "high" ? "system" : undefined,
+    reasons,
+    provenance: [
+      {
+        kind:
+          profile.source === "fallback"
+            ? "deterministic-fallback"
+            : profile.source === "brand-harvester"
+              ? "brand-harvester"
+              : "public-page",
+        sourceUrl: profile.sourceUrl,
+        detail: `Identity harvested for ${expected}.`
+      }
+    ]
+  };
+}
+
+export function withBrandIdentity(
+  profile: BrandProfile,
+  expectedDomain = profile.domain,
+  userConfirmed = false
+): BrandProfile {
+  return {
+    ...profile,
+    identity: assessBrandIdentity(profile, expectedDomain, userConfirmed)
+  };
 }
 
 const profiles: Record<BrandCategory, CategoryProfile> = {
@@ -651,7 +792,10 @@ function evidenceText(brand: BrandProfile): string {
     brand.publicContext,
     ...brand.publicTopics
   ]
-    .filter(Boolean)
+    .filter(
+      (value): value is string =>
+        typeof value === "string" && value.length > 0 && !unsafeIntelligenceText.test(value)
+    )
     .join(" ")
     .slice(0, 10_000);
 }
@@ -670,7 +814,7 @@ function targetLensesFor(target: BrandProfile): TargetAudienceLens[] {
     { text: target.publicContext ?? "", weight: 3 },
     { text: target.title ?? "", weight: 2 },
     { text: `${target.companyName} ${target.domain}`, weight: 1 }
-  ].filter(({ text }) => text.trim().length > 0);
+  ].filter(({ text }) => text.trim().length > 0 && !unsafeIntelligenceText.test(text));
   const ranked = targetAudienceLenses
     .map((lens, index) => ({
       lens,
@@ -712,7 +856,9 @@ export function audienceSuggestionsFor(brand: BrandProfile, target?: BrandProfil
   }
   const targetCategory = identifyBrandCategory(target);
   const hasPublicTargetContext = Boolean(
-    target.description || target.publicContext || target.publicTopics.length > 0
+    [target.description, target.publicContext, ...target.publicTopics].some(
+      (value) => Boolean(value?.trim()) && !unsafeIntelligenceText.test(value ?? "")
+    )
   );
   if (!hasPublicTargetContext && targetCategory === "business-software") {
     return [...profiles[sellerCategory].audiences];

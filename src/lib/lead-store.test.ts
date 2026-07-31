@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   clearMemoryLeadsForTest,
+  getMemoryLeadCountForTest,
   getMemoryLeadForTest,
+  isDurableLeadStoreMode,
   leadStoreMode,
   listLeadsNeedingReconciliation,
   recordLeadCapture,
@@ -29,7 +31,11 @@ function readySession(): TryMeSession {
     answers: {
       targetDomain: "cisco.com",
       audience: "Enterprise architects and platform owners",
-      objective: "Book a meeting"
+      objective: "Book a meeting",
+      ctaType: "book-meeting",
+      ctaStyle: "outline",
+      sourceUrl: "https://www.example.com/private/path?campaign=secret",
+      sourceTitle: "Enterprise AI guide buyer@example.com https://private.example/path"
     },
     audienceSuggestions: [],
     experience: {
@@ -68,7 +74,18 @@ describe("lead store", () => {
 
   it("uses an isolated memory ledger in tests", () => {
     expect(leadStoreMode).toBe("memory-test");
+    expect(isDurableLeadStoreMode("neon-postgres")).toBe(true);
+    expect(isDurableLeadStoreMode("vercel-blob")).toBe(true);
+    expect(isDurableLeadStoreMode("memory-demo")).toBe(false);
   });
+
+  it.each(["", "person@gmail.com", "person@mailinator.com"])(
+    "rejects invalid business email %s without creating a lead",
+    async (email) => {
+      await expect(recordLeadCapture(readySession(), email)).rejects.toThrow();
+      expect(getMemoryLeadCountForTest()).toBe(0);
+    }
+  );
 
   it("captures business-email and qualification context without generated content", async () => {
     const session = readySession();
@@ -84,10 +101,22 @@ describe("lead store", () => {
       useCase: "abm",
       audience: "Enterprise architects and platform owners",
       objective: "Book a meeting",
+      ctaType: "book-meeting",
+      ctaStyle: "outline",
+      sourceKind: "url",
+      sourceHost: "example.com",
+      sourceTitle: "Enterprise AI guide [redacted] [link]",
+      previewUrl: "https://example.test/e/lead-session",
+      previewStatus: "ready",
+      saveStatus: "pending",
       consentScope: "transactional_experience_delivery",
       claimStatus: "captured"
     });
     expect(JSON.stringify(record)).not.toContain("<!doctype html>");
+    expect(JSON.stringify(record)).not.toContain("private/path");
+    expect(record.artifactRevision).toBe(3);
+    expect(record.artifactDigest).toBe("b".repeat(64));
+    expect(getMemoryLeadCountForTest()).toBe(1);
   });
 
   it("updates delivery and publication outcomes idempotently", async () => {
@@ -105,6 +134,8 @@ describe("lead store", () => {
     expect(getMemoryLeadForTest("lead-session")).toMatchObject({
       experienceUrl: "https://experience.example/lead-session",
       claimStatus: "claimed",
+      saveStatus: "saved",
+      savedExperienceUrl: "https://experience.example/lead-session",
       publishStatus: "published",
       emailStatus: "sent"
     });
@@ -128,6 +159,39 @@ describe("lead store", () => {
     expect(getMemoryLeadForTest(session.id)).toMatchObject({
       claimAttemptId: "claim-attempt-1",
       claimStatus: "claimed",
+      publishStatus: "published",
+      emailStatus: "sent",
+      claimedAt: "2026-07-30T01:00:00.000Z"
+    });
+    expect(getMemoryLeadCountForTest()).toBe(1);
+  });
+
+  it("does not let a late failure downgrade a saved, published, emailed outcome", async () => {
+    await recordLeadCapture(readySession(), "buyer@example.com");
+    await updateLeadOutcome({
+      sessionId: "lead-session",
+      claimAttemptId: "claim-attempt-1",
+      experienceUrl: "https://experience.example/lead-session",
+      claimStatus: "claimed",
+      publishStatus: "published",
+      emailStatus: "sent",
+      claimedAt: "2026-07-30T01:00:00.000Z"
+    });
+
+    await updateLeadOutcome({
+      sessionId: "lead-session",
+      claimAttemptId: "claim-attempt-1",
+      experienceUrl: "https://example.test/e/lead-session",
+      claimStatus: "failed",
+      publishStatus: "failed",
+      emailStatus: "failed"
+    });
+
+    expect(getMemoryLeadForTest("lead-session")).toMatchObject({
+      experienceUrl: "https://experience.example/lead-session",
+      savedExperienceUrl: "https://experience.example/lead-session",
+      claimStatus: "claimed",
+      saveStatus: "saved",
       publishStatus: "published",
       emailStatus: "sent",
       claimedAt: "2026-07-30T01:00:00.000Z"

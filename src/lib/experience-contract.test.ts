@@ -234,6 +234,27 @@ describe("campaign contract", () => {
       schemaVersion: "1.0",
       revision: 4,
       sourceBriefRevision: current.campaignBrief?.revision,
+      sourceBriefFingerprint: current.campaignBrief?.fingerprint,
+      grounding: {
+        seller: {
+          source: "fast-extractor",
+          sourceUrl: "https://jitterbit.com/"
+        },
+        target: {
+          source: "fast-extractor",
+          sourceUrl: "https://cisco.com/"
+        },
+        source: {
+          kind: "public-url",
+          status: "confirmed",
+          title: "Jitterbit Harmony",
+          host: "jitterbit.com"
+        },
+        audience: {
+          status: "ready",
+          findingIds: ["evidence_networking"]
+        }
+      },
       identities: {
         seller: { domain: "jitterbit.com", name: "Jitterbit" },
         target: { domain: "cisco.com", name: "Cisco" },

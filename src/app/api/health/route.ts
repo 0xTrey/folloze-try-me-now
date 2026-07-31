@@ -3,23 +3,31 @@ import { NextResponse } from "next/server";
 import {
   canPublishFolloze,
   config,
-  hasDatabase,
   hasOpenAI,
   hasRemoteBrandHarvester,
   hasRemoteFolloze,
   hasResend
 } from "@/lib/config";
-import { leadStoreMode } from "@/lib/lead-store";
-import { isProductionCapable } from "@/lib/readiness";
+import { isDurableLeadStoreMode, leadStoreMode } from "@/lib/lead-store";
+import { noStoreHeaders } from "@/lib/http";
+import { isProductionCapable, productionReadiness } from "@/lib/readiness";
 import {
   sessionStoreIsProductionSafe,
   sessionStoreMode
 } from "@/lib/session-store";
 
 export function GET() {
+  const durableLeadStore = isDurableLeadStoreMode(leadStoreMode);
   const productionCapable = isProductionCapable({
     sessionStoreMode,
-    databaseConnected: hasDatabase,
+    durableLeadStore,
+    openAIConnected: hasOpenAI,
+    follozePublishReady: canPublishFolloze,
+    resendConnected: hasResend
+  });
+  const readiness = productionReadiness({
+    sessionStoreMode,
+    durableLeadStore,
     openAIConnected: hasOpenAI,
     follozePublishReady: canPublishFolloze,
     resendConnected: hasResend
@@ -27,6 +35,12 @@ export function GET() {
   return NextResponse.json({
     ok: true,
     mode: productionCapable ? "production-capable" : "fixture",
+    readiness,
+    lifecycle: {
+      anonymousPreviewTtlSeconds: config.sessionTtlSeconds,
+      leadCreatedOnBusinessEmailClaimOnly: true,
+      previewSavePublishSeparated: true
+    },
     services: {
       sessionStore: sessionStoreMode,
       sessionStoreProductionSafe: sessionStoreIsProductionSafe,
@@ -40,5 +54,5 @@ export function GET() {
       },
       transactionalEmail: { mode: config.emailMode, connected: hasResend }
     }
-  });
+  }, { headers: noStoreHeaders });
 }

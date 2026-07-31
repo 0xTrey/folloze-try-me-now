@@ -186,7 +186,7 @@ afterEach(async () => {
 });
 
 describe("session workspace foundation", () => {
-  it("applies all creative controls atomically and invalidates an obsolete preview", async () => {
+  it("applies controls while keeping the current preview visible until replacement succeeds", async () => {
     const id = `workspace-${Date.now()}`;
     ids.add(id);
     await putSession(workspaceSession(id));
@@ -234,8 +234,15 @@ describe("session workspace foundation", () => {
         selectedAssetIds: ["asset_seller_logo"]
       }
     });
-    expect(result.session.experience).toBeUndefined();
-    expect(result.session.qualityReceipt).toBeUndefined();
+    expect(result.session.experience).toMatchObject({
+      ready: true,
+      title: "Jitterbit for Cisco",
+      artifactRevision: 8
+    });
+    expect(result.session.qualityReceipt).toMatchObject({
+      status: "passed",
+      artifactRevision: 8
+    });
     expect(stored?.evidenceItems?.find((item) => item.id === "evidence_networking")?.disposition).toBe(
       "pinned"
     );
@@ -392,6 +399,113 @@ describe("session workspace foundation", () => {
     expect(stored?.experience?.html).toContain('id="campaign-thesis"');
     expect(stored?.experience?.html).toContain('id="decision-path"');
     expect(stored?.experience?.html).toContain('id="guided-questions"');
+  });
+
+  it("leaves revision N intact when replacement generation fails", async () => {
+    const id = `atomic-replacement-failure-${Date.now()}`;
+    ids.add(id);
+    const original = workspaceSession(id);
+    original.experienceSpecRevision = 8;
+    original.experienceSpec = {
+      schemaVersion: "1.0",
+      revision: 8,
+      sourceBriefRevision: 3,
+      sourceBriefFingerprint: "brief-v3",
+      createdAt: original.updatedAt,
+      artifactDigest: "spec-v8",
+      grounding: {
+        seller: { source: seller.source, sourceUrl: seller.sourceUrl },
+        target: { source: target.source, sourceUrl: target.sourceUrl },
+        audience: { status: "ready", findingIds: ["evidence_networking"] }
+      },
+      identities: {
+        seller: { domain: seller.domain, name: seller.companyName },
+        target: { domain: target.domain, name: target.companyName }
+      },
+      brandTokens: {
+        primaryColor: seller.primaryColor,
+        accentColor: seller.accentColor,
+        surfaceColor: seller.surfaceColor
+      },
+      draft: {},
+      cta: { intent: "explore", style: "solid", label: "Continue" },
+      selectedAssetIds: [],
+      evidenceItemIds: ["evidence_networking"],
+      curatedSections: [],
+      analytics: { events: ["preview-opened"] },
+      renderers: { web: { status: "ready" }, folloze: { status: "not-requested" } }
+    };
+    const originalDigest = original.experience?.artifactDigest;
+    const originalSpec = structuredClone(original.experienceSpec);
+    const originalReceipt = structuredClone(original.qualityReceipt);
+    await putSession(original);
+
+    await patchSessionWorkspace(id, {
+      answers: { objective: "Accelerate an opportunity" }
+    });
+    vi.mocked(generateExperienceDraft).mockRejectedValueOnce(new Error("generation unavailable"));
+
+    await runStoryStage(id);
+
+    const stored = await getSession(id);
+    expect(stored).toMatchObject({
+      status: "preview_ready_unclaimed",
+      experience: { artifactRevision: 8, artifactDigest: originalDigest },
+      stages: {
+        story: {
+          status: "failed",
+          detail: expect.stringMatching(/current preview.*safe/i)
+        }
+      }
+    });
+    expect(stored?.experienceSpec).toEqual(originalSpec);
+    expect(stored?.qualityReceipt).toEqual(originalReceipt);
+  });
+
+  it("replaces source provenance atomically and binds confirmation to the newly submitted source", async () => {
+    const id = `source-replacement-${Date.now()}`;
+    ids.add(id);
+    const original = workspaceSession(id);
+    original.useCase = "content";
+    original.answers = {
+      sourceName: "old-source.pdf",
+      sourceTitle: "Old source",
+      sourceUploadId: "old-upload",
+      sourceOpenAIFileId: "old-file",
+      sourceConfirmed: true,
+      audience: "Operations leaders",
+      objective: "Increase content engagement"
+    };
+    original.sourceConfirmation = {
+      status: "confirmed",
+      sourceKind: "uploaded-pdf",
+      provenance: "user-confirmed"
+    };
+    original.sourceFingerprint = "old-source-fingerprint";
+    await putSession(original);
+
+    await patchSessionWorkspace(id, {
+      answers: { sourceUrl: "https://example.org/new-report" }
+    });
+
+    const stored = await getSession(id);
+    expect(stored?.answers).toMatchObject({
+      sourceUrl: "https://example.org/new-report",
+      audience: "Operations leaders"
+    });
+    expect(stored?.answers.sourceName).toBeUndefined();
+    expect(stored?.answers.sourceTitle).toBeUndefined();
+    expect(stored?.answers.sourceUploadId).toBeUndefined();
+    expect(stored?.answers.sourceOpenAIFileId).toBeUndefined();
+    expect(stored?.answers.sourceConfirmed).toBe(true);
+    expect(stored?.sourceConfirmation).toMatchObject({
+      status: "confirmed",
+      sourceKind: "public-url",
+      provenance: "user-submitted"
+    });
+    expect(stored?.sourceFingerprint).toEqual(expect.any(String));
+    expect(stored?.sourceFingerprint).not.toBe("old-source-fingerprint");
+    expect(stored?.experience?.artifactRevision).toBe(8);
   });
 
   it("records bounded preview interaction aggregates without exposing internal events", async () => {

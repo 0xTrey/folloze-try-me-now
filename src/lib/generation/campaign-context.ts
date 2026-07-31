@@ -1,10 +1,19 @@
 import {
+  assessBrandIdentity,
   identifyBrandCategory,
   narrativeProfileFor,
   type BrandCategory
 } from "@/lib/brand-intelligence";
 import { primaryActionFor } from "@/lib/cta-presentation";
-import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
+import type {
+  BrandProfile,
+  EntityIdentity,
+  IntelligenceConfirmationStatus,
+  IntelligenceProvenance,
+  SessionAnswers,
+  SourceGrounding,
+  UseCase
+} from "@/lib/types";
 
 export const campaignRegisters = [
   "one-to-one-abm",
@@ -95,6 +104,8 @@ export interface TargetAccountEvidenceItem {
   sourceUrl: string;
   /** Short, exact phrases the generator may safely carry into buyer-facing copy. */
   signals: string[];
+  entityRole: "target";
+  confidence: "high" | "medium";
 }
 
 export interface CampaignGenerationContext {
@@ -102,11 +113,26 @@ export interface CampaignGenerationContext {
     campaignGoal: string;
     audience: string;
     campaignRegister: CampaignRegister;
-    seller: { domain: string; name: string; category: BrandCategory; offer: string };
-    targetAccount: { domain: string; name: string } | null;
+    seller: {
+      domain: string;
+      name: string;
+      category: BrandCategory;
+      offer: string;
+      identity: EntityIdentity;
+    };
+    targetAccount: { domain: string; name: string; identity: EntityIdentity } | null;
+    offerOrSource: {
+      kind: "offer" | "source" | "seller-category";
+      name: string;
+      sourceUrl: string | null;
+      sourceHost: string | null;
+      confirmationStatus: IntelligenceConfirmationStatus;
+      provenance: IntelligenceProvenance[];
+    };
     campaignSubtype: SessionAnswers["campaignType"] | null;
     eventContext: string | null;
     sourceTitle: string | null;
+    sourceGrounding: SourceGrounding;
     buyerStage: "awareness" | "education" | "evaluation" | "decision-support";
     primaryAction: string;
     messageSpine: {
@@ -227,18 +253,6 @@ function sourceTitleFor(
   return value ? cleanSourceTitle(value) || null : null;
 }
 
-function proofModeFor(
-  brand: BrandProfile,
-  answers: SessionAnswers,
-  sourceContent?: PublicContentEvidence | null
-): ProofMode {
-  if (answers.sourceOpenAIFileId || sourceContent?.excerpt.trim()) return "source-content";
-  if (brand.publicContext || brand.description || brand.publicTopics.length > 0) {
-    return "public-brand-mechanism";
-  }
-  return "mechanism-only";
-}
-
 const evidenceStopWords = new Set([
   "about",
   "across",
@@ -262,7 +276,6 @@ const evidenceStopWords = new Set([
   "products",
   "resources",
   "services",
-  "solutions",
   "support",
   "that",
   "the",
@@ -271,6 +284,164 @@ const evidenceStopWords = new Set([
   "through",
   "with"
 ]);
+
+const sourceTopicStopWords = new Set([
+  ...evidenceStopWords,
+  "article",
+  "asset",
+  "ebook",
+  "field",
+  "guide",
+  "home",
+  "introduction",
+  "overview",
+  "paper",
+  "readiness",
+  "report",
+  "resource",
+  "scorecard",
+  "website",
+  "whitepaper"
+]);
+
+function sourceTopicTokens(value: string): string[] {
+  return value
+    .toLocaleLowerCase()
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[^\p{L}\p{N}+#/-]+/gu, " ")
+    .split(/\s+/)
+    .map((token) => token.replace(/^[+#/-]+|[+#/-]+$/g, ""))
+    .filter((token) => token.length >= 3 || token === "ai")
+    .filter((token) => !sourceTopicStopWords.has(token))
+    .filter((token) => !unsafePublicEvidence.test(token));
+}
+
+function sourceTopicsFor(
+  title: string | null,
+  sourceContent?: PublicContentEvidence | null
+): string[] {
+  const titleTokens = sourceTopicTokens(title ?? "").slice(0, 8);
+  const titlePhrases = titleTokens
+    .slice(0, -1)
+    .map((token, index) => `${token} ${titleTokens[index + 1]}`)
+    .filter((phrase) => phrase.length <= 56);
+  const bodyTokens = sourceTopicTokens(
+    `${sourceContent?.description ?? ""} ${sourceContent?.excerpt ?? ""}`
+  );
+  const counts = new Map<string, number>();
+  for (const token of bodyTokens) counts.set(token, (counts.get(token) ?? 0) + 1);
+  const repeatedBodyTopics = [...counts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([token]) => token);
+  return [...titlePhrases, ...titleTokens, ...repeatedBodyTopics]
+    .map((topic) => topic.replace(/\bai\b/gi, "AI"))
+    .filter(
+      (topic, index, topics) =>
+        topics.findIndex((candidate) => candidate.toLocaleLowerCase() === topic.toLocaleLowerCase()) ===
+        index
+    )
+    .slice(0, 6);
+}
+
+export function sourceGroundingFor(input: {
+  answers: SessionAnswers;
+  sourceContent?: PublicContentEvidence | null;
+}): SourceGrounding {
+  const { answers, sourceContent } = input;
+  const title = sourceTitleFor(answers, sourceContent);
+  const kind: SourceGrounding["kind"] = answers.sourceName
+    ? "uploaded-pdf"
+    : answers.sourceUrl
+      ? "public-url"
+      : answers.eventSource
+        ? "event-context"
+        : "none";
+  const sourceUrl = answers.sourceUrl || sourceContent?.sourceUrl;
+  let sourceHost: string | undefined;
+  try {
+    sourceHost = sourceUrl ? new URL(sourceUrl).hostname.replace(/^www\./, "") : undefined;
+  } catch {
+    sourceHost = undefined;
+  }
+  const topics = sourceTopicsFor(title, sourceContent);
+  const extractedBodyLength = cleanWhitespace(
+    `${sourceContent?.description ?? ""} ${sourceContent?.excerpt ?? ""}`
+  ).length;
+  const confidence =
+    kind === "event-context"
+      ? "medium"
+      : title && extractedBodyLength >= 120 && topics.length >= 2
+        ? "high"
+        : title && topics.length >= 1
+          ? "medium"
+          : "low";
+  const explicitlyConfirmed = Boolean(answers.sourceConfirmed || answers.sourceTopicConfirmed);
+  const confirmationStatus: SourceGrounding["confirmationStatus"] = explicitlyConfirmed
+    ? "confirmed"
+    : kind === "none" || confidence === "low"
+      ? "needs-confirmation"
+      : "confirmed";
+  const provenance: IntelligenceProvenance[] = [];
+  if (kind === "uploaded-pdf") {
+    provenance.push({
+      kind: "uploaded-source",
+      detail: "The visitor supplied this document as the factual source."
+    });
+  } else if (sourceUrl) {
+    provenance.push({
+      kind: "user-input",
+      sourceUrl,
+      detail: "The visitor supplied this public URL as the factual source."
+    });
+  } else if (kind === "event-context") {
+    provenance.push({
+      kind: "user-input",
+      detail: "The visitor supplied this event context."
+    });
+  }
+  if (sourceContent?.excerpt.trim()) {
+    provenance.push({
+      kind: "public-page",
+      sourceUrl: sourceContent.sourceUrl,
+      detail: "Readable source copy was extracted for factual grounding."
+    });
+  }
+  return {
+    kind,
+    ...(title ? { title } : {}),
+    ...(sourceUrl ? { sourceUrl } : {}),
+    ...(sourceHost ? { sourceHost } : {}),
+    topics,
+    confidence,
+    confirmationStatus,
+    provenance,
+    reason:
+      confidence === "high"
+        ? "The title and readable source copy provide distinct topical evidence."
+        : confidence === "medium"
+          ? "The submitted source identifies the topic, but deeper source evidence is limited."
+          : "The source topic is not clear enough to support inferred claims without confirmation."
+  };
+}
+
+function proofModeFor(
+  brand: BrandProfile,
+  answers: SessionAnswers,
+  sourceContent?: PublicContentEvidence | null
+): ProofMode {
+  if (
+    answers.sourceOpenAIFileId ||
+    sourceContent?.excerpt.trim() ||
+    sourceContent?.description?.trim()
+  ) {
+    return "source-content";
+  }
+  if (brand.publicContext || brand.description || brand.publicTopics.length > 0) {
+    return "public-brand-mechanism";
+  }
+  return "mechanism-only";
+}
 
 const unsafePublicEvidence =
   /\b(ignore|disregard|instructions?|system prompt|developer message|assistant|password|secret|api key)\b/i;
@@ -340,9 +511,11 @@ function evidenceSignalsFor(
 export function targetAccountEvidenceFor(
   profile: BrandProfile | undefined
 ): TargetAccountEvidenceItem[] {
+  const identity = profile ? profile.identity ?? assessBrandIdentity(profile, profile.domain) : null;
   if (
     !profile ||
     profile.source === "fallback" ||
+    identity?.confirmationStatus === "rejected" ||
     (!profile.description && !profile.publicContext && profile.publicTopics.length === 0)
   ) {
     return [];
@@ -407,7 +580,9 @@ export function targetAccountEvidenceFor(
       label: candidate.label,
       text: candidate.text,
       sourceUrl: profile.sourceUrl,
-      signals
+      signals,
+      entityRole: "target",
+      confidence: identity?.confidence === "high" ? "high" : "medium"
     });
     if (items.length === 3) break;
   }
@@ -524,6 +699,7 @@ export function compileCampaignContext(input: {
   const objective = answers.objective || "Continue the evaluation";
   const register = registerFor(useCase, answers);
   const sourceTitle = sourceTitleFor(answers, sourceContent);
+  const sourceGrounding = sourceGroundingFor({ answers, sourceContent });
   const eventContext = cleanEventContext(answers.eventSource);
   const proofMode = proofModeFor(brand, answers, sourceContent);
   const targetEvidence = targetAccountEvidenceFor(targetBrand);
@@ -531,6 +707,26 @@ export function compileCampaignContext(input: {
   const designRegister = designRegisterFor(brand, category);
   const imageMode = brand.imageUrls.length >= 3 ? "image-led" : brand.imageUrls.length ? "image-supported" : "type-led";
   const primaryAction = primaryActionFor({ useCase, objective, campaignType: answers.campaignType });
+  const sellerIdentity =
+    brand.identity ?? assessBrandIdentity(brand, brand.domain, answers.sellerConfirmed);
+  const targetIdentity = targetBrand
+    ? targetBrand.identity ??
+      assessBrandIdentity(targetBrand, answers.targetDomain ?? targetBrand.domain, answers.targetConfirmed)
+    : null;
+  const offerName = answers.promotedOffer || sourceTitle || profile.offerLabel;
+  const offerSourceUrl = answers.promotedOffer ? answers.offerSourceUrl : sourceGrounding.sourceUrl;
+  let offerSourceHost: string | null = sourceGrounding.sourceHost ?? null;
+  if (answers.promotedOffer && answers.offerSourceUrl) {
+    try {
+      offerSourceHost = new URL(answers.offerSourceUrl).hostname.replace(/^www\./, "");
+    } catch {
+      offerSourceHost = null;
+    }
+  }
+  const contentTopics = sourceGrounding.topics.slice(0, 3);
+  const contentTopicPhrase = contentTopics.length
+    ? contentTopics.join(", ")
+    : sourceTitle ?? "the submitted source";
   const publicMoment = eventContext
     ? `The visitor supplied ${eventContext} as the event context.`
     : sourceTitle
@@ -546,12 +742,46 @@ export function compileCampaignContext(input: {
         domain: brand.domain,
         name: brand.companyName,
         category,
-        offer: profile.offerLabel
+        offer: answers.promotedOffer || profile.offerLabel,
+        identity: sellerIdentity
       },
-      targetAccount: targetBrand ? { domain: targetBrand.domain, name: targetBrand.companyName } : null,
+      targetAccount: targetBrand
+        ? { domain: targetBrand.domain, name: targetBrand.companyName, identity: targetIdentity! }
+        : null,
+      offerOrSource: {
+        kind: sourceGrounding.kind !== "none"
+          ? "source"
+          : answers.promotedOffer
+            ? "offer"
+            : "seller-category",
+        name: offerName,
+        sourceUrl: offerSourceUrl ?? null,
+        sourceHost: offerSourceHost,
+        confirmationStatus:
+          sourceGrounding.kind !== "none"
+            ? sourceGrounding.confirmationStatus
+            : answers.promotedOfferConfirmed || answers.offerSourceConfirmed
+              ? "confirmed"
+              : answers.promotedOffer
+                ? "needs-confirmation"
+                : sellerIdentity.confirmationStatus,
+        provenance:
+          sourceGrounding.kind !== "none"
+            ? sourceGrounding.provenance
+            : answers.promotedOffer
+              ? [
+                  {
+                    kind: "user-input",
+                    ...(answers.offerSourceUrl ? { sourceUrl: answers.offerSourceUrl } : {}),
+                    detail: "The visitor named the promoted offer."
+                  }
+                ]
+              : sellerIdentity.provenance
+      },
       campaignSubtype: answers.campaignType ?? null,
       eventContext,
       sourceTitle,
+      sourceGrounding,
       buyerStage: buyerStageFor(objective),
       primaryAction,
       messageSpine: {
@@ -560,9 +790,15 @@ export function compileCampaignContext(input: {
           : sourceTitle
             ? `${sourceTitle} for ${audience}`
             : audience,
-        whyChange: profile.thesis,
+        whyChange:
+          register === "content-magic"
+            ? `Keep the buyer story anchored to the source's supported ideas about ${contentTopicPhrase}.`
+            : profile.thesis,
         whyNow: publicMoment,
-        sellerPromise: profile.capabilitySentence,
+        sellerPromise:
+          register === "content-magic"
+            ? `Help ${audience} explore the supported ideas in ${sourceTitle ?? "the source"} without adding unrelated product-category claims.`
+            : profile.capabilitySentence,
         proofPolicy:
           proofMode === "source-content"
             ? "Use only claims found in the approved source asset or seller public evidence."

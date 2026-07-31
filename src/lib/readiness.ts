@@ -5,7 +5,8 @@ import {
 
 export function isProductionCapable(options: {
   sessionStoreMode: SessionStoreMode;
-  databaseConnected: boolean;
+  databaseConnected?: boolean;
+  durableLeadStore?: boolean;
   openAIConnected: boolean;
   follozePublishReady: boolean;
   resendConnected: boolean;
@@ -15,7 +16,33 @@ export function isProductionCapable(options: {
   // must not make the public generator appear unhealthy when disabled.
   return (
     isProductionSafeSessionStoreMode(options.sessionStoreMode) &&
-    options.databaseConnected &&
+    (options.durableLeadStore ?? options.databaseConnected ?? false) &&
     options.openAIConnected
   );
+}
+
+export function productionReadiness(options: {
+  sessionStoreMode: SessionStoreMode;
+  durableLeadStore: boolean;
+  openAIConnected: boolean;
+  follozePublishReady: boolean;
+  resendConnected: boolean;
+}) {
+  const required = {
+    durableSessions: isProductionSafeSessionStoreMode(options.sessionStoreMode),
+    durableLeads: options.durableLeadStore,
+    openAI: options.openAIConnected
+  };
+  const blockers = Object.entries(required)
+    .filter(([, ready]) => !ready)
+    .map(([service]) => service);
+  return {
+    productionCapable: blockers.length === 0,
+    required,
+    optional: {
+      follozePublication: options.follozePublishReady,
+      transactionalEmail: options.resendConnected
+    },
+    blockers
+  };
 }

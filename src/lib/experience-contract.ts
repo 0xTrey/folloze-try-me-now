@@ -34,6 +34,12 @@ function publicCitation(value: string | undefined): string | undefined {
   }
 }
 
+function publicHost(value: string | undefined): string | undefined {
+  const citation = publicCitation(value);
+  if (!citation) return undefined;
+  return new URL(citation).hostname.replace(/^www\./, "");
+}
+
 function field(
   input: Omit<CampaignBriefField, "citations"> & { citations?: Array<string | undefined> }
 ): CampaignBriefField {
@@ -225,12 +231,76 @@ export function buildExperienceSpec(
 ): ExperienceSpecV1 {
   const createdAt = new Date().toISOString();
   const canonicalDraft = canonicalizeExperienceDraft(draft);
+  const sourceBrief = session.campaignBrief ?? campaignBriefFor(session, createdAt);
+  const audienceLens = session.audienceLens ?? audienceLensFor(session, createdAt);
+  const sourceKind =
+    session.sourceConfirmation?.sourceKind ??
+    (session.answers.sourceUrl
+      ? "public-url"
+      : session.answers.sourceName
+        ? "uploaded-pdf"
+        : session.answers.eventSource
+          ? "event-context"
+          : session.campaignOfferSource?.sourceUrl
+            ? "public-url"
+            : undefined);
+  const sourceStatus =
+    session.sourceConfirmation?.status ??
+    session.campaignOfferSource?.status ??
+    (session.answers.sourceConfirmed || session.answers.offerSourceConfirmed
+      ? "confirmed"
+      : "unconfirmed");
+  const sourceUrl =
+    publicCitation(session.answers.sourceUrl) ??
+    publicCitation(session.campaignOfferSource?.sourceUrl) ??
+    publicCitation(session.answers.eventSource);
+  const sourceTitle =
+    session.answers.sourceTitle ??
+    session.answers.offerSourceTitle ??
+    session.answers.promotedOffer ??
+    session.answers.sourceName;
   const payload = {
     schemaVersion: "1.0" as const,
     revision:
       Math.max(session.experienceSpecRevision ?? 0, session.experienceSpec?.revision ?? 0) + 1,
-    sourceBriefRevision: session.campaignBrief?.revision ?? 1,
+    sourceBriefRevision: sourceBrief.revision,
+    sourceBriefFingerprint: sourceBrief.fingerprint,
     createdAt,
+    grounding: {
+      seller: {
+        source: brand.source,
+        sourceUrl: publicCitation(brand.sourceUrl) ?? `https://${brand.domain}/`,
+        ...(brand.identity?.confidence ? { confidence: brand.identity.confidence } : {})
+      },
+      ...(targetBrand
+        ? {
+            target: {
+              source: targetBrand.source,
+              sourceUrl:
+                publicCitation(targetBrand.sourceUrl) ?? `https://${targetBrand.domain}/`,
+              ...(targetBrand.identity?.confidence
+                ? { confidence: targetBrand.identity.confidence }
+                : {})
+            }
+          }
+        : {}),
+      ...(sourceKind
+        ? {
+            source: {
+              kind: sourceKind,
+              status: sourceStatus,
+              ...(sourceTitle ? { title: sourceTitle } : {}),
+              ...(publicHost(sourceUrl) ? { host: publicHost(sourceUrl) } : {})
+            }
+          }
+        : {}),
+      audience: {
+        status: audienceLens.status,
+        findingIds: audienceLens.findings
+          .filter((finding) => finding.disposition !== "excluded")
+          .map((finding) => finding.id)
+      }
+    },
     identities: {
       seller: { domain: brand.domain, name: brand.companyName },
       ...(targetBrand

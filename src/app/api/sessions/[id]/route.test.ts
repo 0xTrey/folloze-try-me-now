@@ -9,6 +9,7 @@ import {
   recordPreviewInteraction
 } from "@/lib/orchestrator";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { getSession } from "@/lib/session-store";
 
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
@@ -26,7 +27,8 @@ vi.mock("@/lib/orchestrator", () => ({
   runTargetBrandStage: vi.fn()
 }));
 
-vi.mock("@/lib/rate-limit", () => ({
+vi.mock("@/lib/rate-limit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/rate-limit")>()),
   anonymousClientKey: vi.fn(() => "test-client"),
   enforceRateLimit: vi.fn()
 }));
@@ -36,7 +38,7 @@ vi.mock("@/lib/session-store", () => ({
   toPublicSession: vi.fn()
 }));
 
-import { PATCH, POST } from "./route";
+import { GET, PATCH, POST } from "./route";
 
 const sessionId = "session-workspace-route";
 
@@ -62,6 +64,7 @@ const publicSession = {
 describe("session workspace API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(canEditSession).mockResolvedValue(true);
     vi.mocked(patchSessionAnswers).mockResolvedValue({
       session: publicSession,
@@ -77,6 +80,21 @@ describe("session workspace API", () => {
       editorToken: "new-editor-token",
       shouldGenerate: true
     } as never);
+  });
+
+  it("returns a correlated 410 after the anonymous preview has expired", async () => {
+    vi.mocked(getSession).mockResolvedValue(null);
+
+    const response = await GET(
+      new NextRequest(`https://preview.example.com/api/sessions/${sessionId}`),
+      context
+    );
+    const body = (await response.json()) as { code: string; requestId: string };
+
+    expect(response.status).toBe(410);
+    expect(body.code).toBe("expired");
+    expect(body.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(response.headers.get("cache-control")).toContain("no-store");
   });
 
   it("preserves the legacy raw answer PATCH", async () => {
@@ -150,7 +168,7 @@ describe("session workspace API", () => {
       label: "Executive option"
     });
     expect(duplicateResponse.headers.get("set-cookie")).toContain(
-      "tmn_editor=new-version-id.new-editor-token"
+      "tmn_editor_new-version-id=new-editor-token"
     );
     expect(after).toHaveBeenCalled();
   });
@@ -162,5 +180,24 @@ describe("session workspace API", () => {
     expect(response.status).toBe(403);
     expect(patchSessionAnswers).not.toHaveBeenCalled();
     expect(patchSessionWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("uses the session-scoped cookie when legacy and current tabs coexist", async () => {
+    const scopedRequest = new NextRequest(
+      `https://preview.example.com/api/sessions/${sessionId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `tmn_editor=other-session.legacy-token; tmn_editor_${sessionId}=scoped-token`
+        },
+        body: JSON.stringify({ objective: "Book a meeting" })
+      }
+    );
+
+    const response = await PATCH(scopedRequest, context);
+
+    expect(response.status).toBe(200);
+    expect(canEditSession).toHaveBeenCalledWith(sessionId, "scoped-token");
   });
 });

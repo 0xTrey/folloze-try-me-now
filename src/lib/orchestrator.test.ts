@@ -188,13 +188,20 @@ describe("PDF source finalization", () => {
 
       expect(result.session.answers).toEqual({
         sourceName: "Uploaded PDF",
-        sourceTitle: "Buyer Automation Guide"
+        sourceTitle: "Buyer Automation Guide",
+        sourceConfirmed: true
       });
       expect(stored?.answers).toMatchObject({
         sourceName: "brief.pdf",
         sourceTitle: "Buyer Automation Guide",
         sourceOpenAIFileId: "file-private-source",
-        sourceUploadId: uploadId
+        sourceUploadId: uploadId,
+        sourceConfirmed: true
+      });
+      expect(stored?.sourceConfirmation).toMatchObject({
+        status: "confirmed",
+        sourceKind: "uploaded-pdf",
+        provenance: "user-submitted"
       });
     } finally {
       await deleteSession(id);

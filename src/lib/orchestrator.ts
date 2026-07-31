@@ -1,13 +1,21 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
-import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
+import {
+  assessBrandIdentity,
+  audienceSuggestionsFor,
+  narrativeProfileFor,
+  withBrandIdentity
+} from "@/lib/brand-intelligence";
 import { config } from "@/lib/config";
 import {
   buildExperienceSpec,
   draftFromExperienceSpec,
   syncCampaignContracts
 } from "@/lib/experience-contract";
-import { targetAccountEvidenceFor } from "@/lib/generation/campaign-context";
+import {
+  sourceGroundingFor,
+  targetAccountEvidenceFor
+} from "@/lib/generation/campaign-context";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import { HttpError, logServerError } from "@/lib/http";
@@ -17,8 +25,11 @@ import {
 } from "@/lib/image-delivery";
 import { harvestBrand, fallbackBrand } from "@/lib/integrations/brand-harvester";
 import { sendClaimEmail } from "@/lib/integrations/email";
-import { publishClaimedExperience } from "@/lib/integrations/folloze";
-import { generateExperienceDraft, SourceFetchError } from "@/lib/integrations/openai";
+import {
+  deterministicDraft,
+  generateExperienceDraft,
+  SourceFetchError
+} from "@/lib/integrations/openai";
 import { leadStoreMode, recordLeadCapture, updateLeadOutcome } from "@/lib/lead-store";
 import {
   acquireSessionLease,
@@ -59,6 +70,53 @@ function stableId(prefix: string, ...parts: Array<string | undefined>): string {
     .slice(0, 16)}`;
 }
 
+function trustedBrandProfile(
+  profile: BrandProfile,
+  expectedDomain: string,
+  userConfirmed = false
+): { profile: BrandProfile; usedFallback: boolean } {
+  const assessed = withBrandIdentity(profile, expectedDomain, userConfirmed);
+  if (assessed.identity?.confirmationStatus !== "rejected") {
+    return { profile: assessed, usedFallback: false };
+  }
+  const safeFallback = withBrandIdentity(fallbackBrand(expectedDomain), expectedDomain);
+  return {
+    profile: {
+      ...safeFallback,
+      identity: {
+        ...safeFallback.identity!,
+        canonicalName: safeFallback.companyName,
+        confidence: "low",
+        confirmationStatus: "needs-confirmation",
+        confirmedBy: undefined,
+        reasons: [
+          ...assessed.identity.reasons,
+          "Untrusted harvested identity was replaced with a neutral domain-based fallback."
+        ],
+        provenance: [...assessed.identity.provenance, ...safeFallback.identity!.provenance]
+      }
+    },
+    usedFallback: true
+  };
+}
+
+function sourceFingerprintForAnswers(answers: SessionAnswers): string | undefined {
+  const source = answers.sourceName || answers.sourceUrl || answers.eventSource || answers.targetDomain;
+  if (!source) return undefined;
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        sourceUrl: answers.sourceUrl ?? null,
+        sourceName: answers.sourceName ?? null,
+        sourceTitle: answers.sourceTitle ?? null,
+        sourceUploadId: answers.sourceUploadId ?? null,
+        eventSource: answers.eventSource ?? null,
+        targetDomain: answers.targetDomain ?? null
+      })
+    )
+    .digest("hex");
+}
+
 function evidenceItemsFor(
   targetBrand: BrandProfile | undefined,
   existing: SessionEvidenceItem[] = []
@@ -80,28 +138,49 @@ function audienceRecommendationsFor(
   target: BrandProfile | undefined,
   evidenceItems: SessionEvidenceItem[]
 ) {
-  const usableEvidence = evidenceItems.filter((item) => item.disposition !== "excluded");
-  const companyContext = target ?? seller;
+  const targetDomain = target?.domain.toLocaleLowerCase().replace(/^www\./, "");
+  const usableEvidence = evidenceItems.filter((item) => {
+    if (item.disposition === "excluded" || !targetDomain) return false;
+    try {
+      const host = new URL(item.sourceUrl).hostname.toLocaleLowerCase().replace(/^www\./, "");
+      return host === targetDomain || host.endsWith(`.${targetDomain}`);
+    } catch {
+      return false;
+    }
+  });
+  const sellerProfile = seller ? narrativeProfileFor(seller) : null;
+  const targetIdentity = target
+    ? target.identity ?? assessBrandIdentity(target, target.domain)
+    : undefined;
   return suggestions.map((label, index) => {
     const evidence = usableEvidence[index % Math.max(usableEvidence.length, 1)];
     const evidenceFocus = evidence?.text
       .replace(/\s+/g, " ")
       .replace(/[.!?]+$/g, "")
       .slice(0, 120);
+    const evidenceSignal = evidence?.signals[0] ?? evidenceFocus;
     const companySpecific = Boolean(
-      companyContext && companyContext.source !== "fallback" && usableEvidence.length
+      seller &&
+        target &&
+        target.source !== "fallback" &&
+        targetIdentity?.confirmationStatus === "confirmed" &&
+        usableEvidence.length
     );
+    const sellerMechanism = sellerProfile?.offerLabel.toLocaleLowerCase() ?? "offering";
     return {
       id: stableId("audience", seller?.domain, target?.domain, label),
       label,
       rationale: companySpecific
-        ? `${target ? "Connects the seller's offer" : "Connects the campaign"} to ${companyContext?.companyName}'s public focus: ${
-            evidenceFocus || "relevant operating priorities"
-          }.`
-        : `A ${companyContext?.companyName ?? "company"}-category starting point until stronger public context is available.`,
+        ? `${target!.companyName}'s public focus: ${evidenceFocus}. That ${evidenceSignal || "operating context"} evidence makes this group relevant to evaluating ${seller!.companyName}'s ${sellerMechanism}.`
+        : target
+          ? `A role hypothesis for ${target.companyName}; confirm the account identity and public evidence before using it in the story.`
+          : `A seller-category starting point until a target account and its public evidence are available.`,
       evidenceItemIds: evidence ? [evidence.id] : [],
       confidence: companySpecific ? (usableEvidence.length >= 2 ? "high" : "medium") : "hypothesis",
-      source: companySpecific ? "seller-target-synthesis" : "seller-category-fallback"
+      source: companySpecific ? "seller-target-synthesis" : "seller-category-fallback",
+      confirmationStatus: companySpecific ? "confirmed" : "needs-confirmation",
+      ...(target ? { targetName: target.companyName } : {}),
+      ...(evidenceFocus ? { evidenceSummary: evidenceFocus } : {})
     } as const;
   });
 }
@@ -132,7 +211,7 @@ function assetsFor(brand: BrandProfile | undefined, target: BrandProfile | undef
 }
 
 function syncExperienceFoundation(session: TryMeSession): void {
-  session.evidenceItems = evidenceItemsFor(session.targetBrand ?? session.brand, session.evidenceItems);
+  session.evidenceItems = evidenceItemsFor(session.targetBrand, session.evidenceItems);
   session.audienceRecommendations = audienceRecommendationsFor(
     session.audienceSuggestions,
     session.brand,
@@ -203,9 +282,7 @@ function brandsWithSelectedAssets(
     brand: {
       ...brand,
       logoUrl: sellerLogo ?? brand.logoUrl,
-      imageUrls: sellerImages.length || targetImages.length
-        ? [...sellerImages, ...targetImages]
-        : brand.imageUrls
+      imageUrls: sellerImages.length ? sellerImages : brand.imageUrls
     },
     targetBrand: targetBrand
       ? {
@@ -280,15 +357,21 @@ function resetGeneratedExperience(session: TryMeSession, detail: string): void {
       "Create a new version to change a saved experience."
     );
   }
-  session.experience = undefined;
+  // Keep revision N visible while revision N+1 is assembled. The replacement
+  // is committed atomically only after generation, contract construction, and
+  // rendering all succeed.
   session.experienceSpecRevision = Math.max(
     session.experienceSpecRevision ?? 0,
     session.experienceSpec?.revision ?? 0
   );
-  session.experienceSpec = undefined;
-  session.qualityReceipt = undefined;
   session.status = "collecting";
-  session.stages.story = { status: "pending", detail };
+  session.stages.story = {
+    status: "pending",
+    detail: session.experience
+      ? `${detail} Your current preview remains available while the replacement is built.`
+      : detail,
+    ...(session.experience ? { artifact: `Preview revision ${session.experience.artifactRevision}` } : {})
+  };
 }
 
 function fontDeliveryUrls(id: string, brand: BrandProfile): { display?: string; body?: string } {
@@ -329,7 +412,64 @@ function storyInputFingerprint(session: TryMeSession): string {
     .digest("hex");
 }
 
-function qualityReceiptFor(session: TryMeSession, artifactRevision: number): QualityReceipt {
+function generationTrustFailureFor(input: {
+  draft: ExperienceDraft;
+  brand: BrandProfile;
+  targetBrand?: BrandProfile;
+  useCase: UseCase;
+  answers: SessionAnswers;
+}): string | undefined {
+  const { draft, brand, targetBrand, useCase, answers } = input;
+  const visible = [
+    draft.title,
+    draft.eyebrow,
+    draft.headline,
+    draft.subhead,
+    draft.thesisHeadline,
+    draft.thesisBody,
+    draft.narrativeArc,
+    draft.closingHeadline,
+    draft.closingBody,
+    ...draft.sections.flatMap((section) => [section.headline, section.body, section.proof])
+  ].join(" ");
+  if (!visible.includes(brand.companyName)) return "missing_seller_identity";
+  if (useCase === "abm") {
+    if (!targetBrand || !visible.includes(targetBrand.companyName)) return "missing_target_identity";
+    const identity = targetBrand.identity ?? assessBrandIdentity(targetBrand, answers.targetDomain ?? targetBrand.domain);
+    if (identity.confirmationStatus === "rejected") return "rejected_target_identity";
+  }
+  if (
+    useCase !== "content" &&
+    /\b(trusted by|customers? (?:achieve|report|see)|proven to|#1|market[- ]leading)\b/i.test(visible)
+  ) {
+    const evidence = [brand.description, brand.publicContext, ...brand.publicTopics]
+      .filter(Boolean)
+      .join(" ");
+    if (!/\b(trusted by|customers?|proven|#1|market[- ]leading)\b/i.test(evidence)) {
+      return "unsupported_proof_claim";
+    }
+  }
+  if (useCase === "content") {
+    const grounding = sourceGroundingFor({ answers });
+    const meaningfulTopics = grounding.topics.filter((topic) => topic.length >= 4);
+    if (
+      grounding.confidence !== "low" &&
+      meaningfulTopics.length > 0 &&
+      !meaningfulTopics.some((topic) =>
+        visible.toLocaleLowerCase().includes(topic.toLocaleLowerCase())
+      )
+    ) {
+      return "unrelated_source_topic";
+    }
+  }
+  return undefined;
+}
+
+function qualityReceiptFor(
+  session: TryMeSession,
+  artifactRevision: number,
+  trustFallbackReason?: string
+): QualityReceipt {
   const usableEvidence = session.evidenceItems?.filter(
     (item) => item.disposition !== "excluded"
   ).length ?? 0;
@@ -347,7 +487,23 @@ function qualityReceiptFor(session: TryMeSession, artifactRevision: number): Qua
       id: "copy",
       label: "Copy quality",
       status: "passed",
-      detail: "The generated copy passed the structured generation quality gates."
+      detail: trustFallbackReason
+        ? `A safe deterministic draft replaced copy rejected by the ${trustFallbackReason} trust gate.`
+        : "The generated copy passed the structured generation quality gates."
+    },
+    {
+      id: "identity",
+      label: "Company identity",
+      status:
+        session.brand?.identity?.confirmationStatus === "needs-confirmation" ||
+        session.targetBrand?.identity?.confirmationStatus === "needs-confirmation"
+          ? "warning"
+          : "passed",
+      detail:
+        session.brand?.identity?.confirmationStatus === "needs-confirmation" ||
+        session.targetBrand?.identity?.confirmationStatus === "needs-confirmation"
+          ? "Confirm the low-confidence company identity before sharing."
+          : "Seller and target evidence remain attached to their submitted domains."
     },
     {
       id: "account-evidence",
@@ -378,6 +534,28 @@ function qualityReceiptFor(session: TryMeSession, artifactRevision: number): Qua
               ? "The page is grounded in the current public account evidence set."
               : "The selected source context was confirmed by the editor."
             : "The editor has not confirmed the selected source context."
+    },
+    {
+      id: "source-grounding",
+      label: "Source grounding",
+      status:
+        session.useCase !== "content"
+          ? "not-applicable"
+          : sourceGroundingFor({ answers: session.answers }).confidence === "low"
+            ? "warning"
+            : "passed",
+      detail:
+        session.useCase !== "content"
+          ? "A source asset is not required for this experience type."
+          : sourceGroundingFor({ answers: session.answers }).reason
+    },
+    {
+      id: "claims",
+      label: "Claim support",
+      status: "passed",
+      detail: trustFallbackReason
+        ? "Unsupported or unrelated copy was replaced with a bounded fallback."
+        : "Visible claims remain bounded by the submitted source and public company evidence."
     },
     {
       id: "cta",
@@ -554,7 +732,9 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
   if (!shouldHarvest) return;
 
   try {
-    const profile = await harvestBrand(expectedDomain);
+    const harvested = await harvestBrand(expectedDomain);
+    const trusted = trustedBrandProfile(harvested, expectedDomain);
+    const profile = trusted.profile;
     await updateSession(id, (session) => {
       if (
         session.companyDomain !== expectedDomain ||
@@ -567,13 +747,22 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
       session.audienceSuggestions = audienceSuggestionsFor(profile, session.targetBrand);
       syncExperienceFoundation(session);
       session.stages.brand = {
-        status: "complete",
+        status: trusted.usedFallback ? "fallback" : "complete",
         startedAt: session.stages.brand.startedAt,
         completedAt: new Date().toISOString(),
-        detail: "Brand found.",
+        detail: trusted.usedFallback
+          ? "The harvested identity did not match the submitted domain. Confirm the safe fallback before sharing."
+          : "Brand found.",
         artifact: `${profile.companyName} · ${profile.colors.slice(0, 4).join(" · ") || "brand fallback"}`
       };
-      appendEvent(session, "brand_harvest_completed", { source: profile.source });
+      appendEvent(session, "brand_harvest_completed", {
+        source: profile.source,
+        identityConfidence: profile.identity?.confidence ?? "unknown",
+        identityFallback: trusted.usedFallback
+      });
+      if (trusted.usedFallback) {
+        appendEvent(session, "brand_identity_rejected", { domain: expectedDomain });
+      }
       appendEvent(session, "audience_hypotheses_ready", {
         count: session.audienceSuggestions.length,
         categorySource: profile.source
@@ -595,7 +784,7 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
       ) {
         return session;
       }
-      session.brand = fallbackBrand(expectedDomain);
+      session.brand = withBrandIdentity(fallbackBrand(expectedDomain), expectedDomain);
       session.audienceSuggestions = audienceSuggestionsFor(session.brand, session.targetBrand);
       syncExperienceFoundation(session);
       session.stages.brand = {
@@ -679,7 +868,9 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
   if (!shouldHarvest) return;
 
   try {
-    const profile = await harvestBrand(expectedDomain);
+    const harvested = await harvestBrand(expectedDomain);
+    const trusted = trustedBrandProfile(harvested, expectedDomain);
+    const profile = trusted.profile;
     await updateSession(id, (session) => {
       if (
         session.answers.targetDomain !== expectedDomain ||
@@ -706,8 +897,13 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       };
       appendEvent(session, "target_harvest_completed", {
         domain: expectedDomain,
-        source: profile.source
+        source: profile.source,
+        identityConfidence: profile.identity?.confidence ?? "unknown",
+        identityFallback: trusted.usedFallback
       });
+      if (trusted.usedFallback) {
+        appendEvent(session, "target_identity_rejected", { domain: expectedDomain });
+      }
       appendEvent(session, "audience_hypotheses_refined", {
         domain: expectedDomain,
         count: session.audienceSuggestions.length,
@@ -730,7 +926,7 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       ) {
         return session;
       }
-      session.targetBrand = fallbackBrand(expectedDomain);
+      session.targetBrand = withBrandIdentity(fallbackBrand(expectedDomain), expectedDomain);
       if (session.brand) {
         session.audienceSuggestions = audienceSuggestionsFor(session.brand, session.targetBrand);
       }
@@ -757,9 +953,20 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const patch = { ...input };
   const targetWasSupplied = Object.hasOwn(patch, "targetDomain");
   const sourceUrlWasSupplied = Object.hasOwn(patch, "sourceUrl");
+  const sourceNameWasSupplied = Object.hasOwn(patch, "sourceName");
+  const sourceTitleWasSupplied = Object.hasOwn(patch, "sourceTitle");
+  const sourceUploadWasSupplied = Object.hasOwn(patch, "sourceUploadId");
   const eventSourceWasSupplied = Object.hasOwn(patch, "eventSource");
+  const sourceWasSupplied =
+    sourceUrlWasSupplied ||
+    sourceNameWasSupplied ||
+    sourceTitleWasSupplied ||
+    sourceUploadWasSupplied ||
+    eventSourceWasSupplied;
   const offerSourceUrlWasSupplied = Object.hasOwn(patch, "offerSourceUrl");
+  const previousSourceFingerprint = sourceFingerprintForAnswers(session.answers);
   if (patch.targetDomain) patch.targetDomain = normalizeDomain(patch.targetDomain);
+  if (patch.sourceUrl) patch.sourceUrl = new URL(patch.sourceUrl).toString();
   if (patch.offerSourceUrl) patch.offerSourceUrl = new URL(patch.offerSourceUrl).toString();
   if (
     patch.offerSourceConfirmed &&
@@ -772,23 +979,36 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
       "Add a public offer source before confirming it."
     );
   }
-  if (patch.sourceUrl && (session.answers.sourceName || session.answers.sourceUploadId)) {
-    throw new HttpError(
-      409,
-      "source_conflict",
-      "A PDF source is already being processed for this experience."
-    );
+  if (patch.sourceUrl) {
+    delete session.answers.sourceName;
+    delete session.answers.sourceTitle;
+    delete session.answers.sourceOpenAIFileId;
+    delete session.answers.sourceUploadId;
+    delete session.answers.sourceUploadReservedAt;
+  } else if (patch.sourceName || patch.sourceUploadId) {
+    delete session.answers.sourceUrl;
   }
   const targetChanged =
     targetWasSupplied && patch.targetDomain !== session.answers.targetDomain;
-  const sourceChanged = Boolean(
-    (sourceUrlWasSupplied && patch.sourceUrl !== session.answers.sourceUrl) ||
-      (eventSourceWasSupplied && patch.eventSource !== session.answers.eventSource)
-  );
   session.answers = { ...session.answers, ...patch };
   if (targetWasSupplied && !patch.targetDomain) delete session.answers.targetDomain;
   if (sourceUrlWasSupplied && !patch.sourceUrl) delete session.answers.sourceUrl;
+  if (sourceNameWasSupplied && !patch.sourceName) {
+    delete session.answers.sourceName;
+    delete session.answers.sourceTitle;
+    delete session.answers.sourceOpenAIFileId;
+    delete session.answers.sourceUploadId;
+    delete session.answers.sourceUploadReservedAt;
+  }
+  if (sourceTitleWasSupplied && !patch.sourceTitle) delete session.answers.sourceTitle;
+  if (sourceUploadWasSupplied && !patch.sourceUploadId) {
+    delete session.answers.sourceUploadId;
+    delete session.answers.sourceUploadReservedAt;
+    delete session.answers.sourceOpenAIFileId;
+  }
   if (eventSourceWasSupplied && !patch.eventSource) delete session.answers.eventSource;
+  const currentSourceFingerprint = sourceFingerprintForAnswers(session.answers);
+  const sourceChanged = sourceWasSupplied && currentSourceFingerprint !== previousSourceFingerprint;
   if (offerSourceUrlWasSupplied && !patch.offerSourceUrl) {
     delete session.answers.offerSourceUrl;
     delete session.answers.offerSourceTitle;
@@ -807,6 +1027,7 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   if (patch.exampleKey !== undefined) session.exampleKey = patch.exampleKey;
 
   if (targetChanged) {
+    if (patch.targetConfirmed === undefined) delete session.answers.targetConfirmed;
     session.targetBrand = undefined;
     session.audienceSuggestions = [];
     session.audienceRecommendations = [];
@@ -827,22 +1048,36 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
     }
   }
 
-  syncCampaignContracts(session);
-
-  if (sourceChanged && patch.sourceConfirmed === undefined) {
-    delete session.answers.sourceConfirmed;
+  if (
+    (sourceChanged || (targetChanged && session.useCase === "abm")) &&
+    patch.sourceConfirmed === undefined
+  ) {
+    const submittedContentSource =
+      session.useCase === "content" && sourceChanged && Boolean(currentSourceFingerprint);
+    if (submittedContentSource) session.answers.sourceConfirmed = true;
+    else delete session.answers.sourceConfirmed;
+    delete session.answers.sourceTopicConfirmed;
     session.sourceConfirmation = {
-      status: "unconfirmed",
-      sourceKind: sourceKindFor(session)
+      status: submittedContentSource ? "confirmed" : "unconfirmed",
+      confirmedAt: submittedContentSource ? new Date().toISOString() : undefined,
+      sourceKind: sourceKindFor(session),
+      provenance: "user-submitted"
     };
   }
   if (patch.sourceConfirmed !== undefined) {
+    if (!currentSourceFingerprint && patch.sourceConfirmed) {
+      throw new HttpError(409, "source_missing", "Add a source before confirming it.");
+    }
     session.sourceConfirmation = {
       status: patch.sourceConfirmed ? "confirmed" : "unconfirmed",
       confirmedAt: patch.sourceConfirmed ? new Date().toISOString() : undefined,
-      sourceKind: sourceKindFor(session)
+      sourceKind: sourceKindFor(session),
+      provenance: patch.sourceConfirmed ? "user-confirmed" : "user-submitted"
     };
   }
+  session.sourceFingerprint = currentSourceFingerprint;
+
+  syncCampaignContracts(session);
 
   const resolvedAudience =
     session.answers.audience === "Other"
@@ -983,12 +1218,19 @@ export async function patchSessionWorkspace(
     }
 
     if (patch.sourceConfirmation) {
+      const sourceFingerprint = sourceFingerprintForAnswers(session.answers);
+      if (!sourceFingerprint && patch.sourceConfirmation === "confirmed") {
+        throw new HttpError(409, "source_missing", "Add a source before confirming it.");
+      }
       session.sourceConfirmation = {
         status: patch.sourceConfirmation,
         confirmedAt:
           patch.sourceConfirmation === "confirmed" ? new Date().toISOString() : undefined,
-        sourceKind: sourceKindFor(session)
+        sourceKind: sourceKindFor(session),
+        provenance:
+          patch.sourceConfirmation === "confirmed" ? "user-confirmed" : "user-submitted"
       };
+      session.sourceFingerprint = sourceFingerprint;
       session.answers.sourceConfirmed = patch.sourceConfirmation === "confirmed";
       appendEvent(session, "source_confirmation_updated", {
         status: patch.sourceConfirmation
@@ -1172,6 +1414,7 @@ export async function finalizePdfSource(
 ): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean }> {
   assertProductionSessionStore();
   const updated = await updateSession(id, (session) => {
+    const previousFingerprint = storyInputFingerprint(session);
     if (
       session.useCase !== "content" ||
       session.answers.sourceUploadId !== input.uploadId ||
@@ -1188,11 +1431,16 @@ export async function finalizePdfSource(
     if (input.sourceTitle) session.answers.sourceTitle = input.sourceTitle;
     else delete session.answers.sourceTitle;
     session.answers.sourceOpenAIFileId = input.sourceOpenAIFileId;
-    delete session.answers.sourceConfirmed;
+    session.answers.sourceConfirmed = true;
     session.sourceConfirmation = {
-      status: "unconfirmed",
-      sourceKind: "uploaded-pdf"
+      status: "confirmed",
+      confirmedAt: new Date().toISOString(),
+      sourceKind: "uploaded-pdf",
+      provenance: "user-submitted"
     };
+    session.sourceFingerprint = sourceFingerprintForAnswers(session.answers);
+    syncCampaignContracts(session);
+    completeInputMutation(session, previousFingerprint);
     appendEvent(session, "source_submitted");
     return session;
   });
@@ -1243,7 +1491,11 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       session.blockControls = normalizeCoreBlockControls(session.blockControls);
     }
     if (!isGenerationReady(session.useCase, session.answers)) return session;
-    if (session.status === "preview_ready_unclaimed" || session.status === "claimed") {
+    if (
+      session.status === "claimed" ||
+      (session.status === "preview_ready_unclaimed" &&
+        (session.stages.story.status === "complete" || session.stages.story.status === "fallback"))
+    ) {
       return session;
     }
     if (
@@ -1284,12 +1536,32 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         : undefined);
     const generationTargetBrand = curatedTargetBrand(latest, targetBrand);
     const selectedBrands = brandsWithSelectedAssets(latest, brand, generationTargetBrand);
-    const generated = await generateExperienceDraft({
+    let generated = await generateExperienceDraft({
       brand: selectedBrands.brand,
       targetBrand: selectedBrands.targetBrand,
       useCase: latest.useCase,
       answers: latest.answers
     });
+    const trustFallbackReason = generationTrustFailureFor({
+      draft: generated.draft,
+      brand: selectedBrands.brand,
+      targetBrand: selectedBrands.targetBrand,
+      useCase: latest.useCase,
+      answers: latest.answers
+    });
+    if (trustFallbackReason && generated.source === "openai") {
+      generated = {
+        draft: deterministicDraft({
+          brand: selectedBrands.brand,
+          targetBrand: selectedBrands.targetBrand,
+          useCase: latest.useCase,
+          answers: latest.answers
+        }),
+        source: "deterministic-fallback",
+        durationMs: generated.durationMs,
+        fallbackReason: `trust_gate_${trustFallbackReason}`
+      };
+    }
     const controlledDraft = draftWithBlockControls(generated.draft, latest.blockControls);
     syncCampaignContracts(latest);
     const experienceSpec = buildExperienceSpec(
@@ -1299,7 +1571,11 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       selectedBrands.targetBrand
     );
     const webDraft = draftFromExperienceSpec(experienceSpec);
-    const generationQualityReceipt = qualityReceiptFor(latest, latest.revision + 1);
+    const generationQualityReceipt = qualityReceiptFor(
+      latest,
+      latest.revision + 1,
+      trustFallbackReason
+    );
     const imageSources = imageDeliverySources(latest, brand, targetBrand);
     const renderBrand = brandWithFirstPartyImages(
       id,
@@ -1425,15 +1701,19 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         }
         return session;
       }
-      session.status = "generation_failed";
+      session.status = session.experience ? "preview_ready_unclaimed" : "generation_failed";
       session.stages.story = {
         status: "failed",
         startedAt: session.stages.story.startedAt,
         completedAt: new Date().toISOString(),
         detail:
           errorCode === "source_fetch_failed"
-            ? "The public content URL could not be read. Check the URL or try a PDF instead."
-            : "The story could not be completed. Your inputs are safe and ready to retry.",
+            ? session.experience
+              ? "The replacement source could not be read. The current preview is still available; check the URL or try a PDF."
+              : "The public content URL could not be read. Check the URL or try a PDF instead."
+            : session.experience
+              ? "The replacement could not be completed. The current preview and latest inputs are safe to retry."
+              : "The story could not be completed. Your inputs are safe and ready to retry.",
         errorCode
       };
       appendEvent(session, "generation_failed", {
@@ -1497,7 +1777,6 @@ export async function recoverSessionWork(id: string): Promise<void> {
     }
 
     const storyCanResume =
-      !session.experience &&
       isGenerationReady(session.useCase, session.answers) &&
       (session.stages.story.status === "pending" ||
         (session.stages.story.status === "running" &&
@@ -1651,7 +1930,7 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
           current.claim.emailStatus === "sent" || current.claim.emailStatus === "failed"
             ? current.claim.emailStatus
             : "skipped",
-        publishMode: current.claim.publishStatus === "published" ? "folloze" : "preview-only"
+        publishMode: "preview-only"
       };
     }
     throw new Error("This experience has already been claimed.");
@@ -1693,7 +1972,7 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
         email,
         emailMasked: maskEmail(email),
         emailStatus: "pending",
-        publishStatus: "pending"
+        publishStatus: "not-attempted"
       };
       appendEvent(session, "claim_started");
       return session;
@@ -1717,9 +1996,8 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
     throw error;
   }
 
-  let publishable: TryMeSession | null;
   try {
-    publishable = await updateSession(
+    const persisted = await updateSession(
       id,
       (session) => {
         appendEvent(session, "lead_captured", { store: leadStoreMode });
@@ -1727,7 +2005,7 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
       },
       { ttlSeconds: 86400 }
     );
-    if (!publishable) throw new Error("The claimed experience could not be prepared for publication.");
+    if (!persisted) throw new Error("The claimed experience could not be made durable.");
   } catch (error) {
     await syncLeadOutcome(
       {
@@ -1751,26 +2029,9 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
     throw error;
   }
 
-  let publish: Awaited<ReturnType<typeof publishClaimedExperience>>;
-  try {
-    publish = await publishClaimedExperience(publishable);
-  } catch (error) {
-    await syncLeadOutcome(
-      {
-        sessionId: id,
-        claimAttemptId,
-        experienceUrl: pending.temporaryUrl,
-        claimStatus: "failed",
-        publishStatus: "failed",
-        emailStatus: "not-attempted"
-      },
-      "lead_failure_update"
-    );
-    await markClaimFailure(id, claimAttemptId, email, error, "failed", "not-attempted");
-    throw error;
-  }
-
-  const liveUrl = publish.publicUrl ?? pending.temporaryUrl;
+  // V1 claim means "save this app preview", not "publish to Folloze". Native
+  // draft creation and public board publication remain explicit later actions.
+  const liveUrl = pending.temporaryUrl;
   let emailStatus: "sent" | "skipped" | "failed";
   try {
     emailStatus = await sendClaimEmail({
@@ -1789,7 +2050,7 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
   }
 
   const claimedAt = new Date().toISOString();
-  const publishStatus = publish.mode === "folloze" ? "published" : "preview-only";
+  const publishStatus = "preview-only" as const;
   const leadOutcomeSynced = await syncLeadOutcome(
     {
       sessionId: pending.id,
@@ -1818,8 +2079,8 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
           emailMasked: maskEmail(email),
           emailStatus,
           publishStatus,
-          follozeBoardId: publish.boardId,
-          designerUrl: publish.designerUrl
+          follozeBoardId: undefined,
+          designerUrl: undefined
         };
         session.cockpit = {
           savedAt: claimedAt,
@@ -1837,7 +2098,7 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
           versionNumber: session.lineage?.versionNumber ?? 1,
           previewInteractions: session.previewAnalytics?.totalInteractions ?? 0
         };
-        appendEvent(session, "claim_completed", { publishMode: publish.mode });
+        appendEvent(session, "claim_completed", { publishMode: "preview-only" });
         if (!leadOutcomeSynced) appendEvent(session, "lead_outcome_sync_failed");
         appendEvent(
           session,
@@ -1862,7 +2123,7 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
     return {
       session: toPublicSession(claimed),
       emailDelivery: emailStatus,
-      publishMode: publish.mode
+      publishMode: "preview-only"
     };
   } catch (error) {
     logServerError(error, {

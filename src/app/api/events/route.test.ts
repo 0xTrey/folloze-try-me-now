@@ -27,6 +27,7 @@ describe("POST /api/events", () => {
 
   it("accepts a privacy-bounded event without returning stored context", async () => {
     const response = await POST(request({
+      eventId: "heartbeat_abcdefgh",
       sessionId: "session_abcdefgh",
       event: "page_heartbeat",
       context: { seconds: 15 }
@@ -34,7 +35,11 @@ describe("POST /api/events", () => {
 
     expect(response.status).toBe(202);
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
-    await expect(response.json()).resolves.toEqual({ accepted: true, persisted: true });
+    await expect(response.json()).resolves.toEqual({
+      accepted: true,
+      persisted: true,
+      persistence: "stored"
+    });
     expect(getMemoryEngagementEventsForTest()).toEqual([
       expect.objectContaining({ event: "page_heartbeat", context: { seconds: 15 } })
     ]);

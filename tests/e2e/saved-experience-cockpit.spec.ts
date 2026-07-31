@@ -20,17 +20,19 @@ test("keeps the saved experience cockpit crisp inside the desktop sidebar", asyn
     </style>
     <aside class="rail">
       <section class="savedCockpit" aria-labelledby="saved-cockpit-title">
-        <div class="cockpitTopline"><span><i></i>Saved experience</span><small>Saved Jul 31, 10:00 AM</small></div>
+        <div class="cockpitTopline"><span><i></i>Saved successfully</span><small>Saved Jul 31, 10:00 AM</small></div>
         <div class="cockpitHero">
+          <span class="savedSuccessMark" aria-hidden="true">✓</span>
           <div>
-            <span>Live · shareable · measurable</span>
+            <span>Permanent URL created</span>
             <h2 id="saved-cockpit-title">Medidata for Lilly is live.</h2>
+            <p>Your private preview is now a shareable, measurable experience.</p>
             <code title="https://experience.example/medidata-lilly">https://experience.example/medidata-lilly</code>
           </div>
-          <div class="cockpitActions">
-            <button type="button" class="primaryAction" aria-label="Open experience">Open ↗</button>
-            <button type="button" class="secondaryAction" aria-label="Copy experience URL">Copy URL</button>
-          </div>
+        </div>
+        <div class="cockpitActions">
+          <button type="button" class="primaryAction" aria-label="Open experience">Open experience ↗</button>
+          <button type="button" class="secondaryAction" aria-label="Copy experience URL">Copy URL</button>
         </div>
         <div class="cockpitMetrics">
           <div><span>Quality</span><strong>82</strong><small>Personalization score</small></div>

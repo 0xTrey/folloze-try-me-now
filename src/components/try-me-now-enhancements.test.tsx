@@ -17,6 +17,7 @@ import {
   ExperienceBlockControl,
   ExperienceVariantCards,
   ExpirySaveValuePanel,
+  FollozeValueReceipt,
   InstantBrandLockStrip,
   MessageDirectionControl,
   PersonalizationQualityReceipt,
@@ -79,7 +80,8 @@ describe("Try Me Now prospect enhancement components", () => {
       <InstantBrandLockStrip status="locked" brand={brand} onInspect={inspect} />
     );
 
-    expect(screen.getByText("Public brand system captured")).toBeInTheDocument();
+    expect(screen.getByText("Identity and brand matched")).toBeInTheDocument();
+    expect(screen.getByText("Domain matched to the public company site")).toBeInTheDocument();
     expect(screen.getByText("Logo + 6 colors from servicenow.com.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "ServiceNow logo" }).getAttribute("src")).toContain(brand.logoUrl);
     expect(screen.getByLabelText("Harvested ServiceNow brand palette")).toBeInTheDocument();
@@ -141,7 +143,7 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByText("Using neutral preview styling — not ServiceNow colors.")).toBeInTheDocument();
     expect(screen.getByText("Needs verification")).toBeInTheDocument();
     expect(screen.getByLabelText("Temporary neutral preview palette")).toBeInTheDocument();
-    expect(screen.queryByText("Public brand system captured")).not.toBeInTheDocument();
+    expect(screen.queryByText("Identity and brand matched")).not.toBeInTheDocument();
   });
 
   it("confirms source facts", () => {
@@ -351,7 +353,7 @@ describe("Try Me Now prospect enhancement components", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Generate options" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate 3 options" }));
     fireEvent.click(screen.getByRole("button", { name: "Lock" }));
     fireEvent.click(screen.getByRole("button", { name: "Provocative" }));
     fireEvent.click(screen.getByRole("button", { name: /Editorial proof/i }));
@@ -362,6 +364,21 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(tone).toHaveBeenCalledWith("provocative");
     expect(variant).toHaveBeenCalledWith("editorial");
     expect(asset).toHaveBeenCalledWith("hero-image", true);
+  });
+
+  it("does not promise generated alternatives when no three-option action exists", () => {
+    render(
+      <ExperienceBlockControl
+        blockId="hero"
+        label="Hero promise"
+        onEdit={vi.fn()}
+        onLockChange={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: /Generate/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lock" })).toBeInTheDocument();
   });
 
   it("turns analytics from a claim into an accessible live proof surface", () => {
@@ -398,6 +415,27 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(closePanel).toHaveBeenCalledOnce();
   });
 
+  it("explains enrichment, personalization, and engagement as one Folloze value receipt", () => {
+    const openSignals = vi.fn();
+    render(
+      <FollozeValueReceipt
+        companyName="NVIDIA"
+        audienceLabel="AI infrastructure leaders"
+        objectiveLabel="Accelerate an opportunity"
+        interactionCount={2}
+        onOpenSignals={openSignals}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "From three signals to a measurable buyer journey." })).toBeInTheDocument();
+    expect(screen.getByText("01 · Enriched")).toBeInTheDocument();
+    expect(screen.getByText("02 · Personalized")).toBeInTheDocument();
+    expect(screen.getByText("03 · Measured")).toBeInTheDocument();
+    expect(screen.getByText("2 live signals captured")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Review captured engagement" }));
+    expect(openSignals).toHaveBeenCalledOnce();
+  });
+
   it("makes personalization quality, expiry value, and saved-experience actions explicit", () => {
     const onEmail = vi.fn();
     const onSave = vi.fn();
@@ -405,13 +443,17 @@ describe("Try Me Now prospect enhancement components", () => {
     const onCopy = vi.fn();
     render(
       <>
-        <PersonalizationQualityReceipt score={88} companyName="Cisco" layers={[{ id: "account", label: "Account context", detail: "Cisco signals mapped", status: "strong" }]} />
+        <PersonalizationQualityReceipt score={88} companyName="Cisco" layers={[
+          { id: "account", label: "Account context", detail: "Cisco signals mapped", status: "strong" },
+          { id: "source", label: "Source grounding", detail: "Not required for this path", status: "not-applicable" }
+        ]} />
         <ExpirySaveValuePanel expiresLabel="in 24 minutes" email="" onEmailChange={onEmail} onSave={onSave} />
         <SavedExperienceCockpit title="Jitterbit for Cisco" url="https://experience.example/cisco" updatedLabel="Updated now" metrics={[{ label: "Visitors", value: 1 }]} onOpen={onOpen} onCopy={onCopy} />
       </>
     );
 
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "88");
+    expect(screen.getByText("Not required for this path")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Business email"), { target: { value: "buyer@company.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Save and email my link" }).closest("form")!);
     fireEvent.click(screen.getByRole("button", { name: "Open experience" }));

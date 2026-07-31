@@ -12,6 +12,7 @@ describe("engagement event sink", () => {
 
   it("accepts only the analytics proof allowlist and stores bounded context", async () => {
     const payload = parseEngagementEventPayload({
+      eventId: "event_12345678",
       sessionId: "session_12345678",
       event: "section_dwell",
       context: { sectionId: "decision-path", seconds: 19 }
@@ -21,11 +22,25 @@ describe("engagement event sink", () => {
     expect(getMemoryEngagementEventsForTest()).toEqual([
       expect.objectContaining({
         sessionId: "session_12345678",
+        eventId: "event_12345678",
         event: "section_dwell",
         context: { sectionId: "decision-path", seconds: 19 },
         createdAt: expect.any(String)
       })
     ]);
+  });
+
+  it("deduplicates a retried event by its bounded idempotency key", async () => {
+    const payload = parseEngagementEventPayload({
+      eventId: "event_retry_12345678",
+      sessionId: "session_12345678",
+      event: "cta_click",
+      context: { ctaId: "primary-cta" }
+    });
+
+    await expect(recordEngagementEvent(payload)).resolves.toBe(true);
+    await expect(recordEngagementEvent(payload)).resolves.toBe(false);
+    expect(getMemoryEngagementEventsForTest()).toHaveLength(1);
   });
 
   it("rejects unknown events and unbounded or sensitive payload fields", () => {
@@ -44,6 +59,10 @@ describe("engagement event sink", () => {
       event: "cta_click",
       context: { html: "<main>generated experience</main>" }
     })).toThrow();
+    expect(() => parseEngagementEventPayload({
+      sessionId: "session_12345678",
+      event: "experience_view",
+      context: { sourceBody: "Private source document body" }
+    })).toThrow();
   });
 });
-

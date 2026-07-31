@@ -13,6 +13,8 @@ import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { extractPdfDocumentTitle, pdfTitleFallback } from "@/lib/pdf-title";
 import { getSession, sessionStoreMode, updateSession } from "@/lib/session-store";
 
+import { readEditorToken } from "../../editor-cookie";
+
 type RouteContext = { params: Promise<{ id: string }> };
 
 const clientPayloadSchema = z.object({
@@ -45,13 +47,6 @@ const uploadStatusSchema = z.object({
 type UploadStatus = z.infer<typeof uploadStatusSchema>;
 
 const CALLBACK_LEASE_MS = 6 * 60_000;
-
-function editorToken(request: NextRequest, id: string): string | undefined {
-  const value = request.cookies.get("tmn_editor")?.value;
-  if (!value) return undefined;
-  const [cookieId, token] = value.split(".", 2);
-  return cookieId === id ? token : undefined;
-}
 
 function uploadPath(sessionId: string, uploadId: string): string {
   return `try-me/uploads/${sessionId}/${uploadId}.pdf`;
@@ -184,7 +179,7 @@ async function discardBlob(pathname: string, id: string, uploadId: string): Prom
 export async function GET(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   try {
-    if (!(await canEditSession(id, editorToken(request, id)))) {
+    if (!(await canEditSession(id, readEditorToken(request, id)))) {
       throw new HttpError(403, "editor_inactive", "This editor session is no longer active.");
     }
     const uploadId = z.uuid().parse(request.nextUrl.searchParams.get("uploadId"));
@@ -221,7 +216,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (bodyType === "try-me.client-upload-error") {
       await enforceRateLimit(`upload-error:${anonymousClientKey(request)}`, 20, 3600);
-      if (!(await canEditSession(id, editorToken(request, id)))) {
+      if (!(await canEditSession(id, readEditorToken(request, id)))) {
         throw new HttpError(403, "editor_inactive", "This editor session is no longer active.");
       }
       const report = clientErrorSchema.parse(body);
@@ -253,7 +248,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         if (origin && origin !== new URL(request.url).origin) {
           throw new HttpError(403, "cross_origin_upload", "This upload request is not allowed.");
         }
-        if (!(await canEditSession(id, editorToken(request, id)))) {
+        if (!(await canEditSession(id, readEditorToken(request, id)))) {
           throw new HttpError(403, "editor_inactive", "This editor session is no longer active.");
         }
         const session = await getSession(id);

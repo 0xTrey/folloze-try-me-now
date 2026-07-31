@@ -1,11 +1,45 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   acquireSessionLease,
+  deleteSession,
+  getSession,
   isProductionSafeSessionStoreMode,
+  putSession,
   selectSessionStoreMode,
   usesRedisSessionStoreMode
 } from "@/lib/session-store";
+import type { TryMeSession } from "@/lib/types";
+
+function anonymousPreview(overrides: Partial<TryMeSession> = {}): TryMeSession {
+  return {
+    id: "anonymous-lifecycle-session",
+    editorTokenHash: "private",
+    useCase: "campaign",
+    companyDomain: "folloze.com",
+    status: "preview_ready_unclaimed",
+    createdAt: "2026-07-31T12:00:00.000Z",
+    updatedAt: "2026-07-31T12:00:00.000Z",
+    expiresAt: "2026-07-31T12:30:00.000Z",
+    temporaryUrl: "https://preview.example/e/anonymous-lifecycle-session",
+    revision: 2,
+    stages: {
+      brand: { status: "complete" },
+      audience: { status: "complete" },
+      story: { status: "complete" }
+    },
+    answers: {},
+    audienceSuggestions: [],
+    events: [],
+    ...overrides
+  };
+}
+
+afterEach(async () => {
+  vi.useRealTimers();
+  await deleteSession("anonymous-lifecycle-session");
+  await deleteSession("legacy-session-shape");
+});
 
 describe("session store selection", () => {
   it("prefers Blob when Blob and Redis are both configured", () => {
@@ -38,5 +72,37 @@ describe("session operation leases", () => {
     const next = await acquireSessionLease("lease-session", "claim", 30);
     expect(next).not.toBeNull();
     await next?.release();
+  });
+});
+
+describe("anonymous session lifecycle", () => {
+  it("expires exactly 30 minutes after preview readiness even when storage lives longer", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-31T12:00:00.000Z"));
+    await putSession(anonymousPreview(), { ttlSeconds: 3600 });
+
+    vi.advanceTimersByTime(30 * 60_000 - 1);
+    await expect(getSession("anonymous-lifecycle-session")).resolves.not.toBeNull();
+
+    vi.advanceTimersByTime(1);
+    await expect(getSession("anonymous-lifecycle-session")).resolves.toBeNull();
+  });
+
+  it("normalizes additive collection fields when reading a stored legacy session", async () => {
+    const legacy = anonymousPreview({
+      id: "legacy-session-shape",
+      status: "collecting",
+      expiresAt: undefined
+    }) as unknown as Record<string, unknown>;
+    delete legacy.revision;
+    delete legacy.audienceSuggestions;
+    delete legacy.events;
+    await putSession(legacy as unknown as TryMeSession);
+
+    await expect(getSession("legacy-session-shape")).resolves.toMatchObject({
+      revision: 1,
+      audienceSuggestions: [],
+      events: []
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assessBrandIdentity,
   audienceSuggestionsFor,
   identifyBrandCategory,
   narrativeProfileFor
@@ -133,5 +134,36 @@ describe("company-specific audience intelligence", () => {
 
     expect(audiences).not.toEqual(audienceSuggestionsFor(jitterbit));
     expect(audiences.join(" ")).toMatch(/network|security|cloud|resilien/i);
+  });
+
+  it("rejects a harvested company or named logo that does not match the submitted domain", () => {
+    const wrongCompany = brand({
+      domain: "hellopebble.com",
+      companyName: "PitchBook",
+      sourceUrl: "https://hellopebble.com",
+      logoUrl: "https://cdn.example.com/pitchbook-logo.svg"
+    });
+
+    expect(assessBrandIdentity(wrongCompany, "hellopebble.com")).toMatchObject({
+      canonicalDomain: "hellopebble.com",
+      confidence: "low",
+      confirmationStatus: "rejected"
+    });
+  });
+
+  it("recognizes a clean hello-prefixed domain without confusing it for another company", () => {
+    const pebble = brand({
+      domain: "hellopebble.com",
+      companyName: "Pebble",
+      sourceUrl: "https://www.hellopebble.com/",
+      logoUrl: "https://www.hellopebble.com/assets/pebble-logo.svg"
+    });
+
+    expect(assessBrandIdentity(pebble, "hellopebble.com")).toMatchObject({
+      canonicalName: "Pebble",
+      confidence: "high",
+      confirmationStatus: "confirmed",
+      confirmedBy: "system"
+    });
   });
 });

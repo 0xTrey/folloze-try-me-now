@@ -317,7 +317,7 @@ describe("anonymous preview and claim publication boundary", () => {
   });
 
   // Regression: an email must be durably captured before any Folloze publication attempt.
-  it("records the lead before publishing and records the successful outcome", async () => {
+  it("records the lead and saves the app URL without publishing to Folloze", async () => {
     const trace: string[] = [];
     const ready = session({
       id: "claim-success-boundary",
@@ -349,12 +349,8 @@ describe("anonymous preview and claim publication boundary", () => {
 
     const result = await claimSession(ready.id, "buyer@acme.test");
 
-    expect(trace).toEqual([
-      "lead:capture",
-      "folloze:publish",
-      "email:send",
-      "lead:outcome:claimed"
-    ]);
+    expect(trace).toEqual(["lead:capture", "email:send", "lead:outcome:claimed"]);
+    expect(publishClaimedExperience).not.toHaveBeenCalled();
     expect(recordLeadCapture).toHaveBeenCalledWith(
       expect.objectContaining({ id: ready.id, status: "claim_pending" }),
       "buyer@acme.test"
@@ -362,17 +358,17 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(updateLeadOutcome).toHaveBeenCalledWith({
       sessionId: ready.id,
       claimAttemptId: expect.any(String),
-      experienceUrl: "https://experience.example/claim-success-boundary",
+      experienceUrl: ready.temporaryUrl,
       claimStatus: "claimed",
-      publishStatus: "published",
+      publishStatus: "preview-only",
       emailStatus: "sent",
       claimedAt: expect.any(String)
     });
-    expect(result).toMatchObject({ publishMode: "folloze", emailDelivery: "sent" });
+    expect(result).toMatchObject({ publishMode: "preview-only", emailDelivery: "sent" });
     expect(await getSession(ready.id)).toMatchObject({
       status: "claimed",
-      liveUrl: "https://experience.example/claim-success-boundary",
-      claim: { publishStatus: "published", emailStatus: "sent" },
+      liveUrl: ready.temporaryUrl,
+      claim: { publishStatus: "preview-only", emailStatus: "sent" },
       cockpit: {
         companyDomain: "jitterbit.com",
         audience: "Enterprise architects and platform owners",
@@ -433,7 +429,7 @@ describe("anonymous preview and claim publication boundary", () => {
       expect.objectContaining({ id: pending.id, status: "claim_pending" }),
       "first@acme.test"
     );
-    expect(publishClaimedExperience).toHaveBeenCalledOnce();
+    expect(publishClaimedExperience).not.toHaveBeenCalled();
     expect(await getSession(pending.id)).toMatchObject({
       status: "claimed",
       claim: { email: "first@acme.test", publishStatus: "preview-only" }
@@ -466,7 +462,7 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(publishClaimedExperience).not.toHaveBeenCalled();
   });
 
-  it("keeps a successful publication claimed when email delivery throws", async () => {
+  it("keeps a successfully saved preview claimed when email delivery throws", async () => {
     const ready = session({
       id: "claim-email-failure-boundary",
       status: "preview_ready_unclaimed",
@@ -483,18 +479,19 @@ describe("anonymous preview and claim publication boundary", () => {
 
     const result = await claimSession(ready.id, "buyer@acme.test");
 
-    expect(result).toMatchObject({ publishMode: "folloze", emailDelivery: "failed" });
+    expect(result).toMatchObject({ publishMode: "preview-only", emailDelivery: "failed" });
+    expect(publishClaimedExperience).not.toHaveBeenCalled();
     expect(updateLeadOutcome).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: ready.id,
         claimStatus: "claimed",
-        publishStatus: "published",
+        publishStatus: "preview-only",
         emailStatus: "failed"
       })
     );
     expect(await getSession(ready.id)).toMatchObject({
       status: "claimed",
-      claim: { publishStatus: "published", emailStatus: "failed" }
+      claim: { publishStatus: "preview-only", emailStatus: "failed" }
     });
   });
 
@@ -550,7 +547,7 @@ describe("anonymous preview and claim publication boundary", () => {
     );
   });
 
-  it("records a failed lead outcome when publication fails", async () => {
+  it("ignores Folloze publication wiring because V1 save is preview-only", async () => {
     const trace: string[] = [];
     const ready = session({
       id: "claim-failure-boundary",
@@ -571,23 +568,15 @@ describe("anonymous preview and claim publication boundary", () => {
       return true;
     });
 
-    await expect(claimSession(ready.id, "buyer@acme.test")).rejects.toThrow(
-      "Folloze unavailable"
-    );
+    const result = await claimSession(ready.id, "buyer@acme.test");
 
-    expect(trace).toEqual(["lead:capture", "folloze:publish", "lead:outcome:failed"]);
-    expect(updateLeadOutcome).toHaveBeenCalledWith({
-      sessionId: ready.id,
-      claimAttemptId: expect.any(String),
-      experienceUrl: ready.temporaryUrl,
-      claimStatus: "failed",
-      publishStatus: "failed",
-      emailStatus: "not-attempted"
-    });
-    expect(sendClaimEmail).not.toHaveBeenCalled();
+    expect(result.publishMode).toBe("preview-only");
+    expect(trace).toEqual(["lead:capture", "lead:outcome:claimed"]);
+    expect(publishClaimedExperience).not.toHaveBeenCalled();
     expect(await getSession(ready.id)).toMatchObject({
-      status: "claim_failed",
-      claim: { publishStatus: "failed", emailStatus: "not-attempted" }
+      status: "claimed",
+      liveUrl: ready.temporaryUrl,
+      claim: { publishStatus: "preview-only", emailStatus: "skipped" }
     });
   });
 });

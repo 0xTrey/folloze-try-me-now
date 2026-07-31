@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from "next/server";
 
-import { apiError, noStoreHeaders } from "@/lib/http";
+import { apiError, HttpError, noStoreHeaders } from "@/lib/http";
 import {
   canEditSession,
   duplicateSession,
@@ -19,34 +19,35 @@ import {
   sessionWorkspacePatchSchema
 } from "@/lib/validation";
 
-type RouteContext = { params: Promise<{ id: string }> };
+import { readEditorToken, setEditorTokenCookie } from "../editor-cookie";
 
-function editorToken(request: NextRequest, id: string): string | undefined {
-  const value = request.cookies.get("tmn_editor")?.value;
-  if (!value) return undefined;
-  const [cookieId, token] = value.split(".", 2);
-  return cookieId === id ? token : undefined;
-}
+type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
-  const session = await getSession(id);
-  if (!session) {
-    return NextResponse.json(
-      { error: "This temporary experience has expired.", code: "expired" },
-      { status: 410, headers: noStoreHeaders }
-    );
+  try {
+    const session = await getSession(id);
+    if (!session) {
+      throw new HttpError(410, "expired", "This temporary experience has expired.");
+    }
+    after(() => recoverSessionWork(id));
+    return NextResponse.json({ session: toPublicSession(session) }, { headers: noStoreHeaders });
+  } catch (error) {
+    return apiError(error, {
+      route: "/api/sessions/[id]",
+      method: "GET",
+      sessionId: id,
+      operation: "read_session"
+    });
   }
-  after(() => recoverSessionWork(id));
-  return NextResponse.json({ session: toPublicSession(session) }, { headers: noStoreHeaders });
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
     await enforceRateLimit(`input:${anonymousClientKey(request)}`, 60, 60);
-    if (!(await canEditSession(id, editorToken(request, id)))) {
-      return NextResponse.json({ error: "This editor session is no longer active." }, { status: 403 });
+    if (!(await canEditSession(id, readEditorToken(request, id)))) {
+      throw new HttpError(403, "editor_forbidden", "This editor session is no longer active.");
     }
     const body: unknown = await request.json();
     const workspaceParse = sessionWorkspacePatchSchema.safeParse(body);
@@ -64,7 +65,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (updated.shouldGenerate) after(() => runStoryStage(id));
     return NextResponse.json({ session: updated.session }, { headers: noStoreHeaders });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, {
+      route: "/api/sessions/[id]",
+      method: "PATCH",
+      sessionId: (await context.params).id,
+      operation: "update_session"
+    });
   }
 }
 
@@ -75,11 +81,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // one completed preview (or multiple prospects behind one corporate NAT) from
     // exhausting the interaction allowance for every other active experience.
     await enforceRateLimit(`operation:${id}:${anonymousClientKey(request)}`, 120, 3600);
-    if (!(await canEditSession(id, editorToken(request, id)))) {
-      return NextResponse.json(
-        { error: "This editor session is no longer active." },
-        { status: 403, headers: noStoreHeaders }
-      );
+    if (!(await canEditSession(id, readEditorToken(request, id)))) {
+      throw new HttpError(403, "editor_forbidden", "This editor session is no longer active.");
     }
     const operation = sessionOperationSchema.parse(await request.json());
     if (operation.operation === "preview-interaction") {
@@ -93,19 +96,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
       { session: duplicated.session, mode: operation.mode },
       { status: 201, headers: noStoreHeaders }
     );
-    response.cookies.set(
-      "tmn_editor",
-      `${duplicated.session.id}.${duplicated.editorToken}`,
-      {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/api/sessions",
-        maxAge: 3600
-      }
+    setEditorTokenCookie(
+      request,
+      response,
+      duplicated.session.id,
+      duplicated.editorToken
     );
     return response;
   } catch (error) {
-    return apiError(error);
+    return apiError(error, {
+      route: "/api/sessions/[id]",
+      method: "POST",
+      sessionId: (await context.params).id,
+      operation: "session_operation"
+    });
   }
 }

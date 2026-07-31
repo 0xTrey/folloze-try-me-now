@@ -8,9 +8,12 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  Building2,
   Check,
+  CircleCheck,
   ChevronDown,
   Clipboard,
+  Clock3,
   ExternalLink,
   FileText,
   Gauge,
@@ -18,7 +21,11 @@ import {
   LoaderCircle,
   Mail,
   Megaphone,
+  MessageSquareText,
+  PencilLine,
   RefreshCw,
+  Search,
+  ShieldCheck,
   Sparkles,
   Target,
   Users,
@@ -39,12 +46,12 @@ import {
   AnalyticsSignalToast,
   AssetPicker,
   AudienceEvidenceTray,
-  ContentSourceConfirmation,
   CtaStyleControl,
   EditBriefDrawer,
   EntryPathMicroDemo,
   ExpirySaveValuePanel,
   ExperienceBlockControl as ExperienceBlockControlPanel,
+  FollozeValueReceipt,
   InstantBrandLockStrip,
   PersonalizationQualityReceipt,
   ProgressiveArtifactStream,
@@ -113,33 +120,33 @@ const useCaseContent: Record<
   abm: {
     number: "01",
     kicker: "1:1 ABM",
-    title: "Build a 1:1 account page",
-    description: "Personalize one page for a target account.",
-    cta: "Build a 1:1 account page",
-    domainTitle: "What company is selling?",
-    domainBody: "We will capture the brand while you continue.",
+    title: "Personalize for one account",
+    description: "Build a buyer-ready page around one target company.",
+    cta: "Personalize for one account",
+    domainTitle: "Which company are you representing?",
+    domainBody: "Add the seller domain. We will verify the identity and start the brand scan immediately.",
     icon: Target,
     className: "portalEditorial"
   },
   campaign: {
     number: "02",
     kicker: "Campaign",
-    title: "Launch a campaign page",
-    description: "Create a page for a product, offer, or event.",
-    cta: "Build a campaign page",
-    domainTitle: "What company is launching it?",
-    domainBody: "We will capture the brand while you continue.",
+    title: "Launch a campaign",
+    description: "Turn one offer and one audience into a campaign experience.",
+    cta: "Launch a campaign",
+    domainTitle: "Which company is launching the campaign?",
+    domainBody: "Add the company domain. We will verify the identity and start the brand scan immediately.",
     icon: Megaphone,
     className: "portalCobalt"
   },
   content: {
     number: "03",
     kicker: "Content",
-    title: "Make content interactive",
-    description: "Turn a public URL or PDF into a guided experience.",
-    cta: "Make content interactive",
-    domainTitle: "What company owns the content?",
-    domainBody: "We will capture the brand while you continue.",
+    title: "Turn content into an experience",
+    description: "Transform a public URL or PDF into a guided buyer journey.",
+    cta: "Turn content into an experience",
+    domainTitle: "Which company owns the content?",
+    domainBody: "Add the company domain. We will verify the identity and start the brand scan immediately.",
     icon: BookOpen,
     className: "portalTerminal"
   }
@@ -161,7 +168,7 @@ export function recommendedObjectiveFor(session: Pick<PublicTryMeSession, "useCa
 
 export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCase" | "answers" | "sourceConfirmation">): boolean {
   if (session.useCase !== "content" || session.sourceConfirmation?.status === "confirmed") return false;
-  return Boolean(session.answers.sourceUrl || (session.answers.sourceName && session.answers.sourceTitle));
+  return Boolean(session.answers.sourceUrl || session.answers.sourceName);
 }
 
 const NVIDIA_ONE_TO_ONE_EXAMPLE_URL = "https://experience.folloze.com/folloze-for-nvidia";
@@ -171,9 +178,9 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     id: "abm",
     index: "01",
     eyebrow: "1:1 ABM",
-    title: "Break into one account",
-    description: "Watch public account evidence become a credible, one-to-one buyer journey.",
-    actionLabel: "Build my 1:1 page",
+    title: "Personalize for one account",
+    description: "Tell us who you sell for and who you want to reach. We will shape the page around that account.",
+    actionLabel: "Personalize for an account",
     exampleLabel: "Watch the NVIDIA 1:1 experience",
     exampleUrl: NVIDIA_ONE_TO_ONE_EXAMPLE_URL,
     demoSteps: ["Seller", "Account evidence", "1:1 experience"],
@@ -184,9 +191,9 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     id: "campaign",
     index: "02",
     eyebrow: "Campaign",
-    title: "Launch a Campaign",
-    description: "Turn one offer and one audience into a sharp, measurable campaign front door.",
-    actionLabel: "Build my campaign page",
+    title: "Launch a campaign",
+    description: "Give one offer a clear story, buyer path, and measurable next step.",
+    actionLabel: "Launch a campaign",
     exampleLabel: "Watch Folloze + Claude launch",
     exampleUrl: "https://experience.folloze.com/folloze-claude-launch",
     demoSteps: ["Offer", "Buyer objective", "Live campaign"],
@@ -197,8 +204,8 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     id: "content",
     index: "03",
     eyebrow: "Content",
-    title: "Make your best content interactive",
-    description: "Preserve the facts, then reshape a URL or PDF into a guided buyer path.",
+    title: "Turn content into an experience",
+    description: "Keep the source facts, then turn a URL or PDF into a guided buyer journey.",
     actionLabel: "Transform my content",
     exampleLabel: "Watch Cisco HMF become an experience",
     exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
@@ -510,10 +517,10 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
       sourceBody: "Give us a public URL or PDF. We will preserve the facts and reshape the way buyers explore them.",
       audienceLoadingTitle: `Mapping the buying roles that fit ${targetName}.`,
       audienceLoadingBody: `We are reading ${targetName}'s public product and operating context now.`,
-      audienceTitle: `Who at ${targetName} needs to believe it?`,
-      audienceBody: `Choose the closest role. The options combine ${targetName}'s public context with the decision ${brandName} helps buyers make.`,
-      objectiveTitle: `What should ${targetName} do next?`,
-      objectiveBody: "One outcome will set the tension, proof, and CTA across the entire experience.",
+      audienceTitle: `Which team at ${targetName} owns this decision?`,
+      audienceBody: `Choose the closest role. Every recommendation is tied to ${targetName}'s public context and the problem ${brandName} can help that team solve.`,
+      objectiveTitle: `What should this experience help ${targetName} do?`,
+      objectiveBody: "Choose one outcome. It will align the opening promise, proof, and visual CTA treatment.",
       completeTitle: `${brandName} × ${targetName}. The brief is locked.`,
       completeBody: "Folloze is composing the account story, proof sequence, interaction path, and next move now."
     };
@@ -532,7 +539,7 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
       audienceTitle: `Who should get more from ${sourceName}?`,
       audienceBody: "Choose the buyer lens. It will change what gets emphasized, sequenced, and measured.",
       objectiveTitle: `What should ${sourceName} unlock?`,
-      objectiveBody: "One outcome will decide how the source becomes a useful next step instead of another download.",
+      objectiveBody: "Choose one outcome. It will decide how the source becomes a useful next step instead of another download.",
       completeTitle: `${sourceName} is becoming a buyer path.`,
       completeBody: "Folloze is preserving the facts while composing the guided sequence, interaction, and next move."
     };
@@ -549,8 +556,8 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
     audienceLoadingBody: `We are reading ${brandName}'s public product and market context now.`,
     audienceTitle: `Who should ${brandName}'s campaign move?`,
     audienceBody: "Choose the buyer who should recognize the problem, trust the proof, and care about the next step.",
-    objectiveTitle: "What must this campaign earn?",
-    objectiveBody: "One outcome will keep the promise, proof, and CTA pointed in the same direction.",
+    objectiveTitle: "What should this campaign help the buyer do?",
+    objectiveBody: "Choose one outcome. It will keep the promise, proof, and visual CTA treatment pointed in the same direction.",
     completeTitle: `${campaignTypeFor(session)} brief locked.`,
     completeBody: "Folloze is composing the campaign promise, proof sequence, interaction, and conversion path now."
   };
@@ -707,6 +714,53 @@ async function confirmHighConfidenceSource(session: PublicTryMeSession): Promise
   }
 }
 
+export function preservePreviewDuringRegeneration(
+  current: PublicTryMeSession | undefined,
+  next: PublicTryMeSession
+): PublicTryMeSession {
+  if (!current?.experience || next.experience || current.id !== next.id) return next;
+  return { ...next, experience: current.experience };
+}
+
+export function previewUpdateState(
+  session: Pick<PublicTryMeSession, "experience" | "stages">
+): "running" | "failed" | undefined {
+  if (!session.experience) return undefined;
+  if (session.stages.story.status === "running") return "running";
+  if (session.stages.story.status === "failed") return "failed";
+  return undefined;
+}
+
+export function PreviewUpdateNotice({
+  session,
+  onRetry
+}: {
+  session: Pick<PublicTryMeSession, "experience" | "stages">;
+  onRetry: () => void;
+}) {
+  const state = previewUpdateState(session);
+  if (!state || !session.experience) return null;
+  const revision = session.experience.artifactRevision ?? 1;
+
+  if (state === "running") {
+    return (
+      <section className="previewUpdateNotice isRunning" role="status" aria-live="polite" data-preview-update-state="running">
+        <span className="previewUpdateIcon" aria-hidden="true"><LoaderCircle className="spin" size={18} /></span>
+        <span><strong>Updating this preview</strong>Revision {revision} stays fully interactive while Folloze writes the replacement.</span>
+        <small><i className="liveDot" />Revision {revision} live</small>
+      </section>
+    );
+  }
+
+  return (
+    <section className="previewUpdateNotice isFailed" role="alert" data-preview-update-state="failed">
+      <span className="previewUpdateIcon" aria-hidden="true"><ShieldCheck size={18} /></span>
+      <span><strong>Your current preview is still live.</strong>The replacement did not finish. Folloze preserved revision {revision} so you can keep exploring it.</span>
+      <button type="button" onClick={onRetry}><RefreshCw size={14} />Retry update</button>
+    </section>
+  );
+}
+
 async function recordPreviewSignal(
   sessionId: string,
   event: "preview-opened" | "section-viewed" | "lens-selected" | "cta-clicked",
@@ -858,6 +912,7 @@ function DomainStart({
   domain,
   onDomain,
   onBack,
+  onContinue,
   isStarting,
   error
 }: {
@@ -865,6 +920,7 @@ function DomainStart({
   domain: string;
   onDomain: (value: string) => void;
   onBack: () => void;
+  onContinue: () => void;
   isStarting: boolean;
   error?: string;
 }) {
@@ -873,16 +929,18 @@ function DomainStart({
     <section className="domainStage">
       <button className="textBack" type="button" onClick={onBack}><ArrowLeft size={16} />Choose another path</button>
       <div className="domainStageGrid">
-        <div>
-          <span className="sectionKicker">{portal.kicker}</span>
+        <div className="domainPrompt">
+          <span className="guideIdentity"><MessageSquareText size={15} />Folloze guide · first signal</span>
           <h2>{portal.domainTitle}</h2>
           <p>{portal.domainBody}</p>
+          <div className="domainPromise"><ShieldCheck size={18} /><span><strong>We confirm before we compose.</strong> You will see the company name, logo, and color evidence before choosing an audience.</span></div>
         </div>
-        <label className={`domainInput ${isStarting ? "isWorking" : ""}`}>
-          <span>Company domain</span>
+        <form className={`domainInput ${isStarting ? "isWorking" : ""}`} onSubmit={(event) => { event.preventDefault(); onContinue(); }}>
+          <label htmlFor="company-domain">Company domain</label>
           <div>
             <Globe2 size={20} />
             <input
+              id="company-domain"
               value={domain}
               onChange={(event) => onDomain(event.target.value)}
               placeholder="yourcompany.com"
@@ -895,10 +953,87 @@ function DomainStart({
             {isStarting && <LoaderCircle className="spin" size={19} />}
           </div>
           <small id={error ? "domain-error" : "domain-help"} className={error ? "fieldError" : ""}>
-            {error || (isStarting ? "Finding the public brand signals now." : "No email or login required.")}
+            {error || (isStarting ? "Matching the company and harvesting the public brand now…" : "Enrichment starts as soon as the domain is recognized.")}
           </small>
-        </label>
+          <button className="buttonPrimary domainContinue" type="submit" disabled={!likelyDomain.test(domain.trim()) || isStarting}>
+            {isStarting ? "Confirming the company" : "Confirm this company"}{isStarting ? <LoaderCircle className="spin" size={17} /> : <ArrowRight size={17} />}
+          </button>
+        </form>
       </div>
+    </section>
+  );
+}
+
+function ConversationThread({ session, onRestart }: { session: PublicTryMeSession; onRestart: () => void }) {
+  const brandName = brandNameFor(session);
+  const targetName = targetNameFor(session);
+  const contextComplete = session.useCase === "abm"
+    ? Boolean(session.answers.targetDomain)
+    : session.useCase === "campaign"
+      ? Boolean(session.answers.campaignType)
+      : Boolean(session.answers.sourceUrl || session.answers.sourceName);
+  const audienceComplete = Boolean(session.answers.audience && (session.answers.audience !== "Other" || session.answers.customAudience));
+  const objectiveComplete = Boolean(session.answers.objective);
+  const contextLabel = session.useCase === "abm" ? "Target account" : session.useCase === "campaign" ? "Campaign shape" : "Source content";
+  const contextValue = session.useCase === "abm"
+    ? targetName
+    : session.useCase === "campaign"
+      ? campaignTypeFor(session)
+      : sourceNameFor(session);
+  const decisions = [
+    { label: contextLabel, complete: contextComplete },
+    { label: "Buyer", complete: audienceComplete },
+    { label: "Outcome", complete: objectiveComplete }
+  ];
+  const currentIndex = Math.min(decisions.findIndex((decision) => !decision.complete), 2);
+  const activeIndex = currentIndex < 0 ? 2 : currentIndex;
+  const brandReady = ["complete", "fallback"].includes(session.stages.brand.status);
+
+  return (
+    <section className="guidedThread" aria-labelledby="guided-thread-title">
+      <div className="guidedThreadHeader">
+        <span className="guideAvatar" aria-hidden="true"><Sparkles size={16} /></span>
+        <div><span>Folloze guide</span><h2 id="guided-thread-title">Three decisions. One buyer-ready experience.</h2></div>
+      </div>
+      <ol className="decisionRail" aria-label="Experience brief progress">
+        {decisions.map((decision, index) => (
+          <li key={decision.label} className={decision.complete ? "isComplete" : index === activeIndex ? "isCurrent" : ""} aria-current={index === activeIndex ? "step" : undefined}>
+            <span>{decision.complete ? <Check size={13} /> : index + 1}</span><strong>{decision.label}</strong>
+          </li>
+        ))}
+      </ol>
+      <div className="conversationHistory">
+        <article className="guideBubble">
+          <span><ShieldCheck size={14} />Identity check</span>
+          <div className="identityMessage">
+            <span className="identityLogo">
+              {previewLogoUrl(session) ? <Image src={previewLogoUrl(session) ?? ""} alt={`${brandName} logo`} width={92} height={28} unoptimized /> : <Building2 size={18} />}
+            </span>
+            <div><strong>{brandReady ? brandName : `Checking ${brandName}`}</strong><small>{session.companyDomain} · {brandReady ? session.brand?.source === "fallback" ? "Identity found; brand needs verification" : "Matched to the public company site" : "Enrichment in progress"}</small></div>
+            {brandReady && <CircleCheck size={18} className="identityCheck" aria-label="Seller identity matched" />}
+          </div>
+        </article>
+        {contextComplete && (
+          <article className="prospectBubble">
+            <span>You chose</span><strong>{contextLabel}: {contextValue}</strong>
+            {session.useCase === "content" && <button type="button" onClick={onRestart}><PencilLine size={13} />Replace source</button>}
+          </article>
+        )}
+        {session.useCase === "abm" && session.answers.targetDomain && (
+          <article className="guideBubble compactGuideBubble">
+            <span><Search size={14} />Account check</span>
+            <div className="identityMessage">
+              <span className="identityLogo">
+                {previewLogoUrl(session, "target") ? <Image src={previewLogoUrl(session, "target") ?? ""} alt={`${targetName} logo`} width={92} height={28} unoptimized /> : <Target size={18} />}
+              </span>
+              <div><strong>{session.targetBrand ? targetName : `Researching ${targetName}`}</strong><small>{session.answers.targetDomain} · {session.targetBrand ? "Target identity matched" : "Public account signals are loading"}</small></div>
+              {session.targetBrand && <CircleCheck size={18} className="identityCheck" aria-label="Target identity matched" />}
+            </div>
+          </article>
+        )}
+        {audienceComplete && <article className="prospectBubble"><span>You chose</span><strong>Buyer: {audienceFor(session)}</strong></article>}
+      </div>
+      <button type="button" className="identityReset" onClick={onRestart}>Something look wrong? Start over</button>
     </section>
   );
 }
@@ -944,8 +1079,7 @@ function ProgressiveQuestions({
   isSaving,
   onPatch,
   onWorkspacePatch,
-  onUpload,
-  onRestart
+  onUpload
 }: {
   session: PublicTryMeSession;
   answers: SessionAnswers;
@@ -953,7 +1087,6 @@ function ProgressiveQuestions({
   onPatch: (patch: SessionAnswers) => Promise<void>;
   onWorkspacePatch: (patch: WorkspacePatch) => Promise<void>;
   onUpload: (file: File) => Promise<void>;
-  onRestart: () => void;
 }) {
   const questionKey = session.useCase === "abm" && !answers.targetDomain
     ? "target-domain"
@@ -969,6 +1102,8 @@ function ProgressiveQuestions({
   );
   const [customAudience, setCustomAudience] = useState(answers.customAudience ?? "");
   const [selectedObjective, setSelectedObjective] = useState<string>();
+  const [reviewingBrief, setReviewingBrief] = useState(false);
+  const [messageFocus, setMessageFocus] = useState(answers.messageBelief ?? "");
   const textValue = fieldValues[questionKey] ?? "";
   const setTextValue = (value: string) =>
     setFieldValues((current) => ({ ...current, [questionKey]: value }));
@@ -1060,47 +1195,6 @@ function ProgressiveQuestions({
             />
           </label>
         )}
-      </div>
-    );
-  }
-
-  if (
-    session.useCase === "content" &&
-    (answers.sourceUrl || answers.sourceName) &&
-    session.sourceConfirmation?.status !== "confirmed" &&
-    !shouldAutoConfirmSource(session)
-  ) {
-    const submittedSource = answers.sourceTitle || fieldValues["content-source"] || (answers.sourceName ? "Uploaded document" : "Public URL");
-    let sourceHost = answers.sourceName ? "Secure PDF upload" : "Public web source";
-    let sourceTitle = submittedSource.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ");
-    try {
-      const parsed = new URL(submittedSource);
-      sourceHost = parsed.hostname.replace(/^www\./, "");
-      sourceTitle = parsed.pathname
-        .split("/")
-        .filter(Boolean)
-        .pop()
-        ?.replace(/[-_]+/g, " ") || `${brandNameFor(session)} source`;
-    } catch {
-      // Uploaded document titles and privacy-preserving public placeholders are shown as labels only.
-    }
-    return (
-      <div className="questionCard sourceConfirmationStep">
-        <ContentSourceConfirmation
-          source={{
-            title: trimLabel(sourceTitle, 72),
-            sourceLabel: answers.sourceName ? "Uploaded PDF" : "Public content URL",
-            host: sourceHost,
-            facts: [
-              `Brand context: ${brandNameFor(session)}`,
-              answers.sourceName ? "The uploaded PDF is the factual source." : "The supplied public page is the factual source.",
-              "Generated claims will stay constrained to this source."
-            ]
-          }}
-          confirmed={false}
-          onConfirm={() => void onWorkspacePatch({ sourceConfirmation: "confirmed" })}
-          onReplace={onRestart}
-        />
       </div>
     );
   }
@@ -1221,14 +1315,50 @@ function ProgressiveQuestions({
     const recommended = recommendedObjectiveFor(session);
     const orderedObjectives = [recommended, ...objectives[session.useCase].filter((objective) => objective !== recommended)];
     const chosenObjective = selectedObjective ?? recommended;
+    if (reviewingBrief) {
+      const subject = session.useCase === "abm"
+        ? `${brandNameFor(session)} for ${targetNameFor(session)}`
+        : session.useCase === "content"
+          ? sourceNameFor(session)
+          : `${brandNameFor(session)} ${campaignTypeFor(session).toLowerCase()}`;
+      return (
+        <div className="questionCard briefReviewCard">
+          <span className="questionCount">Ready to build · review</span>
+          <h2>Here is the brief Folloze will use.</h2>
+          <p>Check the three decisions below. You can add one optional direction, then we will build the interactive desktop experience.</p>
+          <dl className="briefReviewList">
+            <div><dt>Experience</dt><dd>{subject}</dd></div>
+            <div><dt>Buyer</dt><dd>{audienceFor(session)}</dd></div>
+            <div><dt>Outcome</dt><dd>{chosenObjective}</dd></div>
+          </dl>
+          <label className="briefPromptField">
+            <span><PencilLine size={15} />Optional direction</span>
+            <textarea
+              value={messageFocus}
+              onChange={(event) => setMessageFocus(event.target.value)}
+              placeholder="For example: Lead with the cost of disconnected buyer journeys."
+              maxLength={360}
+            />
+            <small>{messageFocus.length}/360 · Edit this only if you want to steer the story.</small>
+          </label>
+          <div className="briefReviewActions">
+            <button className="buttonSecondary" type="button" disabled={isSaving} onClick={() => setReviewingBrief(false)}><ArrowLeft size={16} />Change the outcome</button>
+            <button className="buttonPrimary" type="button" disabled={isSaving} onClick={() => void onPatch({ objective: chosenObjective, messageBelief: messageFocus.trim() || undefined })}>
+              {isSaving ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}Build my experience
+            </button>
+          </div>
+          <p className="buildExpectationInline"><Clock3 size={15} />Usually takes 10–30 seconds. Your brief stays safe if a stage needs to retry.</p>
+        </div>
+      );
+    }
     return (
       <div className="questionCard">
         <span className="questionCount">Final signal · objective</span>
         <h2>{questionCopy.objectiveTitle}</h2>
         <p>{questionCopy.objectiveBody}</p>
         <ChipGroup label="Choose an objective" options={orderedObjectives} value={chosenObjective} recommendedOption={recommended} disabled={isSaving} onChange={setSelectedObjective} />
-        <button className="buttonPrimary" type="button" disabled={isSaving} onClick={() => void onPatch({ objective: chosenObjective })}>
-          Build my experience<ArrowRight size={17} />
+        <button className="buttonPrimary" type="button" disabled={isSaving} onClick={() => setReviewingBrief(true)}>
+          Review my brief<ArrowRight size={17} />
         </button>
       </div>
     );
@@ -1238,11 +1368,11 @@ function ProgressiveQuestions({
     return (
       <div className="questionCard recoveryCard" role="alert">
         <span className="generationGlyph isFailed"><RefreshCw size={24} /></span>
-        <span className="questionCount">One step needs another pass</span>
-        <h2>Your brief is safe.</h2>
-        <p>The story did not finish, but none of your answers were lost. Retry the build from the same brief.</p>
+        <span className="questionCount">Experience assembly stopped</span>
+        <h2>The buyer story did not finish.</h2>
+        <p>Your company, account or source, audience, outcome, and optional direction are still saved. Retry only the experience stage from this exact brief.</p>
         <button className="buttonPrimary" type="button" disabled={isSaving || !answers.objective} onClick={() => void onPatch({ objective: answers.objective })}>
-          <RefreshCw size={17} />Retry the story
+          <RefreshCw size={17} />Retry experience assembly
         </button>
       </div>
     );
@@ -1727,7 +1857,7 @@ export function TryMeNowApp() {
         failures = 0;
         setConnectionError("");
         const nextSession = await confirmHighConfidenceSource(result.session);
-        setSession(nextSession);
+        setSession((current) => preservePreviewDuringRegeneration(current, nextSession));
         setAnswers(nextSession.answers);
       } catch {
         if (cancelled) return;
@@ -1873,7 +2003,7 @@ export function TryMeNowApp() {
       });
       if (requestNumber !== patchRequestRef.current) return;
       const nextSession = await confirmHighConfidenceSource(result.session);
-      setSession(nextSession);
+      setSession((current) => preservePreviewDuringRegeneration(current, nextSession));
       setAnswers(nextSession.answers);
     } catch (patchError) {
       setError(patchError instanceof Error ? patchError.message : "We could not save that answer.");
@@ -1893,7 +2023,7 @@ export function TryMeNowApp() {
         body: JSON.stringify({ operation: "update-workspace", ...patch })
       });
       if (requestNumber !== patchRequestRef.current) return;
-      setSession(result.session);
+      setSession((current) => preservePreviewDuringRegeneration(current, result.session));
       setAnswers(result.session.answers);
     } catch (patchError) {
       setError(patchError instanceof Error ? patchError.message : "We could not update the live brief.");
@@ -2130,15 +2260,28 @@ export function TryMeNowApp() {
           <div className="entryHero">
             <span className="sectionKicker">Try Folloze</span>
             <h1>What do you want to build?</h1>
-            <p>Choose a path. We will ask only what changes the result.</p>
+            <p>Choose a path, answer three guided questions, and watch Folloze turn live company signals into a buyer-ready experience.</p>
+            <div className="entryPromise" aria-label="Try Me Now experience promise">
+              <span><CircleCheck size={14} />No blank canvas</span>
+              <span><Clock3 size={14} />Usually 10–30 seconds</span>
+              <span><ShieldCheck size={14} />Preview before email</span>
+            </div>
           </div>
           <UseCasePortals onSelect={selectUseCase} />
-          <div className="entryFooter"><span>No login. No blank canvas.</span><span>Preview first. Add your email only if you want to keep it.</span></div>
+          <div className="entryFooter"><span>Enrichment starts with the first domain.</span><span>Add your email only after you decide the experience is worth keeping.</span></div>
         </section>
       )}
 
       {useCase && !session && (
-        <DomainStart useCase={useCase} domain={domain} onDomain={setDomain} onBack={() => setUseCase(undefined)} isStarting={isStarting} error={error} />
+        <DomainStart
+          useCase={useCase}
+          domain={domain}
+          onDomain={setDomain}
+          onBack={() => setUseCase(undefined)}
+          onContinue={() => void startSession(useCase, domain)}
+          isStarting={isStarting}
+          error={error}
+        />
       )}
 
       {session && !isReveal && buildPanelCopy && (
@@ -2160,6 +2303,7 @@ export function TryMeNowApp() {
               } : { companyName: displayNameFromDomain(session.companyDomain), domain: session.companyDomain }}
               onInspect={() => setShowProcess(true)}
             />
+            <ConversationThread session={session} onRestart={resetExperience} />
             <ProgressiveQuestions
               session={session}
               answers={answers}
@@ -2167,7 +2311,6 @@ export function TryMeNowApp() {
               onPatch={patchAnswers}
               onWorkspacePatch={patchWorkspace}
               onUpload={uploadPdf}
-              onRestart={resetExperience}
             />
             {error && <div className="inlineError" role="alert">{error}</div>}
             {connectionError && <div className="connectionNotice" role="status"><LoaderCircle className="spin" size={15} />{connectionError}</div>}
@@ -2222,6 +2365,10 @@ export function TryMeNowApp() {
               <a className="buttonPrimary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
             </div>
           </div>
+          <PreviewUpdateNotice
+            session={session}
+            onRetry={() => void patchAnswers({ objective: session.answers.objective })}
+          />
           <div className="revealGrid">
             <div className="revealPreview">
               <div className="previewControlBar">
@@ -2247,13 +2394,13 @@ export function TryMeNowApp() {
                   <summary><span><Sparkles size={17} />Tune this experience</span><small>Copy, CTA, assets, and sections</small><ChevronDown size={16} /></summary>
                   <div className="experienceControlBody">
                     <ToneChips
-                      label="Message tone"
+                      label="Rewrite the message"
                       selectedId={answers.toneVariant || "executive"}
                       options={[
-                        { id: "executive", label: "Executive", description: "Concise, decision-oriented language." },
-                        { id: "technical", label: "Technical", description: "Precise language for expert buyers." },
-                        { id: "provocative", label: "Provocative", description: "Sharper tension and a bolder point of view." },
-                        { id: "consultative", label: "Consultative", description: "Guided, collaborative language." }
+                        { id: "executive", label: "Shorter", description: "Tighter, more direct copy." },
+                        { id: "consultative", label: "More business value", description: "Put the buyer outcome and value first." },
+                        { id: "technical", label: "More technical", description: "Use more precise language for expert buyers." },
+                        { id: "provocative", label: "Bolder", description: "Sharpen the tension and point of view." }
                       ]}
                       onChange={(id) => void patchWorkspace({ answers: { toneVariant: id as NonNullable<SessionAnswers["toneVariant"]> } })}
                     />
@@ -2322,11 +2469,6 @@ export function TryMeNowApp() {
                             description={description}
                             locked={control?.locked}
                             onEdit={() => openBlockEditor(id)}
-                            onGenerateOptions={() => {
-                              const directions: Array<NonNullable<SessionAnswers["styleVariant"]>> = ["brand-led", "editorial", "technical", "minimal"];
-                              const next = directions[(directions.indexOf(answers.styleVariant || "brand-led") + 1) % directions.length];
-                              void patchWorkspace({ answers: { styleVariant: next } });
-                            }}
                             onLockChange={(_, locked) => void patchWorkspace({
                               blockControls: [{
                                 id,
@@ -2374,6 +2516,16 @@ export function TryMeNowApp() {
                   onEdit={() => void createVariation("version", true)}
                 />
               ) : null}
+              <FollozeValueReceipt
+                companyName={session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session)}
+                audienceLabel={audienceFor(session)}
+                objectiveLabel={session.answers.objective || "one clear next step"}
+                interactionCount={Math.max(clientEvents.length - 1, 0)}
+                onOpenSignals={() => {
+                  setShowAnalyticsPanel(true);
+                  track("value_receipt_signals_opened", { useCase: session.useCase });
+                }}
+              />
               <PersonalizationQualityReceipt
                 score={personalizationScore}
                 companyName={session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session)}
@@ -2383,9 +2535,11 @@ export function TryMeNowApp() {
                   detail: check.detail,
                   status: check.status === "passed"
                     ? "strong"
-                    : check.status === "warning" || check.status === "not-applicable"
+                    : check.status === "warning"
                       ? "partial"
-                      : "missing"
+                      : check.status === "not-applicable"
+                        ? "not-applicable"
+                        : "missing"
                 })) : revealCopy.receipts.slice(0, 4).map((receipt) => ({
                   id: receipt.number,
                   label: receipt.label,
@@ -2393,7 +2547,7 @@ export function TryMeNowApp() {
                   status: "strong" as const
                 }))}
               />
-              <div className="signalTeaser"><Gauge size={22} /><h3>Built is only step one.</h3><p>Interact with the preview, then see the signals Folloze captured.</p><button type="button" onClick={() => { setShowAnalyticsPanel(true); track("signal_preview_opened"); }}>See what Folloze knows<ArrowRight size={16} /></button></div>
+              <div className="signalTeaser"><Gauge size={22} /><h3>Now watch buyer intent become visible.</h3><p>Choose a path or CTA in the preview. Folloze will turn that interaction into a live engagement signal.</p><button type="button" onClick={() => { setShowAnalyticsPanel(true); track("signal_preview_opened"); }}>Open engagement signals<ArrowRight size={16} /></button></div>
               <div className="revealReceipt revealMiniReceipt">
                 <span className="sectionKicker">Built from real signals</span>
                 <div>{revealCopy.receipts.map(({ number, label }) => <span key={number}><i>{number}</i>{label}<Check size={13} /></span>)}</div>

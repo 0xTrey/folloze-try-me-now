@@ -28,6 +28,20 @@ export const PREVIEW_INTERACTION_TYPES = [
   "email-prompt-viewed"
 ] as const;
 export const BRIEF_FIELD_PROVENANCE = ["user", "inferred", "research"] as const;
+export const INTELLIGENCE_CONFIDENCE_LEVELS = ["high", "medium", "low"] as const;
+export const INTELLIGENCE_CONFIRMATION_STATUSES = [
+  "confirmed",
+  "needs-confirmation",
+  "rejected"
+] as const;
+export const INTELLIGENCE_PROVENANCE_KINDS = [
+  "user-input",
+  "public-page",
+  "brand-harvester",
+  "verified-profile",
+  "uploaded-source",
+  "deterministic-fallback"
+] as const;
 export const BRIEF_FIELD_KEYS = ["seller", "target", "offer", "audience", "objective"] as const;
 export const EXPERIENCE_DEPENDENCIES = [
   "seller-brand",
@@ -58,6 +72,11 @@ export type LayoutVariant = (typeof LAYOUT_VARIANTS)[number];
 export type ExperienceBlockId = (typeof EXPERIENCE_BLOCK_IDS)[number];
 export type PreviewInteractionType = (typeof PREVIEW_INTERACTION_TYPES)[number];
 export type BriefFieldProvenance = (typeof BRIEF_FIELD_PROVENANCE)[number];
+export type IntelligenceConfidence = (typeof INTELLIGENCE_CONFIDENCE_LEVELS)[number];
+export type IntelligenceConfirmationStatus =
+  (typeof INTELLIGENCE_CONFIRMATION_STATUSES)[number];
+export type IntelligenceProvenanceKind =
+  (typeof INTELLIGENCE_PROVENANCE_KINDS)[number];
 export type BriefFieldKey = (typeof BRIEF_FIELD_KEYS)[number];
 export type ExperienceDependency = (typeof EXPERIENCE_DEPENDENCIES)[number];
 export type CuratedSectionFamily = (typeof CURATED_SECTION_FAMILIES)[number];
@@ -84,6 +103,27 @@ export interface StageState {
   errorCode?: string;
 }
 
+export interface IntelligenceProvenance {
+  kind: IntelligenceProvenanceKind;
+  sourceUrl?: string;
+  detail: string;
+}
+
+/**
+ * Identity evidence stays attached to the entity it describes. Seller and
+ * target profiles may share a shape, but their evidence is never merged.
+ */
+export interface EntityIdentity {
+  expectedDomain: string;
+  canonicalDomain: string;
+  canonicalName: string;
+  confidence: IntelligenceConfidence;
+  confirmationStatus: IntelligenceConfirmationStatus;
+  confirmedBy?: "system" | "user";
+  reasons: string[];
+  provenance: IntelligenceProvenance[];
+}
+
 export interface BrandProfile {
   domain: string;
   companyName: string;
@@ -103,10 +143,13 @@ export interface BrandProfile {
   bodyFontUrl?: string;
   sourceUrl: string;
   source: "brand-harvester" | "fast-extractor" | "fallback";
+  identity?: EntityIdentity;
 }
 
 export interface SessionAnswers {
+  sellerConfirmed?: boolean;
   targetDomain?: string;
+  targetConfirmed?: boolean;
   audience?: string;
   customAudience?: string;
   objective?: string;
@@ -119,12 +162,14 @@ export interface SessionAnswers {
   sourceUploadId?: string;
   sourceUploadReservedAt?: string;
   promotedOffer?: string;
+  promotedOfferConfirmed?: boolean;
   offerSourceUrl?: string;
   offerSourceTitle?: string;
   offerSourceConfirmed?: boolean;
   exampleMode?: boolean;
   exampleKey?: string;
   sourceConfirmed?: boolean;
+  sourceTopicConfirmed?: boolean;
   messageBelief?: string;
   messageAction?: string;
   ctaType?: CtaType;
@@ -158,6 +203,7 @@ export type PublicBrandProfile = Pick<
   | "accentColor"
   | "surfaceColor"
   | "source"
+  | "identity"
 >;
 
 export interface ExperienceSection {
@@ -205,6 +251,9 @@ export interface AudienceRecommendation {
   evidenceItemIds: string[];
   confidence: "high" | "medium" | "hypothesis";
   source: "seller-category-fallback" | "seller-target-synthesis";
+  confirmationStatus?: IntelligenceConfirmationStatus;
+  targetName?: string;
+  evidenceSummary?: string;
 }
 
 export interface SessionEvidenceItem {
@@ -215,12 +264,27 @@ export interface SessionEvidenceItem {
   sourceUrl: string;
   signals: string[];
   disposition: "available" | "pinned" | "excluded";
+  entityRole?: "target";
+  confidence?: IntelligenceConfidence;
 }
 
 export interface SourceConfirmation {
   status: "unconfirmed" | "confirmed" | "rejected";
   confirmedAt?: string;
   sourceKind?: "public-url" | "uploaded-pdf" | "event-context" | "public-account";
+  provenance?: "user-submitted" | "user-confirmed" | "system-extracted";
+}
+
+export interface SourceGrounding {
+  kind: "public-url" | "uploaded-pdf" | "event-context" | "none";
+  title?: string;
+  sourceUrl?: string;
+  sourceHost?: string;
+  topics: string[];
+  confidence: IntelligenceConfidence;
+  confirmationStatus: IntelligenceConfirmationStatus;
+  provenance: IntelligenceProvenance[];
+  reason: string;
 }
 
 export interface ExperienceAsset {
@@ -249,7 +313,15 @@ export interface PreviewAnalytics {
 }
 
 export interface QualityReceiptCheck {
-  id: "copy" | "account-evidence" | "source-confirmation" | "cta" | "structure";
+  id:
+    | "copy"
+    | "identity"
+    | "account-evidence"
+    | "source-confirmation"
+    | "source-grounding"
+    | "claims"
+    | "cta"
+    | "structure";
   label: string;
   status: "passed" | "warning" | "not-applicable";
   detail: string;
@@ -351,8 +423,31 @@ export interface ExperienceSpecV1 {
   schemaVersion: "1.0";
   revision: number;
   sourceBriefRevision: number;
+  sourceBriefFingerprint: string;
   createdAt: string;
   artifactDigest: string;
+  grounding: {
+    seller: {
+      source: BrandProfile["source"];
+      sourceUrl: string;
+      confidence?: IntelligenceConfidence;
+    };
+    target?: {
+      source: BrandProfile["source"];
+      sourceUrl: string;
+      confidence?: IntelligenceConfidence;
+    };
+    source?: {
+      kind: NonNullable<SourceConfirmation["sourceKind"]>;
+      status: SourceConfirmation["status"];
+      title?: string;
+      host?: string;
+    };
+    audience: {
+      status: AudienceLensArtifact["status"];
+      findingIds: string[];
+    };
+  };
   identities: {
     seller: { domain: string; name: string };
     target?: { domain: string; name: string };
@@ -422,6 +517,8 @@ export interface TryMeSession {
   selectedAudienceRecommendationId?: string;
   evidenceItems?: SessionEvidenceItem[];
   sourceConfirmation?: SourceConfirmation;
+  /** Internal digest proving source confirmation belongs to the current source. */
+  sourceFingerprint?: string;
   availableAssets?: ExperienceAsset[];
   blockControls?: ExperienceBlockControl[];
   previewAnalytics?: PreviewAnalytics;
@@ -457,6 +554,7 @@ export type PublicTryMeSession = Omit<
   | "campaignOfferSource"
   | "stages"
   | "targetBrand"
+  | "sourceFingerprint"
 > & {
   answers: PublicSessionAnswers;
   brand?: PublicBrandProfile;

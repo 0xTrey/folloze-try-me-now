@@ -104,11 +104,35 @@ function storedEntry(
   };
 }
 
+function normalizedSession(value: TryMeSession): TryMeSession {
+  // Stored sessions predate several additive workspace fields. Normalize only
+  // server-owned collection/revision fields so old previews remain readable
+  // without manufacturing new user answers or lifecycle state.
+  const session = structuredClone(value) as TryMeSession;
+  session.revision = Number.isFinite(session.revision) ? session.revision : 1;
+  session.answers = session.answers ?? {};
+  session.audienceSuggestions = Array.isArray(session.audienceSuggestions)
+    ? session.audienceSuggestions
+    : [];
+  session.events = Array.isArray(session.events) ? session.events : [];
+  return session;
+}
+
+function isExpiredAnonymousPreview(session: TryMeSession, now = Date.now()): boolean {
+  if (session.status === "expired") return true;
+  if (session.status !== "preview_ready_unclaimed" || !session.expiresAt) return false;
+  const expiresAt = Date.parse(session.expiresAt);
+  return Number.isFinite(expiresAt) && expiresAt <= now;
+}
+
 async function readBlobSnapshot(id: string): Promise<BlobSnapshot | null> {
   const result = await get(blobPathFor(id), { access: "private", useCache: false });
   if (!result || result.statusCode !== 200) return null;
   const entry = (await new Response(result.stream).json()) as StoredEntry;
-  if (entry.expiresAt && entry.expiresAt <= Date.now()) {
+  if (
+    (entry.expiresAt && entry.expiresAt <= Date.now()) ||
+    isExpiredAnonymousPreview(entry.value)
+  ) {
     try {
       await del(blobPathFor(id), { ifMatch: strongEtag(result.blob.etag) });
     } catch (error) {
@@ -118,7 +142,10 @@ async function readBlobSnapshot(id: string): Promise<BlobSnapshot | null> {
   }
   // JSON responses can be compressed in transit, which prefixes the HTTP ETag with W/.
   // Blob conditional writes expect the underlying strong object ETag.
-  return { entry, etag: strongEtag(result.blob.etag) };
+  return {
+    entry: { ...entry, value: normalizedSession(entry.value) },
+    etag: strongEtag(result.blob.etag)
+  };
 }
 
 async function writeBlobEntry(
@@ -162,12 +189,18 @@ export async function putSession(
 
 export async function getSession(id: string): Promise<TryMeSession | null> {
   if (useRedisSessionStore) {
-    return (await getRedis().get<TryMeSession>(keyFor(id))) ?? null;
+    const session = (await getRedis().get<TryMeSession>(keyFor(id))) ?? null;
+    if (!session) return null;
+    if (isExpiredAnonymousPreview(session)) {
+      await getRedis().del(keyFor(id));
+      return null;
+    }
+    return normalizedSession(session);
   }
 
   if (sessionStoreMode === "vercel-blob") {
     const snapshot = await readBlobSnapshot(id);
-    return snapshot ? structuredClone(snapshot.entry.value) : null;
+    return snapshot ? normalizedSession(snapshot.entry.value) : null;
   }
 
   const entry = memory.get(id);
@@ -176,7 +209,11 @@ export async function getSession(id: string): Promise<TryMeSession | null> {
     memory.delete(id);
     return null;
   }
-  return structuredClone(entry.value);
+  if (isExpiredAnonymousPreview(entry.value)) {
+    memory.delete(id);
+    return null;
+  }
+  return normalizedSession(entry.value);
 }
 
 export async function updateSession(

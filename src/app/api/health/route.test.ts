@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isProductionCapable } from "@/lib/readiness";
+import { isProductionCapable, productionReadiness } from "@/lib/readiness";
 
 const connectedServices = {
   databaseConnected: true,
@@ -54,5 +54,40 @@ describe("health production capability", () => {
         openAIConnected: false
       })
     ).toBe(false);
+  });
+
+  it("uses durable lead capability rather than requiring a specific database vendor", () => {
+    expect(
+      isProductionCapable({
+        sessionStoreMode: "vercel-blob",
+        ...connectedServices,
+        databaseConnected: false,
+        durableLeadStore: true
+      })
+    ).toBe(true);
+    expect(
+      isProductionCapable({
+        sessionStoreMode: "vercel-blob",
+        ...connectedServices,
+        durableLeadStore: false
+      })
+    ).toBe(false);
+  });
+
+  it("reports required blockers separately from optional Folloze and Resend integrations", () => {
+    expect(
+      productionReadiness({
+        sessionStoreMode: "vercel-blob",
+        durableLeadStore: true,
+        openAIConnected: true,
+        follozePublishReady: false,
+        resendConnected: false
+      })
+    ).toEqual({
+      productionCapable: true,
+      required: { durableSessions: true, durableLeads: true, openAI: true },
+      optional: { follozePublication: false, transactionalEmail: false },
+      blockers: []
+    });
   });
 });

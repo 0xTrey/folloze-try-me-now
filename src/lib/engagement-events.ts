@@ -26,6 +26,7 @@ const safeContextText = z
 
 export const engagementEventPayloadSchema = z
   .object({
+    eventId: z.string().trim().min(8).max(128).regex(/^[a-z0-9_-]+$/i).optional(),
     sessionId: z.string().trim().min(8).max(128).regex(/^[a-z0-9_-]+$/i),
     event: z.enum(ENGAGEMENT_EVENT_NAMES),
     context: z
@@ -76,7 +77,7 @@ async function ensureEventStoreReady(): Promise<void> {
   if (!schemaReady) {
     schemaReady = (async () => {
       const sql = getDatabase();
-      await sql`SELECT session_id, event_name, context, created_at FROM try_me_events LIMIT 0`;
+      await sql`SELECT event_id, session_id, event_name, context, created_at FROM try_me_events LIMIT 0`;
     })().catch((error) => {
       schemaReady = null;
       throw error;
@@ -97,6 +98,9 @@ export async function recordEngagementEvent(payload: EngagementEventPayload): Pr
   };
 
   if (engagementEventStoreMode === "memory-test") {
+    if (record.eventId && memory.some((candidate) => candidate.eventId === record.eventId)) {
+      return false;
+    }
     memory.push(structuredClone(record));
     return true;
   }
@@ -104,16 +108,20 @@ export async function recordEngagementEvent(payload: EngagementEventPayload): Pr
 
   await ensureEventStoreReady();
   const sql = getDatabase();
-  await sql`
-    INSERT INTO try_me_events (session_id, event_name, context, created_at)
+  const rows = await sql`
+    INSERT INTO try_me_events (event_id, session_id, event_name, context, created_at)
     VALUES (
+      ${record.eventId ?? null},
       ${record.sessionId},
       ${record.event},
       CAST(${JSON.stringify(record.context ?? {})} AS jsonb),
       ${record.createdAt}
     )
+    ON CONFLICT (event_id) DO NOTHING
+    RETURNING id
   `;
-  return true;
+  const returnedRows = Array.isArray(rows) ? rows : rows.rows;
+  return returnedRows.length === 1;
 }
 
 export function getMemoryEngagementEventsForTest(): EngagementEventRecord[] {

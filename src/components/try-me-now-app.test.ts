@@ -10,6 +10,7 @@ import {
   getGuidedQuestionCopy,
   getRevealCopy,
   getRevealShellHeadline,
+  preservePreviewDuringRegeneration,
   previewBoundaryScrollDelta,
   recommendedObjectiveFor,
   shouldAutoConfirmSource
@@ -65,7 +66,7 @@ describe("Try Me Now experience copy", () => {
   it("auto-confirms only high-confidence content sources", () => {
     expect(shouldAutoConfirmSource(session("content", { answers: { sourceUrl: "https://jitterbit.com/report" } }))).toBe(true);
     expect(shouldAutoConfirmSource(session("content", { answers: { sourceName: "report.pdf", sourceTitle: "Integration Report" } }))).toBe(true);
-    expect(shouldAutoConfirmSource(session("content", { answers: { sourceName: "report.pdf" } }))).toBe(false);
+    expect(shouldAutoConfirmSource(session("content", { answers: { sourceName: "report.pdf" } }))).toBe(true);
     expect(shouldAutoConfirmSource(session("content", {
       answers: { sourceUrl: "https://jitterbit.com/report" },
       sourceConfirmation: { status: "confirmed" }
@@ -78,7 +79,7 @@ describe("Try Me Now experience copy", () => {
       exampleUrl: "https://experience.folloze.com/folloze-for-nvidia"
     });
     expect(entryPathOptions.campaign).toMatchObject({
-      title: "Launch a Campaign",
+      title: "Launch a campaign",
       exampleLabel: "Watch Folloze + Claude launch",
       exampleUrl: "https://experience.folloze.com/folloze-claude-launch"
     });
@@ -242,6 +243,31 @@ describe("Try Me Now experience copy", () => {
 
     expect(getAssemblyPreviewKey(analyticsUpdate)).toBe(getAssemblyPreviewKey(initial));
     expect(getAssemblyPreviewKey(regenerated)).not.toBe(getAssemblyPreviewKey(initial));
+  });
+
+  it("keeps the last complete preview visible while a replacement regenerates", () => {
+    const current = session("campaign", {
+      status: "preview_ready_unclaimed",
+      answers: { audience: "Revenue leaders", objective: "Generate demand" },
+      experience: {
+        ready: true,
+        title: "Existing campaign",
+        headline: "The current complete story",
+        generationSource: "openai",
+        artifactRevision: 3
+      }
+    });
+    const regenerating = session("campaign", {
+      status: "generating",
+      revision: 8,
+      answers: { audience: "Revenue leaders", objective: "Generate demand", toneVariant: "consultative" }
+    });
+
+    const visible = preservePreviewDuringRegeneration(current, regenerating);
+    expect(visible.status).toBe("generating");
+    expect(visible.answers.toneVariant).toBe("consultative");
+    expect(visible.experience).toEqual(current.experience);
+    expect(preservePreviewDuringRegeneration(undefined, regenerating).experience).toBeUndefined();
   });
 
   it("accepts only bounded scroll handoffs from the generated preview", () => {
