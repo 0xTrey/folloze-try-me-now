@@ -389,27 +389,83 @@ export function ProgressiveArtifactStream({ artifacts, headline = "Your experien
   const running = artifacts.find((artifact) => artifact.status === "running");
   const queued = artifacts.find((artifact) => artifact.status === "queued");
   const focus = failed ?? running ?? queued ?? artifacts.at(-1);
+  const focusIndex = focus ? artifacts.findIndex((artifact) => artifact.id === focus.id) + 1 : 0;
   const complete = Boolean(artifacts.length) && ready === artifacts.length;
+  const finalAssembly = Boolean(running && focus?.id === "experience");
+  const preserveFinalAssemblyHeight = finalAssembly
+    || Boolean(complete && artifacts.at(-1)?.id === "experience")
+    || Boolean(failed?.id === "experience");
   const focusLabel = failed
     ? "Needs attention"
     : complete
       ? "Build complete"
-      : running
+      : finalAssembly
+        ? "Final assembly · live"
+        : running
         ? "Working now"
         : "Up next";
   const focusDetail = complete
     ? `All ${artifacts.length} build stages are complete. Your preview is ready for the reveal.`
     : focus?.detail ?? "Waiting for the first build signal.";
+  const cadenceLabel = failed
+    ? "Build paused — the rest of your work is safe."
+    : complete
+      ? "Your buyer journey is ready to explore."
+      : running
+        ? focus?.id === "experience"
+          ? "Shaping the story · arranging proof · polishing the page"
+          : focus?.id === "brand"
+            ? "Reading identity · extracting color · verifying visual cues"
+            : focus?.id === "buyer"
+              ? "Connecting company signals · mapping roles · ranking relevance"
+              : focus?.id === "strategy"
+                ? "Clarifying the objective · structuring the message · choosing the next move"
+                : "Turning live signals into the next build decision."
+        : "Standing by for the next build stage.";
+  const visualProgress = running && focus?.id === "experience"
+    ? { value: "Final assembly", label: "" }
+    : complete
+      ? { value: "Ready", label: `${artifacts.length} of ${artifacts.length} stages locked` }
+      : { value: `${ready} of ${artifacts.length}`, label: "stages locked" };
   return (
-    <section className={styles.artifactStream} aria-labelledby="artifact-stream-title">
+    <section className={styles.artifactStream} aria-labelledby="artifact-stream-title" aria-busy={Boolean(running)}>
       <div className={styles.streamHeader}>
         <div><span>Progressive build</span><h3 id="artifact-stream-title">{headline}</h3></div>
         <strong>{ready}/{artifacts.length}</strong>
       </div>
-      <div className={classes(styles.activeBuild, complete && styles.activeBuildComplete, failed && styles.activeBuildFailed)} data-build-state={failed ? "failed" : complete ? "complete" : running ? "running" : "queued"}>
-        <span className={styles.buildSignal} aria-hidden="true"><i /><i /><i /></span>
-        <div role="status" aria-live="polite" aria-atomic="true"><span>{focusLabel}</span><strong>{focus?.title ?? "Waiting for the build"}</strong><p>{focusDetail}</p></div>
-        <span className={styles.buildCadence} aria-hidden="true">{Array.from({ length: 7 }, (_, index) => <i key={index} />)}</span>
+      <div
+        className={classes(
+          styles.activeBuild,
+          preserveFinalAssemblyHeight && styles.activeBuildEmphasis,
+          complete && styles.activeBuildComplete,
+          failed && styles.activeBuildFailed
+        )}
+        data-build-state={failed ? "failed" : complete ? "complete" : running ? "running" : "queued"}
+        data-final-assembly={finalAssembly ? "true" : "false"}
+      >
+        <span className={styles.buildVisual} aria-hidden="true">
+          <span className={styles.buildSignal}>
+            <span className={styles.buildCore}>
+              {failed ? <X size={34} strokeWidth={1.7} /> : complete ? <Check size={34} strokeWidth={1.7} /> : running ? <WandSparkles size={34} strokeWidth={1.7} /> : <Clock size={32} strokeWidth={1.7} />}
+            </span>
+            <i /><i /><i />
+          </span>
+          <small><strong>{visualProgress.value}</strong>{visualProgress.label}</small>
+        </span>
+        <div className={styles.buildNarrative} role="status" aria-live="polite" aria-atomic="true" aria-relevant="text">
+          <div className={styles.buildStatusLine}>
+            <span>{focusLabel}</span>
+            <small>{focusIndex ? `Stage ${focusIndex} of ${artifacts.length}` : "Waiting for stage 1"}</small>
+          </div>
+          <strong>{focus?.title ?? "Waiting for the build"}</strong>
+          <p>{focusDetail}</p>
+          {finalAssembly && <small className={styles.buildExpectation}>Usually takes 10–30 seconds. Keep this page open.</small>}
+          <div className={styles.buildActivity}>
+            <span className={styles.buildCadence} aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</span>
+            <span>{cadenceLabel}</span>
+          </div>
+        </div>
+        <span className={styles.buildStageStamp} aria-hidden="true"><small>Stage</small><strong>{focusIndex ? String(focusIndex).padStart(2, "0") : "—"}</strong><span>of {String(artifacts.length).padStart(2, "0")}</span></span>
       </div>
       <div className={styles.buildProgressMeta}><span>{ready} completed</span><span>{Math.max(artifacts.length - ready, 0)} remaining</span></div>
       <div className={styles.progressTrack} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${ready} of ${artifacts.length} stages complete. ${focusLabel}: ${focus?.title ?? "Waiting"}.`} aria-label="Experience build progress"><span style={{ width: `${progress}%` }} /></div>

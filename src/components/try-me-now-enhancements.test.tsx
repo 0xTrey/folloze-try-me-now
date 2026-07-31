@@ -157,8 +157,12 @@ describe("Try Me Now prospect enhancement components", () => {
 
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
     expect(screen.getByRole("status")).toHaveAttribute("aria-atomic", "true");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-relevant", "text");
     expect(screen.getByRole("status")).toHaveTextContent("Working now");
+    expect(screen.getByRole("status")).toHaveTextContent("Stage 2 of 2");
+    expect(screen.getByRole("status")).toHaveTextContent("Turning live signals into the next build decision.");
     expect(screen.getAllByText("Working now").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Your experience is assembling live")).toHaveAttribute("aria-busy", "true");
     fireEvent.change(screen.getByLabelText("Audience"), { target: { value: "Platform owners" } });
     fireEvent.click(screen.getByRole("button", { name: /Update experience/i }));
     fireEvent.keyDown(document, { key: "Escape" });
@@ -186,6 +190,45 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByText("Build complete")).toBeInTheDocument();
     expect(screen.getByText("All 3 build stages are complete. Your preview is ready for the reveal.")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
+    expect(screen.getByLabelText("Your experience is assembling live")).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("keeps queued and failed build states clear without treating them as active work", () => {
+    const { rerender, container } = render(<ProgressiveArtifactStream artifacts={[
+      { id: "story", phase: "Story", title: "Composing the buyer journey", detail: "Waiting for brand signals", status: "queued" }
+    ]} />);
+
+    expect(container.querySelector('[data-build-state="queued"]')).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Up next");
+    expect(screen.getByRole("status")).toHaveTextContent("Stage 1 of 1");
+    expect(screen.getByRole("status")).toHaveTextContent("Standing by for the next build stage.");
+    expect(screen.getByLabelText("Your experience is assembling live")).toHaveAttribute("aria-busy", "false");
+
+    rerender(<ProgressiveArtifactStream artifacts={[
+      { id: "story", phase: "Story", title: "Composing the buyer journey", detail: "The generation request could not finish", status: "failed" }
+    ]} />);
+    expect(container.querySelector('[data-build-state="failed"]')).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Needs attention");
+    expect(screen.getByRole("status")).toHaveTextContent("Build paused — the rest of your work is safe.");
+  });
+
+  it("makes the final Experience stage unmistakable without claiming a determinate percentage", () => {
+    render(<ProgressiveArtifactStream artifacts={[
+      { id: "brand", phase: "Brand system", title: "Brand language reconstructed", detail: "Brand cues locked", status: "ready" },
+      { id: "buyer", phase: "Buyer fit", title: "Buyer context locked", detail: "Audience locked", status: "ready" },
+      { id: "strategy", phase: "Message strategy", title: "One outcome locked", detail: "Objective locked", status: "ready" },
+      { id: "experience", phase: "Experience", title: "Composing the buyer journey", detail: "Composing the guided experience", status: "running" }
+    ]} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Stage 4 of 4");
+    expect(screen.getByRole("status")).toHaveTextContent("Final assembly · live");
+    expect(screen.getByRole("status")).toHaveTextContent("Shaping the story · arranging proof · polishing the page");
+    expect(screen.getByRole("status")).toHaveTextContent("Usually takes 10–30 seconds. Keep this page open.");
+    expect(screen.getByText("Final assembly")).toBeInTheDocument();
+    expect(screen.queryByText("75% assembled")).not.toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "75");
+    expect(screen.getByLabelText("Your experience is assembling live")).toHaveAttribute("aria-busy", "true");
+    expect(document.querySelector('[data-final-assembly="true"]')).toBeInTheDocument();
   });
 
   it("exposes block, tone, variant, and asset editing callbacks", () => {
