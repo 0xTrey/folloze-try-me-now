@@ -692,8 +692,18 @@ export function experienceQualityFailure(input: {
   return undefined;
 }
 
-function isNonBlockingStyleFailure(failure: string): boolean {
-  return failure === "copy_quality_em_dash" || failure === "copy_quality_cliche";
+export function isNonBlockingStyleFailure(
+  failure: string,
+  context: CampaignGenerationContext
+): boolean {
+  if (failure === "copy_quality_em_dash" || failure === "copy_quality_cliche") return true;
+  return (
+    context.brief.campaignRegister === "content-magic" &&
+    new Set([
+      "copy_quality_missing_source_grounding",
+      "copy_quality_source_grounding_not_distributed"
+    ]).has(failure)
+  );
 }
 
 export async function generateExperienceDraft(input: {
@@ -877,7 +887,7 @@ export async function generateExperienceDraft(input: {
                 durationMs: Date.now() - startedAt
               };
             }
-            if (isNonBlockingStyleFailure(repairFailure)) {
+            if (isNonBlockingStyleFailure(repairFailure, context)) {
               return {
                 draft: repairResponse.output_parsed,
                 source: "openai",
@@ -891,7 +901,7 @@ export async function generateExperienceDraft(input: {
               fallbackReason: `openai_repair_rejected_${repairFailure}`
             };
           }
-          if (isNonBlockingStyleFailure(failure)) {
+          if (isNonBlockingStyleFailure(failure, context)) {
             return {
               draft: response.output_parsed,
               source: "openai",
@@ -905,7 +915,7 @@ export async function generateExperienceDraft(input: {
             fallbackReason: "openai_repair_no_structured_output"
           };
         } catch (repairError) {
-          if (isNonBlockingStyleFailure(failure)) {
+          if (isNonBlockingStyleFailure(failure, context)) {
             return {
               draft: response.output_parsed,
               source: "openai",
@@ -923,7 +933,7 @@ export async function generateExperienceDraft(input: {
           };
         }
       }
-      if (isNonBlockingStyleFailure(failure)) {
+      if (isNonBlockingStyleFailure(failure, context)) {
         return {
           draft: response.output_parsed,
           source: "openai",

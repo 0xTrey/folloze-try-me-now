@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
 import { compileCampaignContext } from "@/lib/generation/campaign-context";
-import { deterministicDraft, experienceQualityFailure } from "@/lib/integrations/openai";
+import {
+  deterministicDraft,
+  experienceQualityFailure,
+  isNonBlockingStyleFailure
+} from "@/lib/integrations/openai";
 import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
 
 const jitterbit: BrandProfile = {
@@ -58,6 +62,44 @@ function draftFor(useCase: UseCase, answers: SessionAnswers, targetBrand?: Brand
 }
 
 describe("deterministic experience copy", () => {
+  it("keeps repaired content drafts when only token-distribution grounding is imperfect", () => {
+    const contentContext = compileCampaignContext({
+      brand: jitterbit,
+      useCase: "content",
+      answers: {
+        sourceName: "AI integration guide.pdf",
+        audience: "Enterprise integration leaders",
+        objective: "Educate buyers"
+      }
+    });
+    const abmContext = compileCampaignContext({
+      brand: jitterbit,
+      targetBrand: cisco,
+      useCase: "abm",
+      answers: {
+        targetDomain: "cisco.com",
+        audience: "Infrastructure leaders",
+        objective: "Book a meeting"
+      }
+    });
+
+    expect(
+      isNonBlockingStyleFailure("copy_quality_missing_source_grounding", contentContext)
+    ).toBe(true);
+    expect(
+      isNonBlockingStyleFailure(
+        "copy_quality_source_grounding_not_distributed",
+        contentContext
+      )
+    ).toBe(true);
+    expect(
+      isNonBlockingStyleFailure("copy_quality_unsupported_number", contentContext)
+    ).toBe(false);
+    expect(
+      isNonBlockingStyleFailure("copy_quality_missing_source_grounding", abmContext)
+    ).toBe(false);
+  });
+
   it("creates a Jitterbit-specific content story for the selected audience and objective", () => {
     const draft = deterministicDraft({
       brand: jitterbit,
