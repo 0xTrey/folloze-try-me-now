@@ -175,7 +175,15 @@ describe("anonymous preview and claim publication boundary", () => {
     const stored = await getSession(pending.id);
     expect(stored).toMatchObject({
       status: "preview_ready_unclaimed",
-      experience: { generationSource: "deterministic-fallback" }
+      experience: { generationSource: "deterministic-fallback" },
+      qualityReceipt: {
+        status: "needs-review",
+        artifactRevision: expect.any(Number),
+        checks: expect.arrayContaining([
+          expect.objectContaining({ id: "copy", status: "passed" }),
+          expect.objectContaining({ id: "cta", status: "warning" })
+        ])
+      }
     });
     expect(stored?.experience?.html).toContain(
       `/api/sessions/${pending.id}/font/display`
@@ -283,7 +291,15 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(await getSession(ready.id)).toMatchObject({
       status: "claimed",
       liveUrl: "https://experience.example/claim-success-boundary",
-      claim: { publishStatus: "published", emailStatus: "sent" }
+      claim: { publishStatus: "published", emailStatus: "sent" },
+      cockpit: {
+        companyDomain: "jitterbit.com",
+        audience: "Enterprise architects and platform owners",
+        objective: "Book a meeting",
+        artifactRevision: 2,
+        versionNumber: 1,
+        previewInteractions: 0
+      }
     });
   });
 

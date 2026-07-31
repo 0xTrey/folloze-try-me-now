@@ -1,6 +1,40 @@
 export const USE_CASES = ["abm", "campaign", "content"] as const;
+export const EXPERIENCE_MODES = ["custom", "example"] as const;
+export const CTA_TYPES = [
+  "book-meeting",
+  "contact-sales",
+  "register",
+  "download",
+  "explore",
+  "custom"
+] as const;
+export const STYLE_VARIANTS = ["brand-led", "editorial", "technical", "minimal"] as const;
+export const TONE_VARIANTS = ["executive", "technical", "provocative", "consultative"] as const;
+export const LAYOUT_VARIANTS = ["narrative", "modular", "immersive", "compact"] as const;
+export const EXPERIENCE_BLOCK_IDS = [
+  "hero",
+  "thesis",
+  "decision-lenses",
+  "guided-questions",
+  "closing"
+] as const;
+export const PREVIEW_INTERACTION_TYPES = [
+  "preview-opened",
+  "section-viewed",
+  "lens-selected",
+  "cta-clicked",
+  "share-started",
+  "email-prompt-viewed"
+] as const;
 
 export type UseCase = (typeof USE_CASES)[number];
+export type ExperienceMode = (typeof EXPERIENCE_MODES)[number];
+export type CtaType = (typeof CTA_TYPES)[number];
+export type StyleVariant = (typeof STYLE_VARIANTS)[number];
+export type ToneVariant = (typeof TONE_VARIANTS)[number];
+export type LayoutVariant = (typeof LAYOUT_VARIANTS)[number];
+export type ExperienceBlockId = (typeof EXPERIENCE_BLOCK_IDS)[number];
+export type PreviewInteractionType = (typeof PREVIEW_INTERACTION_TYPES)[number];
 export type StageKey = "brand" | "audience" | "story";
 export type StageStatus = "pending" | "running" | "complete" | "fallback" | "failed";
 export type SessionStatus =
@@ -57,6 +91,17 @@ export interface SessionAnswers {
   sourceOpenAIFileId?: string;
   sourceUploadId?: string;
   sourceUploadReservedAt?: string;
+  exampleMode?: boolean;
+  exampleKey?: string;
+  sourceConfirmed?: boolean;
+  messageBelief?: string;
+  messageAction?: string;
+  ctaType?: CtaType;
+  ctaDestination?: string;
+  styleVariant?: StyleVariant;
+  toneVariant?: ToneVariant;
+  layoutVariant?: LayoutVariant;
+  selectedAssetIds?: string[];
 }
 
 export type PublicSessionAnswers = Omit<
@@ -119,6 +164,94 @@ export interface SessionEvent {
   meta?: Record<string, string | number | boolean | null>;
 }
 
+export interface AudienceRecommendation {
+  id: string;
+  label: string;
+  rationale: string;
+  evidenceItemIds: string[];
+  confidence: "high" | "medium" | "hypothesis";
+  source: "seller-category-fallback" | "seller-target-synthesis";
+}
+
+export interface SessionEvidenceItem {
+  id: string;
+  type: "public-positioning" | "public-operating-context" | "public-focus-area";
+  label: string;
+  text: string;
+  sourceUrl: string;
+  signals: string[];
+  disposition: "available" | "pinned" | "excluded";
+}
+
+export interface SourceConfirmation {
+  status: "unconfirmed" | "confirmed" | "rejected";
+  confirmedAt?: string;
+  sourceKind?: "public-url" | "uploaded-pdf" | "event-context" | "public-account";
+}
+
+export interface ExperienceAsset {
+  id: string;
+  kind: "seller-logo" | "seller-image" | "target-logo" | "target-image";
+  label: string;
+  url: string;
+  source: "seller" | "target";
+}
+
+export interface ExperienceBlockControl {
+  id: ExperienceBlockId;
+  visible?: boolean;
+  locked?: boolean;
+  eyebrow?: string;
+  headline?: string;
+  body?: string;
+  ctaLabel?: string;
+}
+
+export interface PreviewAnalytics {
+  totalInteractions: number;
+  lastInteractionAt?: string;
+  counts: Partial<Record<PreviewInteractionType, number>>;
+  lastElementId?: string;
+}
+
+export interface QualityReceiptCheck {
+  id: "copy" | "account-evidence" | "source-confirmation" | "cta" | "structure";
+  label: string;
+  status: "passed" | "warning" | "not-applicable";
+  detail: string;
+}
+
+export interface QualityReceipt {
+  status: "passed" | "needs-review";
+  checkedAt: string;
+  artifactRevision: number;
+  checks: QualityReceiptCheck[];
+}
+
+export interface ClaimCockpitMetadata {
+  savedAt: string;
+  companyDomain: string;
+  targetDomain?: string;
+  audience?: string;
+  objective?: string;
+  ctaType?: CtaType;
+  styleVariant?: StyleVariant;
+  toneVariant?: ToneVariant;
+  layoutVariant?: LayoutVariant;
+  qualityStatus?: QualityReceipt["status"];
+  artifactRevision: number;
+  versionNumber: number;
+  previewInteractions: number;
+}
+
+export interface SessionLineage {
+  rootSessionId: string;
+  parentSessionId?: string;
+  duplicatedFromSessionId?: string;
+  versionNumber: number;
+  label?: string;
+}
+
 export interface ClaimState {
   attemptId?: string;
   startedAt?: string;
@@ -148,6 +281,18 @@ export interface TryMeSession {
   brand?: BrandProfile;
   targetBrand?: BrandProfile;
   audienceSuggestions: string[];
+  experienceMode?: ExperienceMode;
+  exampleKey?: string;
+  audienceRecommendations?: AudienceRecommendation[];
+  selectedAudienceRecommendationId?: string;
+  evidenceItems?: SessionEvidenceItem[];
+  sourceConfirmation?: SourceConfirmation;
+  availableAssets?: ExperienceAsset[];
+  blockControls?: ExperienceBlockControl[];
+  previewAnalytics?: PreviewAnalytics;
+  qualityReceipt?: QualityReceipt;
+  cockpit?: ClaimCockpitMetadata;
+  lineage?: SessionLineage;
   experience?: ExperienceModel;
   claim?: ClaimState;
   events: SessionEvent[];
@@ -180,6 +325,30 @@ export type PublicTryMeSession = Omit<
 export interface CreateSessionInput {
   useCase: UseCase;
   companyDomain: string;
+  exampleMode?: boolean;
+  exampleKey?: string;
+}
+
+export interface SessionWorkspacePatch {
+  answers?: SessionAnswers;
+  selectedAudienceRecommendationId?: string | null;
+  evidenceDecisions?: Array<{
+    id: string;
+    disposition: SessionEvidenceItem["disposition"];
+  }>;
+  sourceConfirmation?: SourceConfirmation["status"];
+  blockControls?: ExperienceBlockControl[];
+}
+
+export interface PreviewInteractionInput {
+  event: PreviewInteractionType;
+  elementId?: string;
+  value?: string;
+}
+
+export interface DuplicateSessionInput {
+  mode: "duplicate" | "version";
+  label?: string;
 }
 
 export interface ClaimResult {

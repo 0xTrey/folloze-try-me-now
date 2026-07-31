@@ -275,6 +275,24 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
     brand: publicBrand(session.brand),
     targetBrand: publicBrand(session.targetBrand),
     audienceSuggestions: [...session.audienceSuggestions],
+    experienceMode: session.experienceMode,
+    exampleKey: session.exampleKey,
+    audienceRecommendations: session.audienceRecommendations
+      ? structuredClone(session.audienceRecommendations)
+      : undefined,
+    selectedAudienceRecommendationId: session.selectedAudienceRecommendationId,
+    evidenceItems: session.evidenceItems ? structuredClone(session.evidenceItems) : undefined,
+    sourceConfirmation: session.sourceConfirmation
+      ? structuredClone(session.sourceConfirmation)
+      : undefined,
+    availableAssets: session.availableAssets ? structuredClone(session.availableAssets) : undefined,
+    blockControls: session.blockControls ? structuredClone(session.blockControls) : undefined,
+    previewAnalytics: session.previewAnalytics
+      ? structuredClone(session.previewAnalytics)
+      : undefined,
+    qualityReceipt: session.qualityReceipt ? structuredClone(session.qualityReceipt) : undefined,
+    cockpit: session.cockpit ? structuredClone(session.cockpit) : undefined,
+    lineage: session.lineage ? structuredClone(session.lineage) : undefined,
     experience: session.experience
       ? {
           ready: true,

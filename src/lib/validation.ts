@@ -4,14 +4,44 @@ import { promises as dns } from "node:dns";
 import disposableEmailDomains from "disposable-email-domains";
 import { z } from "zod";
 
-import { USE_CASES } from "@/lib/types";
+import {
+  CTA_TYPES,
+  EXPERIENCE_BLOCK_IDS,
+  LAYOUT_VARIANTS,
+  PREVIEW_INTERACTION_TYPES,
+  STYLE_VARIANTS,
+  TONE_VARIANTS,
+  USE_CASES
+} from "@/lib/types";
 
 const domainPattern = /^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
 export const createSessionSchema = z.object({
   useCase: z.enum(USE_CASES),
-  companyDomain: z.string().min(3).max(300)
-});
+  companyDomain: z.string().min(3).max(300),
+  exampleMode: z.boolean().optional(),
+  exampleKey: z.string().trim().min(2).max(80).regex(/^[a-z0-9][a-z0-9-]*$/).optional()
+}).strict();
+
+const httpsDestinationSchema = z
+  .string()
+  .trim()
+  .max(1000)
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      return (
+        url.protocol === "https:" &&
+        !url.username &&
+        !url.password &&
+        !url.port
+      );
+    } catch {
+      return false;
+    }
+  }, "Use a public HTTPS destination.");
+
+const assetIdSchema = z.string().min(4).max(96).regex(/^[a-z0-9][a-z0-9_-]*$/i);
 
 export const answersSchema = z
   .object({
@@ -21,9 +51,94 @@ export const answersSchema = z
     objective: z.string().min(2).max(120).optional(),
     campaignType: z.enum(["product", "demand", "event"]).optional(),
     eventSource: z.string().max(1000).optional(),
-    sourceUrl: z.string().max(1000).optional()
+    sourceUrl: z.string().max(1000).optional(),
+    exampleMode: z.boolean().optional(),
+    exampleKey: z.string().trim().min(2).max(80).regex(/^[a-z0-9][a-z0-9-]*$/).optional(),
+    sourceConfirmed: z.boolean().optional(),
+    messageBelief: z.string().trim().min(4).max(240).optional(),
+    messageAction: z.string().trim().min(2).max(160).optional(),
+    ctaType: z.enum(CTA_TYPES).optional(),
+    // An empty value is an explicit "clear" operation. The orchestrator removes
+    // it from the stored answers so only validated HTTPS destinations persist.
+    ctaDestination: z.union([httpsDestinationSchema, z.literal("")]).optional(),
+    styleVariant: z.enum(STYLE_VARIANTS).optional(),
+    toneVariant: z.enum(TONE_VARIANTS).optional(),
+    layoutVariant: z.enum(LAYOUT_VARIANTS).optional(),
+    selectedAssetIds: z.array(assetIdSchema).max(12).optional()
   })
   .strict();
+
+const blockControlSchema = z
+  .object({
+    id: z.enum(EXPERIENCE_BLOCK_IDS),
+    visible: z.boolean().optional(),
+    locked: z.boolean().optional(),
+    eyebrow: z.string().trim().min(2).max(52).optional(),
+    headline: z.string().trim().min(4).max(160).optional(),
+    body: z.string().trim().min(8).max(500).optional(),
+    ctaLabel: z.string().trim().min(2).max(48).optional()
+  })
+  .strict();
+
+export const sessionWorkspacePatchSchema = z
+  .object({
+    operation: z.literal("update-workspace"),
+    answers: answersSchema.optional(),
+    selectedAudienceRecommendationId: assetIdSchema.nullable().optional(),
+    evidenceDecisions: z
+      .array(
+        z
+          .object({
+            id: assetIdSchema,
+            disposition: z.enum(["available", "pinned", "excluded"])
+          })
+          .strict()
+      )
+      .max(12)
+      .optional(),
+    sourceConfirmation: z.enum(["unconfirmed", "confirmed", "rejected"]).optional(),
+    blockControls: z.array(blockControlSchema).max(EXPERIENCE_BLOCK_IDS.length).optional()
+  })
+  .strict()
+  .refine(
+    (value) =>
+      Boolean(
+        value.answers ||
+          value.selectedAudienceRecommendationId !== undefined ||
+          value.evidenceDecisions ||
+          value.sourceConfirmation ||
+          value.blockControls
+      ),
+    "Include at least one workspace change."
+  )
+  .superRefine((value, context) => {
+    const evidenceIds = value.evidenceDecisions?.map((decision) => decision.id) ?? [];
+    if (new Set(evidenceIds).size !== evidenceIds.length) {
+      context.addIssue({ code: "custom", message: "Evidence decisions must be unique." });
+    }
+    const blockIds = value.blockControls?.map((control) => control.id) ?? [];
+    if (new Set(blockIds).size !== blockIds.length) {
+      context.addIssue({ code: "custom", message: "Block controls must be unique." });
+    }
+  });
+
+export const sessionOperationSchema = z.discriminatedUnion("operation", [
+  z
+    .object({
+      operation: z.literal("preview-interaction"),
+      event: z.enum(PREVIEW_INTERACTION_TYPES),
+      elementId: z.string().trim().min(1).max(80).regex(/^[a-z0-9][a-z0-9_.:-]*$/i).optional(),
+      value: z.string().trim().min(1).max(80).regex(/^[a-z0-9][a-z0-9 _.,:+/-]*$/i).optional()
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("duplicate"),
+      mode: z.enum(["duplicate", "version"]),
+      label: z.string().trim().min(2).max(80).optional()
+    })
+    .strict()
+]);
 
 export const claimSchema = z.object({
   email: z.string().trim().email().max(320)

@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
 import { config } from "@/lib/config";
+import { targetAccountEvidenceFor } from "@/lib/generation/campaign-context";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import { HttpError, logServerError } from "@/lib/http";
 import { harvestBrand, fallbackBrand } from "@/lib/integrations/brand-harvester";
@@ -21,8 +22,16 @@ import { appendEvent } from "@/lib/telemetry";
 import type {
   BrandProfile,
   ClaimResult,
+  CreateSessionInput,
+  DuplicateSessionInput,
+  ExperienceAsset,
+  ExperienceBlockControl,
+  PreviewInteractionInput,
   PublicTryMeSession,
+  QualityReceipt,
+  SessionEvidenceItem,
   SessionAnswers,
+  SessionWorkspacePatch,
   TryMeSession,
   UseCase
 } from "@/lib/types";
@@ -30,6 +39,147 @@ import { assertBusinessEmail, maskEmail, normalizeDomain } from "@/lib/validatio
 
 function opaqueId(): string {
   return randomBytes(24).toString("base64url");
+}
+
+function stableId(prefix: string, ...parts: Array<string | undefined>): string {
+  return `${prefix}_${createHash("sha256")
+    .update(parts.filter(Boolean).join("\u0000"))
+    .digest("hex")
+    .slice(0, 16)}`;
+}
+
+function evidenceItemsFor(
+  targetBrand: BrandProfile | undefined,
+  existing: SessionEvidenceItem[] = []
+): SessionEvidenceItem[] {
+  const priorDisposition = new Map(existing.map((item) => [item.id, item.disposition]));
+  return targetAccountEvidenceFor(targetBrand).map((item) => {
+    const id = stableId("evidence", targetBrand?.domain, item.type, item.text);
+    return {
+      ...item,
+      id,
+      disposition: priorDisposition.get(id) ?? "available"
+    };
+  });
+}
+
+function audienceRecommendationsFor(
+  suggestions: string[],
+  seller: BrandProfile | undefined,
+  target: BrandProfile | undefined,
+  evidenceItems: SessionEvidenceItem[]
+) {
+  const usableEvidence = evidenceItems.filter((item) => item.disposition !== "excluded");
+  return suggestions.map((label, index) => {
+    const evidence = usableEvidence[index % Math.max(usableEvidence.length, 1)];
+    const targetSpecific = Boolean(target && target.source !== "fallback" && usableEvidence.length);
+    return {
+      id: stableId("audience", seller?.domain, target?.domain, label),
+      label,
+      rationale: targetSpecific
+        ? `Connects the seller's offer to ${target?.companyName}'s public ${
+            evidence?.label.toLocaleLowerCase() ?? "operating context"
+          }: ${evidence?.signals.slice(0, 2).join(" and ") || "account context"}.`
+        : "A seller-category starting point until public target-account context is available.",
+      evidenceItemIds: evidence ? [evidence.id] : [],
+      confidence: targetSpecific ? (usableEvidence.length >= 2 ? "high" : "medium") : "hypothesis",
+      source: targetSpecific ? "seller-target-synthesis" : "seller-category-fallback"
+    } as const;
+  });
+}
+
+function assetsFor(brand: BrandProfile | undefined, target: BrandProfile | undefined): ExperienceAsset[] {
+  const assets: ExperienceAsset[] = [];
+  const add = (
+    source: "seller" | "target",
+    kind: ExperienceAsset["kind"],
+    label: string,
+    url: string | undefined,
+    index = 0
+  ) => {
+    if (!url) return;
+    const id = stableId("asset", source, kind, url);
+    if (assets.some((asset) => asset.id === id)) return;
+    assets.push({ id, source, kind, label: index ? `${label} ${index + 1}` : label, url });
+  };
+  add("seller", "seller-logo", `${brand?.companyName ?? "Seller"} logo`, brand?.logoUrl);
+  brand?.imageUrls.slice(0, 6).forEach((url, index) =>
+    add("seller", "seller-image", `${brand.companyName} image`, url, index)
+  );
+  add("target", "target-logo", `${target?.companyName ?? "Target"} logo`, target?.logoUrl);
+  target?.imageUrls.slice(0, 4).forEach((url, index) =>
+    add("target", "target-image", `${target.companyName} image`, url, index)
+  );
+  return assets;
+}
+
+function syncExperienceFoundation(session: TryMeSession): void {
+  session.evidenceItems = evidenceItemsFor(session.targetBrand, session.evidenceItems);
+  session.audienceRecommendations = audienceRecommendationsFor(
+    session.audienceSuggestions,
+    session.brand,
+    session.targetBrand,
+    session.evidenceItems
+  );
+  session.availableAssets = assetsFor(session.brand, session.targetBrand);
+  const availableAssetIds = new Set(session.availableAssets.map((asset) => asset.id));
+  if (session.answers.selectedAssetIds) {
+    session.answers.selectedAssetIds = session.answers.selectedAssetIds.filter((id) =>
+      availableAssetIds.has(id)
+    );
+  }
+  if (
+    session.selectedAudienceRecommendationId &&
+    !session.audienceRecommendations.some(
+      (recommendation) => recommendation.id === session.selectedAudienceRecommendationId
+    )
+  ) {
+    session.selectedAudienceRecommendationId = undefined;
+  }
+}
+
+function curatedTargetBrand(session: TryMeSession, targetBrand: BrandProfile | undefined): BrandProfile | undefined {
+  if (!targetBrand || !session.evidenceItems?.length) return targetBrand;
+  const excluded = session.evidenceItems.filter((item) => item.disposition === "excluded");
+  const included = session.evidenceItems.filter((item) => item.disposition !== "excluded");
+  const pinned = included.filter((item) => item.disposition === "pinned");
+  const topicSignals = [...pinned, ...included]
+    .flatMap((item) => item.signals)
+    .filter((signal, index, signals) => signals.indexOf(signal) === index);
+  return {
+    ...targetBrand,
+    description: excluded.some((item) => item.type === "public-positioning")
+      ? undefined
+      : targetBrand.description,
+    publicContext: excluded.some((item) => item.type === "public-operating-context")
+      ? undefined
+      : targetBrand.publicContext,
+    publicTopics: [
+      ...topicSignals,
+      ...targetBrand.publicTopics.filter(
+        (topic) =>
+          !excluded.some(
+            (item) =>
+              item.type === "public-focus-area" &&
+              item.text.toLocaleLowerCase() === topic.toLocaleLowerCase()
+          )
+      )
+    ].filter((topic, index, topics) => topics.indexOf(topic) === index)
+  };
+}
+
+function resetGeneratedExperience(session: TryMeSession, detail: string): void {
+  if (session.status === "claimed") {
+    throw new HttpError(
+      409,
+      "claimed_session_locked",
+      "Create a new version to change a saved experience."
+    );
+  }
+  session.experience = undefined;
+  session.qualityReceipt = undefined;
+  session.status = "collecting";
+  session.stages.story = { status: "pending", detail };
 }
 
 function fontDeliveryUrls(id: string, brand: BrandProfile): { display?: string; body?: string } {
@@ -59,10 +209,92 @@ function storyInputFingerprint(session: TryMeSession): string {
         companyDomain: session.companyDomain,
         brand: session.brand,
         targetBrand: session.targetBrand,
-        answers: session.answers
+        answers: session.answers,
+        evidence: session.evidenceItems?.map(({ id, disposition }) => ({ id, disposition })),
+        sourceConfirmation: session.sourceConfirmation?.status,
+        selectedAudienceRecommendationId: session.selectedAudienceRecommendationId,
+        blockControls: session.blockControls
       })
     )
     .digest("hex");
+}
+
+function qualityReceiptFor(session: TryMeSession, artifactRevision: number): QualityReceipt {
+  const usableEvidence = session.evidenceItems?.filter(
+    (item) => item.disposition !== "excluded"
+  ).length ?? 0;
+  const sourceRelevant = Boolean(
+    session.answers.sourceUrl ||
+      session.answers.sourceName ||
+      session.answers.eventSource ||
+      session.useCase === "abm"
+  );
+  const ctaNeedsDestination = Boolean(
+    session.answers.ctaType && session.answers.ctaType !== "explore"
+  );
+  const checks: QualityReceipt["checks"] = [
+    {
+      id: "copy",
+      label: "Copy quality",
+      status: "passed",
+      detail: "The generated copy passed the structured generation quality gates."
+    },
+    {
+      id: "account-evidence",
+      label: "Account evidence",
+      status:
+        session.useCase !== "abm" ? "not-applicable" : usableEvidence >= 2 ? "passed" : "warning",
+      detail:
+        session.useCase !== "abm"
+          ? "Account evidence is not required for this experience type."
+          : usableEvidence >= 2
+            ? `${usableEvidence} public account signals are available for the story.`
+            : "Confirm at least two public account signals before sharing."
+    },
+    {
+      id: "source-confirmation",
+      label: "Source confirmation",
+      status:
+        !sourceRelevant
+          ? "not-applicable"
+          : session.sourceConfirmation?.status === "confirmed"
+            ? "passed"
+            : "warning",
+      detail:
+        !sourceRelevant
+          ? "No external source confirmation is required."
+          : session.sourceConfirmation?.status === "confirmed"
+            ? "The selected source context was confirmed by the editor."
+            : "The editor has not confirmed the selected source context."
+    },
+    {
+      id: "cta",
+      label: "CTA readiness",
+      status:
+        !session.answers.ctaType ||
+        (ctaNeedsDestination && !session.answers.ctaDestination)
+          ? "warning"
+          : "passed",
+      detail:
+        !session.answers.ctaType
+          ? "Choose a CTA type before sharing."
+          : ctaNeedsDestination && !session.answers.ctaDestination
+            ? "Add the public HTTPS destination for the selected CTA."
+            : "The CTA intent and destination are ready."
+    },
+    {
+      id: "structure",
+      label: "Experience structure",
+      status: "passed",
+      detail: "The experience contains a hero, decision path, proof questions, and close."
+    }
+  ];
+  return {
+    status: checks.some((check) => check.status === "warning") ? "needs-review" : "passed",
+    checkedAt: new Date().toISOString(),
+    artifactRevision,
+    checks
+  };
 }
 
 function isStale(startedAt: string | undefined, maxAgeMs: number): boolean {
@@ -104,10 +336,9 @@ export function isGenerationReady(useCase: UseCase, answers: SessionAnswers): bo
   return Boolean(answers.sourceUrl || answers.sourceName);
 }
 
-export async function createSession(input: {
-  useCase: UseCase;
-  companyDomain: string;
-}): Promise<{ session: PublicTryMeSession; editorToken: string }> {
+export async function createSession(
+  input: CreateSessionInput
+): Promise<{ session: PublicTryMeSession; editorToken: string }> {
   assertProductionSessionStore();
   const companyDomain = normalizeDomain(input.companyDomain);
   const now = new Date().toISOString();
@@ -129,8 +360,19 @@ export async function createSession(input: {
         audience: stage("running", "Building a useful first audience hypothesis from the company context."),
         story: stage("pending", "Waiting for the audience and objective.")
       },
-      answers: {},
+      answers: {
+        exampleMode: input.exampleMode,
+        exampleKey: input.exampleKey
+      },
       audienceSuggestions: [],
+      experienceMode: input.exampleMode ? "example" : "custom",
+      exampleKey: input.exampleKey,
+      audienceRecommendations: [],
+      evidenceItems: [],
+      availableAssets: [],
+      blockControls: [],
+      previewAnalytics: { totalInteractions: 0, counts: {} },
+      lineage: { rootSessionId: id, versionNumber: 1 },
       events: []
     },
     "company_domain_submitted",
@@ -205,6 +447,7 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
       }
       session.brand = profile;
       session.audienceSuggestions = audienceSuggestionsFor(profile, session.targetBrand);
+      syncExperienceFoundation(session);
       session.stages.brand = {
         status: "complete",
         startedAt: session.stages.brand.startedAt,
@@ -236,6 +479,7 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
       }
       session.brand = fallbackBrand(expectedDomain);
       session.audienceSuggestions = audienceSuggestionsFor(session.brand, session.targetBrand);
+      syncExperienceFoundation(session);
       session.stages.brand = {
         status: "fallback",
         startedAt: session.stages.brand.startedAt,
@@ -319,6 +563,7 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       if (session.brand) {
         session.audienceSuggestions = audienceSuggestionsFor(session.brand, profile);
       }
+      syncExperienceFoundation(session);
       session.stages.audience = {
         status: session.answers.audience ? "complete" : "running",
         attemptId,
@@ -361,6 +606,7 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       if (session.brand) {
         session.audienceSuggestions = audienceSuggestionsFor(session.brand, session.targetBrand);
       }
+      syncExperienceFoundation(session);
       appendEvent(session, "target_harvest_failed", {
         domain: expectedDomain,
         error: error instanceof Error ? error.name : "unknown",
@@ -372,67 +618,363 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
   await runStoryStage(id);
 }
 
+function sourceKindFor(session: TryMeSession): NonNullable<TryMeSession["sourceConfirmation"]>["sourceKind"] {
+  if (session.answers.sourceUrl) return "public-url";
+  if (session.answers.sourceName) return "uploaded-pdf";
+  if (session.answers.eventSource) return "event-context";
+  return "public-account";
+}
+
+function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
+  const patch = { ...input };
+  const targetWasSupplied = Object.hasOwn(patch, "targetDomain");
+  const sourceUrlWasSupplied = Object.hasOwn(patch, "sourceUrl");
+  const eventSourceWasSupplied = Object.hasOwn(patch, "eventSource");
+  const ctaDestinationWasSupplied = Object.hasOwn(patch, "ctaDestination");
+  if (patch.targetDomain) patch.targetDomain = normalizeDomain(patch.targetDomain);
+  if (patch.ctaDestination) patch.ctaDestination = new URL(patch.ctaDestination).toString();
+  if (patch.sourceUrl && (session.answers.sourceName || session.answers.sourceUploadId)) {
+    throw new HttpError(
+      409,
+      "source_conflict",
+      "A PDF source is already being processed for this experience."
+    );
+  }
+  const targetChanged =
+    targetWasSupplied && patch.targetDomain !== session.answers.targetDomain;
+  const sourceChanged = Boolean(
+    (sourceUrlWasSupplied && patch.sourceUrl !== session.answers.sourceUrl) ||
+      (eventSourceWasSupplied && patch.eventSource !== session.answers.eventSource)
+  );
+  session.answers = { ...session.answers, ...patch };
+  if (targetWasSupplied && !patch.targetDomain) delete session.answers.targetDomain;
+  if (sourceUrlWasSupplied && !patch.sourceUrl) delete session.answers.sourceUrl;
+  if (eventSourceWasSupplied && !patch.eventSource) delete session.answers.eventSource;
+  if (ctaDestinationWasSupplied && !patch.ctaDestination) {
+    delete session.answers.ctaDestination;
+  }
+  if (patch.exampleMode !== undefined) {
+    session.experienceMode = patch.exampleMode ? "example" : "custom";
+  }
+  if (patch.exampleKey !== undefined) session.exampleKey = patch.exampleKey;
+
+  if (targetChanged) {
+    session.targetBrand = undefined;
+    session.audienceSuggestions = [];
+    session.audienceRecommendations = [];
+    session.selectedAudienceRecommendationId = undefined;
+    session.evidenceItems = [];
+    session.availableAssets = assetsFor(session.brand, undefined);
+    if (!patch.audience && !patch.customAudience) {
+      session.answers.audience = undefined;
+      session.answers.customAudience = undefined;
+    }
+  }
+
+  if (patch.selectedAssetIds) {
+    const availableIds = new Set((session.availableAssets ?? []).map((asset) => asset.id));
+    const unknown = patch.selectedAssetIds.find((id) => !availableIds.has(id));
+    if (unknown) {
+      throw new HttpError(400, "unknown_asset", "Choose an asset from the harvested asset list.");
+    }
+  }
+
+  if (sourceChanged && patch.sourceConfirmed === undefined) {
+    delete session.answers.sourceConfirmed;
+    session.sourceConfirmation = {
+      status: "unconfirmed",
+      sourceKind: sourceKindFor(session)
+    };
+  }
+  if (patch.sourceConfirmed !== undefined) {
+    session.sourceConfirmation = {
+      status: patch.sourceConfirmed ? "confirmed" : "unconfirmed",
+      confirmedAt: patch.sourceConfirmed ? new Date().toISOString() : undefined,
+      sourceKind: sourceKindFor(session)
+    };
+  }
+
+  const resolvedAudience =
+    session.answers.audience === "Other"
+      ? session.answers.customAudience
+      : session.answers.customAudience || session.answers.audience;
+  if (resolvedAudience) {
+    session.stages.audience = {
+      ...session.stages.audience,
+      status: "complete",
+      startedAt: session.stages.audience.startedAt,
+      completedAt: new Date().toISOString(),
+      detail: "Audience and decision context aligned.",
+      artifact: `${resolvedAudience} · ${session.answers.objective || "objective in progress"}`
+    };
+  } else {
+    session.stages.audience = {
+      ...session.stages.audience,
+      status: "running",
+      startedAt: session.stages.audience.startedAt,
+      detail: "Refining the audience and decision context."
+    };
+  }
+  if (patch.audience || patch.customAudience) {
+    appendEvent(session, "audience_selected", {
+      recommendation: session.selectedAudienceRecommendationId ?? null
+    });
+  }
+  if (patch.objective) appendEvent(session, "objective_selected");
+  if (patch.sourceUrl || patch.sourceName) appendEvent(session, "source_submitted");
+  if (patch.messageBelief || patch.messageAction) appendEvent(session, "message_spine_updated");
+  if (patch.ctaType || patch.ctaDestination) appendEvent(session, "cta_configured");
+  if (patch.styleVariant || patch.toneVariant || patch.layoutVariant) {
+    appendEvent(session, "creative_direction_updated");
+  }
+  if (patch.selectedAssetIds) {
+    appendEvent(session, "asset_selection_updated", { count: patch.selectedAssetIds.length });
+  }
+}
+
+function completeInputMutation(session: TryMeSession, previousFingerprint: string): void {
+  if (storyInputFingerprint(session) !== previousFingerprint) {
+    resetGeneratedExperience(
+      session,
+      "Inputs changed. The next preview will use the latest workspace decisions."
+    );
+  }
+}
+
 export async function patchSessionAnswers(
   id: string,
   patch: SessionAnswers
 ): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean }> {
   assertProductionSessionStore();
-  const normalizedPatch = { ...patch };
-  if (patch.targetDomain) normalizedPatch.targetDomain = normalizeDomain(patch.targetDomain);
   const updated = await updateSession(id, (session) => {
-    if (
-      normalizedPatch.sourceUrl &&
-      (session.answers.sourceName || session.answers.sourceUploadId)
-    ) {
-      throw new HttpError(
-        409,
-        "source_conflict",
-        "A PDF source is already being processed for this experience."
-      );
-    }
-    const targetChanged =
-      normalizedPatch.targetDomain && normalizedPatch.targetDomain !== session.answers.targetDomain;
-    session.answers = { ...session.answers, ...normalizedPatch };
-    if (targetChanged) {
-      session.targetBrand = undefined;
-      session.audienceSuggestions = [];
-      if (!normalizedPatch.audience && !normalizedPatch.customAudience) {
-        session.answers.audience = undefined;
-        session.answers.customAudience = undefined;
-      }
-    }
-    const resolvedAudience =
-      session.answers.audience === "Other"
-        ? session.answers.customAudience
-        : session.answers.customAudience || session.answers.audience;
-    if (resolvedAudience) {
-      session.stages.audience = {
-        ...session.stages.audience,
-        status: "complete",
-        startedAt: session.stages.audience.startedAt,
-        completedAt: new Date().toISOString(),
-        detail: "Audience and decision context aligned.",
-        artifact: `${resolvedAudience} · ${session.answers.objective || "objective in progress"}`
-      };
-    } else {
-      session.stages.audience = {
-        ...session.stages.audience,
-        status: "running",
-        startedAt: session.stages.audience.startedAt,
-        detail: "Refining the audience and decision context."
-      };
-    }
-    if (normalizedPatch.audience || normalizedPatch.customAudience) {
-      appendEvent(session, "audience_selected", {
-        audience: normalizedPatch.customAudience || normalizedPatch.audience || null
-      });
-    }
-    if (normalizedPatch.objective) appendEvent(session, "objective_selected");
-    if (normalizedPatch.sourceUrl || normalizedPatch.sourceName) appendEvent(session, "source_submitted");
+    const previousFingerprint = storyInputFingerprint(session);
+    applyAnswerPatch(session, patch);
+    completeInputMutation(session, previousFingerprint);
     return session;
   });
   if (!updated) throw new Error("This temporary experience has expired.");
-  return { session: toPublicSession(updated), shouldGenerate: isGenerationReady(updated.useCase, updated.answers) };
+  return {
+    session: toPublicSession(updated),
+    shouldGenerate: isGenerationReady(updated.useCase, updated.answers)
+  };
+}
+
+export async function patchSessionWorkspace(
+  id: string,
+  patch: SessionWorkspacePatch
+): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean }> {
+  assertProductionSessionStore();
+  const updated = await updateSession(id, (session) => {
+    const previousFingerprint = storyInputFingerprint(session);
+    if (session.status === "claimed") {
+      throw new HttpError(
+        409,
+        "claimed_session_locked",
+        "Create a new version to change a saved experience."
+      );
+    }
+    if (patch.answers) applyAnswerPatch(session, patch.answers);
+
+    if (patch.selectedAudienceRecommendationId !== undefined) {
+      if (patch.selectedAudienceRecommendationId === null) {
+        session.selectedAudienceRecommendationId = undefined;
+      } else {
+        const recommendation = session.audienceRecommendations?.find(
+          (candidate) => candidate.id === patch.selectedAudienceRecommendationId
+        );
+        if (!recommendation) {
+          throw new HttpError(
+            400,
+            "unknown_audience_recommendation",
+            "Choose an audience recommendation from the current account brief."
+          );
+        }
+        session.selectedAudienceRecommendationId = recommendation.id;
+        applyAnswerPatch(session, {
+          audience: recommendation.label,
+          customAudience: undefined
+        });
+        appendEvent(session, "audience_recommendation_selected", {
+          recommendationId: recommendation.id
+        });
+      }
+    }
+
+    if (patch.evidenceDecisions) {
+      const decisions = new Map(
+        patch.evidenceDecisions.map((decision) => [decision.id, decision.disposition])
+      );
+      const knownIds = new Set((session.evidenceItems ?? []).map((item) => item.id));
+      const unknown = patch.evidenceDecisions.find((decision) => !knownIds.has(decision.id));
+      if (unknown) {
+        throw new HttpError(
+          400,
+          "unknown_evidence",
+          "Choose evidence from the current public account brief."
+        );
+      }
+      session.evidenceItems = (session.evidenceItems ?? []).map((item) => ({
+        ...item,
+        disposition: decisions.get(item.id) ?? item.disposition
+      }));
+      session.audienceRecommendations = audienceRecommendationsFor(
+        session.audienceSuggestions,
+        session.brand,
+        session.targetBrand,
+        session.evidenceItems
+      );
+      appendEvent(session, "account_evidence_curated", {
+        pinned: session.evidenceItems.filter((item) => item.disposition === "pinned").length,
+        excluded: session.evidenceItems.filter((item) => item.disposition === "excluded").length
+      });
+    }
+
+    if (patch.sourceConfirmation) {
+      session.sourceConfirmation = {
+        status: patch.sourceConfirmation,
+        confirmedAt:
+          patch.sourceConfirmation === "confirmed" ? new Date().toISOString() : undefined,
+        sourceKind: sourceKindFor(session)
+      };
+      session.answers.sourceConfirmed = patch.sourceConfirmation === "confirmed";
+      appendEvent(session, "source_confirmation_updated", {
+        status: patch.sourceConfirmation
+      });
+    }
+
+    if (patch.blockControls) {
+      const updates = new Map(patch.blockControls.map((control) => [control.id, control]));
+      const existing = new Map((session.blockControls ?? []).map((control) => [control.id, control]));
+      for (const [id, control] of updates) {
+        existing.set(id, { ...existing.get(id), ...control } as ExperienceBlockControl);
+      }
+      session.blockControls = [...existing.values()];
+      appendEvent(session, "block_controls_updated", {
+        count: patch.blockControls.length,
+        locked: session.blockControls.filter((control) => control.locked).length
+      });
+    }
+
+    completeInputMutation(session, previousFingerprint);
+    return session;
+  });
+  if (!updated) throw new Error("This temporary experience has expired.");
+  return {
+    session: toPublicSession(updated),
+    shouldGenerate: isGenerationReady(updated.useCase, updated.answers)
+  };
+}
+
+export async function recordPreviewInteraction(
+  id: string,
+  input: PreviewInteractionInput
+): Promise<PublicTryMeSession> {
+  assertProductionSessionStore();
+  const updated = await updateSession(id, (session) => {
+    if (session.status === "claimed") {
+      throw new HttpError(
+        409,
+        "claimed_session_locked",
+        "Saved experiences use their live analytics stream."
+      );
+    }
+    const at = new Date().toISOString();
+    const preview = session.previewAnalytics ?? { totalInteractions: 0, counts: {} };
+    preview.totalInteractions += 1;
+    preview.lastInteractionAt = at;
+    preview.lastElementId = input.elementId;
+    preview.counts[input.event] = (preview.counts[input.event] ?? 0) + 1;
+    session.previewAnalytics = preview;
+    appendEvent(session, `preview_${input.event.replaceAll("-", "_")}`, {
+      elementId: input.elementId ?? null,
+      hasValue: Boolean(input.value)
+    });
+    return session;
+  });
+  if (!updated) throw new Error("This temporary experience has expired.");
+  return toPublicSession(updated);
+}
+
+export async function duplicateSession(
+  id: string,
+  input: DuplicateSessionInput
+): Promise<{
+  session: PublicTryMeSession;
+  editorToken: string;
+  shouldGenerate: boolean;
+}> {
+  assertProductionSessionStore();
+  const source = await getSession(id);
+  if (!source) throw new Error("This temporary experience has expired.");
+
+  const now = new Date().toISOString();
+  const nextId = opaqueId();
+  const editorToken = opaqueId();
+  const sourceLineage = source.lineage ?? {
+    rootSessionId: source.id,
+    versionNumber: 1
+  };
+  const next: TryMeSession = {
+    ...structuredClone(source),
+    id: nextId,
+    editorTokenHash: createHash("sha256").update(editorToken).digest("hex"),
+    status: "collecting",
+    createdAt: now,
+    updatedAt: now,
+    expiresAt: undefined,
+    claimedAt: undefined,
+    temporaryUrl: `${config.appUrl}/e/${nextId}`,
+    liveUrl: undefined,
+    revision: 1,
+    stages: {
+      brand: source.brand
+        ? {
+            status: source.brand.source === "fallback" ? "fallback" : "complete",
+            completedAt: now,
+            detail: "Brand context copied from the source experience."
+          }
+        : stage("running", "Reading the visual and messaging signals buyers already recognize."),
+      audience: source.answers.audience
+        ? {
+            status: "complete",
+            completedAt: now,
+            detail: "Audience and account context copied from the source experience.",
+            artifact: source.answers.customAudience || source.answers.audience
+          }
+        : stage("running", "Refining the audience and decision context."),
+      story: stage("pending", "Ready to generate this version from the copied workspace.")
+    },
+    experience: undefined,
+    qualityReceipt: undefined,
+    cockpit: undefined,
+    claim: undefined,
+    previewAnalytics: { totalInteractions: 0, counts: {} },
+    lineage:
+      input.mode === "version"
+        ? {
+            rootSessionId: sourceLineage.rootSessionId,
+            parentSessionId: source.id,
+            versionNumber: sourceLineage.versionNumber + 1,
+            label: input.label
+          }
+        : {
+            rootSessionId: nextId,
+            duplicatedFromSessionId: source.id,
+            versionNumber: 1,
+            label: input.label
+          },
+    events: []
+  };
+  appendEvent(next, input.mode === "version" ? "session_version_created" : "session_duplicated", {
+    sourceSessionId: source.id,
+    versionNumber: next.lineage?.versionNumber ?? 1
+  });
+  await putSession(next, { ttlSeconds: 3600 });
+  return {
+    session: toPublicSession(next),
+    editorToken,
+    shouldGenerate: isGenerationReady(next.useCase, next.answers)
+  };
 }
 
 export async function finalizePdfSource(
@@ -455,6 +997,11 @@ export async function finalizePdfSource(
     }
     session.answers.sourceName = input.sourceName;
     session.answers.sourceOpenAIFileId = input.sourceOpenAIFileId;
+    delete session.answers.sourceConfirmed;
+    session.sourceConfirmation = {
+      status: "unconfirmed",
+      sourceKind: "uploaded-pdf"
+    };
     appendEvent(session, "source_submitted");
     return session;
   });
@@ -540,16 +1087,17 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       (latest.useCase === "abm" && latest.answers.targetDomain
         ? fallbackBrand(latest.answers.targetDomain)
         : undefined);
+    const generationTargetBrand = curatedTargetBrand(latest, targetBrand);
     const generated = await generateExperienceDraft({
       brand,
-      targetBrand,
+      targetBrand: generationTargetBrand,
       useCase: latest.useCase,
       answers: latest.answers
     });
     const html = renderExperienceHtml({
       draft: generated.draft,
       brand,
-      targetBrand,
+      targetBrand: generationTargetBrand,
       useCase: latest.useCase,
       answers: latest.answers,
       themeUrl: process.env.FOLLOZE_THEME_URL,
@@ -606,6 +1154,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           artifactRevision: session.revision + 1,
           artifactDigest: createHash("sha256").update(html).digest("hex")
         };
+        session.qualityReceipt = qualityReceiptFor(session, session.revision + 1);
         session.status = "preview_ready_unclaimed";
         session.expiresAt = new Date(readyAt + config.sessionTtlSeconds * 1000).toISOString();
         session.stages.story = {
@@ -1047,6 +1596,21 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
           publishStatus,
           follozeBoardId: publish.boardId,
           designerUrl: publish.designerUrl
+        };
+        session.cockpit = {
+          savedAt: claimedAt,
+          companyDomain: session.companyDomain,
+          targetDomain: session.answers.targetDomain,
+          audience: session.answers.customAudience || session.answers.audience,
+          objective: session.answers.objective,
+          ctaType: session.answers.ctaType,
+          styleVariant: session.answers.styleVariant,
+          toneVariant: session.answers.toneVariant,
+          layoutVariant: session.answers.layoutVariant,
+          qualityStatus: session.qualityReceipt?.status,
+          artifactRevision: session.experience?.artifactRevision ?? session.revision,
+          versionNumber: session.lineage?.versionNumber ?? 1,
+          previewInteractions: session.previewAnalytics?.totalInteractions ?? 0
         };
         appendEvent(session, "claim_completed", { publishMode: publish.mode });
         if (!leadOutcomeSynced) appendEvent(session, "lead_outcome_sync_failed");

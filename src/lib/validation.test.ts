@@ -15,7 +15,9 @@ import {
   assertPublicHostname,
   assertSafePublicUrl,
   maskEmail,
-  normalizeDomain
+  normalizeDomain,
+  sessionOperationSchema,
+  sessionWorkspacePatchSchema
 } from "@/lib/validation";
 import { createPinnedLookup } from "@/lib/safe-fetch";
 
@@ -198,6 +200,113 @@ describe("PDF validation", () => {
     [new File(["not a pdf"], "renamed.pdf", { type: "application/pdf" }), "not a valid PDF"]
   ])("rejects invalid PDF input", async (file, message) => {
     await expect(validatePdfFile(file)).rejects.toThrow(message);
+  });
+});
+
+describe("expanded session workspace validation", () => {
+  it("keeps the legacy answer patch contract valid", () => {
+    expect(
+      answersSchema.parse({
+        targetDomain: "cisco.com",
+        audience: "Network operations leaders",
+        objective: "Book a meeting"
+      })
+    ).toEqual({
+      targetDomain: "cisco.com",
+      audience: "Network operations leaders",
+      objective: "Book a meeting"
+    });
+  });
+
+  it("accepts the full creative control foundation in one bounded workspace mutation", () => {
+    expect(
+      sessionWorkspacePatchSchema.parse({
+        operation: "update-workspace",
+        answers: {
+          exampleMode: true,
+          exampleKey: "jitterbit-cisco",
+          messageBelief: "Cisco can govern automation across connected infrastructure.",
+          messageAction: "Plan the first architecture workshop",
+          ctaType: "book-meeting",
+          ctaDestination: "https://jitterbit.com/contact",
+          styleVariant: "brand-led",
+          toneVariant: "technical",
+          layoutVariant: "narrative",
+          selectedAssetIds: ["asset_1234"]
+        },
+        selectedAudienceRecommendationId: "audience_1234",
+        evidenceDecisions: [
+          { id: "evidence_1234", disposition: "pinned" },
+          { id: "evidence_5678", disposition: "excluded" }
+        ],
+        sourceConfirmation: "confirmed",
+        blockControls: [
+          {
+            id: "hero",
+            locked: true,
+            headline: "Make Cisco automation accountable by design."
+          }
+        ]
+      })
+    ).toMatchObject({
+      operation: "update-workspace",
+      sourceConfirmation: "confirmed"
+    });
+  });
+
+  it("rejects unsafe CTA destinations and duplicate evidence or block decisions", () => {
+    expect(() =>
+      answersSchema.parse({
+        ctaType: "book-meeting",
+        ctaDestination: "javascript:alert(1)"
+      })
+    ).toThrow("public HTTPS");
+    expect(() =>
+      sessionWorkspacePatchSchema.parse({
+        operation: "update-workspace",
+        evidenceDecisions: [
+          { id: "evidence_same", disposition: "pinned" },
+          { id: "evidence_same", disposition: "excluded" }
+        ]
+      })
+    ).toThrow("unique");
+    expect(() =>
+      sessionWorkspacePatchSchema.parse({
+        operation: "update-workspace",
+        blockControls: [
+          { id: "hero", locked: true },
+          { id: "hero", visible: false }
+        ]
+      })
+    ).toThrow("unique");
+  });
+
+  it("accepts an explicit empty CTA destination so an editor can clear it", () => {
+    expect(answersSchema.parse({ ctaDestination: "" })).toEqual({ ctaDestination: "" });
+  });
+
+  it("uses one operation contract for preview telemetry and duplicate/version creation", () => {
+    expect(
+      sessionOperationSchema.parse({
+        operation: "preview-interaction",
+        event: "lens-selected",
+        elementId: "decision-lens-2",
+        value: "Automation control"
+      })
+    ).toMatchObject({ event: "lens-selected" });
+    expect(
+      sessionOperationSchema.parse({
+        operation: "duplicate",
+        mode: "version",
+        label: "Executive option"
+      })
+    ).toMatchObject({ mode: "version" });
+    expect(() =>
+      sessionOperationSchema.parse({
+        operation: "preview-interaction",
+        event: "email-captured"
+      })
+    ).toThrow();
   });
 });
 
