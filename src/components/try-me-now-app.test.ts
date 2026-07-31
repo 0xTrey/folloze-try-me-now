@@ -10,7 +10,9 @@ import {
   getGuidedQuestionCopy,
   getRevealCopy,
   getRevealShellHeadline,
-  previewBoundaryScrollDelta
+  previewBoundaryScrollDelta,
+  recommendedObjectiveFor,
+  shouldAutoConfirmSource
 } from "./try-me-now-app";
 
 function brand(domain: string, companyName: string): PublicBrandProfile {
@@ -52,6 +54,24 @@ function session(
 }
 
 describe("Try Me Now experience copy", () => {
+  it("preselects a contextual objective without submitting it", () => {
+    expect(recommendedObjectiveFor(session("abm"))).toBe("Accelerate an opportunity");
+    expect(recommendedObjectiveFor(session("campaign", { answers: { campaignType: "product" } }))).toBe("Launch or announce");
+    expect(recommendedObjectiveFor(session("campaign", { answers: { campaignType: "event" } }))).toBe("Drive registrations");
+    expect(recommendedObjectiveFor(session("campaign", { answers: { campaignType: "demand" } }))).toBe("Generate demand");
+    expect(recommendedObjectiveFor(session("content"))).toBe("Increase content engagement");
+  });
+
+  it("auto-confirms only high-confidence content sources", () => {
+    expect(shouldAutoConfirmSource(session("content", { answers: { sourceUrl: "https://jitterbit.com/report" } }))).toBe(true);
+    expect(shouldAutoConfirmSource(session("content", { answers: { sourceName: "report.pdf", sourceTitle: "Integration Report" } }))).toBe(true);
+    expect(shouldAutoConfirmSource(session("content", { answers: { sourceName: "report.pdf" } }))).toBe(false);
+    expect(shouldAutoConfirmSource(session("content", {
+      answers: { sourceUrl: "https://jitterbit.com/report" },
+      sourceConfirmation: { status: "confirmed" }
+    }))).toBe(false);
+  });
+
   it("routes each watch-example action to a verified public Folloze board", () => {
     expect(entryPathOptions.abm).toMatchObject({
       exampleLabel: "Watch Tribe Connect for HARMAN",

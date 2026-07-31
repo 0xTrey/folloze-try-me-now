@@ -224,6 +224,7 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
             alt={`${companyName} logo`}
             width={164}
             height={38}
+            style={{ width: "auto", height: "auto" }}
             unoptimized
             onError={() => setFailedLogoUrl(brand?.logoUrl)}
           />
@@ -294,12 +295,13 @@ export interface AudienceEvidenceTrayProps {
   companyName: string;
   options: AudienceEvidenceOption[];
   selectedId?: string;
+  simplified?: boolean;
   onSelect: (id: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onExclude: (id: string, excluded: boolean) => void;
 }
 
-export function AudienceEvidenceTray({ companyName, options, selectedId, onSelect, onPin, onExclude }: AudienceEvidenceTrayProps) {
+export function AudienceEvidenceTray({ companyName, options, selectedId, simplified = false, onSelect, onPin, onExclude }: AudienceEvidenceTrayProps) {
   return (
     <section className={styles.evidenceTray} aria-labelledby="audience-evidence-title">
       <div className={styles.sectionHeading}>
@@ -320,14 +322,14 @@ export function AudienceEvidenceTray({ companyName, options, selectedId, onSelec
               <span><strong>{option.label}</strong><small>{option.rationale}</small></span>
               <ArrowRight size={16} />
             </button>
-            <div className={styles.audienceTools}>
+            {!simplified && <div className={styles.audienceTools}>
               <button type="button" aria-pressed={Boolean(option.pinned)} onClick={() => onPin(option.id, !option.pinned)}>
                 <Pin size={14} />{option.pinned ? "Pinned" : "Pin"}
               </button>
               <button type="button" aria-pressed={Boolean(option.excluded)} onClick={() => onExclude(option.id, !option.excluded)}>
                 <X size={14} />{option.excluded ? "Restore" : "Exclude"}
               </button>
-            </div>
+            </div>}
             <details className={styles.evidenceDetails}>
               <summary>{option.evidence.length} supporting signals</summary>
               <div>

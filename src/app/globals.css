@@ -412,3 +412,185 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   .experienceControlDeck > summary { min-height: 58px; }
   .experienceControlBody { padding: 14px; }
 }
+
+/* Prospect-shell simplification: one decision, one build, then the preview. */
+@media (min-width: 821px) {
+  .workbench {
+    grid-template-columns: minmax(320px,.72fr) minmax(0,1.45fr);
+  }
+
+  .processRail {
+    display: none;
+  }
+
+  .briefPanel {
+    padding: clamp(32px,3.2vw,52px);
+    background: #fff;
+  }
+
+  .briefHeader {
+    margin-bottom: 24px;
+  }
+
+  .briefPanel > section:first-of-type {
+    margin-bottom: clamp(34px,4.5vh,52px);
+  }
+
+  .questionCard {
+    max-width: 660px;
+    padding-bottom: 42px;
+  }
+
+  .questionCard h2 {
+    max-width: 620px;
+  }
+
+  .largeChoiceGrid button {
+    min-height: 76px;
+    padding: 16px 18px;
+  }
+
+  .creativeBriefControls {
+    margin-top: 8px;
+    padding-top: 28px;
+    border-top: 1px solid var(--fz-border);
+  }
+
+  .buildPanel {
+    padding: clamp(34px,4vw,62px);
+    background:
+      radial-gradient(circle at 92% 2%,rgba(91,91,255,.08),transparent 32%),
+      linear-gradient(180deg,#f8f9fc,#f4f5f9);
+  }
+
+  .buildTop,
+  .buildPanel > section {
+    width: min(100%,1120px);
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .buildTop {
+    min-height: 0;
+  }
+
+  .buildTop h2 {
+    font-size: clamp(28px,2.5vw,38px);
+  }
+
+  .buildTop p {
+    max-width: 700px;
+    font-size: 12px;
+  }
+
+  .workbench:has([data-final-assembly="true"]) {
+    min-height: calc(100vh - 72px);
+    display: block;
+    background:
+      radial-gradient(circle at 50% 18%,rgba(91,91,255,.09),transparent 34%),
+      #f5f6fa;
+  }
+
+  .workbench:has([data-final-assembly="true"]) .briefPanel,
+  .workbench:has([data-final-assembly="true"]) .processRail {
+    display: none;
+  }
+
+  .workbench:has([data-final-assembly="true"]) .buildPanel {
+    min-height: calc(100vh - 72px);
+    padding: clamp(38px,5vh,72px) clamp(30px,6vw,96px);
+    display: grid;
+    align-content: center;
+  }
+
+  .workbench:has([data-final-assembly="true"]) .buildTop {
+    align-items: flex-end;
+    margin-bottom: 4px;
+  }
+
+  .revealGrid {
+    grid-template-columns: minmax(0,1fr);
+  }
+
+  .revealPreview {
+    padding: 18px;
+  }
+
+  .revealPreview .assembly {
+    height: clamp(680px,76vh,860px);
+  }
+
+  .revealRail {
+    padding: 18px;
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    align-items: stretch;
+    gap: 14px;
+    border-top: 1px solid var(--fz-border);
+    border-left: 0;
+    background: #fafbfc;
+  }
+
+  .revealRail .signalTeaser {
+    height: 100%;
+    margin-top: 0;
+  }
+
+  .revealMiniReceipt {
+    display: none;
+  }
+}
+
+.saveDialogBackdrop {
+  z-index: 90;
+  display: grid;
+  place-content: center;
+  place-items: center;
+  padding: 24px;
+  background: rgba(7,16,35,.62);
+  backdrop-filter: blur(12px);
+}
+
+.saveExperienceDialog {
+  position: relative;
+  width: min(100%,520px);
+  max-height: min(760px,calc(100vh - 48px));
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.65);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 34px 100px rgba(6,18,43,.28);
+}
+
+.saveExperienceDialog > .drawerClose {
+  z-index: 2;
+  top: 22px;
+  right: 22px;
+}
+
+.saveExperienceDialog section {
+  padding: 22px;
+  border: 0;
+}
+
+@media (max-width: 600px) {
+  .saveDialogBackdrop { padding: 12px; }
+  .saveExperienceDialog { border-radius: 20px; }
+}
+
+@media (min-width: 821px) and (max-width: 1120px) {
+  .revealRail {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+
+  .revealRail .signalTeaser {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 820px) {
+  .previewControlBar {
+    display: none;
+  }
+}

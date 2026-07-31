@@ -2,12 +2,12 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicTryMeSession } from "@/lib/types";
 
-import { AssemblyPreview } from "./try-me-now-app";
+import { AssemblyPreview, SaveExperienceDialog } from "./try-me-now-app";
 
 afterEach(() => cleanup());
 
@@ -79,5 +79,29 @@ describe("AssemblyPreview", () => {
       "src",
       "/api/sessions/desktop-preview-session/image/seller-logo"
     );
+  });
+});
+
+describe("SaveExperienceDialog", () => {
+  it("asks for a business email only after the preview and closes accessibly", () => {
+    const onClose = vi.fn();
+    const onSave = vi.fn();
+    render(
+      <SaveExperienceDialog
+        open
+        expiresLabel="11:30 AM"
+        email=""
+        status="idle"
+        onEmailChange={vi.fn()}
+        onSave={onSave}
+        onClose={onClose}
+      />
+    );
+
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("Save the URL before the preview disappears.");
+    expect(screen.getByRole("textbox", { name: "Business email" })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

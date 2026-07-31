@@ -568,3 +568,205 @@ fieldset.controlCard { min-inline-size:0 }
   .demoOrigin,.demoResult,.demoSignal { opacity:1;transform:none }
   .demoPulse { display:none }
 }
+
+/* Approved shell polish: compact proof, a visible build ceremony, and quieter save UI. */
+.pathActions {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.pathActions .primaryAction,
+.pathActions .exampleAction {
+  width: 100%;
+}
+
+.pathActions .exampleAction {
+  min-height: 38px;
+  padding: 7px 2px 0;
+  justify-content: flex-start;
+  border-radius: 0;
+}
+
+.brandStrip {
+  container: brand-proof / inline-size;
+  min-height: 174px;
+  padding: 18px;
+  grid-template-columns: 112px minmax(0,1fr);
+  grid-template-areas:
+    "mark identity"
+    "status action"
+    "palette palette";
+  gap: 11px 14px;
+  border-radius: 18px;
+  box-shadow: 0 14px 42px color-mix(in srgb,var(--harvest-primary) 9%,transparent);
+}
+
+.brandMark {
+  width: 112px;
+  height: 60px;
+  padding: 12px;
+  border-radius: 14px;
+}
+
+.brandPalette {
+  grid-template-columns: minmax(118px,.48fr) minmax(0,1.52fr);
+  grid-template-areas:
+    "header header"
+    "rail tokens";
+  column-gap: 12px;
+}
+
+.artifactStream {
+  padding: clamp(26px,3vw,40px);
+  border-radius: 26px;
+  background: linear-gradient(155deg,#fff,#fbfbfe 72%);
+  box-shadow: 0 24px 74px rgba(10,22,48,.1);
+}
+
+.streamHeader h3 {
+  font-size: clamp(25px,2.4vw,34px);
+}
+
+.activeBuild {
+  min-height: 220px;
+  margin: 24px 0 20px;
+  padding: 28px 30px;
+  grid-template-columns: 128px minmax(0,1fr);
+}
+
+.activeBuildEmphasis {
+  min-height: 380px;
+  padding: clamp(32px,4vw,52px);
+  grid-template-columns: minmax(180px,.42fr) minmax(0,1fr) 96px;
+}
+
+.activeBuildEmphasis .buildNarrative>strong {
+  max-width: 760px;
+  font-size: clamp(38px,3.4vw,52px);
+}
+
+.activeBuildEmphasis .buildNarrative>p {
+  max-width: 720px;
+  font-size: 16px;
+}
+
+.activeBuildEmphasis .buildExpectation {
+  margin-top: 17px;
+  font-size: 13px;
+}
+
+.artifactList {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  column-gap: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.artifactRow:nth-last-child(-n+2) {
+  border-bottom: 0;
+}
+
+.savePanel {
+  padding: 15px;
+  gap: 11px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.expiryClock {
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.saveCopy h3 {
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.saveCopy ul {
+  display: none;
+}
+
+.saveForm label>div {
+  min-height: 44px;
+}
+
+.qualityReceipt {
+  container: quality-card / inline-size;
+}
+
+@container brand-proof (max-width: 540px) {
+  .brandMark {
+    width: 112px;
+    height: 58px;
+    padding: 11px;
+  }
+
+  .brandIdentity strong {
+    font-size: 19px;
+  }
+
+  .brandIdentity small {
+    font-size: 9px;
+  }
+
+  .brandPalette {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "rail";
+  }
+
+  .brandTokenList {
+    display: none;
+  }
+}
+
+@container artifact-stream (max-width: 720px) {
+  .activeBuild,
+  .activeBuildEmphasis {
+    min-height: 300px;
+    padding: 26px;
+    grid-template-columns: 130px minmax(0,1fr);
+  }
+
+  .activeBuildEmphasis .buildStageStamp {
+    display: none;
+  }
+
+  .activeBuildEmphasis .buildNarrative>strong {
+    font-size: clamp(31px,5cqi,40px);
+  }
+
+  .artifactList {
+    grid-template-columns: 1fr;
+  }
+
+  .artifactRow:nth-last-child(2) {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+@container quality-card (max-width: 520px) {
+  .qualityReceipt {
+    padding: 16px;
+    grid-template-columns: 72px minmax(0,1fr);
+    gap: 14px;
+  }
+
+  .qualityScore {
+    width: 72px;
+    height: 72px;
+  }
+
+  .qualityScore strong {
+    font-size: 23px;
+  }
+
+  .qualityCopy>div {
+    grid-template-columns: 1fr;
+  }
+}

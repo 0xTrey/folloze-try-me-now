@@ -1,5 +1,21 @@
 # Try Me Now UX V2 Build Plan
 
+## July 31 simplification decision
+
+The prospect journey now intentionally uses one seven-step path:
+
+1. choose one of three use cases;
+2. enter the company domain or source;
+3. confirm the recommended company-specific audience;
+4. confirm one contextual objective;
+5. watch a large, truthful 10–30 second build ceremony;
+6. explore the canonical desktop preview;
+7. enter a business email only to save the experience.
+
+The earlier cockpit-heavy plan below remains useful as a backlog, but it is not the first-run UX. Source confirmation is automatic for high-confidence URLs and extracted PDF titles. Evidence pin/exclude, belief/action direction, CTA styling, block controls, and analytics remain available after the preview or in advanced product work. Mobile/tablet preview toggles, separate edit controls, permanent save sidebars, and duplicate/regenerate actions are intentionally omitted from the prospect flow. Direct examples open verified existing Folloze boards.
+
+The accepted lifecycle boundary is unchanged: anonymous previews expire after 30 minutes and create no lead; a valid business email is required before the lead ledger and durable saved experience are created. Production, git, and public verification remain separate checkpoints. The simplified journey is approved for production promotion; the older backlog's preview-only delivery boundary no longer applies to this release.
+
 ## Outcome
 
 Turn the current polished MVP into a prospect-controlled product experience that visibly recognizes the visitor's company, shows the evidence behind its recommendations, builds the page progressively, lets the prospect refine the result without restarting, proves engagement analytics, and converts an email claim into a durable experience workspace.

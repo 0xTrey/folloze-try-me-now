@@ -42,11 +42,10 @@ import {
   ContentSourceConfirmation,
   CtaStyleControl,
   EditBriefDrawer,
-  EntryPathMicroDemo,
+  ExampleModeCta,
   ExpirySaveValuePanel,
   ExperienceBlockControl as ExperienceBlockControlPanel,
   InstantBrandLockStrip,
-  MessageDirectionControl,
   PersonalizationQualityReceipt,
   ProgressiveArtifactStream,
   SavedExperienceCockpit,
@@ -114,33 +113,33 @@ const useCaseContent: Record<
   abm: {
     number: "01",
     kicker: "1:1 ABM",
-    title: "Break into one account",
-    description: "Shape one experience around the company, buying group, and next move.",
-    cta: "Build a 1:1 experience",
-    domainTitle: "Start with the brand making the case.",
-    domainBody: "We will capture its public identity now, then map it against the account you choose.",
+    title: "Build a 1:1 account page",
+    description: "Personalize one page for a target account.",
+    cta: "Build a 1:1 account page",
+    domainTitle: "What company is selling?",
+    domainBody: "We will capture the brand while you continue.",
     icon: Target,
     className: "portalEditorial"
   },
   campaign: {
     number: "02",
     kicker: "Campaign",
-    title: "Launch the campaign",
-    description: "Build a focused landing page for an offer, segment, product, or event.",
+    title: "Launch a campaign page",
+    description: "Create a page for a product, offer, or event.",
     cta: "Build a campaign page",
-    domainTitle: "Start with the brand buyers should recognize.",
-    domainBody: "We will capture its voice and visual system while you choose the offer and outcome.",
+    domainTitle: "What company is launching it?",
+    domainBody: "We will capture the brand while you continue.",
     icon: Megaphone,
     className: "portalCobalt"
   },
   content: {
     number: "03",
     kicker: "Content",
-    title: "Make content work harder",
-    description: "Turn a URL or PDF into a guided, measurable path buyers want to explore.",
-    cta: "Transform my content",
-    domainTitle: "Start with the company behind the source.",
-    domainBody: "We will capture the brand now, then turn a URL or PDF into a guided buyer path.",
+    title: "Make content interactive",
+    description: "Turn a public URL or PDF into a guided experience.",
+    cta: "Make content interactive",
+    domainTitle: "What company owns the content?",
+    domainBody: "We will capture the brand while you continue.",
     icon: BookOpen,
     className: "portalTerminal"
   }
@@ -151,6 +150,19 @@ const objectives: Record<UseCase, string[]> = {
   campaign: ["Generate demand", "Drive registrations", "Launch or announce", "Book meetings"],
   content: ["Educate buyers", "Increase content engagement", "Capture qualified interest", "Book a meeting"]
 };
+
+export function recommendedObjectiveFor(session: Pick<PublicTryMeSession, "useCase" | "answers">): string {
+  if (session.useCase === "abm") return "Accelerate an opportunity";
+  if (session.useCase === "content") return "Increase content engagement";
+  if (session.answers.campaignType === "event") return "Drive registrations";
+  if (session.answers.campaignType === "product") return "Launch or announce";
+  return "Generate demand";
+}
+
+export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCase" | "answers" | "sourceConfirmation">): boolean {
+  if (session.useCase !== "content" || session.sourceConfirmation?.status === "confirmed") return false;
+  return Boolean(session.answers.sourceUrl || (session.answers.sourceName && session.answers.sourceTitle));
+}
 
 export const entryPathOptions: Record<UseCase, EntryPathOption> = {
   abm: {
@@ -342,11 +354,11 @@ export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
   return [
     {
       key: "brand",
-      phase: "Brand system",
+      phase: "Your brand",
       title: ["complete", "fallback"].includes(brandState)
-        ? brandState === "fallback" ? "Brand language reconstructed" : "Public identity captured"
-        : brandState === "running" ? `Reading ${brandName}` : "Brand scan queued",
-      detail: `Reading the identity, palette, and visual cues buyers already associate with ${brandName}.`,
+        ? brandState === "fallback" ? "Brand style ready" : "Logo and colors ready"
+        : brandState === "running" ? `Finding ${brandName}'s look and feel` : "Brand check waiting",
+      detail: `Finding the logo, colors, and visual cues buyers already recognize from ${brandName}.`,
       artifact: ["complete", "fallback"].includes(brandState)
         ? `${brandName} · ${session?.brand?.colors.length || 1} brand colors`
         : undefined,
@@ -355,11 +367,11 @@ export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
     },
     {
       key: "buyer",
-      phase: "Buyer fit",
+      phase: "Your audience",
       title: audience
-        ? "Buyer context locked"
-        : audienceState === "running" ? `Mapping roles at ${buyerContext}` : audienceState === "complete" ? "Company-fit roles found" : "Buyer mapping queued",
-      detail: `Turning ${buyerContext}'s public product and market context into relevant buying roles.`,
+        ? "Audience ready"
+        : audienceState === "running" ? `Finding the right buyers at ${buyerContext}` : audienceState === "complete" ? "Relevant buyers found" : "Audience check waiting",
+      detail: `Using ${buyerContext}'s public product and market context to find the most relevant buying roles.`,
       artifact: audience
         ? `Built for ${audience}`
         : audienceState === "complete" && session?.audienceSuggestions.length
@@ -370,20 +382,20 @@ export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
     },
     {
       key: "strategy",
-      phase: "Message strategy",
-      title: objective ? "One outcome locked" : "Waiting for the objective",
-      detail: "The objective decides the tension, proof, and single next move the page should earn.",
+      phase: "Your goal",
+      title: objective ? "Goal ready" : "Waiting for your goal",
+      detail: "Your goal determines the promise, proof, and next step across the page.",
       artifact: objective ? `Objective · ${objective}` : undefined,
       status: objective ? "complete" : pending,
       icon: Target
     },
     {
       key: "experience",
-      phase: "Experience",
+      phase: "Your page",
       title: session?.experience
-        ? "Narrative and page assembled"
-        : experienceState === "running" ? "Composing the buyer journey" : experienceState === "failed" ? "Composition needs another pass" : "Composition queued",
-      detail: "Composing the story, proof modules, interaction path, and CTA into one guided experience.",
+        ? "Your experience is ready"
+        : experienceState === "running" ? "Building your buyer experience" : experienceState === "failed" ? "The page needs another pass" : "Page build waiting",
+      detail: "Writing the story, arranging the proof, and polishing the page into one guided experience.",
       artifact: session?.experience?.title,
       status: experienceState,
       icon: Sparkles
@@ -679,6 +691,20 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return readJsonResponse<T>(response);
 }
 
+async function confirmHighConfidenceSource(session: PublicTryMeSession): Promise<PublicTryMeSession> {
+  if (!shouldAutoConfirmSource(session)) return session;
+  try {
+    const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ operation: "update-workspace", sourceConfirmation: "confirmed" })
+    });
+    return result.session;
+  } catch {
+    // Keep the source intact and show the manual confirmation fallback.
+    return session;
+  }
+}
+
 async function recordPreviewSignal(
   sessionId: string,
   event: "preview-opened" | "section-viewed" | "lens-selected" | "cta-clicked",
@@ -803,21 +829,25 @@ function LiveChecklist({ session, compact = false }: { session?: PublicTryMeSess
 }
 
 function UseCasePortals({
-  onSelect,
-  onExampleOpen
+  onSelect
 }: {
   onSelect: (value: UseCase) => void;
-  onExampleOpen: (value: UseCase) => void;
 }) {
   return (
-    <div className="entryPathRail" aria-label="Choose what you want to create">
-      {(Object.keys(entryPathOptions) as UseCase[]).map((key) => (
-        <EntryPathMicroDemo
-          key={key}
-          option={entryPathOptions[key]}
-          onSelect={onSelect}
-          onExampleOpen={onExampleOpen}
-        />
+    <div className="entryPathRail largeChoiceGrid" aria-label="Choose what you want to create">
+      {(Object.keys(useCaseContent) as UseCase[]).map((key) => (
+        <article key={key}>
+          <button type="button" onClick={() => onSelect(key)}>
+            <strong>{useCaseContent[key].cta}</strong>
+            <span>{useCaseContent[key].description}</span>
+            <ArrowRight size={16} />
+          </button>
+          <ExampleModeCta
+            label={entryPathOptions[key].exampleLabel}
+            href={entryPathOptions[key].exampleUrl}
+            onClick={() => track("example_opened", { useCase: key })}
+          />
+        </article>
       ))}
     </div>
   );
@@ -846,7 +876,7 @@ function DomainStart({
         <div>
           <span className="sectionKicker">{portal.kicker}</span>
           <h2>{portal.domainTitle}</h2>
-          <p>{portal.domainBody} The build begins as soon as we recognize the domain.</p>
+          <p>{portal.domainBody}</p>
         </div>
         <label className={`domainInput ${isStarting ? "isWorking" : ""}`}>
           <span>Company domain</span>
@@ -877,12 +907,14 @@ function ChipGroup({
   label,
   options,
   value,
+  recommendedOption,
   disabled,
   onChange
 }: {
   label: string;
   options: string[];
   value?: string;
+  recommendedOption?: string;
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
@@ -898,7 +930,7 @@ function ChipGroup({
             aria-pressed={value === option}
             onClick={() => onChange(option)}
           >
-            <span>{option}</span>{value === option ? <Check size={16} /> : <ArrowRight size={15} />}
+            <span>{option}{recommendedOption === option ? " · Recommended" : ""}</span>{value === option ? <Check size={16} /> : <ArrowRight size={15} />}
           </button>
         ))}
       </div>
@@ -923,18 +955,20 @@ function ProgressiveQuestions({
   onUpload: (file: File) => Promise<void>;
   onRestart: () => void;
 }) {
-  const questionKey =
-    session.useCase === "abm" && !answers.targetDomain
-      ? "target-domain"
-      : session.useCase === "campaign" && answers.campaignType === "event" && !answers.eventSource
-        ? "event-source"
-        : session.useCase === "content" && !answers.sourceUrl && !answers.sourceName
-          ? "content-source"
-          : answers.audience === "Other" && !answers.customAudience
-            ? "custom-audience"
-            : "none";
+  const questionKey = session.useCase === "abm" && !answers.targetDomain
+    ? "target-domain"
+    : session.useCase === "content" && !answers.sourceUrl && !answers.sourceName
+      ? "content-source"
+      : "none";
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [sourceMode, setSourceMode] = useState<"url" | "pdf">("url");
+  const [campaignChoice, setCampaignChoice] = useState<SessionAnswers["campaignType"]>(answers.campaignType);
+  const [selectedAudienceId, setSelectedAudienceId] = useState<string>();
+  const [selectedAudience, setSelectedAudience] = useState<string | undefined>(
+    answers.audience === "Other" && !answers.customAudience ? "Other" : undefined
+  );
+  const [customAudience, setCustomAudience] = useState(answers.customAudience ?? "");
+  const [selectedObjective, setSelectedObjective] = useState<string>();
   const textValue = fieldValues[questionKey] ?? "";
   const setTextValue = (value: string) =>
     setFieldValues((current) => ({ ...current, [questionKey]: value }));
@@ -958,7 +992,8 @@ function ProgressiveQuestions({
     );
   }
 
-  if (session.useCase === "campaign" && !answers.campaignType) {
+  if (session.useCase === "campaign" && (!answers.campaignType || (answers.campaignType === "event" && !answers.eventSource))) {
+    const choice = campaignChoice ?? answers.campaignType;
     return (
       <div className="questionCard">
         <span className="questionCount">Next signal · campaign</span>
@@ -970,24 +1005,23 @@ function ProgressiveQuestions({
             ["demand", "Demand generation", "Create a focused path from interest to action."],
             ["event", "Event or webinar", "Frame the reason to attend and make registration obvious."]
           ].map(([value, title, body]) => (
-            <button type="button" key={value} disabled={isSaving} onClick={() => void onPatch({ campaignType: value as SessionAnswers["campaignType"] })}>
+            <button type="button" key={value} disabled={isSaving} className={choice === value ? "isSelected" : ""} onClick={() => setCampaignChoice(value as SessionAnswers["campaignType"])}>
               <strong>{title}</strong><span>{body}</span><ArrowRight size={16} />
             </button>
           ))}
         </div>
+        {choice === "event" && (
+          <label className="lineInput"><span>Event URL or details</span><div><FileText size={19} /><input value={fieldValues.eventSource ?? ""} onChange={(event) => setFieldValues((current) => ({ ...current, eventSource: event.target.value }))} placeholder="https://... or September 12 webinar" /></div></label>
+        )}
+        <button
+          className="buttonPrimary"
+          type="button"
+          disabled={!choice || (choice === "event" && (fieldValues.eventSource ?? answers.eventSource ?? "").trim().length < 8) || isSaving}
+          onClick={() => void onPatch({ campaignType: choice, eventSource: choice === "event" ? (fieldValues.eventSource ?? answers.eventSource)?.trim() : undefined })}
+        >
+          Continue<ArrowRight size={17} />
+        </button>
       </div>
-    );
-  }
-
-  if (session.useCase === "campaign" && answers.campaignType === "event" && !answers.eventSource) {
-    return (
-      <form className="questionCard" onSubmit={(event) => { event.preventDefault(); void onPatch({ eventSource: textValue }); }}>
-        <span className="questionCount">Next signal · event</span>
-        <h2>Where can we find the event details?</h2>
-        <p>Add the event URL or a compact description. We will not invent speakers, dates, or agenda details.</p>
-        <label className="lineInput"><span>Event URL or details</span><div><FileText size={19} /><input value={textValue} onChange={(event) => setTextValue(event.target.value)} placeholder="https://... or September 12 webinar" /></div></label>
-        <button className="buttonPrimary" disabled={textValue.trim().length < 8 || isSaving}>Use these details<ArrowRight size={17} /></button>
-      </form>
     );
   }
 
@@ -1033,7 +1067,8 @@ function ProgressiveQuestions({
   if (
     session.useCase === "content" &&
     (answers.sourceUrl || answers.sourceName) &&
-    session.sourceConfirmation?.status !== "confirmed"
+    session.sourceConfirmation?.status !== "confirmed" &&
+    !shouldAutoConfirmSource(session)
   ) {
     const submittedSource = answers.sourceTitle || fieldValues["content-source"] || (answers.sourceName ? "Uploaded document" : "Public URL");
     let sourceHost = answers.sourceName ? "Secure PDF upload" : "Public web source";
@@ -1070,7 +1105,7 @@ function ProgressiveQuestions({
     );
   }
 
-  if (!answers.audience) {
+  if (!answers.audience || (answers.audience === "Other" && !answers.customAudience)) {
     if (session.audienceSuggestions.length === 0) {
       return (
         <div className="questionCard generationCard" role="status" aria-live="polite">
@@ -1084,6 +1119,10 @@ function ProgressiveQuestions({
     const recommendations = session.audienceRecommendations ?? [];
     const evidence = new Map((session.evidenceItems ?? []).map((item) => [item.id, item]));
     if (recommendations.length) {
+      const recommended = recommendations[0];
+      const chosenId = selectedAudience === "Other"
+        ? undefined
+        : selectedAudienceId ?? session.selectedAudienceRecommendationId ?? recommended.id;
       return (
         <div className="questionCard audienceEvidenceStep">
           <span className="questionCount">Next signal · audience</span>
@@ -1091,15 +1130,18 @@ function ProgressiveQuestions({
           <p>{questionCopy.audienceBody}</p>
           <AudienceEvidenceTray
             companyName={session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session)}
-            selectedId={session.selectedAudienceRecommendationId}
-            options={recommendations.map((recommendation) => {
+            selectedId={chosenId}
+            simplified
+            options={recommendations.map((recommendation, index) => {
               const supporting = recommendation.evidenceItemIds
                 .map((id) => evidence.get(id))
                 .filter((item): item is SessionEvidenceItem => Boolean(item));
               return {
                 id: recommendation.id,
                 label: recommendation.label,
-                rationale: recommendation.rationale,
+                rationale: index === 0
+                  ? `Recommended for ${session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session)}. ${recommendation.rationale}`
+                  : recommendation.rationale,
                 pinned: supporting.some((item) => item.disposition === "pinned"),
                 excluded: supporting.length > 0 && supporting.every((item) => item.disposition === "excluded"),
                 evidence: supporting.map((item) => ({
@@ -1111,7 +1153,7 @@ function ProgressiveQuestions({
                 }))
               };
             })}
-            onSelect={(id) => void onWorkspacePatch({ selectedAudienceRecommendationId: id })}
+            onSelect={(id) => { setSelectedAudience(undefined); setSelectedAudienceId(id); }}
             onPin={(id, pinned) => {
               const recommendation = recommendations.find((candidate) => candidate.id === id);
               if (!recommendation) return;
@@ -1137,41 +1179,57 @@ function ProgressiveQuestions({
             className="audienceOtherButton"
             type="button"
             disabled={isSaving}
-            onClick={() => void onPatch({ audience: "Other" })}
+            onClick={() => setSelectedAudience("Other")}
           >
             I have a different audience in mind <ArrowRight size={15} />
+          </button>
+          {selectedAudience === "Other" && (
+            <label className="lineInput"><span>Audience</span><div><Users size={19} /><input value={customAudience} onChange={(event) => setCustomAudience(event.target.value)} placeholder="Regional field marketing leaders" /></div></label>
+          )}
+          <button
+            className="buttonPrimary"
+            type="button"
+            disabled={isSaving || (selectedAudience === "Other" ? customAudience.trim().length < 3 : !chosenId)}
+            onClick={() => selectedAudience === "Other"
+              ? void onPatch({ audience: "Other", customAudience: customAudience.trim() })
+              : void onWorkspacePatch({ selectedAudienceRecommendationId: chosenId })}
+          >
+            Continue<ArrowRight size={17} />
           </button>
         </div>
       );
     }
+    const recommendedAudience = session.audienceSuggestions[0] ?? "Other";
+    const chosenAudience = selectedAudience ?? recommendedAudience;
     return (
       <div className="questionCard">
         <span className="questionCount">Next signal · audience</span>
         <h2>{questionCopy.audienceTitle}</h2>
         <p>{questionCopy.audienceBody}</p>
-        <ChipGroup label="Choose an audience" options={[...session.audienceSuggestions, "Other"]} value={answers.audience} disabled={isSaving} onChange={(audience) => void onPatch({ audience })} />
+        <ChipGroup label="Choose an audience" options={[...session.audienceSuggestions, "Other"]} value={chosenAudience} recommendedOption={recommendedAudience} disabled={isSaving} onChange={setSelectedAudience} />
+        {chosenAudience === "Other" && (
+          <label className="lineInput"><span>Audience</span><div><Users size={19} /><input value={customAudience} onChange={(event) => setCustomAudience(event.target.value)} placeholder="Regional field marketing leaders" /></div></label>
+        )}
+        <button className="buttonPrimary" type="button" disabled={isSaving || (chosenAudience === "Other" && customAudience.trim().length < 3)} onClick={() => void onPatch({ audience: chosenAudience, customAudience: chosenAudience === "Other" ? customAudience.trim() : undefined })}>
+          Continue<ArrowRight size={17} />
+        </button>
       </div>
     );
   }
 
-  if (answers.audience === "Other" && !answers.customAudience) {
-    return (
-      <form className="questionCard" onSubmit={(event) => { event.preventDefault(); void onPatch({ customAudience: textValue }); }}>
-        <span className="questionCount">Refine the audience</span>
-        <h2>Who should we build around?</h2>
-        <label className="lineInput"><span>Audience</span><div><Users size={19} /><input value={textValue} onChange={(event) => setTextValue(event.target.value)} placeholder="Regional field marketing leaders" /></div></label>
-        <button className="buttonPrimary" disabled={textValue.trim().length < 3 || isSaving}>Use this audience<ArrowRight size={17} /></button>
-      </form>
-    );
-  }
-
   if (!answers.objective) {
+    const recommended = recommendedObjectiveFor(session);
+    const orderedObjectives = [recommended, ...objectives[session.useCase].filter((objective) => objective !== recommended)];
+    const chosenObjective = selectedObjective ?? recommended;
     return (
       <div className="questionCard">
         <span className="questionCount">Final signal · objective</span>
         <h2>{questionCopy.objectiveTitle}</h2>
         <p>{questionCopy.objectiveBody}</p>
-        <ChipGroup label="Choose an objective" options={objectives[session.useCase]} value={answers.objective} disabled={isSaving} onChange={(objective) => void onPatch({ objective })} />
+        <ChipGroup label="Choose an objective" options={orderedObjectives} value={chosenObjective} recommendedOption={recommended} disabled={isSaving} onChange={setSelectedObjective} />
+        <button className="buttonPrimary" type="button" disabled={isSaving} onClick={() => void onPatch({ objective: chosenObjective })}>
+          Build my experience<ArrowRight size={17} />
+        </button>
       </div>
     );
   }
@@ -1432,6 +1490,46 @@ function useDialogBehavior(onClose: () => void) {
   return { dialogRef, onKeyDown };
 }
 
+export function SaveExperienceDialog({
+  open,
+  expiresLabel,
+  email,
+  status,
+  error,
+  onEmailChange,
+  onSave,
+  onClose
+}: {
+  open: boolean;
+  expiresLabel: string;
+  email: string;
+  status: "idle" | "saving" | "saved" | "error";
+  error?: string;
+  onEmailChange: (email: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  const { dialogRef, onKeyDown } = useDialogBehavior(onClose);
+  if (!open) return null;
+  return createPortal(
+    <div className="drawerBackdrop saveDialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && status !== "saving") onClose(); }}>
+      <section ref={dialogRef} className="saveExperienceDialog" role="dialog" aria-modal="true" aria-labelledby="save-value-title" onKeyDown={onKeyDown}>
+        <button className="drawerClose" type="button" onClick={onClose} disabled={status === "saving"} aria-label="Close save experience"><X size={20} /></button>
+        <ExpirySaveValuePanel
+          expiresLabel={expiresLabel}
+          email={email}
+          status={status}
+          error={error}
+          onEmailChange={onEmailChange}
+          onSave={onSave}
+          benefits={["Permanent live URL", "Email delivery", "Engagement-ready experience"]}
+        />
+      </section>
+    </div>,
+    document.body
+  );
+}
+
 function MobileProcessDialog({ session, onClose }: { session: PublicTryMeSession; onClose: () => void }) {
   const { dialogRef, onKeyDown } = useDialogBehavior(onClose);
   return createPortal(
@@ -1489,9 +1587,9 @@ export function TryMeNowApp() {
   const [showProcess, setShowProcess] = useState(false);
   const [showRevealCeremony, setShowRevealCeremony] = useState(false);
   const [showEditBrief, setShowEditBrief] = useState(false);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showAnalyticsPanel, setShowAnalyticsPanel] = useState(false);
   const [showAnalyticsToast, setShowAnalyticsToast] = useState(false);
-  const [messageDirection, setMessageDirection] = useState({ enabled: false, belief: "", action: "" });
   const [ctaValue, setCtaValue] = useState<CtaValue>({ type: "meeting", label: "Book a meeting", style: "solid" });
   const [claimEmail, setClaimEmail] = useState("");
   const [claimStatus, setClaimStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -1503,7 +1601,6 @@ export function TryMeNowApp() {
   const startedDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
   const ceremonySession = useRef<string | undefined>(undefined);
-  const directionSession = useRef<string | undefined>(undefined);
   const ctaSessionSignature = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const patchRequestRef = useRef(0);
@@ -1520,9 +1617,9 @@ export function TryMeNowApp() {
     setRevealedAt(undefined);
     setShowRevealCeremony(false);
     setShowEditBrief(false);
+    setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
     setShowAnalyticsToast(false);
-    setMessageDirection({ enabled: false, belief: "", action: "" });
     setCtaValue({ type: "meeting", label: "Book a meeting", style: "solid" });
     setClaimEmail("");
     setClaimStatus("idle");
@@ -1532,7 +1629,6 @@ export function TryMeNowApp() {
     startedDomain.current = undefined;
     revealTracked.current = false;
     ceremonySession.current = undefined;
-    directionSession.current = undefined;
     ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
     track("use_case_selected", { useCase: selected });
@@ -1549,9 +1645,9 @@ export function TryMeNowApp() {
     setShowProcess(false);
     setShowRevealCeremony(false);
     setShowEditBrief(false);
+    setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
     setShowAnalyticsToast(false);
-    setMessageDirection({ enabled: false, belief: "", action: "" });
     setCtaValue({ type: "meeting", label: "Book a meeting", style: "solid" });
     setClaimEmail("");
     setClaimStatus("idle");
@@ -1563,7 +1659,6 @@ export function TryMeNowApp() {
     startedDomain.current = undefined;
     revealTracked.current = false;
     ceremonySession.current = undefined;
-    directionSession.current = undefined;
     ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
   }, []);
@@ -1604,16 +1699,6 @@ export function TryMeNowApp() {
   }, []);
 
   useEffect(() => {
-    if (!session || directionSession.current === session.id) return;
-    directionSession.current = session.id;
-    setMessageDirection({
-      enabled: Boolean(session.answers.messageBelief || session.answers.messageAction),
-      belief: session.answers.messageBelief || "",
-      action: session.answers.messageAction || ""
-    });
-  }, [session]);
-
-  useEffect(() => {
     if (!session) return;
     const next = ctaValueForSession(session);
     const signature = `${session.id}:${next.type}:${next.style}:${next.label}`;
@@ -1641,8 +1726,9 @@ export function TryMeNowApp() {
         if (cancelled) return;
         failures = 0;
         setConnectionError("");
-        setSession(result.session);
-        setAnswers(result.session.answers);
+        const nextSession = await confirmHighConfidenceSource(result.session);
+        setSession(nextSession);
+        setAnswers(nextSession.answers);
       } catch {
         if (cancelled) return;
         failures += 1;
@@ -1786,8 +1872,9 @@ export function TryMeNowApp() {
         body: JSON.stringify(patch)
       });
       if (requestNumber !== patchRequestRef.current) return;
-      setSession(result.session);
-      setAnswers(result.session.answers);
+      const nextSession = await confirmHighConfidenceSource(result.session);
+      setSession(nextSession);
+      setAnswers(nextSession.answers);
     } catch (patchError) {
       setError(patchError instanceof Error ? patchError.message : "We could not save that answer.");
     } finally {
@@ -1818,12 +1905,6 @@ export function TryMeNowApp() {
   const saveCreativeDirection = async () => {
     await patchWorkspace({
       answers: {
-        messageBelief: messageDirection.enabled && messageDirection.belief.trim()
-          ? messageDirection.belief.trim()
-          : undefined,
-        messageAction: messageDirection.enabled && messageDirection.action.trim()
-          ? messageDirection.action.trim()
-          : undefined,
         ctaType: serverCtaType(ctaValue.type),
         ctaStyle: ctaValue.style
       },
@@ -1834,18 +1915,6 @@ export function TryMeNowApp() {
         ctaLabel: ctaValue.label.trim() || defaultCtaLabel(ctaValue.type)
       }]
     });
-  };
-
-  const openBriefEditor = () => {
-    if (!session) return;
-    setEditingBlockId(undefined);
-    setBriefDraft({
-      audience: session.answers.customAudience || session.answers.audience || "",
-      objective: session.answers.objective || "",
-      belief: session.answers.messageBelief || "",
-      action: session.answers.messageAction || ""
-    });
-    setShowEditBrief(true);
   };
 
   const openBlockEditor = (blockId: SessionExperienceBlockControl["id"]) => {
@@ -1906,7 +1975,6 @@ export function TryMeNowApp() {
       setRevealedAt(undefined);
       revealTracked.current = false;
       ceremonySession.current = undefined;
-      directionSession.current = undefined;
       ctaSessionSignature.current = undefined;
       if (openEditor) {
         setBriefDraft({
@@ -1976,8 +2044,9 @@ export function TryMeNowApp() {
         );
       }
 
-      setSession(processedSession);
-      setAnswers(processedSession.answers);
+      const nextSession = await confirmHighConfidenceSource(processedSession);
+      setSession(nextSession);
+      setAnswers(nextSession.answers);
       track("pdf_upload_completed", {
         useCase: activeSession.useCase,
         sizeBucket: uploadSizeBucket(file.size)
@@ -2007,6 +2076,7 @@ export function TryMeNowApp() {
       });
       setSession(result.session);
       setClaimStatus("saved");
+      setShowSavePrompt(false);
       track("experience_claimed", { useCase: result.session.useCase });
     } catch (claimFailure) {
       const message = claimFailure instanceof Error ? claimFailure.message : "We could not save this experience.";
@@ -2031,8 +2101,9 @@ export function TryMeNowApp() {
   }));
   const latestAnalyticsSignal = [...analyticsSignals].reverse().find((signal) => signal.type !== "view");
   const qualityChecks = session?.qualityReceipt?.checks ?? [];
-  const personalizationScore = qualityChecks.length
-    ? Math.round((qualityChecks.reduce((score, check) => score + (check.status === "passed" ? 1 : check.status === "not-applicable" ? 0.85 : 0.55), 0) / qualityChecks.length) * 100)
+  const scoredQualityChecks = qualityChecks.filter((check) => check.status !== "not-applicable");
+  const personalizationScore = scoredQualityChecks.length
+    ? Math.round((scoredQualityChecks.reduce((score, check) => score + (check.status === "passed" ? 1 : check.status === "warning" ? 0.5 : 0), 0) / scoredQualityChecks.length) * 100)
     : 86;
   const expiresLabel = session?.expiresAt
     ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(session.expiresAt))
@@ -2045,8 +2116,8 @@ export function TryMeNowApp() {
     <>
     <main
       className={`appShell ${isReveal ? "revealMode" : ""}`}
-      aria-hidden={showSignals || showProcess || showRevealCeremony || showEditBrief || showAnalyticsPanel ? true : undefined}
-      inert={showSignals || showProcess || showRevealCeremony || showEditBrief || showAnalyticsPanel ? true : undefined}
+      aria-hidden={showSignals || showProcess || showRevealCeremony || showEditBrief || showSavePrompt || showAnalyticsPanel ? true : undefined}
+      inert={showSignals || showProcess || showRevealCeremony || showEditBrief || showSavePrompt || showAnalyticsPanel ? true : undefined}
     >
       <header className="siteHeader">
         <Link href="/" aria-label="Folloze Try Me Now home"><Image src="/brand/folloze-logo.svg" width={101} height={25} alt="Folloze" priority /><span>Try Me Now</span></Link>
@@ -2058,13 +2129,10 @@ export function TryMeNowApp() {
         <section className="entryStage">
           <div className="entryHero">
             <span className="sectionKicker">Try Folloze</span>
-            <h1>Give us 30 seconds.<br /><em>Get a live buyer experience.</em></h1>
-            <p>Choose what you want to launch. Add a domain and a few signals. Folloze builds it, hosts it, and captures engagement while you watch.</p>
+            <h1>What do you want to build?</h1>
+            <p>Choose a path. We will ask only what changes the result.</p>
           </div>
-          <UseCasePortals
-            onSelect={selectUseCase}
-            onExampleOpen={(selectedUseCase) => track("example_opened", { useCase: selectedUseCase })}
-          />
+          <UseCasePortals onSelect={selectUseCase} />
           <div className="entryFooter"><span>No login. No blank canvas.</span><span>Preview first. Add your email only if you want to keep it.</span></div>
         </section>
       )}
@@ -2101,31 +2169,6 @@ export function TryMeNowApp() {
               onUpload={uploadPdf}
               onRestart={resetExperience}
             />
-            {answers.objective && (
-              <div className="creativeBriefControls">
-                <MessageDirectionControl value={messageDirection} onChange={setMessageDirection} />
-                <CtaStyleControl
-                  value={ctaValue}
-                  onChange={(next) => {
-                    setCtaValue((current) => ({
-                      ...next,
-                      label: current.type !== next.type && current.label === defaultCtaLabel(current.type)
-                        ? defaultCtaLabel(next.type)
-                        : next.label
-                    }));
-                  }}
-                />
-                <button
-                  className="buttonSecondary creativeApply"
-                  type="button"
-                  disabled={isSaving}
-                  onClick={() => void saveCreativeDirection()}
-                >
-                  {isSaving ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}
-                  Apply direction to the live build
-                </button>
-              </div>
-            )}
             {error && <div className="inlineError" role="alert">{error}</div>}
             {connectionError && <div className="connectionNotice" role="status"><LoaderCircle className="spin" size={15} />{connectionError}</div>}
           </div>
@@ -2174,7 +2217,7 @@ export function TryMeNowApp() {
               {session.status === "claimed" ? (
                 <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
               ) : (
-                <a className="buttonSecondary" href="#save-experience"><Mail size={16} />Save this preview</a>
+                <button className="buttonSecondary" type="button" onClick={() => setShowSavePrompt(true)}><Mail size={16} />Save this preview</button>
               )}
               <a className="buttonPrimary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
             </div>
@@ -2186,11 +2229,6 @@ export function TryMeNowApp() {
                   <Globe2 size={16} aria-hidden="true" />
                   <span><strong>Interactive desktop preview</strong><small>Scroll inside the page to explore the full experience.</small></span>
                 </div>
-                {session.status !== "claimed" && (
-                  <button className="buttonSecondary editBriefButton" type="button" onClick={openBriefEditor}>
-                    <Sparkles size={15} />Edit the brief
-                  </button>
-                )}
               </div>
               <div className="desktopPreviewShell">
                 <AssemblyPreview session={session} iframeRef={previewFrameRef} />
@@ -2206,7 +2244,7 @@ export function TryMeNowApp() {
               />
               {session.status !== "claimed" && (
                 <details className="experienceControlDeck">
-                  <summary><span><Sparkles size={17} />Tune and personalize</span><small>Copy, CTA, assets, and blocks</small><ChevronDown size={16} /></summary>
+                  <summary><span><Sparkles size={17} />Tune this experience</span><small>Copy, CTA, assets, and sections</small><ChevronDown size={16} /></summary>
                   <div className="experienceControlBody">
                     <ToneChips
                       label="Message tone"
@@ -2334,21 +2372,8 @@ export function TryMeNowApp() {
                   onOpen={() => window.open(session.liveUrl || session.temporaryUrl, "_blank", "noopener,noreferrer")}
                   onCopy={() => void navigator.clipboard.writeText(session.liveUrl || session.temporaryUrl)}
                   onEdit={() => void createVariation("version", true)}
-                  onDuplicate={() => void createVariation("duplicate")}
                 />
-              ) : (
-                <div id="save-experience">
-                  <ExpirySaveValuePanel
-                    expiresLabel={expiresLabel}
-                    email={claimEmail}
-                    status={claimStatus}
-                    error={claimError}
-                    onEmailChange={setClaimEmail}
-                    onSave={() => void claim(claimEmail)}
-                    benefits={["Permanent live URL", "Email delivery", "Engagement-ready experience"]}
-                  />
-                </div>
-              )}
+              ) : null}
               <PersonalizationQualityReceipt
                 score={personalizationScore}
                 companyName={session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session)}
@@ -2356,9 +2381,9 @@ export function TryMeNowApp() {
                   id: check.id,
                   label: check.label,
                   detail: check.detail,
-                  status: check.status === "passed" || check.status === "not-applicable"
+                  status: check.status === "passed"
                     ? "strong"
-                    : check.status === "warning"
+                    : check.status === "warning" || check.status === "not-applicable"
                       ? "partial"
                       : "missing"
                 })) : revealCopy.receipts.slice(0, 4).map((receipt) => ({
@@ -2400,6 +2425,18 @@ export function TryMeNowApp() {
       onSave={() => void saveBriefEdit()}
       onClose={closeEditBrief}
     />
+    {showSavePrompt && session && session.status !== "claimed" && (
+      <SaveExperienceDialog
+        open
+        expiresLabel={expiresLabel}
+        email={claimEmail}
+        status={claimStatus}
+        error={claimError}
+        onEmailChange={setClaimEmail}
+        onSave={() => void claim(claimEmail)}
+        onClose={() => setShowSavePrompt(false)}
+      />
+    )}
     <AnalyticsSignalPanel
       open={showAnalyticsPanel}
       signals={analyticsSignals}

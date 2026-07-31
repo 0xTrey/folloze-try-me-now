@@ -192,6 +192,30 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(onExclude).toHaveBeenCalledWith("architecture", true);
   });
 
+  it("keeps evidence available while hiding analyst controls in the prospect flow", () => {
+    render(
+      <AudienceEvidenceTray
+        simplified
+        companyName="ServiceNow"
+        selectedId="platform"
+        options={[{
+          id: "platform",
+          label: "Automation architects and platform owners",
+          rationale: "Recommended for ServiceNow because they shape enterprise workflow decisions.",
+          evidence: [{ id: "e1", label: "Platform signal", detail: "ServiceNow emphasizes enterprise workflow orchestration." }]
+        }]}
+        onSelect={vi.fn()}
+        onPin={vi.fn()}
+        onExclude={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /Automation architects and platform owners/i })).toBeInTheDocument();
+    expect(screen.getByText("1 supporting signals")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pin" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exclude" })).not.toBeInTheDocument();
+  });
+
   it("keeps CTA intent, label, and style controlled without asking for a URL", () => {
     const onMessage = vi.fn();
     const onCta = vi.fn();
