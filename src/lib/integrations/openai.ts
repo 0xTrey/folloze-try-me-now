@@ -520,7 +520,13 @@ export function experienceQualityFailure(input: {
   if (bannedCopy.test(visibleCopy)) return "copy_quality_banned_phrase";
   if (marketingCliche.test(visibleCopy)) return "copy_quality_cliche";
   if (/[—]/.test(visibleCopy)) return "copy_quality_em_dash";
-  if (/\p{Script=Han}/u.test(visibleCopy)) return "copy_quality_unexpected_script";
+  if (
+    /[\p{Script=Cyrillic}\p{Script=Han}\p{Script=Arabic}\p{Script=Devanagari}\p{Script=Hebrew}]/u.test(
+      visibleCopy
+    )
+  ) {
+    return "copy_quality_unexpected_script";
+  }
   const headlineLimit = context.brief.campaignRegister === "content-magic" ? 11 : 14;
   if (wordCount(draft.headline) > headlineLimit) return "copy_quality_headline_too_long";
   if (wordCount(draft.subhead) > 32) return "copy_quality_subhead_too_long";
@@ -778,6 +784,7 @@ export async function generateExperienceDraft(input: {
       "Do not mention demos, templates, boards, microsites, agents, prompts, AI generation, source material, form fields, objectives, or the build process.",
       "Never use these phrases: make the next move easier to believe; brings the problem, proof, and next step together; generic pages; relevance is a sequence; one clear goal; see the path forward.",
       "Avoid unlock, transform, seamless, robust, innovative, game-changing, revolutionize, elevate, supercharge, and empower.",
+      "Write all buyer-facing copy in English using Latin script only.",
       "Use short declarative sentences. Do not use em dashes."
     ].join("\n");
     const requestDraft = (

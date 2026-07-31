@@ -564,6 +564,17 @@ describe("deterministic experience copy", () => {
         context
       })
     ).toBe("copy_quality_unexpected_script");
+
+    expect(
+      experienceQualityFailure({
+        draft: { ...draft, eyebrow: "A working session for Cisco инфраструктура leaders" },
+        brand: jitterbit,
+        targetBrand: cisco,
+        useCase: "abm",
+        answers,
+        context
+      })
+    ).toBe("copy_quality_unexpected_script");
   });
 
   it("rejects unsupported numeric proof when only mechanism proof is available", () => {
