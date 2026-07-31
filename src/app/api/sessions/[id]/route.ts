@@ -1,7 +1,13 @@
 import { after, NextRequest, NextResponse } from "next/server";
 
 import { apiError, noStoreHeaders } from "@/lib/http";
-import { canEditSession, patchSessionAnswers, runStoryStage } from "@/lib/orchestrator";
+import {
+  canEditSession,
+  patchSessionAnswers,
+  recoverSessionWork,
+  runStoryStage,
+  runTargetBrandStage
+} from "@/lib/orchestrator";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { getSession, toPublicSession } from "@/lib/session-store";
 import { answersSchema } from "@/lib/validation";
@@ -24,6 +30,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       { status: 410, headers: noStoreHeaders }
     );
   }
+  after(() => recoverSessionWork(id));
   return NextResponse.json({ session: toPublicSession(session) }, { headers: noStoreHeaders });
 }
 
@@ -36,6 +43,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     const patch = answersSchema.parse(await request.json());
     const updated = await patchSessionAnswers(id, patch);
+    if (patch.targetDomain) after(() => runTargetBrandStage(id));
     if (updated.shouldGenerate) after(() => runStoryStage(id));
     return NextResponse.json({ session: updated.session }, { headers: noStoreHeaders });
   } catch (error) {

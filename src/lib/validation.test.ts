@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { promises as dns } from "node:dns";
 
 import {
   ApiResponseError,
@@ -8,9 +9,20 @@ import {
   validatePdfFile
 } from "@/lib/client-response";
 import { apiError } from "@/lib/http";
-import { answersSchema, assertBusinessEmail, maskEmail, normalizeDomain } from "@/lib/validation";
+import {
+  answersSchema,
+  assertBusinessEmail,
+  assertPublicHostname,
+  assertSafePublicUrl,
+  maskEmail,
+  normalizeDomain
+} from "@/lib/validation";
+import { createPinnedLookup } from "@/lib/safe-fetch";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe("normalizeDomain", () => {
   it.each([
@@ -42,6 +54,87 @@ describe("business email claim", () => {
       expect(() => assertBusinessEmail(email)).toThrow("business email");
     }
   );
+
+  it("rejects disposable email domains", () => {
+    expect(() => assertBusinessEmail("person@mailinator.com")).toThrow("business email");
+    expect(() => assertBusinessEmail("person@inbox.mailinator.com")).toThrow("business email");
+  });
+
+  it("allows an explicit server-side email or domain override", () => {
+    vi.stubEnv(
+      "TRY_ME_BUSINESS_EMAIL_ALLOWLIST",
+      " qa@mailinator.com, @gmail.com, EXAMPLE-DISPOSABLE.TEST "
+    );
+
+    expect(assertBusinessEmail("QA@Mailinator.com")).toBe("qa@mailinator.com");
+    expect(assertBusinessEmail("person@gmail.com")).toBe("person@gmail.com");
+    expect(assertBusinessEmail("person@example-disposable.test")).toBe(
+      "person@example-disposable.test"
+    );
+    expect(() => assertBusinessEmail("other@mailinator.com")).toThrow("business email");
+  });
+});
+
+describe("public URL safety", () => {
+  it("resolves the exact requested hostname without stripping www", async () => {
+    const lookup = vi
+      .spyOn(dns, "lookup")
+      .mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as never);
+
+    await expect(assertSafePublicUrl("https://www.example.com/path")).resolves.toMatchObject({
+      hostname: "www.example.com"
+    });
+    expect(lookup).toHaveBeenCalledWith("www.example.com", { all: true, verbatim: true });
+  });
+
+  it.each([
+    "100.64.0.1",
+    "100.127.255.254",
+    "::ffff:10.0.0.1",
+    "::ffff:c0a8:101",
+    "::a00:1",
+    "fe80::1",
+    "fe90::1",
+    "febf::1",
+    "fec0::1",
+    "2001::1",
+    "2001:db8::1",
+    "2002:a00:1::",
+    "ff02::1"
+  ])("rejects non-public literal address %s", async (address) => {
+    await expect(assertPublicHostname(address)).rejects.toThrow("cannot be fetched safely");
+  });
+
+  it.each([
+    "100.64.0.1",
+    "::ffff:172.16.0.1",
+    "fe9f::1",
+    "3fff::1"
+  ])("rejects a hostname when DNS returns non-public address %s", async (address) => {
+    vi.spyOn(dns, "lookup").mockResolvedValue(
+      [{ address, family: address.includes(":") ? 6 : 4 }] as never
+    );
+
+    await expect(assertPublicHostname("www.example.com")).rejects.toThrow(
+      "cannot be fetched safely"
+    );
+  });
+
+  it.each(["8.8.8.8", "2606:4700:4700::1111"])(
+    "allows public literal address %s",
+    async (address) => {
+      await expect(assertPublicHostname(address)).resolves.toBeUndefined();
+    }
+  );
+
+  it("creates a connection lookup that cannot perform a second DNS resolution", () => {
+    const lookup = createPinnedLookup("93.184.216.34", 4);
+    const callback = vi.fn();
+
+    lookup("rebound.example", { all: false }, callback);
+
+    expect(callback).toHaveBeenCalledWith(null, "93.184.216.34", 4);
+  });
 });
 
 describe("client API responses", () => {

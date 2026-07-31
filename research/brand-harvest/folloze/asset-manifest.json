@@ -1,0 +1,411 @@
+{
+  "logos": [
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6464087fdf877a12a8bd4d26_folloze-logo.svg",
+      "alt": "",
+      "className": "navbar2_logo",
+      "width": 99,
+      "height": 24,
+      "rect": {
+        "x": 80,
+        "y": 24,
+        "width": 99,
+        "height": 24
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d862ecaaf31e25bb0967fc_seismic-logo.svg",
+      "alt": "Seismic logo",
+      "className": "logo1_logo",
+      "width": 128,
+      "height": 24,
+      "rect": {
+        "x": 255,
+        "y": 1447,
+        "width": 128,
+        "height": 24
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d8636aaa7d41e0a237db9a_adp-logo.svg",
+      "alt": "ADP logo",
+      "className": "logo1_logo",
+      "width": 300,
+      "height": 137,
+      "rect": {
+        "x": 415,
+        "y": 1440,
+        "width": 84,
+        "height": 38
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d863b022584b7e32fc5c3b_servicenow.svg",
+      "alt": "Servicenow logo",
+      "className": "logo1_logo",
+      "width": 132,
+      "height": 20,
+      "rect": {
+        "x": 531,
+        "y": 1449,
+        "width": 132,
+        "height": 20
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d863fc3111a1d35057fd05_docusign.svg",
+      "alt": "Docusign logo",
+      "className": "logo1_logo",
+      "width": 1200,
+      "height": 242,
+      "rect": {
+        "x": 695,
+        "y": 1445,
+        "width": 144,
+        "height": 29
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d864bb2f3a71727614a4ef_hp-logo.svg",
+      "alt": "HP logo",
+      "className": "logo1_logo",
+      "width": 800,
+      "height": 800,
+      "rect": {
+        "x": 871,
+        "y": 1440,
+        "width": 38,
+        "height": 38
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d86522a27ed5e2c218a1d5_clari.svg",
+      "alt": "Clari logo",
+      "className": "logo1_logo",
+      "width": 131,
+      "height": 39,
+      "rect": {
+        "x": 941,
+        "y": 1440,
+        "width": 129,
+        "height": 38
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d8657b22584b7e32fc724c_infor.svg",
+      "alt": "Infor logo",
+      "className": "logo1_logo",
+      "width": 83,
+      "height": 32,
+      "rect": {
+        "x": 1102,
+        "y": 1443,
+        "width": 83,
+        "height": 32
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a29ee9eeeb44c54734b535a_Clarity%20for%20Marketing.%20Speed%20for%20Sales.-p-1600.webp",
+      "alt": "Clarity for Marketing. Speed for Sales.",
+      "className": "layout239_image",
+      "width": 1440,
+      "height": 721,
+      "rect": {
+        "x": 994,
+        "y": 2087,
+        "width": 337,
+        "height": 189
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a2dfb523abdfa3192e26834_mark-johnston.webp",
+      "alt": "Smiling man with short light brown hair wearing a dark blazer and white shirt against a gray background.",
+      "className": "testimonial_image",
+      "width": 0,
+      "height": 0,
+      "rect": {
+        "x": 109,
+        "y": 5175,
+        "width": 72,
+        "height": 72
+      }
+    }
+  ],
+  "images": [
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6464087fdf877a12a8bd4d26_folloze-logo.svg",
+      "alt": "",
+      "className": "navbar2_logo",
+      "width": 99,
+      "height": 24,
+      "rect": {
+        "x": 80,
+        "y": 24,
+        "width": 99,
+        "height": 24
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d862ecaaf31e25bb0967fc_seismic-logo.svg",
+      "alt": "Seismic logo",
+      "className": "logo1_logo",
+      "width": 128,
+      "height": 24,
+      "rect": {
+        "x": 255,
+        "y": 1447,
+        "width": 128,
+        "height": 24
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d8636aaa7d41e0a237db9a_adp-logo.svg",
+      "alt": "ADP logo",
+      "className": "logo1_logo",
+      "width": 300,
+      "height": 137,
+      "rect": {
+        "x": 415,
+        "y": 1440,
+        "width": 84,
+        "height": 38
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d863b022584b7e32fc5c3b_servicenow.svg",
+      "alt": "Servicenow logo",
+      "className": "logo1_logo",
+      "width": 132,
+      "height": 20,
+      "rect": {
+        "x": 531,
+        "y": 1449,
+        "width": 132,
+        "height": 20
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d863fc3111a1d35057fd05_docusign.svg",
+      "alt": "Docusign logo",
+      "className": "logo1_logo",
+      "width": 1200,
+      "height": 242,
+      "rect": {
+        "x": 695,
+        "y": 1445,
+        "width": 144,
+        "height": 29
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d864bb2f3a71727614a4ef_hp-logo.svg",
+      "alt": "HP logo",
+      "className": "logo1_logo",
+      "width": 800,
+      "height": 800,
+      "rect": {
+        "x": 871,
+        "y": 1440,
+        "width": 38,
+        "height": 38
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d86522a27ed5e2c218a1d5_clari.svg",
+      "alt": "Clari logo",
+      "className": "logo1_logo",
+      "width": 131,
+      "height": 39,
+      "rect": {
+        "x": 941,
+        "y": 1440,
+        "width": 129,
+        "height": 38
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/69d8657b22584b7e32fc724c_infor.svg",
+      "alt": "Infor logo",
+      "className": "logo1_logo",
+      "width": 83,
+      "height": 32,
+      "rect": {
+        "x": 1102,
+        "y": 1443,
+        "width": 83,
+        "height": 32
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a29ee9e50e43d6ae5db6abb_Campaigns%20That%20Practically%20Build%20Themselves-p-1600.webp",
+      "alt": "Campaigns That Practically Build Themselves",
+      "className": "layout239_image",
+      "width": 1440,
+      "height": 721,
+      "rect": {
+        "x": 109,
+        "y": 2087,
+        "width": 337,
+        "height": 189
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a29ef42dda19395c99a7a87_build.svg",
+      "alt": "",
+      "className": "",
+      "width": 22,
+      "height": 22,
+      "rect": {
+        "x": 267,
+        "y": 1917,
+        "width": 20,
+        "height": 20
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a29ee9e3160485c36340d68_Personalizes%20Content%20to%20Buyer%20Behavior-p-1600.webp",
+      "alt": "Personalizes Content to Buyer Behavior",
+      "className": "layout239_image",
+      "width": 1440,
+      "height": 721,
+      "rect": {
+        "x": 552,
+        "y": 2087,
+        "width": 337,
+        "height": 189
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a29ef429d9e35578adc8d68_activate.svg",
+      "alt": "",
+      "className": "",
+      "width": 23,
+      "height": 23,
+      "rect": {
+        "x": 710,
+        "y": 1917,
+        "width": 20,
+        "height": 20
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a29ee9eeeb44c54734b535a_Clarity%20for%20Marketing.%20Speed%20for%20Sales.-p-1600.webp",
+      "alt": "Clarity for Marketing. Speed for Sales.",
+      "className": "layout239_image",
+      "width": 1440,
+      "height": 721,
+      "rect": {
+        "x": 994,
+        "y": 2087,
+        "width": 337,
+        "height": 189
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a29ef427835646e22929e8f_signal.svg",
+      "alt": "",
+      "className": "",
+      "width": 16,
+      "height": 16,
+      "rect": {
+        "x": 1155,
+        "y": 1919,
+        "width": 16,
+        "height": 16
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a2dfb523abdfa3192e26834_mark-johnston.webp",
+      "alt": "Smiling man with short light brown hair wearing a dark blazer and white shirt against a gray background.",
+      "className": "testimonial_image",
+      "width": 0,
+      "height": 0,
+      "rect": {
+        "x": 109,
+        "y": 5175,
+        "width": 72,
+        "height": 72
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a2dfb52368bc94617ac65af_liza-adams.webp",
+      "alt": "Smiling woman with short brown hair wearing black turtleneck and silver hoop earrings.",
+      "className": "testimonial_image",
+      "width": 0,
+      "height": 0,
+      "rect": {
+        "x": 542,
+        "y": 5175,
+        "width": 72,
+        "height": 72
+      }
+    },
+    {
+      "src": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a2dfb52de45e959f3b66cc4_terrance-martin.webp",
+      "alt": "Smiling man with beard wearing a blue blazer and black shirt outdoors with blurred background.",
+      "className": "testimonial_image",
+      "width": 0,
+      "height": 0,
+      "rect": {
+        "x": 976,
+        "y": 5175,
+        "width": 72,
+        "height": 72
+      }
+    }
+  ],
+  "background_images": [
+    {
+      "urls": [
+        "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a2a00deee823e33bf903115_customer-stories-bg.webp"
+      ],
+      "tag": "div",
+      "className": "customer-stories_component",
+      "rect": {
+        "x": 72,
+        "y": 2595,
+        "width": 1296,
+        "height": 1044
+      },
+      "style": {
+        "backgroundColor": null,
+        "backgroundSize": "cover",
+        "backgroundPosition": "0px 0px"
+      }
+    },
+    {
+      "urls": [
+        "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6a2a00deee823e33bf903115_customer-stories-bg.webp"
+      ],
+      "tag": "div",
+      "className": "customer-stories_component",
+      "rect": {
+        "x": 72,
+        "y": 6185,
+        "width": 1296,
+        "height": 530
+      },
+      "style": {
+        "backgroundColor": null,
+        "backgroundSize": "cover",
+        "backgroundPosition": "0px 0px"
+      }
+    }
+  ],
+  "brandfetch_logos": [],
+  "screenshots": {
+    "desktop_full": {
+      "path": "research/brand-harvest/folloze/screenshots/homepage-desktop-full.png",
+      "width": 1440,
+      "height": 7285,
+      "clipped": false
+    },
+    "mobile_full": {
+      "path": "research/brand-harvest/folloze/screenshots/homepage-mobile-full.png",
+      "width": 390,
+      "height": 13408,
+      "clipped": false
+    }
+  },
+  "manual_screenshots": []
+}

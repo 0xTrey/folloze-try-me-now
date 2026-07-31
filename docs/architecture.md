@@ -30,14 +30,14 @@ The existing Next.js application proves the interaction and generated experience
 | Answers arrive | `PATCH /api/sessions/{id}` merges answers. When the selected use case has enough input, it schedules `runStoryStage()` with `after()`. |
 | PDF arrives | The route validates size, MIME, extension, and `%PDF-`; in explicit `GENERATION_MODE=openai` with a key it uploads the PDF to OpenAI, otherwise it retains filename metadata only. |
 | Status display | The browser polls the session about every 900 ms. `/e/{id}` refreshes itself until HTML exists. |
-| Session state | The deployed store is private Vercel Blob. Each session is a JSON wrapper containing the value and optional expiry; reads use `useCache:false`, expired entries are deleted on read, and updates use ETag `ifMatch` with up to five optimistic-concurrency retries. Redis takes precedence if configured but is not the deployed store. Process memory is the local fallback. |
+| Session state | The deployed store is private Vercel Blob. Each session is a JSON wrapper containing the value and optional expiry; reads use `useCache:false`, expired entries are deleted on read, and updates use ETag `ifMatch` with up to five optimistic-concurrency retries. Blob takes precedence when both Blob and Redis are configured. Redis-only remains a compatibility mode but is not production-safe because its current read/mutate/write path has no atomic revision guard. Process memory is the local fallback. |
 | Rate limits | Redis counters are used when Redis is configured; otherwise rate-limit buckets remain process-local memory even when sessions use Blob. |
 | Brand | `BRAND_MODE=remote` plus a service URL activates the remote Brand Harvester. The deployed `fast` mode uses the bounded HTTPS extractor and then a static fallback brand on failure. |
 | Story | `GENERATION_MODE=openai` plus a key activates schema-validated Responses API copy. The deployed `fixture` mode renders a deterministic draft. |
 | Claim | The claim request publishes and emails synchronously. The deployed `FOLLOZE_MODE=disabled` path marks it `preview-only`; the deployed `EMAIL_MODE=console` path skips Resend delivery. |
 | Analytics | Server events are structured console logs. Browser and generated-page interactions are local custom events or `postMessage`; there is no durable analytics ingestion path. |
 
-`after()` is suitable for keeping work alive briefly after an HTTP response, but it is not a durable job queue. A deployment, timeout, or function failure can strand a session. Blob makes deployed sessions durable across instances and includes optimistic concurrency, but it does not provide workflow execution, scheduled expiry cleanup, distributed rate limits, or a permanent relational claim ledger. The memory fallback is for local development and disappears on restart. Deterministic and preview-only fallbacks are useful for visual QA, but they must not satisfy production readiness.
+`after()` is suitable for keeping work alive briefly after an HTTP response, but it is not a durable job queue. A deployment, timeout, or function failure can strand a session. Blob makes deployed sessions durable across instances and includes optimistic concurrency, but it does not provide workflow execution, scheduled expiry cleanup, distributed leases, or a permanent relational claim ledger. Redis can still provide distributed rate limits while Blob owns session state. Blob-backed operation leases are currently process-local, so external side effects still require idempotency and durable workflow fencing. The memory fallback is for local development and disappears on restart. Deterministic and preview-only fallbacks are useful for visual QA, but they must not satisfy production readiness.
 
 Integration activation is explicit: `GENERATION_MODE`, `BRAND_MODE`, `FOLLOZE_MODE`, and `EMAIL_MODE` prevent ambient machine credentials from silently enabling providers. `TRY_ME_DEMO_MODE` is read into configuration but is not the integration gate. Production readiness must validate the explicit modes and the credentials each selected mode requires.
 
@@ -113,14 +113,16 @@ Generated HTML comes from a trusted server template populated with schema-valida
 
 When the preview first reaches `preview_ready_unclaimed`, replace the remaining collecting TTL with a 30-minute expiry. A cleanup workflow deletes the unclaimed Redis projection, PDF, and generated artifacts after a short operational grace period.
 
+The unclaimed path ends here. Brand harvest, source extraction, copy generation, rendering, and analytics preview are allowed; Folloze save and publish operations are not. Email claim is the only transition that may enter the publication workflow.
+
 ### 3. Claim, publish, and email
 
 Claim is an idempotent durable workflow, not a long synchronous HTTP transaction:
 
 1. Validate the business email and editor token.
-2. Insert or update the Postgres claim record using unique key `session_id`; copy only the active artifact revision and required metadata.
+2. Insert or update the Postgres lead/claim record using unique key `session_id`; copy only qualification metadata, the active experience URL/revision, and delivery state. Do not copy generated HTML or source content.
 3. Remove the unclaimed deletion deadline and enqueue `claim:{sessionId}`. Return `202` with `claim_pending`.
-4. Through an OpenAI Responses call with a forced MCP tool choice and explicit allowlist, ask the narrow Folloze gateway to publish `{session_id, artifact_revision, idempotency_key}`.
+4. Through an OpenAI Responses call with a forced MCP tool choice and explicit allowlist, ask the narrow Folloze gateway to publish `{session_id, artifact_revision, artifact_digest, idempotency_key}`.
 5. Store `board_id`, `designer_url`, `public_url`, and publication timestamps. Only an anonymous public URL counts as `published`.
 6. Send the email with idempotency key `try-me-claim-{sessionId}` after the stable URL exists.
 7. Mark the session `claimed` and expose the live URL. Delete or age out transient Redis state after Postgres and Blob are authoritative.
@@ -187,11 +189,12 @@ The remote gateway exposes one allowlisted operation, currently named `create_tr
 {
   "session_id": "opaque session id",
   "artifact_revision": 7,
+  "artifact_digest": "sha256 hex digest",
   "idempotency_key": "claim:opaque session id"
 }
 ```
 
-It must reject arbitrary HTML, arbitrary fetch URLs, user-selected Folloze tool names, and model-supplied credentials. The gateway authenticates the caller, loads the approved artifact from private storage, verifies its digest and revision, applies an approved theme, publishes idempotently, and returns:
+It must reject arbitrary HTML, arbitrary fetch URLs, user-selected Folloze tool names, and model-supplied credentials. The gateway authenticates the caller, loads the approved artifact from private storage, verifies its digest and revision, applies an approved theme, publishes idempotently, and returns a strict response whose `public_url` host is allowlisted by the app:
 
 ```json
 {
@@ -199,6 +202,8 @@ It must reject arbitrary HTML, arbitrary fetch URLs, user-selected Folloze tool 
   "board_id": "247000",
   "designer_url": "https://...",
   "public_url": "https://...",
+  "artifact_revision": 7,
+  "artifact_digest": "sha256 hex digest",
   "warnings": []
 }
 ```

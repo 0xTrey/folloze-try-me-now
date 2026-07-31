@@ -1,9 +1,8 @@
-import { timingSafeEqual } from "node:crypto";
-
 import { del, list } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
 
 import { hasBlob } from "@/lib/config";
+import { hasValidCronAuthorization } from "@/lib/cron-auth";
 import { apiError, HttpError, noStoreHeaders } from "@/lib/http";
 import {
   selectExpiredUploadArtifacts,
@@ -13,14 +12,6 @@ import {
 
 export const maxDuration = 300;
 const DELETE_BATCH_SIZE = 100;
-
-function hasValidCronAuthorization(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const supplied = Buffer.from(request.headers.get("authorization") ?? "");
-  const expected = Buffer.from(`Bearer ${secret}`);
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
-}
 
 async function sweepPrefix(prefix: string, now: number): Promise<{ scanned: number; deleted: number }> {
   let cursor: string | undefined;

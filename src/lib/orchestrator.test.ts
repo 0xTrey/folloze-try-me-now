@@ -47,25 +47,79 @@ describe("public session projection", () => {
       temporaryUrl: "https://example.com/e/session-id",
       revision: 1,
       stages: {
-        brand: { status: "complete" },
+        brand: { status: "complete", attemptId: "private-attempt-id" },
         audience: { status: "running" },
-        story: { status: "pending" }
+        story: { status: "pending", inputFingerprint: "private-input-fingerprint" }
       },
       answers: {
         sourceName: "brief.pdf",
+        sourceUrl: "https://example.com/private/report?access_token=private-query-token",
+        eventSource: "Private customer event details",
         sourceOpenAIFileId: "file-private-source",
         sourceUploadId: "123e4567-e89b-42d3-a456-426614174000",
         sourceUploadReservedAt: "2026-07-30T00:00:00.000Z"
       },
+      claim: {
+        email: "private@example.com",
+        emailMasked: "pr•••••@example.com",
+        publishStatus: "published",
+        emailStatus: "sent",
+        follozeBoardId: "private-board-id",
+        designerUrl: "https://designer.example/private-board"
+      },
+      experience: {
+        title: "Safe public title",
+        eyebrow: "Example",
+        headline: "A safe public headline",
+        subhead: "A sufficiently detailed safe public subhead.",
+        thesisHeadline: "A safe thesis headline",
+        thesisBody: "A sufficiently detailed safe thesis body.",
+        primaryCta: "Continue",
+        audienceLabel: "Business leaders",
+        narrativeArc: "What should the team validate next?",
+        sections: [],
+        signalLabels: [],
+        closingHeadline: "Choose the next useful step",
+        closingBody: "A sufficiently detailed closing body.",
+        html: "<!doctype html><script>private generated artifact</script>",
+        generationSource: "deterministic-fallback",
+        artifactRevision: 2,
+        artifactDigest: "c".repeat(64)
+      },
       audienceSuggestions: [],
-      events: []
+      events: [{ name: "internal_failure", at: "2026-07-30T00:00:00.000Z", meta: { requestId: "private-request-id" } }]
     };
 
     const projected = toPublicSession(session);
     expect(projected).not.toHaveProperty("editorTokenHash");
-    expect(projected.answers).toEqual({ sourceName: "brief.pdf" });
+    expect(projected.answers).toEqual({
+      sourceName: "Uploaded PDF",
+      sourceUrl: "https://source-provided.invalid/",
+      eventSource: "Event details added"
+    });
     expect(JSON.stringify(projected)).not.toContain("file-private-source");
     expect(JSON.stringify(projected)).not.toContain("123e4567-e89b-42d3-a456-426614174000");
+    expect(JSON.stringify(projected)).not.toContain("private@example.com");
+    expect(JSON.stringify(projected)).not.toContain("private-board-id");
+    expect(JSON.stringify(projected)).not.toContain("designer.example");
+    expect(JSON.stringify(projected)).not.toContain("private generated artifact");
+    expect(JSON.stringify(projected)).not.toContain("private-attempt-id");
+    expect(JSON.stringify(projected)).not.toContain("private-input-fingerprint");
+    expect(JSON.stringify(projected)).not.toContain("private-request-id");
+    expect(JSON.stringify(projected)).not.toContain("private-query-token");
+    expect(JSON.stringify(projected)).not.toContain("Private customer event details");
+    expect(projected).not.toHaveProperty("events");
+    expect(projected.experience).toEqual({
+      ready: true,
+      title: "Safe public title",
+      headline: "A safe public headline",
+      generationSource: "deterministic-fallback",
+      artifactRevision: 2
+    });
+    expect(projected.claim).toEqual({
+      publishStatus: "published",
+      emailStatus: "sent"
+    });
   });
 });
 
@@ -105,7 +159,7 @@ describe("PDF source finalization", () => {
       });
       const stored = await getSession(id);
 
-      expect(result.session.answers).toEqual({ sourceName: "brief.pdf" });
+      expect(result.session.answers).toEqual({ sourceName: "Uploaded PDF" });
       expect(stored?.answers).toMatchObject({
         sourceName: "brief.pdf",
         sourceOpenAIFileId: "file-private-source",

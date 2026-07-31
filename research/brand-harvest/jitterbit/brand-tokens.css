@@ -1,0 +1,13 @@
+:root {
+  --brand-primary: #1B3E51;
+  --brand-accent: #F44414;
+  --brand-text: #111827;
+  --brand-surface: #FFFFFF;
+  --brand-font-display: Roboto, system-ui, sans-serif, sans-serif, Arial, -apple-system, "system-ui", system-ui;
+  --brand-font-body: Roboto, system-ui, sans-serif;
+  --brand-button-radius: 0px;
+  --brand-button-padding: 3px 10px;
+  --brand-button-font-weight: 400;
+  --brand-card-radius: 0px;
+  --brand-card-shadow: none;
+}

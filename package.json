@@ -8,18 +8,25 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:openai": "node scripts/dev-with-keychain.mjs",
     "build": "next build",
+    "build:webpack": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "qa": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "db:migrate:leads": "node scripts/migrate-leads.mjs",
+    "db:export:leads": "node scripts/export-leads.mjs",
+    "qa:claim-ledger": "node scripts/verify-claim-ledger.mjs",
+    "qa": "npm run lint && npm run typecheck && npm run test && npm run build && npm run build:webpack"
   },
   "dependencies": {
+    "@neondatabase/serverless": "1.1.0",
     "@upstash/redis": "1.38.0",
     "@vercel/blob": "2.6.1",
+    "disposable-email-domains": "1.0.62",
     "lucide-react": "1.28.0",
     "next": "16.2.12",
     "openai": "7.2.0",

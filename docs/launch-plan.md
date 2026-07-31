@@ -11,7 +11,7 @@ Decision record: [`decision-log.md`](./decision-log.md)
 ## Launch objective
 
 Release a top-of-funnel, PLG-style Try Me Now experience that reliably produces
-one of three tailored Folloze previews in 60 seconds or less, demonstrates value
+one of three tailored Folloze previews in 30 seconds or less, demonstrates value
 before requesting identity, converts a business-email claim into a persistent
 URL and transactional follow-up, and tells a compelling analytics story.
 
@@ -50,7 +50,7 @@ Exit criteria:
 - At least 15 complete test journeys: five per use case.
 - Test inputs cover varied brands, industries, audiences, and content shapes.
 - No critical brand, factuality, mobile, privacy, or session-isolation defect.
-- p90 preview generation is 60 seconds or faster in the intended hosting
+- p90 preview generation is 30 seconds or faster in the intended hosting
   environment.
 - Folloze publish, persistent URL, and transactional email are verified from a
   fresh browser session.
@@ -136,7 +136,7 @@ three useful modules, and no unsupported claims.
 - [ ] The live checklist uses the approved three labels.
 - [ ] Every checklist transition is backed by an actual progress event.
 - [ ] Story cards are informative, dismissible, and reduced-motion safe.
-- [ ] A credible preview is ready within 60 seconds at p90.
+- [ ] A credible preview is ready within 30 seconds at p90.
 - [ ] Guided review actions work without exposing raw prompt complexity.
 - [ ] Analytics story and final demo CTA work on desktop and mobile.
 
@@ -202,7 +202,7 @@ three useful modules, and no unsupported claims.
 | Measure | Public launch gate |
 | --- | --- |
 | Temporary URL creation | p95 <= 2 seconds |
-| Credible preview | p90 <= 60 seconds |
+| Credible preview | p90 <= 30 seconds |
 | Generation success | >= 95% across launch fixtures and beta traffic |
 | Claim and email operation success | >= 99% |
 | Unclaimed access revocation | 100% of expiration tests |

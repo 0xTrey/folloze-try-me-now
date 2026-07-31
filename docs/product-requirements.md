@@ -21,7 +21,7 @@ override conflicts in that earlier artifact.
 
 An anonymous B2B marketer or seller chooses an outcome, provides a company
 domain and two or three contextual answers, and receives a credible,
-brand-aware Folloze experience in 60 seconds or less.
+brand-aware Folloze experience in 30 seconds or less.
 
 The preview is ungated. A visitor enters a business email only to keep and share
 the result. While the result is being generated, the product explains what it
@@ -289,6 +289,10 @@ Rules:
 - After expiration, the temporary URL must not expose generated content.
 - Claim is idempotent and pauses expiration while publish and email operations
   complete.
+- Unclaimed previews remain cache-only. They must never invoke the Folloze MCP
+  save or publish path.
+- A validated business-email claim must be written to the durable lead ledger
+  before any Folloze publication attempt begins.
 - Claimed experiences do not automatically expire in V1. Removal is an
   administrative action.
 - Multi-tab use must resolve to the same authoritative session state.
@@ -299,6 +303,10 @@ Business email handling:
 - Validate syntax and reject known disposable and free-mail domains.
 - Provide a documented internal/demo override.
 - Store email only on the server and redact it from application logs.
+- Record each claim by unique session ID with company and target domains, use
+  case, audience, objective, source type, experience URL, and coarse
+  publication/email outcomes. Never copy generated HTML or source content into
+  the lead ledger.
 - Treat the URL email as transactional. Marketing subscription requires a
   separate, optional consent control.
 
@@ -334,6 +342,7 @@ Minimum server-side session record:
 - temporary and claimed URL state;
 - created, preview-ready, expiration, claim, and update timestamps;
 - business email only after claim, protected and log-redacted;
+- durable lead-ledger status keyed by session ID;
 - coarse error code and retry count.
 
 Required funnel events:
@@ -364,7 +373,7 @@ analytics payloads.
 Launch service-level objectives:
 
 - Temporary URL available within two seconds of session creation at p95.
-- Credible preview ready within 60 seconds at p90.
+- Credible preview ready within 30 seconds at p90.
 - At least 95% generation success across the launch fixture set.
 - At least 99% claim and transactional-email operation success.
 - 100% of unclaimed expiration tests revoke access correctly.
@@ -411,7 +420,7 @@ The product is ready for launch only when:
 - every visible checklist transition maps to a real progress event;
 - the temporary URL correctly renders in-progress, ready, claimed, and expired
   states;
-- p90 generation meets the 60-second promise on production infrastructure;
+- p90 generation meets the 30-second promise on production infrastructure;
 - output passes brand, factuality, CTA, asset, and mobile checks;
 - business-email claim, persistence, and transactional email work end to end;
 - unclaimed content is inaccessible 30 minutes after the preview becomes ready;

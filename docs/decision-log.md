@@ -36,9 +36,9 @@ decision wins.
 | D-011 | Progress is shown through three labels: Finding your brand, Understanding the audience, and Creating the story. | This is both status and a product narrative. The labels remain visible during progressive questions and generation. | Accepted |
 | D-012 | Checklist state must be honest. | Each visible transition comes from a real job event. Timers may rotate explanatory cards but never fake task completion or percentages. | Accepted |
 | D-013 | Loading cards explain what Folloze is doing and why it matters. | Loading time becomes a selling experience. Cards are relevant to the active task, dismissible, and reduced-motion safe. | Accepted |
-| D-014 | The target experience is a credible preview in 60 seconds or less. | Public launch requires p90 <= 60 seconds; templates and parallel work are preferred to unconstrained generation. | Accepted |
+| D-014 | The target experience is a credible preview in 30 seconds or less. | Trey approved up to 30 seconds for materially stronger copy and visuals; generation uses a bounded request and deterministic fallback at the deadline. | Accepted; updated 2026-07-30 |
 | D-015 | The ABM V1 personalizes for one target account. | A Default/Target preview demonstrates personalization without the latency and complexity of the June brief's three-account example. | Accepted default |
-| D-016 | Publish/share is an outcome, not a setup question. | The app automatically creates a temporary preview and uses business-email claim to control persistence. | Accepted |
+| D-016 | Publish/share is an outcome, not a setup question. | The app automatically creates a 30-minute cache-only preview. It must not create or publish a Folloze board before a validated business-email claim. | Accepted; clarified 2026-07-30 |
 | D-017 | Advanced freeform instructions are hidden behind an optional post-preview control. | First-time visitors get a guided path; they do not face the current six broad Campaign Agent fields. | Accepted |
 | D-018 | Engagement analytics is a primary demo story. | The result includes “See who engages—and what they care about,” followed by a demo CTA. Illustrative data must be labeled. | Accepted |
 | D-019 | Use OpenAI for generation and Folloze MCP/experience capabilities for the Folloze outcome. | Credentials remain server-side. A fresh Folloze instance will replace the test integration when available. | Accepted |
@@ -47,6 +47,7 @@ decision wins.
 | D-022 | The experience is a visual MVP, but all three paths must work. | Visual polish may be scoped, while path coverage, honest progress, claim, expiration, and analytics story are launch requirements. | Accepted |
 | D-023 | Transactional delivery and marketing subscription are separate. | Sending the claimed URL does not silently subscribe the visitor to marketing; optional consent is explicit. | Accepted default |
 | D-024 | Output facts must be source-grounded. | The system must not invent customer claims, metrics, testimonials, speakers, dates, or target-account facts. | Accepted default |
+| D-025 | Every validated business-email claim is written to a durable lead ledger before publication begins. | The ledger is keyed idempotently by session and records qualification, experience URL, publication, and delivery outcomes without storing generated HTML or source content. Transactional delivery still does not create a marketing subscription. | Accepted 2026-07-30 |
 
 ## Superseded June 1 directions
 
@@ -54,7 +55,7 @@ decision wins.
 | --- | --- |
 | Event or Webinar Promotion as a top-level third card | Generalized Campaign is the card; event/webinar is a subtype. |
 | Base experience plus three personalized account versions | One target-account version plus a Default preview state. |
-| Optimize for launching a first campaign in 15 minutes | Deliver a credible Try Me Now preview in 60 seconds or less. |
+| Optimize for launching a first campaign in 15 minutes | Deliver a credible Try Me Now preview in 30 seconds or less. |
 | Ask whether output should be publishable or shareable | Create a temporary URL automatically; claim controls persistence. |
 | Six visible Campaign Agent information categories | Three-to-four progressive questions and a three-step live checklist. |
 | Login-before-generation remained an open question | No login before generation; business email appears only at claim. |
@@ -99,4 +100,4 @@ Any change to an accepted decision should record:
 5. the approving owner and date.
 
 Do not silently change checklist semantics, email gating, TTL, source grounding,
-or the 60-second promise in implementation code.
+or the 30-second promise in implementation code.

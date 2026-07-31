@@ -26,11 +26,11 @@ import {
   X
 } from "lucide-react";
 import {
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState
 } from "react";
@@ -38,7 +38,6 @@ import {
 import type {
   PublicTryMeSession,
   SessionAnswers,
-  StageKey,
   StageState,
   UseCase
 } from "@/lib/types";
@@ -52,6 +51,16 @@ import {
 
 type ClientEvent = { action: string; label: string; at: number };
 
+type BuildMoment = {
+  key: "brand" | "buyer" | "strategy" | "experience";
+  phase: string;
+  title: string;
+  detail: string;
+  artifact?: string;
+  status: StageState["status"];
+  icon: typeof Globe2;
+};
+
 const useCaseContent: Record<
   UseCase,
   {
@@ -60,6 +69,8 @@ const useCaseContent: Record<
     title: string;
     description: string;
     cta: string;
+    domainTitle: string;
+    domainBody: string;
     icon: typeof Target;
     className: string;
   }
@@ -70,6 +81,8 @@ const useCaseContent: Record<
     title: "Break into one account",
     description: "Shape one experience around the company, buying group, and next move.",
     cta: "Build a 1:1 experience",
+    domainTitle: "Start with the brand making the case.",
+    domainBody: "We will capture its public identity now, then map it against the account you choose.",
     icon: Target,
     className: "portalEditorial"
   },
@@ -79,6 +92,8 @@ const useCaseContent: Record<
     title: "Launch the campaign",
     description: "Build a focused landing page for an offer, segment, product, or event.",
     cta: "Build a campaign page",
+    domainTitle: "Start with the brand buyers should recognize.",
+    domainBody: "We will capture its voice and visual system while you choose the offer and outcome.",
     icon: Megaphone,
     className: "portalCobalt"
   },
@@ -88,6 +103,8 @@ const useCaseContent: Record<
     title: "Make content work harder",
     description: "Turn a URL or PDF into a guided, measurable path buyers want to explore.",
     cta: "Transform my content",
+    domainTitle: "Start with the company behind the source.",
+    domainBody: "We will capture the brand now, then turn a URL or PDF into a guided buyer path.",
     icon: BookOpen,
     className: "portalTerminal"
   }
@@ -99,37 +116,433 @@ const objectives: Record<UseCase, string[]> = {
   content: ["Educate buyers", "Increase content engagement", "Capture qualified interest", "Book a meeting"]
 };
 
-const stageContent: Record<
-  StageKey,
-  { title: string; working: string; whyTitle: string; whyBody: string; icon: typeof Globe2 }
-> = {
-  brand: {
-    title: "Finding your brand",
-    working: "Reading the visual and messaging signals buyers already recognize.",
-    whyTitle: "Familiarity earns the first second.",
-    whyBody:
-      "We use the visual cues buyers already trust, so the finished page feels native to the company behind it.",
-    icon: Globe2
-  },
-  audience: {
-    title: "Understanding the audience",
-    working: "Turning company context into a useful audience starting point.",
-    whyTitle: "Relevance changes the response.",
-    whyBody:
-      "A CMO needs the business case. A campaign manager needs the launch path. The person you choose changes the message and the page.",
-    icon: Users
-  },
-  story: {
-    title: "Creating the story",
-    working: "Building the sequence from tension to value, proof, and one next move.",
-    whyTitle: "A page is not a story.",
-    whyBody:
-      "A useful experience creates momentum. Pressure first, value second, proof next, then one clear action.",
-    icon: Sparkles
-  }
+const likelyDomain = /^(?:https?:\/\/)?(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\/?$/i;
+const CEREMONY_DURATION_MS = 4_800;
+
+type BuildPanelCopy = {
+  kicker: string;
+  headline: string;
+  supporting: string;
+  urlLabel: string;
+  mobileLabel: string;
+  mobileStep: string;
 };
 
-const likelyDomain = /^(?:https?:\/\/)?(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\/?$/i;
+type RevealReceipt = { number: string; label: string };
+
+export type RevealCopy = {
+  kicker: string;
+  headline: string;
+  summary: string;
+  counterpart: string;
+  receipts: RevealReceipt[];
+};
+
+type GuidedQuestionCopy = {
+  targetTitle: string;
+  targetBody: string;
+  campaignTitle: string;
+  campaignBody: string;
+  sourceTitle: string;
+  sourceBody: string;
+  audienceLoadingTitle: string;
+  audienceLoadingBody: string;
+  audienceTitle: string;
+  audienceBody: string;
+  objectiveTitle: string;
+  objectiveBody: string;
+  completeTitle: string;
+  completeBody: string;
+};
+
+function displayNameFromDomain(value?: string): string {
+  const stem = value?.replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[./]/)[0];
+  if (!stem) return "the company";
+  return stem
+    .split("-")
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function trimLabel(value: string, max = 42): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= max) return compact;
+  const candidate = compact.slice(0, max + 1).replace(/\s+\S*$/, "").trim();
+  return `${candidate || compact.slice(0, max).trim()}…`;
+}
+
+function brandNameFor(session: PublicTryMeSession): string {
+  return session.brand?.companyName || displayNameFromDomain(session.companyDomain);
+}
+
+function targetNameFor(session: PublicTryMeSession): string {
+  return session.targetBrand?.companyName || displayNameFromDomain(session.answers.targetDomain);
+}
+
+function audienceFor(session: PublicTryMeSession): string {
+  return session.answers.customAudience || session.answers.audience || "the right buying group";
+}
+
+function campaignTypeFor(session: PublicTryMeSession): string {
+  if (session.answers.campaignType === "event") return "Event campaign";
+  if (session.answers.campaignType === "demand") return "Demand campaign";
+  if (session.answers.campaignType === "product") return "Product campaign";
+  return "Campaign experience";
+}
+
+function sourceNameFor(session: PublicTryMeSession): string {
+  const brandName = brandNameFor(session);
+  const sourceName = session.answers.sourceName?.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ").trim();
+  if (sourceName) return trimLabel(sourceName, 54);
+  if (session.useCase === "content" && session.experience?.title) {
+    const title = session.experience.title.split("|")[0]?.trim();
+    if (title) return trimLabel(title, 54);
+  }
+  return `${brandName} content`;
+}
+
+export function ceremonyDuration(prefersReducedMotion: boolean): number {
+  return prefersReducedMotion ? 0 : CEREMONY_DURATION_MS;
+}
+
+export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
+  const pending: StageState["status"] = "pending";
+  const brandName = session?.brand?.companyName || displayNameFromDomain(session?.companyDomain);
+  const targetName = session?.targetBrand?.companyName || displayNameFromDomain(session?.answers.targetDomain);
+  const audience = session?.answers.customAudience || session?.answers.audience;
+  const objective = session?.answers.objective;
+  const buyerContext = session?.useCase === "abm" ? targetName : brandName;
+  const brandState = session?.stages.brand.status ?? pending;
+  const audienceState = session?.stages.audience.status ?? pending;
+  const experienceState = session?.experience ? "complete" : session?.stages.story.status ?? pending;
+
+  return [
+    {
+      key: "brand",
+      phase: "Brand system",
+      title: ["complete", "fallback"].includes(brandState)
+        ? brandState === "fallback" ? "Brand language reconstructed" : "Public identity captured"
+        : brandState === "running" ? `Reading ${brandName}` : "Brand scan queued",
+      detail: `Reading the identity, palette, and visual cues buyers already associate with ${brandName}.`,
+      artifact: ["complete", "fallback"].includes(brandState)
+        ? `${brandName} · ${session?.brand?.colors.length || 1} brand colors`
+        : undefined,
+      status: brandState,
+      icon: Globe2
+    },
+    {
+      key: "buyer",
+      phase: "Buyer fit",
+      title: audience
+        ? "Buyer context locked"
+        : audienceState === "running" ? `Mapping roles at ${buyerContext}` : audienceState === "complete" ? "Company-fit roles found" : "Buyer mapping queued",
+      detail: `Turning ${buyerContext}'s public product and market context into relevant buying roles.`,
+      artifact: audience
+        ? `Built for ${audience}`
+        : audienceState === "complete" && session?.audienceSuggestions.length
+          ? `${session.audienceSuggestions.length} relevant roles surfaced`
+          : undefined,
+      status: audience ? "complete" : audienceState,
+      icon: Users
+    },
+    {
+      key: "strategy",
+      phase: "Message strategy",
+      title: objective ? "One outcome locked" : "Waiting for the objective",
+      detail: "The objective decides the tension, proof, and single next move the page should earn.",
+      artifact: objective ? `Objective · ${objective}` : undefined,
+      status: objective ? "complete" : pending,
+      icon: Target
+    },
+    {
+      key: "experience",
+      phase: "Experience",
+      title: session?.experience
+        ? "Narrative and page assembled"
+        : experienceState === "running" ? "Composing the buyer journey" : experienceState === "failed" ? "Composition needs another pass" : "Composition queued",
+      detail: "Composing the story, proof modules, interaction path, and CTA into one guided experience.",
+      artifact: session?.experience?.title,
+      status: experienceState,
+      icon: Sparkles
+    }
+  ];
+}
+
+export function getBuildPanelCopy(session: PublicTryMeSession): BuildPanelCopy {
+  const brandName = brandNameFor(session);
+  const targetName = targetNameFor(session);
+  const audience = audienceFor(session);
+  const moments = buildMoments(session);
+  const currentIndex = Math.max(
+    0,
+    moments.findIndex((moment) => moment.status === "running" || moment.status === "pending")
+  );
+  const currentMoment = moments[currentIndex] ?? moments[moments.length - 1];
+  const common = {
+    urlLabel: session.status === "claimed" ? "Saved URL ready" : "Private URL active",
+    mobileLabel: currentMoment.title,
+    mobileStep: `${Math.min(currentIndex + 1, moments.length)} of ${moments.length}`
+  };
+
+  if (!["complete", "fallback"].includes(session.stages.brand.status)) {
+    return {
+      ...common,
+      kicker: "Brand harvest · live",
+      headline: `Reading ${brandName} while you keep moving.`,
+      supporting: "Identity, palette, and public positioning are being assembled in the background."
+    };
+  }
+
+  if (session.useCase === "abm" && !session.answers.targetDomain) {
+    return {
+      ...common,
+      kicker: `${brandName} · brand mapped`,
+      headline: "The seller story is ready. Now name the account.",
+      supporting: "The next domain will change the buyer context, message tension, and page payoff."
+    };
+  }
+
+  if (session.useCase === "abm" && session.answers.targetDomain && !session.targetBrand) {
+    return {
+      ...common,
+      kicker: `${brandName} × ${targetName}`,
+      headline: `Reading ${targetName} against ${brandName}.`,
+      supporting: "Public account signals are being turned into relevant buying-role hypotheses."
+    };
+  }
+
+  if (session.useCase === "campaign" && !session.answers.campaignType) {
+    return {
+      ...common,
+      kicker: `${brandName} · brand mapped`,
+      headline: "The brand is ready. Choose the campaign shape.",
+      supporting: "Product, demand, and event paths earn attention differently, so the page will too."
+    };
+  }
+
+  if (session.useCase === "content" && !session.answers.sourceUrl && !session.answers.sourceName) {
+    return {
+      ...common,
+      kicker: `${brandName} · brand mapped`,
+      headline: "The brand is ready. Add the source worth transforming.",
+      supporting: "A public URL or PDF will become the factual backbone of the buyer path."
+    };
+  }
+
+  if (!session.answers.audience) {
+    const buyerContext = session.useCase === "abm" ? targetName : brandName;
+    return {
+      ...common,
+      kicker: `${buyerContext} · buyer mapping`,
+      headline: session.audienceSuggestions.length
+        ? `Buyer hypotheses are ready for ${buyerContext}.`
+        : `Finding the roles that fit ${buyerContext}.`,
+      supporting: "The role you choose will change the problem, proof, and next move across the page."
+    };
+  }
+
+  if (!session.answers.objective) {
+    return {
+      ...common,
+      kicker: `${trimLabel(audience, 48)} · in focus`,
+      headline: "The buyer is set. Give the experience one job.",
+      supporting: "One outcome now becomes the filter for every section and interaction."
+    };
+  }
+
+  return {
+    ...common,
+    kicker: `${brandName} · composing live`,
+    headline: `Turning this brief into a live path for ${trimLabel(audience, 48)}.`,
+    supporting: `The narrative, proof sequence, interaction, and ${session.answers.objective.toLowerCase()} path are being checked now.`
+  };
+}
+
+export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuestionCopy {
+  const brandName = brandNameFor(session);
+  const targetName = targetNameFor(session);
+  const sourceName = sourceNameFor(session);
+
+  if (session.useCase === "abm") {
+    return {
+      targetTitle: `Which account should see itself in ${brandName}'s story?`,
+      targetBody: `Add the account domain. We will map its public context against ${brandName}'s value before the page is composed.`,
+      campaignTitle: "What are you taking to market?",
+      campaignBody: "The offer changes the page structure and the action buyers should take.",
+      sourceTitle: "Which content should do more work?",
+      sourceBody: "Give us a public URL or PDF. We will preserve the facts and reshape the way buyers explore them.",
+      audienceLoadingTitle: `Mapping the buying roles that fit ${targetName}.`,
+      audienceLoadingBody: `We are reading ${targetName}'s public product and operating context now.`,
+      audienceTitle: `Who at ${targetName} needs to believe it?`,
+      audienceBody: `Choose the closest role. The options combine ${targetName}'s public context with the decision ${brandName} helps buyers make.`,
+      objectiveTitle: `What should ${targetName} do next?`,
+      objectiveBody: "One outcome will set the tension, proof, and CTA across the entire experience.",
+      completeTitle: `${brandName} × ${targetName}. The brief is locked.`,
+      completeBody: "Folloze is composing the account story, proof sequence, interaction path, and next move now."
+    };
+  }
+
+  if (session.useCase === "content") {
+    return {
+      targetTitle: "Which account should this feel built for?",
+      targetBody: "Add the target domain to create an account-specific version.",
+      campaignTitle: "What are you taking to market?",
+      campaignBody: "The offer changes the page structure and the action buyers should take.",
+      sourceTitle: `Which ${brandName} content should become interactive?`,
+      sourceBody: "We will preserve the source facts, then turn them into a guided path buyers can explore and you can measure.",
+      audienceLoadingTitle: `Finding the buyers who should get more from ${sourceName}.`,
+      audienceLoadingBody: `We are pairing ${brandName}'s public market context with the source now.`,
+      audienceTitle: `Who should get more from ${sourceName}?`,
+      audienceBody: "Choose the buyer lens. It will change what gets emphasized, sequenced, and measured.",
+      objectiveTitle: `What should ${sourceName} unlock?`,
+      objectiveBody: "One outcome will decide how the source becomes a useful next step instead of another download.",
+      completeTitle: `${sourceName} is becoming a buyer path.`,
+      completeBody: "Folloze is preserving the facts while composing the guided sequence, interaction, and next move."
+    };
+  }
+
+  return {
+    targetTitle: "Which account should this feel built for?",
+    targetBody: "Add the target domain to create an account-specific version.",
+    campaignTitle: `What is ${brandName} taking to market?`,
+    campaignBody: "Choose the campaign shape. It will change the page rhythm, proof pattern, and conversion path.",
+    sourceTitle: "Which content should do more work?",
+    sourceBody: "Give us a public URL or PDF. We will preserve the facts and reshape the way buyers explore them.",
+    audienceLoadingTitle: `Finding the buyers this ${brandName} campaign should move.`,
+    audienceLoadingBody: `We are reading ${brandName}'s public product and market context now.`,
+    audienceTitle: `Who should ${brandName}'s campaign move?`,
+    audienceBody: "Choose the buyer who should recognize the problem, trust the proof, and care about the next step.",
+    objectiveTitle: "What must this campaign earn?",
+    objectiveBody: "One outcome will keep the promise, proof, and CTA pointed in the same direction.",
+    completeTitle: `${campaignTypeFor(session)} brief locked.`,
+    completeBody: "Folloze is composing the campaign promise, proof sequence, interaction, and conversion path now."
+  };
+}
+
+export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
+  const brandName = brandNameFor(session);
+  const targetName = targetNameFor(session);
+  const audience = audienceFor(session);
+  const objective = session.answers.objective || "one clear next move";
+  const sourceName = sourceNameFor(session);
+  const campaignType = campaignTypeFor(session);
+  const headline = session.experience?.headline
+    || (session.useCase === "abm"
+      ? `${targetName}, meet a sharper ${brandName} story.`
+      : session.useCase === "content"
+        ? `${sourceName} just became a buyer journey.`
+        : `${brandName}'s campaign now has a live front door.`);
+
+  if (session.useCase === "abm") {
+    return {
+      kicker: `${brandName} × ${targetName} · 1:1 experience`,
+      headline,
+      summary: `${targetName} now has a ${brandName} story for ${audience}, with one job: ${objective.toLowerCase()}.`,
+      counterpart: targetName,
+      receipts: [
+        { number: "01", label: `${trimLabel(brandName, 24)} identity matched` },
+        { number: "02", label: `${trimLabel(targetName, 24)} context mapped` },
+        { number: "03", label: `${trimLabel(audience, 30)} in focus` },
+        { number: "04", label: `${trimLabel(objective, 30)} path composed` }
+      ]
+    };
+  }
+
+  if (session.useCase === "content") {
+    return {
+      kicker: `${sourceName} · transformed`,
+      headline,
+      summary: `${sourceName} is now a guided ${brandName} path for ${audience}, built to ${objective.toLowerCase()}.`,
+      counterpart: sourceName,
+      receipts: [
+        { number: "01", label: `${trimLabel(brandName, 24)} identity matched` },
+        { number: "02", label: `${trimLabel(sourceName, 30)} transformed` },
+        { number: "03", label: `${trimLabel(audience, 30)} lens applied` },
+        { number: "04", label: `${trimLabel(objective, 30)} path composed` }
+      ]
+    };
+  }
+
+  return {
+    kicker: `${brandName} · ${campaignType.toLowerCase()}`,
+    headline,
+    summary: `${brandName} now has a live ${campaignType.toLowerCase()} for ${audience}, built to ${objective.toLowerCase()}.`,
+    counterpart: campaignType,
+    receipts: [
+      { number: "01", label: `${trimLabel(brandName, 24)} identity matched` },
+      { number: "02", label: `${campaignType} framed` },
+      { number: "03", label: `${trimLabel(audience, 30)} in focus` },
+      { number: "04", label: `${trimLabel(objective, 30)} path composed` }
+    ]
+  };
+}
+
+export function getRevealShellHeadline(session: PublicTryMeSession): string {
+  const brandName = brandNameFor(session);
+  if (session.useCase === "abm") {
+    return `${brandName} × ${targetNameFor(session)}, ready to explore.`;
+  }
+  if (session.useCase === "content") {
+    return `${sourceNameFor(session)}, rebuilt for buyers.`;
+  }
+  return `${brandName}'s ${campaignTypeFor(session).toLowerCase()}, ready to launch.`;
+}
+
+function getWhyCopy(session: PublicTryMeSession): { key: string; title: string; body: string } {
+  const brandName = brandNameFor(session);
+  const targetName = targetNameFor(session);
+  const sourceName = sourceNameFor(session);
+  const audience = session.answers.customAudience || session.answers.audience;
+  const objective = session.answers.objective;
+  const activeMoment = buildMoments(session).find((moment) => moment.status === "running")
+    ?? buildMoments(session).find((moment) => moment.status === "pending")
+    ?? buildMoments(session)[3];
+
+  if (activeMoment.key === "brand") {
+    return {
+      key: "brand",
+      title: `${brandName} should feel like ${brandName}.`,
+      body: "Matching the identity buyers already recognize earns attention before the first sentence has to work."
+    };
+  }
+
+  if (activeMoment.key === "buyer") {
+    if (session.useCase === "abm") {
+      return {
+        key: "buyer-abm",
+        title: `${targetName} is not an audience segment.`,
+        body: `The page should connect ${brandName}'s value to a decision a real role at ${targetName} owns.`
+      };
+    }
+    if (session.useCase === "content") {
+      return {
+        key: "buyer-content",
+        title: "A source needs a point of view.",
+        body: `${sourceName} becomes useful when the right buyer can see the decision inside it.`
+      };
+    }
+    return {
+      key: "buyer-campaign",
+      title: "Campaign relevance starts with one buyer.",
+      body: `${brandName}'s promise, proof, and CTA will all change around the role you choose.`
+    };
+  }
+
+  if (activeMoment.key === "strategy") {
+    return {
+      key: "strategy",
+      title: "One outcome sharpens everything.",
+      body: `${audience || "The buyer"} should feel one clear direction, not four competing calls to action.`
+    };
+  }
+
+  return {
+    key: "experience",
+    title: objective ? `Every section now earns “${objective}.”` : "The brief is becoming a journey.",
+    body: "Folloze is checking the narrative, proof sequence, interaction path, and next move as one experience."
+  };
+}
 
 function track(action: string, detail: Record<string, string | number | boolean> = {}) {
   if (typeof window === "undefined") return;
@@ -216,23 +629,37 @@ function StatusMark({ state }: { state: StageState }) {
 }
 
 function LiveChecklist({ session, compact = false }: { session?: PublicTryMeSession; compact?: boolean }) {
-  const fallback: StageState = { status: "pending" };
+  const moments = buildMoments(session);
+  const lockedCount = moments.filter((moment) => ["complete", "fallback"].includes(moment.status)).length;
+  const currentKey = moments.find((moment) => moment.status === "running")?.key
+    ?? moments.find((moment) => moment.status === "pending")?.key;
   return (
     <div className={compact ? "checklist compactChecklist" : "checklist"} aria-live="polite">
-      {(["brand", "audience", "story"] as StageKey[]).map((key) => {
-        const item = stageContent[key];
-        const state = session?.stages[key] ?? fallback;
-        const Icon = item.icon;
+      {!compact && (
+        <div className="buildLedgerHeader">
+          <div>
+            <span>{lockedCount} of {moments.length} intelligence layers locked</span>
+            <strong>{lockedCount === moments.length ? "Experience ready" : `Now assembling · ${moments.find((moment) => moment.key === currentKey)?.phase || "Live brief"}`}</strong>
+          </div>
+          <span className="buildOrbit" aria-hidden="true"><i /><i /><i /></span>
+        </div>
+      )}
+      <div className="buildProgress" aria-hidden="true"><span style={{ width: `${(lockedCount / moments.length) * 100}%` }} /></div>
+      {moments.map((moment, index) => {
+        const state: StageState = { status: moment.status };
+        const Icon = moment.icon;
         return (
-          <div className={`checkRow is-${state.status}`} key={key}>
+          <div className={`checkRow is-${state.status} ${moment.key === currentKey ? "isCurrent" : ""}`} key={moment.key}>
             <StatusMark state={state} />
             <div className="checkIcon">
               <Icon size={17} />
             </div>
             <div className="checkCopy">
-              <strong>{item.title}</strong>
-              {!compact && <span>{state.artifact || state.detail || item.working}</span>}
+              <span className="checkPhase">{String(index + 1).padStart(2, "0")} · {moment.phase}</span>
+              <strong>{moment.title}</strong>
+              {!compact && <span>{moment.artifact || moment.detail}</span>}
             </div>
+            {moment.key === currentKey && moment.status === "running" && <span className="workingNow">Live</span>}
           </div>
         );
       })}
@@ -319,8 +746,8 @@ function DomainStart({
       <div className="domainStageGrid">
         <div>
           <span className="sectionKicker">{portal.kicker}</span>
-          <h2>Start with the company behind the story.</h2>
-          <p>Brand work begins as soon as we recognize the domain. You can keep answering while it runs.</p>
+          <h2>{portal.domainTitle}</h2>
+          <p>{portal.domainBody} The build begins as soon as we recognize the domain.</p>
         </div>
         <label className={`domainInput ${isStarting ? "isWorking" : ""}`}>
           <span>Company domain</span>
@@ -408,6 +835,7 @@ function ProgressiveQuestions({
   const textValue = fieldValues[questionKey] ?? "";
   const setTextValue = (value: string) =>
     setFieldValues((current) => ({ ...current, [questionKey]: value }));
+  const questionCopy = getGuidedQuestionCopy(session);
 
   if (session.useCase === "abm" && !answers.targetDomain) {
     return (
@@ -419,8 +847,8 @@ function ProgressiveQuestions({
         }}
       >
         <span className="questionCount">Next signal · account</span>
-        <h2>Which account should this feel built for?</h2>
-        <p>We will use the target domain to create the account-specific version.</p>
+        <h2>{questionCopy.targetTitle}</h2>
+        <p>{questionCopy.targetBody}</p>
         <label className="lineInput"><span>Target account domain</span><div><Target size={19} /><input value={textValue} onChange={(event) => setTextValue(event.target.value)} placeholder="targetaccount.com" /></div></label>
         <button className="buttonPrimary" disabled={!likelyDomain.test(textValue.trim()) || isSaving}>Use this account<ArrowRight size={17} /></button>
       </form>
@@ -431,8 +859,8 @@ function ProgressiveQuestions({
     return (
       <div className="questionCard">
         <span className="questionCount">Next signal · campaign</span>
-        <h2>What are you taking to market?</h2>
-        <p>The offer changes the page structure and the action buyers should take.</p>
+        <h2>{questionCopy.campaignTitle}</h2>
+        <p>{questionCopy.campaignBody}</p>
         <div className="largeChoiceGrid" aria-busy={isSaving || undefined}>
           {[
             ["product", "Product or solution", "Build demand around one clear promise."],
@@ -464,8 +892,8 @@ function ProgressiveQuestions({
     return (
       <div className="questionCard">
         <span className="questionCount">Next signal · source</span>
-        <h2>Which content should do more work?</h2>
-        <p>Give us a public URL or PDF. We will preserve the facts and reshape the way buyers explore them.</p>
+        <h2>{questionCopy.sourceTitle}</h2>
+        <p>{questionCopy.sourceBody}</p>
         <div className="sourceTabs" role="tablist" aria-label="Content source type">
           <button type="button" role="tab" id="source-tab-url" aria-controls="source-panel-url" aria-selected={sourceMode === "url"} className={sourceMode === "url" ? "isActive" : ""} onClick={() => setSourceMode("url")}>Public URL</button>
           <button type="button" role="tab" id="source-tab-pdf" aria-controls="source-panel-pdf" aria-selected={sourceMode === "pdf"} className={sourceMode === "pdf" ? "isActive" : ""} onClick={() => setSourceMode("pdf")}>PDF upload</button>
@@ -497,11 +925,21 @@ function ProgressiveQuestions({
   }
 
   if (!answers.audience) {
+    if (session.audienceSuggestions.length === 0) {
+      return (
+        <div className="questionCard generationCard" role="status" aria-live="polite">
+          <span className="generationGlyph"><LoaderCircle className="spin" size={24} /></span>
+          <span className="questionCount">Next signal · audience</span>
+          <h2>{questionCopy.audienceLoadingTitle}</h2>
+          <p>{questionCopy.audienceLoadingBody}</p>
+        </div>
+      );
+    }
     return (
       <div className="questionCard">
         <span className="questionCount">Next signal · audience</span>
-        <h2>Who needs to believe this story?</h2>
-        <p>Pick the closest audience. We will change the problem, proof, and next step around them.</p>
+        <h2>{questionCopy.audienceTitle}</h2>
+        <p>{questionCopy.audienceBody}</p>
         <ChipGroup label="Choose an audience" options={[...session.audienceSuggestions, "Other"]} value={answers.audience} disabled={isSaving} onChange={(audience) => void onPatch({ audience })} />
       </div>
     );
@@ -522,8 +960,8 @@ function ProgressiveQuestions({
     return (
       <div className="questionCard">
         <span className="questionCount">Final signal · objective</span>
-        <h2>What should the experience make easier?</h2>
-        <p>One objective keeps the story focused and gives every interaction a job.</p>
+        <h2>{questionCopy.objectiveTitle}</h2>
+        <p>{questionCopy.objectiveBody}</p>
         <ChipGroup label="Choose an objective" options={objectives[session.useCase]} value={answers.objective} disabled={isSaving} onChange={(objective) => void onPatch({ objective })} />
       </div>
     );
@@ -547,34 +985,114 @@ function ProgressiveQuestions({
     <div className="questionCard generationCard">
       <span className="generationGlyph"><Sparkles size={25} /></span>
       <span className="questionCount">Brief complete</span>
-      <h2>We have enough to create the story.</h2>
-      <p>Keep watching the live build. The preview will open as soon as the narrative and interaction checks are ready.</p>
+      <h2>{questionCopy.completeTitle}</h2>
+      <p>{questionCopy.completeBody}</p>
       <div className="briefChips"><span>{answers.audience}</span><span>{answers.objective}</span></div>
     </div>
   );
 }
 
 function WhyItMatters({ session }: { session: PublicTryMeSession }) {
-  const activeKey = (["brand", "audience", "story"] as StageKey[]).find(
-    (key) => session.stages[key].status === "running"
-  ) ?? (["story", "audience", "brand"] as StageKey[]).find((key) => session.stages[key].status !== "pending") ?? "brand";
-  const content = stageContent[activeKey];
+  const content = getWhyCopy(session);
   return (
-    <aside className="whyCard" key={activeKey}>
+    <aside className="whyCard" key={content.key}>
       <span>Why this matters</span>
-      <h3>{content.whyTitle}</h3>
-      <p>{content.whyBody}</p>
+      <h3>{content.title}</h3>
+      <p>{content.body}</p>
     </aside>
+  );
+}
+
+function RevealBrandToken({
+  name,
+  logoUrl,
+  accent = false
+}: {
+  name: string;
+  logoUrl?: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className={`revealBrandToken ${accent ? "isAccent" : ""}`}>
+      <span>
+        {logoUrl ? <Image src={logoUrl} alt="" width={84} height={28} style={{ width: "auto", height: "auto" }} unoptimized /> : name.slice(0, 1)}
+      </span>
+      <strong>{name}</strong>
+    </div>
+  );
+}
+
+function RevealCeremony({ session, onDismiss }: { session: PublicTryMeSession; onDismiss: () => void }) {
+  const brandName = brandNameFor(session);
+  const copy = getRevealCopy(session);
+  const { dialogRef, onKeyDown } = useDialogBehavior(onDismiss);
+  return (
+    <section
+      ref={dialogRef}
+      className="revealCeremony"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="reveal-ceremony-title"
+      aria-describedby="reveal-ceremony-summary"
+      onKeyDown={onKeyDown}
+    >
+      <div className="ceremonyGrid" aria-hidden="true" />
+      <div className="ceremonyTopline">
+        <span><i className="liveDot" />Private preview assembled</span>
+        <span>{copy.kicker}</span>
+      </div>
+      <div className="ceremonyCore">
+        <div className="ceremonyLockup" aria-label={`${brandName} experience · ${copy.counterpart}`}>
+          <RevealBrandToken name={brandName} logoUrl={session.brand?.logoUrl} />
+          <span className="ceremonyConnector" aria-hidden="true"><i /><ArrowRight size={17} /><i /></span>
+          <RevealBrandToken
+            name={copy.counterpart}
+            logoUrl={session.useCase === "abm" ? session.targetBrand?.logoUrl : undefined}
+            accent
+          />
+        </div>
+        <span className="ceremonyKicker">{copy.kicker}</span>
+        <h2 id="reveal-ceremony-title">{copy.headline}</h2>
+        <p id="reveal-ceremony-summary">{copy.summary}</p>
+        <div className="ceremonyReceipts" aria-label="Completed build layers">
+          {copy.receipts.map(({ number, label }, index) => (
+            <span key={number} style={{ "--receipt-index": index } as CSSProperties}>
+              <i>{number}</i><strong>{label}</strong><Check size={14} />
+            </span>
+          ))}
+        </div>
+        <button type="button" className="ceremonySkip" onClick={onDismiss}>Explore the experience<ArrowRight size={17} /></button>
+        <span className="ceremonyFootnote">Private until you save it</span>
+      </div>
+      <span className="ceremonyTimer" aria-hidden="true"><i /></span>
+    </section>
   );
 }
 
 function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; iframeRef?: RefObject<HTMLIFrameElement | null> }) {
   const brandReady = ["complete", "fallback"].includes(session.stages.brand.status);
-  const audienceReady = session.stages.audience.status === "complete";
+  const audienceReady = session.stages.audience.status === "complete" || Boolean(session.answers.audience);
   const storyReady = Boolean(session.experience);
+  const moments = buildMoments(session);
+  const lockedCount = moments.filter((moment) => ["complete", "fallback"].includes(moment.status)).length;
+  const currentMoment = moments.find((moment) => moment.status === "running")
+    ?? moments.find((moment) => moment.status === "pending")
+    ?? moments[moments.length - 1];
+  const brandName = session.brand?.companyName || displayNameFromDomain(session.companyDomain);
+  const targetName = session.useCase === "abm"
+    ? session.targetBrand?.companyName || displayNameFromDomain(session.answers.targetDomain)
+    : undefined;
+  const audience = session.answers.customAudience || session.answers.audience;
+  const objective = session.answers.objective;
+  const palette = session.brand?.colors.length ? session.brand.colors : ["#1c293f", "#5b5bff", "#11d175"];
+  const canvasStyle = {
+    "--build-primary": session.brand?.primaryColor || palette[0],
+    "--build-accent": session.brand?.accentColor || palette[1] || palette[0],
+    "--build-surface": session.brand?.surfaceColor || "#ffffff"
+  } as CSSProperties;
   return (
     <div className={`assembly ${storyReady ? "isReady" : ""}`}>
-      <div className="browserBar"><i /><i /><i /><span>{session.temporaryUrl.replace(/^https?:\/\//, "")}</span></div>
+      <div className="browserBar"><i /><i /><i /><span>{(session.liveUrl || session.temporaryUrl).replace(/^https?:\/\//, "")}</span></div>
       {storyReady ? (
         <iframe
           ref={iframeRef}
@@ -584,26 +1102,46 @@ function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; 
           sandbox="allow-scripts allow-popups"
         />
       ) : (
-        <div className="assemblyCanvas">
-          <div className={`artifact brandArtifact ${brandReady ? "isPlaced" : ""}`}>
-            {session.brand?.logoUrl ? (
-              <Image
-                src={session.brand.logoUrl}
-                alt={`${session.brand.companyName} logo`}
-                width={140}
-                height={40}
-                unoptimized
-              />
-            ) : <span>{session.brand?.companyName?.slice(0, 1) || "B"}</span>}
-            <div className="swatches">{(session.brand?.colors.length ? session.brand.colors : ["#1c293f", "#5b5bff", "#11d175"]).slice(0, 4).map((color) => <i style={{ background: color }} key={color} />)}</div>
+        <div className="assemblyCanvas" style={canvasStyle}>
+          <div className="assemblyGrid" aria-hidden="true" />
+          <div className="assemblyStatus" role="status" aria-live="polite">
+            <span><i className="liveDot" />{currentMoment.title}</span>
+            <small>{lockedCount} / {moments.length} intelligence layers locked</small>
           </div>
-          <div className={`artifact audienceArtifact ${audienceReady ? "isPlaced" : ""}`}>
-            <span>Built for</span><strong>{session.answers.customAudience || session.answers.audience || "Your audience"}</strong>
+          <div className={`artifact brandArtifact ${brandReady ? "isPlaced" : ""}`}>
+            <div className="assemblyIdentity">
+              {session.brand?.logoUrl ? (
+                <Image
+                  src={session.brand.logoUrl}
+                  alt={`${brandName} logo`}
+                  width={140}
+                  height={40}
+                  style={{ width: "auto", height: "auto" }}
+                  unoptimized
+                />
+              ) : <span>{brandName.slice(0, 1)}</span>}
+              <div><small>Brand system</small><strong>{brandName}</strong></div>
+            </div>
+            {targetName && <div className="accountBridge"><small>Building for</small><strong>{targetName}</strong></div>}
+            <div className="swatches" aria-label="Detected brand palette">{palette.slice(0, 4).map((color) => <i style={{ background: color }} key={color} />)}</div>
+          </div>
+          <div className="assemblyInputs">
+            <div className={`artifact audienceArtifact ${audienceReady ? "isPlaced" : ""}`}>
+              <small>Buyer</small><strong>{audience || "Mapping company-fit roles"}</strong>
+            </div>
+            <div className={`artifact objectiveArtifact ${objective ? "isPlaced" : ""}`}>
+              <small>Objective</small><strong>{objective || "Waiting for one outcome"}</strong>
+            </div>
           </div>
           <div className={`storySkeleton ${session.stages.story.status === "running" ? "isWriting" : ""}`}>
+            <div className="compositionLabel"><small>Message architecture</small><strong>{session.stages.story.status === "running" ? `Composing for ${audience || "the buyer"}` : objective ? `Ready to build around ${objective.toLowerCase()}` : "Waiting for the final signal"}</strong></div>
             <span className="skeletonKicker" /><span className="skeletonHeadline" /><span className="skeletonHeadline short" /><span className="skeletonBody" /><span className="skeletonButton" />
           </div>
-          <div className="moduleSkeleton"><span /><span /><span /></div>
+          <div className="moduleSkeleton" aria-hidden="true">
+            {[["01", "Tension"], ["02", "Proof"], ["03", "Next move"]].map(([number, label]) => (
+              <div key={number}><span>{number}</span><strong>{label}</strong><i /><i /></div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -617,12 +1155,12 @@ function ClaimBar({ session, onClaim }: { session: PublicTryMeSession; onClaim: 
   const claimed = session.status === "claimed";
   const emailSent = session.claim?.emailStatus === "sent";
   return (
-    <section className={`claimBar ${claimed ? "isClaimed" : ""}`}>
+    <section id="save-experience" className={`claimBar ${claimed ? "isClaimed" : ""}`}>
       <div className="claimCopy">
         <span className="claimIcon">{claimed ? <Check size={18} /> : <Mail size={18} />}</span>
         <div>
-          <strong>{claimed ? emailSent ? "Saved. Your live URL is on the way." : "Saved. Your live URL is ready." : "Want to keep it?"}</strong>
-          <span>{claimed ? session.liveUrl : "Enter your business email. Unclaimed previews expire after 30 minutes."}</span>
+          <strong>{claimed ? emailSent ? "Saved. Your live URL is on the way." : "Saved. Your live URL is ready." : "Keep this experience live."}</strong>
+          <span>{claimed ? session.liveUrl : "Enter your business email to save the URL and receive it by email. Otherwise, this private preview expires in 30 minutes."}</span>
         </div>
       </div>
       {claimed ? (
@@ -642,6 +1180,7 @@ function ClaimBar({ session, onClaim }: { session: PublicTryMeSession; onClaim: 
         >
           <label><span className="srOnly">Business email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label>
           <button className="buttonPrimary" disabled={isClaiming}>{isClaiming ? <LoaderCircle className="spin" size={17} /> : null}Save and email my link</button>
+          {!error && <small className="claimPrivacy">Used to save and email this experience. No newsletter signup.</small>}
           {error && <small className="fieldError">{error}</small>}
         </form>
       )}
@@ -741,10 +1280,12 @@ export function TryMeNowApp() {
   const [connectionError, setConnectionError] = useState("");
   const [showSignals, setShowSignals] = useState(false);
   const [showProcess, setShowProcess] = useState(false);
+  const [showRevealCeremony, setShowRevealCeremony] = useState(false);
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([]);
   const [revealedAt, setRevealedAt] = useState<number>();
   const startedDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
+  const ceremonySession = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const patchRequestRef = useRef(0);
 
@@ -757,7 +1298,9 @@ export function TryMeNowApp() {
     setConnectionError("");
     setClientEvents([]);
     setRevealedAt(undefined);
+    setShowRevealCeremony(false);
     startedDomain.current = undefined;
+    ceremonySession.current = undefined;
     track("use_case_selected", { useCase: selected });
   }, []);
 
@@ -825,6 +1368,21 @@ export function TryMeNowApp() {
     track("experience_revealed", { useCase: session.useCase });
     setClientEvents([{ action: "preview_viewed", label: "You opened the experience", at: revealTime }]);
   }, [session]);
+
+  const hasExperience = Boolean(session?.experience);
+  const ceremonySessionId = session?.id;
+  useEffect(() => {
+    if (!hasExperience || !ceremonySessionId || ceremonySession.current === ceremonySessionId) return;
+    ceremonySession.current = ceremonySessionId;
+    const holdTime = ceremonyDuration(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    if (holdTime === 0) return;
+    const openTimer = window.setTimeout(() => setShowRevealCeremony(true), 0);
+    const closeTimer = window.setTimeout(() => setShowRevealCeremony(false), holdTime);
+    return () => {
+      window.clearTimeout(openTimer);
+      window.clearTimeout(closeTimer);
+    };
+  }, [ceremonySessionId, hasExperience]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -945,31 +1503,28 @@ export function TryMeNowApp() {
     track("experience_claimed", { useCase: result.session.useCase });
   };
 
-  const activeStage = useMemo(() => {
-    if (!session) return 0;
-    const states = [session.stages.brand, session.stages.audience, session.stages.story];
-    return Math.max(1, states.findIndex((state) => state.status === "running") + 1 || states.filter((state) => state.status === "complete").length);
-  }, [session]);
-
   const isReveal = Boolean(session?.experience);
+  const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
+  const revealCopy = session ? getRevealCopy(session) : undefined;
 
   return (
+    <>
     <main
       className={`appShell ${isReveal ? "revealMode" : ""}`}
-      aria-hidden={showSignals || showProcess ? true : undefined}
-      inert={showSignals || showProcess ? true : undefined}
+      aria-hidden={showSignals || showProcess || showRevealCeremony ? true : undefined}
+      inert={showSignals || showProcess || showRevealCeremony ? true : undefined}
     >
       <header className="siteHeader">
         <Link href="/" aria-label="Folloze Try Me Now home"><Image src="/brand/folloze-logo.svg" width={101} height={25} alt="Folloze" priority /><span>Try Me Now</span></Link>
-        <div className="headerPromise"><span className="liveDot" />A live buyer experience in about 60 seconds</div>
-        {session && <button className="resetButton" type="button" onClick={() => { setUseCase(undefined); setSession(undefined); setAnswers({}); setDomain(""); setClientEvents([]); setRevealedAt(undefined); setConnectionError(""); startedDomain.current = undefined; revealTracked.current = false; }}><RefreshCw size={14} />Start over</button>}
+        <div className="headerPromise"><span className="liveDot" />A live buyer experience in 30 seconds or less</div>
+        {session && <button className="resetButton" type="button" onClick={() => { setUseCase(undefined); setSession(undefined); setAnswers({}); setDomain(""); setClientEvents([]); setRevealedAt(undefined); setConnectionError(""); setShowRevealCeremony(false); startedDomain.current = undefined; revealTracked.current = false; ceremonySession.current = undefined; }}><RefreshCw size={14} />Start over</button>}
       </header>
 
       {!useCase && (
         <section className="entryStage">
           <div className="entryHero">
             <span className="sectionKicker">Try Folloze</span>
-            <h1>Give us 60 seconds.<br /><em>Get a live buyer experience.</em></h1>
+            <h1>Give us 30 seconds.<br /><em>Get a live buyer experience.</em></h1>
             <p>Choose what you want to launch. Add a domain and a few signals. Folloze builds it, hosts it, and captures engagement while you watch.</p>
           </div>
           <UseCasePortals onSelect={selectUseCase} />
@@ -981,9 +1536,9 @@ export function TryMeNowApp() {
         <DomainStart useCase={useCase} domain={domain} onDomain={setDomain} onBack={() => setUseCase(undefined)} isStarting={isStarting} error={error} />
       )}
 
-      {session && !isReveal && (
+      {session && !isReveal && buildPanelCopy && (
         <section className="workbench">
-          <div className="mobileStatus"><button type="button" aria-expanded={showProcess} aria-controls="mobile-process-dialog" onClick={() => setShowProcess(true)}><span className="liveDot" />{stageContent[(["brand", "audience", "story"] as StageKey[])[Math.min(activeStage - 1, 2)]].title}<span>{activeStage} of 3</span><ChevronDown size={15} /></button></div>
+          <div className="mobileStatus"><button type="button" aria-expanded={showProcess} aria-controls="mobile-process-dialog" onClick={() => setShowProcess(true)}><span className="liveDot" /><strong>{buildPanelCopy.mobileLabel}</strong><span>{buildPanelCopy.mobileStep}</span><ChevronDown size={15} /></button></div>
           <div className="briefPanel">
             <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
             <ProgressiveQuestions session={session} answers={answers} isSaving={isSaving} onPatch={patchAnswers} onUpload={uploadPdf} />
@@ -991,7 +1546,10 @@ export function TryMeNowApp() {
             {connectionError && <div className="connectionNotice" role="status"><LoaderCircle className="spin" size={15} />{connectionError}</div>}
           </div>
           <div className="buildPanel">
-            <div className="buildTop"><div><span className="sectionKicker">Live build</span><h2>Watch the experience come together.</h2></div><span className="tempLink"><span className="liveDot" />Temporary URL ready</span></div>
+            <div className="buildTop">
+              <div className="buildTopCopy"><span className="sectionKicker">{buildPanelCopy.kicker}</span><h2>{buildPanelCopy.headline}</h2><p>{buildPanelCopy.supporting}</p></div>
+              <span className="tempLink"><span className="liveDot" />{buildPanelCopy.urlLabel}</span>
+            </div>
             <AssemblyPreview session={session} iframeRef={previewFrameRef} />
           </div>
           <aside className="processRail">
@@ -1001,30 +1559,55 @@ export function TryMeNowApp() {
         </section>
       )}
 
-      {session && isReveal && (
+      {session && isReveal && revealCopy && (
         <section className="revealStage">
           <div className="revealIntro">
-            <div><span className="sectionKicker">Built. Hosted. Measurable.</span><h1>Your experience is live.</h1></div>
+            <div className="revealIntroCopy">
+              <span className="sectionKicker">
+                {session.status === "claimed" ? "Saved. Shareable. Measurable." : revealCopy.kicker}
+              </span>
+              <h1>{getRevealShellHeadline(session)}</h1>
+              <p className="revealPayoff">{revealCopy.summary}</p>
+              <div className="revealMeta"><span>Built from public brand and company signals</span><i /><span>Private until you save it</span></div>
+            </div>
             <div className="revealActions">
-              <CopyButton value={session.temporaryUrl} className="buttonSecondary" />
-              <a className="buttonPrimary" href={session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
+              {session.status === "claimed" ? (
+                <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
+              ) : (
+                <a className="buttonSecondary" href="#save-experience"><Mail size={16} />Save this preview</a>
+              )}
+              <a className="buttonPrimary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
             </div>
           </div>
           <div className="revealGrid">
-            <div className="revealPreview"><AssemblyPreview session={session} iframeRef={previewFrameRef} /></div>
+            <div className="revealPreview">
+              <AssemblyPreview session={session} iframeRef={previewFrameRef} />
+              <a
+                className="mobilePreviewCta"
+                href={session.liveUrl || session.temporaryUrl}
+                target="_blank"
+                rel="noopener"
+              >
+                Explore the full experience<ArrowRight size={16} />
+              </a>
+            </div>
             <aside className="revealRail">
-              <span className="sectionKicker">A few signals. One live result.</span>
-              <LiveChecklist session={session} />
+              <ClaimBar session={session} onClaim={claim} />
               <div className="signalTeaser"><Gauge size={22} /><h3>Built is only step one.</h3><p>See the engagement signal Folloze can capture from this experience.</p><button type="button" onClick={() => { setShowSignals(true); track("signal_preview_opened"); }}>See who engages<ArrowRight size={16} /></button></div>
+              <div className="revealReceipt revealMiniReceipt">
+                <span className="sectionKicker">Built from real signals</span>
+                <div>{revealCopy.receipts.map(({ number, label }) => <span key={number}><i>{number}</i>{label}<Check size={13} /></span>)}</div>
+              </div>
             </aside>
           </div>
-          <ClaimBar session={session} onClaim={claim} />
-          <div className="revealFooter"><span>Temporary URL</span><code>{session.temporaryUrl}</code><span>{session.status === "claimed" ? "Saved" : "Expires 30 minutes after generation"}</span></div>
+          <div className="revealFooter"><span>{session.status === "claimed" ? "Saved URL" : "Temporary URL"}</span><code>{session.liveUrl || session.temporaryUrl}</code><span>{session.status === "claimed" ? "Saved" : "Expires 30 minutes after generation"}</span></div>
         </section>
       )}
 
       {showProcess && session && <MobileProcessDialog session={session} onClose={() => setShowProcess(false)} />}
       {showSignals && revealedAt && <SignalDrawer events={clientEvents} revealedAt={revealedAt} onClose={() => setShowSignals(false)} />}
     </main>
+    {showRevealCeremony && session?.experience && <RevealCeremony session={session} onDismiss={() => setShowRevealCeremony(false)} />}
+    </>
   );
 }

@@ -8,6 +8,12 @@ const oneOf = <T extends string>(value: string | undefined, choices: readonly T[
 
 const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
 const inferredAppUrl = vercelHost ? `https://${vercelHost}` : "http://localhost:3000";
+const follozeAllowedPublicHosts = (
+  process.env.FOLLOZE_ALLOWED_PUBLIC_HOSTS ?? "engage.folloze.com,experience.folloze.com"
+)
+  .split(",")
+  .map((host) => host.trim().toLowerCase())
+  .filter(Boolean);
 
 export const config = {
   appUrl: (process.env.NEXT_PUBLIC_APP_URL ?? inferredAppUrl).replace(/\/$/, ""),
@@ -16,6 +22,10 @@ export const config = {
   follozeMode: oneOf(process.env.FOLLOZE_MODE, ["disabled", "draft", "publish"] as const, "disabled"),
   emailMode: oneOf(process.env.EMAIL_MODE, ["console", "resend"] as const, "console"),
   openAIModel: process.env.OPENAI_MODEL ?? "gpt-5.6-terra",
+  generationTimeoutMs: Math.min(
+    Math.max(intFromEnv(process.env.TRY_ME_GENERATION_TIMEOUT_MS, 28_000), 10_000),
+    28_000
+  ),
   sessionTtlSeconds: Math.min(
     Math.max(intFromEnv(process.env.TRY_ME_SESSION_TTL_SECONDS, 1800), 300),
     86400
@@ -26,13 +36,15 @@ export const config = {
   ),
   demoMode: process.env.TRY_ME_DEMO_MODE !== "false",
   demoCtaUrl: process.env.NEXT_PUBLIC_DEMO_CTA_URL ?? "https://www.folloze.com/book-a-meeting",
-  follozeToolName: process.env.FOLLOZE_MCP_TOOL_NAME ?? "create_try_me_experience"
+  follozeToolName: process.env.FOLLOZE_MCP_TOOL_NAME ?? "create_try_me_experience",
+  follozeAllowedPublicHosts
 };
 
 export const hasRedis = Boolean(
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
 );
 export const hasBlob = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+export const hasDatabase = Boolean(process.env.DATABASE_URL);
 
 export const hasOpenAIKey = Boolean(process.env.OPENAI_API_KEY);
 export const hasOpenAI = config.generationMode === "openai" && hasOpenAIKey;
@@ -40,4 +52,7 @@ export const hasRemoteBrandHarvester =
   config.brandMode === "remote" && Boolean(process.env.BRAND_HARVESTER_URL);
 export const hasRemoteFolloze =
   config.follozeMode !== "disabled" && Boolean(process.env.FOLLOZE_MCP_SERVER_URL);
+export const canPublishFolloze =
+  config.follozeMode === "publish" &&
+  Boolean(process.env.FOLLOZE_MCP_SERVER_URL && process.env.FOLLOZE_MCP_AUTH_TOKEN);
 export const hasResend = config.emailMode === "resend" && Boolean(process.env.RESEND_API_KEY);

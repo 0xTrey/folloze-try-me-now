@@ -15,6 +15,8 @@ export type SessionStatus =
 
 export interface StageState {
   status: StageStatus;
+  attemptId?: string;
+  inputFingerprint?: string;
   startedAt?: string;
   completedAt?: string;
   detail?: string;
@@ -27,10 +29,18 @@ export interface BrandProfile {
   companyName: string;
   title?: string;
   description?: string;
+  publicContext?: string;
+  publicTopics: string[];
   logoUrl?: string;
+  imageUrls: string[];
   colors: string[];
   primaryColor: string;
   accentColor: string;
+  surfaceColor: string;
+  displayFontFamily?: string;
+  bodyFontFamily?: string;
+  displayFontUrl?: string;
+  bodyFontUrl?: string;
   sourceUrl: string;
   source: "brand-harvester" | "fast-extractor" | "fallback";
 }
@@ -54,6 +64,23 @@ export type PublicSessionAnswers = Omit<
   "sourceOpenAIFileId" | "sourceUploadId" | "sourceUploadReservedAt"
 >;
 
+export type PublicStageState = Pick<
+  StageState,
+  "status" | "completedAt" | "detail" | "artifact" | "errorCode"
+>;
+
+export type PublicBrandProfile = Pick<
+  BrandProfile,
+  | "domain"
+  | "companyName"
+  | "logoUrl"
+  | "colors"
+  | "primaryColor"
+  | "accentColor"
+  | "surfaceColor"
+  | "source"
+>;
+
 export interface ExperienceSection {
   eyebrow: string;
   headline: string;
@@ -66,14 +93,25 @@ export interface ExperienceModel {
   eyebrow: string;
   headline: string;
   subhead: string;
+  thesisHeadline: string;
+  thesisBody: string;
   primaryCta: string;
   audienceLabel: string;
   narrativeArc: string;
   sections: ExperienceSection[];
   signalLabels: string[];
+  closingHeadline: string;
+  closingBody: string;
   html: string;
   generationSource: "openai" | "deterministic-fallback";
+  artifactRevision: number;
+  artifactDigest: string;
 }
+
+export type PublicExperienceSummary = Pick<
+  ExperienceModel,
+  "title" | "headline" | "generationSource" | "artifactRevision"
+> & { ready: true };
 
 export interface SessionEvent {
   name: string;
@@ -82,10 +120,12 @@ export interface SessionEvent {
 }
 
 export interface ClaimState {
+  attemptId?: string;
+  startedAt?: string;
   email?: string;
   emailMasked?: string;
-  emailStatus?: "pending" | "sent" | "skipped" | "failed";
-  publishStatus?: "pending" | "published" | "preview-only" | "failed";
+  emailStatus?: "pending" | "not-attempted" | "sent" | "skipped" | "failed";
+  publishStatus?: "pending" | "not-attempted" | "published" | "preview-only" | "failed";
   follozeBoardId?: string;
   designerUrl?: string;
 }
@@ -113,9 +153,28 @@ export interface TryMeSession {
   events: SessionEvent[];
 }
 
-export type PublicTryMeSession = Omit<TryMeSession, "answers" | "claim" | "editorTokenHash"> & {
+export type PublicClaimState = Pick<
+  ClaimState,
+  "emailStatus" | "publishStatus"
+>;
+
+export type PublicTryMeSession = Omit<
+  TryMeSession,
+  | "answers"
+  | "brand"
+  | "claim"
+  | "editorTokenHash"
+  | "events"
+  | "experience"
+  | "stages"
+  | "targetBrand"
+> & {
   answers: PublicSessionAnswers;
-  claim?: Omit<ClaimState, "email">;
+  brand?: PublicBrandProfile;
+  targetBrand?: PublicBrandProfile;
+  stages: Record<StageKey, PublicStageState>;
+  experience?: PublicExperienceSummary;
+  claim?: PublicClaimState;
 };
 
 export interface CreateSessionInput {

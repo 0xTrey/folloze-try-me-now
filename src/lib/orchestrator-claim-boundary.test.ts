@@ -1,0 +1,496 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { sendClaimEmail } from "@/lib/integrations/email";
+import { publishClaimedExperience } from "@/lib/integrations/folloze";
+import { generateExperienceDraft, SourceFetchError } from "@/lib/integrations/openai";
+import { recordLeadCapture, updateLeadOutcome } from "@/lib/lead-store";
+import type { ExperienceDraft } from "@/lib/generation/experience-schema";
+import {
+  claimSession,
+  reconcileLeadSession,
+  recoverSessionWork,
+  runStoryStage
+} from "@/lib/orchestrator";
+import { deleteSession, getSession, putSession } from "@/lib/session-store";
+import type { BrandProfile, ExperienceModel, TryMeSession } from "@/lib/types";
+
+vi.mock("@/lib/integrations/email", () => ({ sendClaimEmail: vi.fn() }));
+vi.mock("@/lib/integrations/folloze", () => ({ publishClaimedExperience: vi.fn() }));
+vi.mock("@/lib/integrations/openai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/integrations/openai")>()),
+  generateExperienceDraft: vi.fn()
+}));
+vi.mock("@/lib/lead-store", () => ({
+  leadStoreMode: "memory-test",
+  recordLeadCapture: vi.fn(),
+  updateLeadOutcome: vi.fn()
+}));
+
+const sessionIds = new Set<string>();
+
+const brand: BrandProfile = {
+  domain: "jitterbit.com",
+  companyName: "Jitterbit",
+  description: "Enterprise integration and workflow automation.",
+  publicTopics: ["Integration", "Workflow automation", "API management"],
+  imageUrls: [],
+  colors: ["#1B3E51", "#F44414", "#FFFFFF"],
+  primaryColor: "#1B3E51",
+  accentColor: "#F44414",
+  surfaceColor: "#FFFFFF",
+  displayFontFamily: "Roboto Slab",
+  displayFontUrl: "https://cdn.jitterbit.example/fonts/roboto-slab.woff2",
+  sourceUrl: "https://jitterbit.com",
+  source: "fast-extractor"
+};
+
+const draft: ExperienceDraft = {
+  campaignRegister: "campaign-product",
+  designRegister: "source-brand-technical",
+  wireframeName: "product-launch-landing-page",
+  experienceShape: "interactive-workbench",
+  sectionSequence: ["decision-lenses", "guided-questions", "thesis"],
+  sectionLabels: {
+    thesis: "The operating shift",
+    lenses: "Explore what changes",
+    journey: "Questions for the first use case",
+    close: "Choose the first use case"
+  },
+  title: "Jitterbit enterprise automation",
+  eyebrow: "Jitterbit",
+  headline: "Connect systems. Automate workflows.",
+  subhead: "Help enterprise architects connect workflows while keeping control visible.",
+  thesisHeadline: "Move faster without making governance an afterthought.",
+  thesisBody: "Bring integration, automation, and API management into one operating path.",
+  primaryCta: "See how it works",
+  audienceLabel: "Enterprise architects and platform owners",
+  narrativeArc: "What should enterprise architecture teams validate next?",
+  sections: [
+    {
+      eyebrow: "Connect",
+      headline: "Unify the integration path",
+      body: "Connect applications and data across the workflows that matter first.",
+      proof: "Which systems need a governed connection first?"
+    },
+    {
+      eyebrow: "Automate",
+      headline: "Turn repeatable work into workflows",
+      body: "Coordinate people, systems, and approvals without hiding the operating logic.",
+      proof: "Where can automation remove the most manual handoffs?"
+    },
+    {
+      eyebrow: "Govern",
+      headline: "Keep control visible",
+      body: "Make API and automation governance part of the path from the beginning.",
+      proof: "What controls must stay visible as automation expands?"
+    }
+  ],
+  signalLabels: ["Integration", "Automation", "Governance"],
+  closingHeadline: "Start with one workflow worth proving.",
+  closingBody: "Choose a bounded path, connect it, and validate how it operates before expanding."
+};
+
+function experience(): ExperienceModel {
+  return {
+    ...draft,
+    sections: draft.sections.map((section) => ({ ...section })),
+    signalLabels: [...draft.signalLabels],
+    html: "<!doctype html><title>Jitterbit enterprise automation</title>",
+    generationSource: "deterministic-fallback",
+    artifactRevision: 2,
+    artifactDigest: "a".repeat(64)
+  };
+}
+
+function session(input: {
+  id: string;
+  status?: TryMeSession["status"];
+  includeExperience?: boolean;
+}): TryMeSession {
+  sessionIds.add(input.id);
+  return {
+    id: input.id,
+    editorTokenHash: "private-editor-token-hash",
+    useCase: "campaign",
+    companyDomain: "jitterbit.com",
+    status: input.status ?? "collecting",
+    createdAt: "2026-07-30T00:00:00.000Z",
+    updatedAt: "2026-07-30T00:00:00.000Z",
+    temporaryUrl: `https://preview.example/e/${input.id}`,
+    revision: 1,
+    stages: {
+      brand: { status: "complete" },
+      audience: { status: "complete" },
+      story: { status: input.includeExperience ? "complete" : "pending" }
+    },
+    answers: {
+      audience: "Enterprise architects and platform owners",
+      objective: "Book a meeting",
+      campaignType: "product"
+    },
+    brand,
+    audienceSuggestions: [],
+    experience: input.includeExperience ? experience() : undefined,
+    events: []
+  };
+}
+
+describe("anonymous preview and claim publication boundary", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(generateExperienceDraft).mockResolvedValue({
+      draft: {
+        ...draft,
+        sections: draft.sections.map((section) => ({ ...section })),
+        signalLabels: [...draft.signalLabels]
+      },
+      source: "deterministic-fallback",
+      durationMs: 25,
+      fallbackReason: "openai_not_configured"
+    });
+    vi.mocked(recordLeadCapture).mockResolvedValue({} as never);
+    vi.mocked(publishClaimedExperience).mockResolvedValue({
+      mode: "preview-only",
+      publicUrl: undefined,
+      warnings: []
+    });
+    vi.mocked(sendClaimEmail).mockResolvedValue("skipped");
+    vi.mocked(updateLeadOutcome).mockResolvedValue(true);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await Promise.all([...sessionIds].map((id) => deleteSession(id)));
+    sessionIds.clear();
+  });
+
+  // Regression: unclaimed generation must remain cache-only and never publish to Folloze.
+  it("finishes an anonymous preview without publishing or recording a lead", async () => {
+    const pending = session({ id: "anonymous-preview-boundary" });
+    await putSession(pending);
+
+    await runStoryStage(pending.id);
+
+    const stored = await getSession(pending.id);
+    expect(stored).toMatchObject({
+      status: "preview_ready_unclaimed",
+      experience: { generationSource: "deterministic-fallback" }
+    });
+    expect(stored?.experience?.html).toContain(
+      `/api/sessions/${pending.id}/font/display`
+    );
+    expect(stored?.experience?.html).not.toContain(
+      "cdn.jitterbit.example/fonts/roboto-slab.woff2"
+    );
+    expect(generateExperienceDraft).toHaveBeenCalledOnce();
+    expect(publishClaimedExperience).not.toHaveBeenCalled();
+    expect(recordLeadCapture).not.toHaveBeenCalled();
+    expect(updateLeadOutcome).not.toHaveBeenCalled();
+    expect(sendClaimEmail).not.toHaveBeenCalled();
+  });
+
+  it("does not start a second generation while the story stage is already running", async () => {
+    const running = session({ id: "generation-lease-boundary" });
+    running.status = "generating";
+    running.stages.story = { status: "running", startedAt: new Date().toISOString() };
+    await putSession(running);
+
+    await runStoryStage(running.id);
+
+    expect(generateExperienceDraft).not.toHaveBeenCalled();
+    expect(await getSession(running.id)).toMatchObject({
+      status: "generating",
+      stages: { story: { status: "running" } }
+    });
+  });
+
+  it("fails closed when a content source cannot be read", async () => {
+    const unreadable = session({ id: "content-source-failure" });
+    unreadable.useCase = "content";
+    unreadable.answers = {
+      audience: "Enterprise architects and platform owners",
+      objective: "Educate buyers",
+      sourceUrl: "https://example.test/unreadable"
+    };
+    await putSession(unreadable);
+    vi.mocked(generateExperienceDraft).mockRejectedValueOnce(
+      new SourceFetchError(new Error("upstream denied the request"))
+    );
+
+    await runStoryStage(unreadable.id);
+
+    expect(await getSession(unreadable.id)).toMatchObject({
+      status: "generation_failed",
+      stages: { story: { status: "failed", errorCode: "source_fetch_failed" } }
+    });
+    expect(publishClaimedExperience).not.toHaveBeenCalled();
+  });
+
+  // Regression: an email must be durably captured before any Folloze publication attempt.
+  it("records the lead before publishing and records the successful outcome", async () => {
+    const trace: string[] = [];
+    const ready = session({
+      id: "claim-success-boundary",
+      status: "preview_ready_unclaimed",
+      includeExperience: true
+    });
+    await putSession(ready);
+    vi.mocked(recordLeadCapture).mockImplementation(async () => {
+      trace.push("lead:capture");
+      return {} as never;
+    });
+    vi.mocked(publishClaimedExperience).mockImplementation(async () => {
+      trace.push("folloze:publish");
+      return {
+        mode: "folloze",
+        publicUrl: "https://experience.example/claim-success-boundary",
+        boardId: "248999",
+        warnings: []
+      };
+    });
+    vi.mocked(sendClaimEmail).mockImplementation(async () => {
+      trace.push("email:send");
+      return "sent";
+    });
+    vi.mocked(updateLeadOutcome).mockImplementation(async (outcome) => {
+      trace.push(`lead:outcome:${outcome.claimStatus}`);
+      return true;
+    });
+
+    const result = await claimSession(ready.id, "buyer@acme.test");
+
+    expect(trace).toEqual([
+      "lead:capture",
+      "folloze:publish",
+      "email:send",
+      "lead:outcome:claimed"
+    ]);
+    expect(recordLeadCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ id: ready.id, status: "claim_pending" }),
+      "buyer@acme.test"
+    );
+    expect(updateLeadOutcome).toHaveBeenCalledWith({
+      sessionId: ready.id,
+      claimAttemptId: expect.any(String),
+      experienceUrl: "https://experience.example/claim-success-boundary",
+      claimStatus: "claimed",
+      publishStatus: "published",
+      emailStatus: "sent",
+      claimedAt: expect.any(String)
+    });
+    expect(result).toMatchObject({ publishMode: "folloze", emailDelivery: "sent" });
+    expect(await getSession(ready.id)).toMatchObject({
+      status: "claimed",
+      liveUrl: "https://experience.example/claim-success-boundary",
+      claim: { publishStatus: "published", emailStatus: "sent" }
+    });
+  });
+
+  it("rejects a duplicate claim while the first claim is still in progress", async () => {
+    const pending = session({
+      id: "claim-in-progress-boundary",
+      status: "preview_ready_unclaimed",
+      includeExperience: true
+    });
+    pending.status = "claim_pending";
+    pending.claim = {
+      attemptId: "active-claim-attempt",
+      startedAt: new Date().toISOString(),
+      email: "first@acme.test",
+      emailMasked: "fi•••@acme.test",
+      emailStatus: "pending",
+      publishStatus: "pending"
+    };
+    await putSession(pending);
+
+    await expect(claimSession(pending.id, "first@acme.test")).rejects.toThrow(
+      "already being claimed"
+    );
+
+    expect(recordLeadCapture).not.toHaveBeenCalled();
+    expect(publishClaimedExperience).not.toHaveBeenCalled();
+    expect(sendClaimEmail).not.toHaveBeenCalled();
+  });
+
+  it("recovers a stale pending claim with the originally bound email", async () => {
+    const pending = session({
+      id: "stale-claim-recovery-boundary",
+      status: "preview_ready_unclaimed",
+      includeExperience: true
+    });
+    pending.status = "claim_pending";
+    pending.claim = {
+      attemptId: "orphaned-claim-attempt",
+      startedAt: "2026-07-30T00:00:00.000Z",
+      email: "first@acme.test",
+      emailMasked: "fi•••@acme.test",
+      emailStatus: "pending",
+      publishStatus: "pending"
+    };
+    await putSession(pending);
+
+    await recoverSessionWork(pending.id);
+
+    expect(recordLeadCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ id: pending.id, status: "claim_pending" }),
+      "first@acme.test"
+    );
+    expect(publishClaimedExperience).toHaveBeenCalledOnce();
+    expect(await getSession(pending.id)).toMatchObject({
+      status: "claimed",
+      claim: { email: "first@acme.test", publishStatus: "preview-only" }
+    });
+    expect((await getSession(pending.id))?.events.map((event) => event.name)).toContain(
+      "claim_recovered"
+    );
+  });
+
+  it("does not let a failed claim be taken over by a different email", async () => {
+    const failed = session({
+      id: "claim-email-binding",
+      status: "preview_ready_unclaimed",
+      includeExperience: true
+    });
+    failed.status = "claim_failed";
+    failed.claim = {
+      email: "first@acme.test",
+      emailMasked: "fi•••@acme.test",
+      emailStatus: "failed",
+      publishStatus: "failed"
+    };
+    await putSession(failed);
+
+    await expect(claimSession(failed.id, "second@acme.test")).rejects.toThrow(
+      "different business email"
+    );
+
+    expect(recordLeadCapture).not.toHaveBeenCalled();
+    expect(publishClaimedExperience).not.toHaveBeenCalled();
+  });
+
+  it("keeps a successful publication claimed when email delivery throws", async () => {
+    const ready = session({
+      id: "claim-email-failure-boundary",
+      status: "preview_ready_unclaimed",
+      includeExperience: true
+    });
+    await putSession(ready);
+    vi.mocked(publishClaimedExperience).mockResolvedValue({
+      mode: "folloze",
+      publicUrl: "https://experience.example/claim-email-failure-boundary",
+      boardId: "249111",
+      warnings: []
+    });
+    vi.mocked(sendClaimEmail).mockRejectedValue(new Error("email transport unavailable"));
+
+    const result = await claimSession(ready.id, "buyer@acme.test");
+
+    expect(result).toMatchObject({ publishMode: "folloze", emailDelivery: "failed" });
+    expect(updateLeadOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: ready.id,
+        claimStatus: "claimed",
+        publishStatus: "published",
+        emailStatus: "failed"
+      })
+    );
+    expect(await getSession(ready.id)).toMatchObject({
+      status: "claimed",
+      claim: { publishStatus: "published", emailStatus: "failed" }
+    });
+  });
+
+  it("retries a transient lead-outcome write before completing the claim", async () => {
+    const ready = session({
+      id: "claim-ledger-retry-boundary",
+      status: "preview_ready_unclaimed",
+      includeExperience: true
+    });
+    await putSession(ready);
+    vi.mocked(updateLeadOutcome)
+      .mockRejectedValueOnce(new Error("temporary database outage"))
+      .mockRejectedValueOnce(new Error("temporary database outage"))
+      .mockResolvedValueOnce(true);
+
+    const result = await claimSession(ready.id, "buyer@acme.test");
+
+    expect(result.session.status).toBe("claimed");
+    expect(updateLeadOutcome).toHaveBeenCalledTimes(3);
+    expect((await getSession(ready.id))?.events.map((event) => event.name)).not.toContain(
+      "lead_outcome_sync_failed"
+    );
+  });
+
+  it("reconciles a claimed lead outcome from the scheduled repair path", async () => {
+    const ready = session({
+      id: "claim-ledger-recovery-boundary",
+      status: "preview_ready_unclaimed",
+      includeExperience: true
+    });
+    await putSession(ready);
+    vi.mocked(updateLeadOutcome).mockRejectedValue(new Error("database unavailable"));
+
+    const result = await claimSession(ready.id, "buyer@acme.test");
+
+    expect(result.session.status).toBe("claimed");
+    expect((await getSession(ready.id))?.events.map((event) => event.name)).toContain(
+      "lead_outcome_sync_failed"
+    );
+
+    vi.mocked(updateLeadOutcome).mockResolvedValue(true);
+    await expect(reconcileLeadSession(ready.id)).resolves.toBe("reconciled");
+
+    expect((await getSession(ready.id))?.events.map((event) => event.name)).toContain(
+      "lead_outcome_reconciled"
+    );
+    expect(updateLeadOutcome).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sessionId: ready.id,
+        claimStatus: "claimed",
+        publishStatus: "preview-only"
+      })
+    );
+  });
+
+  it("records a failed lead outcome when publication fails", async () => {
+    const trace: string[] = [];
+    const ready = session({
+      id: "claim-failure-boundary",
+      status: "preview_ready_unclaimed",
+      includeExperience: true
+    });
+    await putSession(ready);
+    vi.mocked(recordLeadCapture).mockImplementation(async () => {
+      trace.push("lead:capture");
+      return {} as never;
+    });
+    vi.mocked(publishClaimedExperience).mockImplementation(async () => {
+      trace.push("folloze:publish");
+      throw new Error("Folloze unavailable");
+    });
+    vi.mocked(updateLeadOutcome).mockImplementation(async (outcome) => {
+      trace.push(`lead:outcome:${outcome.claimStatus}`);
+      return true;
+    });
+
+    await expect(claimSession(ready.id, "buyer@acme.test")).rejects.toThrow(
+      "Folloze unavailable"
+    );
+
+    expect(trace).toEqual(["lead:capture", "folloze:publish", "lead:outcome:failed"]);
+    expect(updateLeadOutcome).toHaveBeenCalledWith({
+      sessionId: ready.id,
+      claimAttemptId: expect.any(String),
+      experienceUrl: ready.temporaryUrl,
+      claimStatus: "failed",
+      publishStatus: "failed",
+      emailStatus: "not-attempted"
+    });
+    expect(sendClaimEmail).not.toHaveBeenCalled();
+    expect(await getSession(ready.id)).toMatchObject({
+      status: "claim_failed",
+      claim: { publishStatus: "failed", emailStatus: "not-attempted" }
+    });
+  });
+});

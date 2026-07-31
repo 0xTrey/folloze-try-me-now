@@ -1,0 +1,1261 @@
+{
+  "logos": [
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/2026-Harmony-Marketecture-1536x1015.png",
+      "alt": "Harmony Platform",
+      "className": "default-img",
+      "width": 1240,
+      "height": 819,
+      "rect": {
+        "x": 647,
+        "y": 1427,
+        "width": 663,
+        "height": 438
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-Alnylam-logo.png",
+      "alt": "Alnylam Pharmaceuticals",
+      "className": "",
+      "width": 483,
+      "height": 129,
+      "rect": {
+        "x": 189,
+        "y": 2865,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-CVS-Health-logo.png",
+      "alt": "CVS Health",
+      "className": "",
+      "width": 548,
+      "height": 71,
+      "rect": {
+        "x": 496,
+        "y": 2865,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-Ericsson-logo.png",
+      "alt": "Ericsson",
+      "className": "",
+      "width": 440,
+      "height": 132,
+      "rect": {
+        "x": 804,
+        "y": 2865,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-HR-Block-logo.png",
+      "alt": "H&R Block",
+      "className": "",
+      "width": 527,
+      "height": 97,
+      "rect": {
+        "x": 1111,
+        "y": 2865,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-JBS-logo.png",
+      "alt": "JBS Foods Global",
+      "className": "",
+      "width": 158,
+      "height": 63,
+      "rect": {
+        "x": 199,
+        "y": 2933,
+        "width": 120,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-T-Mobile-logo.png",
+      "alt": "T-Mobile",
+      "className": "",
+      "width": 419,
+      "height": 88,
+      "rect": {
+        "x": 496,
+        "y": 2933,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-Rolls-Royce-logo.png",
+      "alt": "Rolls Royce",
+      "className": "",
+      "width": 120,
+      "height": 159,
+      "rect": {
+        "x": 856,
+        "y": 2933,
+        "width": 36,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-Walmart-logo.png",
+      "alt": "Walmart",
+      "className": "",
+      "width": 523,
+      "height": 125,
+      "rect": {
+        "x": 1111,
+        "y": 2933,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Marketo-250x150-1.png",
+      "alt": "Marketo",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 1781,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Marketo-250x150-1.png",
+      "alt": "Marketo",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 5381,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    }
+  ],
+  "images": [
+    {
+      "src": "https://www.jitterbit.com/wp-content/themes/jitterbit/dist/images/lang-picker-globe-48x48.png?id=7ff1f9f132834f5f2b35",
+      "alt": "Global Icon for Language Switcher",
+      "className": "",
+      "width": 48,
+      "height": 48,
+      "rect": {
+        "x": 1181,
+        "y": 55,
+        "width": 19,
+        "height": 19
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/icon-small-MCP-icy-blue.png",
+      "alt": "",
+      "className": "notification-banner-icon",
+      "width": 100,
+      "height": 100,
+      "rect": {
+        "x": 376,
+        "y": 13,
+        "width": 20,
+        "height": 20
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/HarmonyTitle-HeroImage-Ring-768x613.jpg",
+      "alt": "Harmony",
+      "className": "inner-hero-unit-img",
+      "width": 700,
+      "height": 558,
+      "rect": {
+        "x": 710,
+        "y": 229,
+        "width": 600,
+        "height": 479
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/2026-Harmony-Marketecture-1536x1015.png",
+      "alt": "Harmony Platform",
+      "className": "default-img",
+      "width": 1240,
+      "height": 819,
+      "rect": {
+        "x": 647,
+        "y": 1427,
+        "width": 663,
+        "height": 438
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/infinite-roadshow-home-500x500-x2.png",
+      "alt": "Jitterbit 2026 Infinite Virtual Roadshow Events",
+      "className": "default-img",
+      "width": 1000,
+      "height": 1000,
+      "rect": {
+        "x": 130,
+        "y": 2148,
+        "width": 427,
+        "height": 363
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/infinite-2026-banners.png",
+      "alt": "Dates and regions for Infinite Virtual Roadshow",
+      "className": "default-img",
+      "width": 832,
+      "height": 311,
+      "rect": {
+        "x": 647,
+        "y": 2353,
+        "width": 663,
+        "height": 248
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-Alnylam-logo.png",
+      "alt": "Alnylam Pharmaceuticals",
+      "className": "",
+      "width": 483,
+      "height": 129,
+      "rect": {
+        "x": 189,
+        "y": 2865,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-CVS-Health-logo.png",
+      "alt": "CVS Health",
+      "className": "",
+      "width": 548,
+      "height": 71,
+      "rect": {
+        "x": 496,
+        "y": 2865,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-Ericsson-logo.png",
+      "alt": "Ericsson",
+      "className": "",
+      "width": 440,
+      "height": 132,
+      "rect": {
+        "x": 804,
+        "y": 2865,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-HR-Block-logo.png",
+      "alt": "H&R Block",
+      "className": "",
+      "width": 527,
+      "height": 97,
+      "rect": {
+        "x": 1111,
+        "y": 2865,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-JBS-logo.png",
+      "alt": "JBS Foods Global",
+      "className": "",
+      "width": 158,
+      "height": 63,
+      "rect": {
+        "x": 199,
+        "y": 2933,
+        "width": 120,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-T-Mobile-logo.png",
+      "alt": "T-Mobile",
+      "className": "",
+      "width": 419,
+      "height": 88,
+      "rect": {
+        "x": 496,
+        "y": 2933,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-Rolls-Royce-logo.png",
+      "alt": "Rolls Royce",
+      "className": "",
+      "width": 120,
+      "height": 159,
+      "rect": {
+        "x": 856,
+        "y": 2933,
+        "width": 36,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/hp-Jitterbit-Walmart-logo.png",
+      "alt": "Walmart",
+      "className": "",
+      "width": 523,
+      "height": 125,
+      "rect": {
+        "x": 1111,
+        "y": 2933,
+        "width": 140,
+        "height": 48
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Salesforce-250x150-1.png",
+      "alt": "Salesforce",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -3123,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/NetSuite-250x150-1.png",
+      "alt": "NetSuite",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -2883,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/SAP-250x150-1.png",
+      "alt": "SAP",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -2643,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Shopify-250x150-1.png",
+      "alt": "Shopfiy",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -2403,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/BigCommerce-250x150-1.png",
+      "alt": "BigCommerce",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -2163,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/BMC-Helix-250x150-1.png",
+      "alt": "BMC Helix",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -1923,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Workday-250x150-1.png",
+      "alt": "Workday",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -1683,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/ShipStation-250x150-1.png",
+      "alt": "ShipStation",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -1443,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Epicor-250x150-1.png",
+      "alt": "Epicor",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -1203,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/MS-Dynamics-365-250x150-1.png",
+      "alt": "MS Dynamics",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -963,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Sage-250x150-1.png",
+      "alt": "Sage",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -723,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Coupa-250x150-1.png",
+      "alt": "Coupa",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -483,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/AWS-250x150-1.png",
+      "alt": "Amazon AWS",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -243,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Google-Ads-250x150-1.png",
+      "alt": "Google Ads",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": -3,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Salesforce-250x150-1.png",
+      "alt": "Salesforce",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 237,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/NetSuite-250x150-1.png",
+      "alt": "NetSuite",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 477,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/SAP-250x150-1.png",
+      "alt": "SAP",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 717,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Shopify-250x150-1.png",
+      "alt": "Shopfiy",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 957,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/BigCommerce-250x150-1.png",
+      "alt": "BigCommerce",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 1197,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/BMC-Helix-250x150-1.png",
+      "alt": "BMC Helix",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 1437,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Workday-250x150-1.png",
+      "alt": "Workday",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 1677,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/ShipStation-250x150-1.png",
+      "alt": "ShipStation",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 1917,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Epicor-250x150-1.png",
+      "alt": "Epicor",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 2157,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/MS-Dynamics-365-250x150-1.png",
+      "alt": "MS Dynamics",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 2397,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Sage-250x150-1.png",
+      "alt": "Sage",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 2637,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Coupa-250x150-1.png",
+      "alt": "Coupa",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 2877,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/AWS-250x150-1.png",
+      "alt": "Amazon AWS",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 3117,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Google-Ads-250x150-1.png",
+      "alt": "Google Ads",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 3357,
+        "y": 3330,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/HubSpot-250x150-1.png",
+      "alt": "HubSpot",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 101,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Adobe-250x150-1.png",
+      "alt": "Adobe",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 341,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Google-Analytics-250x150-1.png",
+      "alt": "Google Analytics",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 581,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Box-250x150-1.png",
+      "alt": "Box",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 821,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/DocuSign-250x150-1.png",
+      "alt": "DocuSign",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 1061,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/GitHub-250x150-1.png",
+      "alt": "GitHub",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 1301,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Jira-250x150-1.png",
+      "alt": "Jira",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 1541,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Marketo-250x150-1.png",
+      "alt": "Marketo",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 1781,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/MS-Advertising-250x150-1.png",
+      "alt": "Microsoft Advertising",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 2021,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/OpenAI-250x150-1.png",
+      "alt": "OpenAI",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 2261,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/QuickBooks-250x150-1.png",
+      "alt": "QuickBooks",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 2501,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Slack-250x150-1.png",
+      "alt": "Slack",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 2741,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Square-250x150-1.png",
+      "alt": "Square",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 2981,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Snowflake-250x150-1.png",
+      "alt": "Snowflake",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 3221,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Zendesk-250x150-1.png",
+      "alt": "Zendesk",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 3461,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/HubSpot-250x150-1.png",
+      "alt": "HubSpot",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 3701,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Adobe-250x150-1.png",
+      "alt": "Adobe",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 3941,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Google-Analytics-250x150-1.png",
+      "alt": "Google Analytics",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 4181,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Box-250x150-1.png",
+      "alt": "Box",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 4421,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/DocuSign-250x150-1.png",
+      "alt": "DocuSign",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 4661,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/GitHub-250x150-1.png",
+      "alt": "GitHub",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 4901,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Jira-250x150-1.png",
+      "alt": "Jira",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 5141,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Marketo-250x150-1.png",
+      "alt": "Marketo",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 5381,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/MS-Advertising-250x150-1.png",
+      "alt": "Microsoft Advertising",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 5621,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/OpenAI-250x150-1.png",
+      "alt": "OpenAI",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 5861,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/QuickBooks-250x150-1.png",
+      "alt": "QuickBooks",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 6101,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Slack-250x150-1.png",
+      "alt": "Slack",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 6341,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Square-250x150-1.png",
+      "alt": "Square",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 6581,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Snowflake-250x150-1.png",
+      "alt": "Snowflake",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 6821,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/Zendesk-250x150-1.png",
+      "alt": "Zendesk",
+      "className": "",
+      "width": 250,
+      "height": 150,
+      "rect": {
+        "x": 7061,
+        "y": 3520,
+        "width": 118,
+        "height": 73
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/ai-bundle-badges.png",
+      "alt": "Default Image",
+      "className": "default-img",
+      "width": 500,
+      "height": 425,
+      "rect": {
+        "x": 998,
+        "y": 3797,
+        "width": 312,
+        "height": 265
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/g2-ipaas-implementation-enterprise-barchart-spring2026.png",
+      "alt": "Default Image",
+      "className": "default-img",
+      "width": 1068,
+      "height": 690,
+      "rect": {
+        "x": 647,
+        "y": 4528,
+        "width": 663,
+        "height": 429
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/gartner-how-to-enable-agentic-ai-FI.jpg",
+      "alt": "Gartner® Report: How to Enable Agentic AI via API-Based Integration",
+      "className": "resource-img",
+      "width": 420,
+      "height": 168,
+      "rect": {
+        "x": 130,
+        "y": 5163,
+        "width": 280,
+        "height": 132
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/jitterbit-mcp-blog-FI-768x307.png",
+      "alt": "Jitterbit MCP: The Secure Foundation for Enterprise AI Agents",
+      "className": "resource-img",
+      "width": 420,
+      "height": 167,
+      "rect": {
+        "x": 430,
+        "y": 5163,
+        "width": 280,
+        "height": 132
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/jitterbit_ai_report_2026-blog-1250x500-1-768x307.png",
+      "alt": "The State of Agentic AI & Automation: 1,500+ Businesses Tell All",
+      "className": "resource-img",
+      "width": 420,
+      "height": 167,
+      "rect": {
+        "x": 730,
+        "y": 5163,
+        "width": 280,
+        "height": 132
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/g2-four-in-a-row-blog-FI-768x307.jpg",
+      "alt": "A Full Year at No. 1: Jitterbit Again Tops G2 Enterprise iPaaS Report",
+      "className": "resource-img",
+      "width": 420,
+      "height": 167,
+      "rect": {
+        "x": 1030,
+        "y": 5163,
+        "width": 280,
+        "height": 132
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/info-tech-press-release-FI.jpg",
+      "alt": "Jitterbit Named Leader for 2026 Data Integration Data Quadrant Report by Info-Tech Research Group",
+      "className": "resource-img",
+      "width": 420,
+      "height": 168,
+      "rect": {
+        "x": 130,
+        "y": 5515,
+        "width": 280,
+        "height": 132
+      }
+    },
+    {
+      "src": "https://www.jitterbit.com/wp-content/uploads/evaluating-ai-in-ipaas-FI-1250x500-1-768x307.jpg",
+      "alt": "Tips from the Experts: Evaluating AI in iPaaS",
+      "className": "resource-img",
+      "width": 420,
+      "height": 167,
+      "rect": {
+        "x": 430,
+        "y": 5515,
+        "width": 280,
+        "height": 132
+      }
+    }
+  ],
+  "background_images": [
+    {
+      "urls": [
+        "https://www.jitterbit.com/wp-content/uploads/background-infinite-roadshow-home-2500x1874-x2.png"
+      ],
+      "tag": "section",
+      "className": "content-block bg-fff template-free-form roadshow-event-bg",
+      "rect": {
+        "x": 0,
+        "y": 1945,
+        "width": 1440,
+        "height": 755
+      },
+      "style": {
+        "backgroundColor": null,
+        "backgroundSize": "cover",
+        "backgroundPosition": "50% 50%"
+      }
+    },
+    {
+      "urls": [
+        "https://www.jitterbit.com/wp-content/uploads/Jitterbit-logo-BG-2x.png"
+      ],
+      "tag": "div",
+      "className": "module html sliderTicker",
+      "rect": {
+        "x": 130,
+        "y": 3258,
+        "width": 1180,
+        "height": 407
+      },
+      "style": {
+        "backgroundColor": null,
+        "backgroundSize": "45%",
+        "backgroundPosition": "50% 50%"
+      }
+    },
+    {
+      "urls": [
+        "https://www.jitterbit.com/wp-content/uploads/bg-cubes-wave.jpg"
+      ],
+      "tag": "section",
+      "className": "content-block gradient-bottom template-free-form promoModule noTopMargin",
+      "rect": {
+        "x": 0,
+        "y": 3697,
+        "width": 1440,
+        "height": 569
+      },
+      "style": {
+        "backgroundColor": null,
+        "backgroundSize": "cover",
+        "backgroundPosition": "0% 0%"
+      }
+    }
+  ],
+  "brandfetch_logos": [],
+  "screenshots": {
+    "desktop_full": {
+      "path": "research/brand-harvest/jitterbit/screenshots/homepage-desktop-full.png",
+      "width": 1440,
+      "height": 6490,
+      "clipped": false
+    },
+    "mobile_full": {
+      "path": "research/brand-harvest/jitterbit/screenshots/homepage-mobile-full.png",
+      "width": 390,
+      "height": 12166,
+      "clipped": false
+    }
+  },
+  "manual_screenshots": []
+}
