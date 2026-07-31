@@ -170,7 +170,7 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     id: "campaign",
     index: "02",
     eyebrow: "Campaign",
-    title: "Launch a campaign people explore",
+    title: "Launch a Campaign",
     description: "Turn one offer and one audience into a sharp, measurable campaign front door.",
     actionLabel: "Build my campaign page",
     exampleLabel: "Watch Folloze + Claude launch",

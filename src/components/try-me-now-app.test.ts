@@ -57,6 +57,7 @@ describe("Try Me Now experience copy", () => {
       exampleUrl: "https://experience.folloze.com/tribe-connect-for-harman"
     });
     expect(entryPathOptions.campaign).toMatchObject({
+      title: "Launch a Campaign",
       exampleLabel: "Watch Folloze + Claude launch",
       exampleUrl: "https://experience.folloze.com/folloze-claude-launch"
     });

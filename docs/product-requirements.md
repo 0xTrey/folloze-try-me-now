@@ -76,7 +76,7 @@ The business should receive:
 Show three cards with a short promise and representative thumbnail:
 
 - **Personalize for one account** — Build a one-to-one ABM microsite.
-- **Launch a campaign** — Build a branded campaign or event landing page.
+- **Launch a Campaign** — Build a branded campaign or event landing page.
 - **Make content interactive** — Turn an existing asset into a guided buyer
   experience.
 
