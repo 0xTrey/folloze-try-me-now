@@ -10,6 +10,10 @@ import {
 } from "@/lib/config";
 import { isDurableLeadStoreMode, leadStoreMode } from "@/lib/lead-store";
 import { noStoreHeaders } from "@/lib/http";
+import {
+  isDistributedRateLimitStoreMode,
+  rateLimitStoreMode
+} from "@/lib/rate-limit";
 import { isProductionCapable, productionReadiness } from "@/lib/readiness";
 import {
   sessionStoreIsProductionSafe,
@@ -18,10 +22,12 @@ import {
 
 export function GET() {
   const durableLeadStore = isDurableLeadStoreMode(leadStoreMode);
+  const distributedRateLimits = isDistributedRateLimitStoreMode(rateLimitStoreMode);
   const productionCapable = isProductionCapable({
     sessionStoreMode,
     durableLeadStore,
     openAIConnected: hasOpenAI,
+    distributedRateLimits,
     follozePublishReady: canPublishFolloze,
     resendConnected: hasResend
   });
@@ -29,6 +35,7 @@ export function GET() {
     sessionStoreMode,
     durableLeadStore,
     openAIConnected: hasOpenAI,
+    distributedRateLimits,
     follozePublishReady: canPublishFolloze,
     resendConnected: hasResend
   });
@@ -45,6 +52,7 @@ export function GET() {
       sessionStore: sessionStoreMode,
       sessionStoreProductionSafe: sessionStoreIsProductionSafe,
       leadLedger: leadStoreMode,
+      rateLimiter: { mode: rateLimitStoreMode, distributed: distributedRateLimits },
       generation: { mode: config.generationMode, connected: hasOpenAI },
       brandHarvester: hasRemoteBrandHarvester ? "remote" : "safe-fast-extractor",
       follozeMcp: {

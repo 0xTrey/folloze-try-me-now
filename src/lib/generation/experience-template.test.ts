@@ -319,7 +319,11 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("window.fetch('/api/events'");
     expect(html).not.toContain("window.fetch('/events'");
     expect(html).toContain("credentials:'same-origin',keepalive:true");
-    expect(html).toContain("request.catch(function(){})");
+    expect(html).toContain("eventId:makeEventId()");
+    expect(html).toContain("return ('evt_'+randomPart+'_'+eventSequence.toString(36)).slice(0,128)");
+    expect(html).toContain("body:JSON.stringify(envelope)");
+    expect(html).toContain("sendEvent(envelope,1)");
+    expect(html).toContain("sendEvent(envelope,retriesRemaining-1)");
     expect(html).toContain("document.visibilityState==='visible'");
     expect(html).toContain("document.addEventListener('visibilitychange',visibilityChanged)");
     expect(html).toContain("window.setInterval(heartbeat,15000)");

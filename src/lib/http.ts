@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
-import { RateLimitError } from "@/lib/rate-limit";
+import { RateLimitError, RateLimitUnavailableError } from "@/lib/rate-limit";
 
 export const noStoreHeaders = {
   "Cache-Control": "private, no-store, max-age=0",
@@ -88,6 +88,11 @@ export function apiError(error: unknown, context: ErrorContext = {}): NextRespon
     code = "rate_limited";
     message = error.message;
     responseHeaders["Retry-After"] = String(error.retryAfter);
+  } else if (error instanceof RateLimitUnavailableError) {
+    status = 503;
+    code = "request_protection_unavailable";
+    message = error.message;
+    responseHeaders["Retry-After"] = "30";
   } else if (error instanceof ZodError) {
     status = 400;
     code = "invalid_input";

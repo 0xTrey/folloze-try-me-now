@@ -45,6 +45,30 @@ describe("POST /api/events", () => {
     ]);
   });
 
+  it("deduplicates a retried generated-experience event by eventId", async () => {
+    const payload = {
+      eventId: "evt_retry_abcdefgh",
+      sessionId: "session_abcdefgh",
+      event: "cta_click",
+      context: { ctaId: "hero-primary" }
+    };
+
+    const first = await POST(request(payload));
+    const retry = await POST(request(payload));
+
+    await expect(first.json()).resolves.toMatchObject({
+      accepted: true,
+      persisted: true,
+      persistence: "stored"
+    });
+    await expect(retry.json()).resolves.toMatchObject({
+      accepted: true,
+      persisted: false,
+      persistence: "duplicate"
+    });
+    expect(getMemoryEngagementEventsForTest()).toHaveLength(1);
+  });
+
   it("allows a sandboxed generated experience to complete its CORS preflight", () => {
     const response = OPTIONS();
 

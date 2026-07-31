@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { logServerError } from "@/lib/http";
+import { apiError, logServerError } from "@/lib/http";
+import { RateLimitUnavailableError } from "@/lib/rate-limit";
 
 describe("structured error logging", () => {
   afterEach(() => {
@@ -44,5 +45,20 @@ describe("structured error logging", () => {
     expect(logged).not.toContain(standardKey);
     expect(logged).not.toContain(projectKey);
     expect(logged).toContain(nonSecretText);
+  });
+
+  it("fails closed with a retryable 503 when distributed request protection is unavailable", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const response = apiError(new RateLimitUnavailableError(), {
+      route: "/api/sessions",
+      method: "POST"
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("30");
+    await expect(response.json()).resolves.toMatchObject({
+      code: "request_protection_unavailable"
+    });
   });
 });

@@ -8,6 +8,7 @@ export function isProductionCapable(options: {
   databaseConnected?: boolean;
   durableLeadStore?: boolean;
   openAIConnected: boolean;
+  distributedRateLimits: boolean;
   follozePublishReady: boolean;
   resendConnected: boolean;
 }): boolean {
@@ -17,7 +18,8 @@ export function isProductionCapable(options: {
   return (
     isProductionSafeSessionStoreMode(options.sessionStoreMode) &&
     (options.durableLeadStore ?? options.databaseConnected ?? false) &&
-    options.openAIConnected
+    options.openAIConnected &&
+    options.distributedRateLimits
   );
 }
 
@@ -25,13 +27,15 @@ export function productionReadiness(options: {
   sessionStoreMode: SessionStoreMode;
   durableLeadStore: boolean;
   openAIConnected: boolean;
+  distributedRateLimits: boolean;
   follozePublishReady: boolean;
   resendConnected: boolean;
 }) {
   const required = {
     durableSessions: isProductionSafeSessionStoreMode(options.sessionStoreMode),
     durableLeads: options.durableLeadStore,
-    openAI: options.openAIConnected
+    openAI: options.openAIConnected,
+    distributedRateLimits: options.distributedRateLimits
   };
   const blockers = Object.entries(required)
     .filter(([, ready]) => !ready)

@@ -560,6 +560,7 @@ export function renderExperienceHtml(input: {
     var allowedEvents={anchor_click:true,cta_click:true,topic_select:true,signature_select:true,question_select:true,section_view:true,section_dwell:true,page_heartbeat:true,experience_view:true,fullscreen_change:true,editable_block_select:true};
     var durableEvents={anchor_click:true,cta_click:true,topic_select:true,signature_select:true,question_select:true,section_dwell:true,page_heartbeat:true,experience_view:true};
     var stringKeys={area:true,targetId:true,sectionId:true,ctaId:true,lensId:true,hrefHost:true,state:true,blockId:true,blockKind:true};
+    var eventSequence=0;
     var parentOrigin='*';
     var experienceSessionId;
     try{if(document.referrer){var referrer=new URL(document.referrer);var isLocal=referrer.protocol==='http:'&&/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/.test(referrer.hostname);if(referrer.protocol==='https:'||isLocal)parentOrigin=referrer.origin}}catch(_originError){}
@@ -579,12 +580,23 @@ export function renderExperienceHtml(input: {
       if(Number.isInteger(payload.seconds)&&payload.seconds>=1&&payload.seconds<=3600)context.seconds=payload.seconds;
       return context;
     }
+    function makeEventId(){
+      eventSequence+=1;
+      var randomPart='';
+      try{if(window.crypto&&typeof window.crypto.randomUUID==='function')randomPart=window.crypto.randomUUID().replace(/[^a-z0-9_-]/gi,'')}catch(_eventIdError){}
+      if(!randomPart)randomPart=Date.now().toString(36)+Math.random().toString(36).slice(2,14);
+      return ('evt_'+randomPart+'_'+eventSequence.toString(36)).slice(0,128)
+    }
+    function sendEvent(envelope,retriesRemaining){
+      var request;
+      function retry(){if(retriesRemaining>0)window.setTimeout(function(){sendEvent(envelope,retriesRemaining-1)},250)}
+      try{request=window.fetch('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',keepalive:true,body:JSON.stringify(envelope)})}catch(_eventSendError){retry();return}
+      if(request&&request.then)request.then(function(response){if(response&&response.ok===false)retry()},retry)
+    }
     function persistEvent(action,payload){
       if(!experienceSessionId||!durableEvents[action]||!window.fetch)return;
-      try{
-        var request=window.fetch('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',keepalive:true,body:JSON.stringify({sessionId:experienceSessionId,event:action,context:durableContext(payload)})});
-        if(request&&request.catch)request.catch(function(){})
-      }catch(_eventSinkError){}
+      var envelope={eventId:makeEventId(),sessionId:experienceSessionId,event:action,context:durableContext(payload)};
+      sendEvent(envelope,1)
     }
     window.flzAnalytic=function(action,data){
       if(!allowedEvents[action])return;
