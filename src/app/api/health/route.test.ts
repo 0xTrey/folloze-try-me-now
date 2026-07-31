@@ -27,4 +27,32 @@ describe("health production capability", () => {
       isProductionCapable({ sessionStoreMode: "memory-demo", ...connectedServices })
     ).toBe(false);
   });
+
+  it("treats Folloze publication and transactional email as optional V1 integrations", () => {
+    expect(
+      isProductionCapable({
+        sessionStoreMode: "vercel-blob",
+        ...connectedServices,
+        follozePublishReady: false,
+        resendConnected: false
+      })
+    ).toBe(true);
+  });
+
+  it("still requires durable lead storage and OpenAI generation", () => {
+    expect(
+      isProductionCapable({
+        sessionStoreMode: "vercel-blob",
+        ...connectedServices,
+        databaseConnected: false
+      })
+    ).toBe(false);
+    expect(
+      isProductionCapable({
+        sessionStoreMode: "vercel-blob",
+        ...connectedServices,
+        openAIConnected: false
+      })
+    ).toBe(false);
+  });
 });

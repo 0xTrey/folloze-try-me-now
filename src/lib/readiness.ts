@@ -10,11 +10,12 @@ export function isProductionCapable(options: {
   follozePublishReady: boolean;
   resendConnected: boolean;
 }): boolean {
+  // V1 saves the app-hosted experience after lead capture. Native Folloze
+  // publication and transactional email are optional integrations, so they
+  // must not make the public generator appear unhealthy when disabled.
   return (
     isProductionSafeSessionStoreMode(options.sessionStoreMode) &&
     options.databaseConnected &&
-    options.openAIConnected &&
-    options.follozePublishReady &&
-    options.resendConnected
+    options.openAIConnected
   );
 }
