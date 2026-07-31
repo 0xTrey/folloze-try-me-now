@@ -895,9 +895,9 @@ export function SavedExperienceCockpit({ title, url, updatedLabel, metrics, onOp
   return (
     <section className={styles.savedCockpit} aria-labelledby="saved-cockpit-title">
       <div className={styles.cockpitTopline}><span><i />Saved experience</span><small>{updatedLabel}</small></div>
-      <div className={styles.cockpitHero}><div><span>Live, shareable, measurable</span><h2 id="saved-cockpit-title">{title}</h2><code>{url}</code></div><div className={styles.cockpitActions}><button type="button" className={styles.primaryAction} onClick={onOpen}>Open experience<ExternalLink size={15} /></button><button type="button" className={styles.secondaryAction} onClick={onCopy}><Copy size={15} />Copy URL</button></div></div>
+      <div className={styles.cockpitHero}><div><span>Live · shareable · measurable</span><h2 id="saved-cockpit-title">{title}</h2><code title={url}>{url}</code></div><div className={styles.cockpitActions}><button type="button" className={styles.primaryAction} aria-label="Open experience" onClick={onOpen}>Open<ExternalLink size={15} /></button><button type="button" className={styles.secondaryAction} aria-label="Copy experience URL" onClick={onCopy}><Copy size={15} />Copy URL</button></div></div>
       <div className={styles.cockpitMetrics}>{metrics.map((metric) => <div key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong>{metric.detail && <small>{metric.detail}</small>}</div>)}</div>
-      {(onEdit || onDuplicate) && <div className={styles.cockpitFooter}>{onEdit && <button type="button" onClick={onEdit}><Pencil size={14} />Edit brief</button>}{onDuplicate && <button type="button" onClick={onDuplicate}><RefreshCw size={14} />Create a variation</button>}<span><Target size={14} />Ready for campaign activation</span></div>}
+      {(onEdit || onDuplicate) && <div className={styles.cockpitFooter}><span><Target size={14} />Ready for activation</span>{onEdit && <button type="button" onClick={onEdit}><Pencil size={14} />Edit brief</button>}{onDuplicate && <button type="button" onClick={onDuplicate}><RefreshCw size={14} />Create variation</button>}</div>}
     </section>
   );
 }

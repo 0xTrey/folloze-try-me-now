@@ -391,7 +391,7 @@ describe("Try Me Now prospect enhancement components", () => {
     fireEvent.change(screen.getByLabelText("Business email"), { target: { value: "buyer@company.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Save and email my link" }).closest("form")!);
     fireEvent.click(screen.getByRole("button", { name: "Open experience" }));
-    fireEvent.click(screen.getByRole("button", { name: "Copy URL" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy experience URL" }));
     expect(onEmail).toHaveBeenCalledWith("buyer@company.com");
     expect(onSave).toHaveBeenCalledOnce();
     expect(onOpen).toHaveBeenCalledOnce();

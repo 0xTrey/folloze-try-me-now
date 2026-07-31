@@ -431,7 +431,7 @@ fieldset.controlCard { min-inline-size:0 }
 .saveForm>small,.saveForm>p { grid-column:1 / -1;margin:0 0 0 12px;font-size:8px }
 .saveForm>small { color:#b42318 }
 .saveForm>p { color:var(--muted) }
-.savedCockpit { overflow:hidden;color:#fff;border:1px solid rgba(255,255,255,.09);border-radius:24px;background:radial-gradient(circle at 90% 0,rgba(91,91,255,.26),transparent 30%),linear-gradient(145deg,#0b1932,#070b1f);box-shadow:0 26px 80px rgba(7,20,40,.22) }
+.savedCockpit { container:saved-cockpit / inline-size;overflow:hidden;color:#fff;border:1px solid rgba(255,255,255,.09);border-radius:24px;background:radial-gradient(circle at 90% 0,rgba(91,91,255,.26),transparent 30%),linear-gradient(145deg,#0b1932,#070b1f);box-shadow:0 26px 80px rgba(7,20,40,.22) }
 .cockpitTopline { min-height:49px;padding:0 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;color:#9aa8bf;border-bottom:1px solid rgba(255,255,255,.09);font-size:8px;letter-spacing:.1em;text-transform:uppercase }
 .cockpitTopline>span { display:flex;align-items:center;gap:8px;color:#fff;font-weight:800 }
 .cockpitTopline i { width:7px;height:7px;border-radius:50%;background:#25d984;box-shadow:0 0 0 5px rgba(37,217,132,.1) }
@@ -443,7 +443,7 @@ fieldset.controlCard { min-inline-size:0 }
 .cockpitActions { display:flex;gap:7px;flex:0 0 auto }
 .savedCockpit .primaryAction { color:var(--deep);border-color:#fff;background:#fff }
 .savedCockpit .secondaryAction { color:#fff;border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.05) }
-.cockpitMetrics { display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid rgba(255,255,255,.09);border-bottom:1px solid rgba(255,255,255,.09) }
+.cockpitMetrics { display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));border-top:1px solid rgba(255,255,255,.09);border-bottom:1px solid rgba(255,255,255,.09) }
 .cockpitMetrics>div { min-width:0;padding:20px 24px }
 .cockpitMetrics>div:not(:last-child) { border-right:1px solid rgba(255,255,255,.09) }
 .cockpitMetrics span,.cockpitMetrics strong,.cockpitMetrics small { display:block }
@@ -539,6 +539,28 @@ fieldset.controlCard { min-inline-size:0 }
   .cockpitMetrics>div { padding:17px }
   .cockpitFooter { padding:10px 14px;align-items:flex-start;flex-direction:column }
   .cockpitFooter>span { margin-left:9px }
+}
+
+@container saved-cockpit (max-width: 460px) {
+  .savedCockpit { border-radius:18px;box-shadow:0 18px 55px rgba(7,20,40,.18) }
+  .cockpitTopline { min-height:47px;padding:0 16px;gap:10px;font-size:7px }
+  .cockpitTopline small { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.06em }
+  .cockpitHero { padding:22px 17px 18px;align-items:stretch;flex-direction:column;gap:18px }
+  .cockpitHero>div:first-child>span { font-size:7px;letter-spacing:.13em }
+  .cockpitHero h2 { max-width:none;margin:9px 0 12px;font-size:clamp(25px,10cqi,31px);line-height:1.02;letter-spacing:-.035em;overflow-wrap:anywhere }
+  .cockpitHero code { padding:9px 10px;color:#b1bdd0;border:1px solid rgba(255,255,255,.09);border-radius:9px;background:rgba(255,255,255,.035);font-size:8px }
+  .cockpitActions { display:grid;grid-template-columns:1fr 1fr;gap:7px }
+  .cockpitActions>* { width:100%;min-width:0;min-height:44px;padding:9px 10px;justify-content:center;font-size:10px;white-space:nowrap }
+  .cockpitMetrics { grid-template-columns:repeat(3,minmax(0,1fr)) }
+  .cockpitMetrics>div { min-width:0;padding:14px 10px;text-align:left }
+  .cockpitMetrics>div:nth-child(n) { border-right:1px solid rgba(255,255,255,.09);border-bottom:0 }
+  .cockpitMetrics>div:last-child { border-right:0 }
+  .cockpitMetrics span { font-size:6px;letter-spacing:.1em }
+  .cockpitMetrics strong { margin:6px 0 0;font-size:18px;line-height:1.05 }
+  .cockpitMetrics small { display:none }
+  .cockpitFooter { min-height:0;padding:13px 12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:7px }
+  .cockpitFooter>span { grid-column:1 / -1;margin:0 4px 2px;color:#77e6ae;font-size:7px;letter-spacing:.04em }
+  .cockpitFooter button { min-width:0;min-height:40px;padding:8px;justify-content:center;color:#c3ccda;border:1px solid rgba(255,255,255,.09);border-radius:9px;background:rgba(255,255,255,.035);font-size:8px;white-space:nowrap }
 }
 
 @media (prefers-reduced-motion: reduce) {

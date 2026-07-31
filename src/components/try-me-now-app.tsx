@@ -2317,11 +2317,15 @@ export function TryMeNowApp() {
             <aside className="revealRail">
               {session.status === "claimed" ? (
                 <SavedExperienceCockpit
-                  title={session.experience?.title || `${brandNameFor(session)} experience`}
+                  title={session.useCase === "abm"
+                    ? `${brandNameFor(session)} for ${targetNameFor(session)} is live.`
+                    : session.useCase === "campaign"
+                      ? `${brandNameFor(session)} campaign is live.`
+                      : `${brandNameFor(session)} content experience is live.`}
                   url={session.liveUrl || session.temporaryUrl}
                   updatedLabel={`Saved ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(session.cockpit?.savedAt || session.claimedAt || session.updatedAt))}`}
                   metrics={[
-                    { label: "Quality", value: session.cockpit?.qualityStatus === "passed" ? "Ready" : "Review", detail: `${personalizationScore}/100 personalization` },
+                    { label: "Quality", value: personalizationScore, detail: "Personalization score" },
                     { label: "Signals", value: session.cockpit?.previewInteractions ?? session.previewAnalytics?.totalInteractions ?? clientEvents.length, detail: "Preview interactions" },
                     { label: "Version", value: `v${session.cockpit?.versionNumber ?? session.lineage?.versionNumber ?? 1}`, detail: `Revision ${session.cockpit?.artifactRevision ?? session.experience?.artifactRevision ?? 1}` }
                   ]}
