@@ -893,7 +893,8 @@ export async function generateExperienceDraft(input: {
         campaignType: input.answers.campaignType,
         eventSource: input.answers.eventSource,
         sourceUrl: input.answers.sourceUrl,
-        sourceName: input.answers.sourceName
+        sourceName: input.answers.sourceName,
+        sourceTitle: input.answers.sourceTitle
       },
       sourceContent,
       sourceEvidencePhrases: sourceEvidencePhrases(sourceContent, context.brief.sourceTitle)

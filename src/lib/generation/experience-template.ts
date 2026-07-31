@@ -250,7 +250,7 @@ function receiptFromInput(input: {
     return {
       title: "Built from the original",
       detail:
-        compactText(input.answers.sourceName, 140) ??
+        compactText(input.answers.sourceTitle, 140) ??
         sourceHost ??
         "The supplied source material",
       href: input.sourceUrl,

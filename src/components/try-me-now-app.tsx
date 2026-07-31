@@ -313,8 +313,10 @@ function campaignTypeFor(session: PublicTryMeSession): string {
 
 function sourceNameFor(session: PublicTryMeSession): string {
   const brandName = brandNameFor(session);
+  const sourceTitle = session.answers.sourceTitle?.trim();
+  if (sourceTitle) return trimLabel(sourceTitle, 72);
   const sourceName = session.answers.sourceName?.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ").trim();
-  if (sourceName) return trimLabel(sourceName, 54);
+  if (sourceName && sourceName !== "Uploaded PDF") return trimLabel(sourceName, 72);
   if (session.useCase === "content" && session.experience?.title) {
     const title = session.experience.title.split("|")[0]?.trim();
     if (title) return trimLabel(title, 54);
@@ -1033,7 +1035,7 @@ function ProgressiveQuestions({
     (answers.sourceUrl || answers.sourceName) &&
     session.sourceConfirmation?.status !== "confirmed"
   ) {
-    const submittedSource = fieldValues["content-source"] || (answers.sourceName ? "Uploaded PDF" : "Public URL");
+    const submittedSource = answers.sourceTitle || fieldValues["content-source"] || (answers.sourceName ? "Uploaded document" : "Public URL");
     let sourceHost = answers.sourceName ? "Secure PDF upload" : "Public web source";
     let sourceTitle = submittedSource.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ");
     try {
@@ -1045,7 +1047,7 @@ function ProgressiveQuestions({
         .pop()
         ?.replace(/[-_]+/g, " ") || `${brandNameFor(session)} source`;
     } catch {
-      // Uploaded filenames and the privacy-preserving public placeholder are shown as labels only.
+      // Uploaded document titles and privacy-preserving public placeholders are shown as labels only.
     }
     return (
       <div className="questionCard sourceConfirmationStep">

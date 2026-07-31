@@ -181,13 +181,18 @@ describe("PDF source finalization", () => {
       const result = await finalizePdfSource(id, {
         uploadId,
         sourceName: "brief.pdf",
+        sourceTitle: "Buyer Automation Guide",
         sourceOpenAIFileId: "file-private-source"
       });
       const stored = await getSession(id);
 
-      expect(result.session.answers).toEqual({ sourceName: "Uploaded PDF" });
+      expect(result.session.answers).toEqual({
+        sourceName: "Uploaded PDF",
+        sourceTitle: "Buyer Automation Guide"
+      });
       expect(stored?.answers).toMatchObject({
         sourceName: "brief.pdf",
+        sourceTitle: "Buyer Automation Guide",
         sourceOpenAIFileId: "file-private-source",
         sourceUploadId: uploadId
       });

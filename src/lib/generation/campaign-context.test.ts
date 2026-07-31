@@ -263,6 +263,7 @@ describe("compileCampaignContext", () => {
       useCase: "content",
       answers: {
         sourceName: "Integration readiness scorecard.pdf",
+        sourceTitle: "Integration Readiness Assessment",
         audience: "Application leaders",
         objective: "Capture qualified demand"
       }
@@ -289,7 +290,7 @@ describe("compileCampaignContext", () => {
     });
     expect(resource.wireframe.labels).not.toEqual(assessment.wireframe.labels);
     expect(resource.wireframe.finalCtaPattern).not.toBe(assessment.wireframe.finalCtaPattern);
-    expect(assessment.brief.sourceTitle).toBe("Integration readiness scorecard");
+    expect(assessment.brief.sourceTitle).toBe("Integration Readiness Assessment");
   });
 
   it("falls back to mechanism-only proof and neutral design when no public evidence exists", () => {

@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { canEditSession, finalizePdfSource } from "@/lib/orchestrator";
+import { extractPdfDocumentTitle } from "@/lib/pdf-title";
 import { getSession, updateSession } from "@/lib/session-store";
 
 vi.mock("@vercel/blob", async (importOriginal) => {
@@ -17,6 +18,11 @@ vi.mock("@/lib/orchestrator", () => ({
   canEditSession: vi.fn(),
   finalizePdfSource: vi.fn(),
   runStoryStage: vi.fn()
+}));
+
+vi.mock("@/lib/pdf-title", () => ({
+  extractPdfDocumentTitle: vi.fn(),
+  pdfTitleFallback: vi.fn(() => "Uploaded document")
 }));
 
 vi.mock("@/lib/rate-limit", async (importOriginal) => {
@@ -98,6 +104,7 @@ describe("PDF client upload route", () => {
     } as never);
     vi.mocked(put).mockResolvedValue({} as never);
     vi.mocked(del).mockResolvedValue(undefined);
+    vi.mocked(extractPdfDocumentTitle).mockResolvedValue("The Now Platform Reference Guide");
   });
 
   it("issues a short-lived private PDF-only token without sending PDF bytes through the Function", async () => {
@@ -218,6 +225,7 @@ describe("PDF client upload route", () => {
     expect(finalizePdfSource).toHaveBeenCalledWith(sessionId, {
       uploadId,
       sourceName: "brief.pdf",
+      sourceTitle: "The Now Platform Reference Guide",
       sourceOpenAIFileId: undefined
     });
     expect(put).toHaveBeenCalledWith(

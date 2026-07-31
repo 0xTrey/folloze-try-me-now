@@ -108,6 +108,21 @@ describe("Try Me Now experience copy", () => {
     expect(result.summary).toContain("increase content engagement");
   });
 
+  it("uses the extracted document title instead of the private PDF filename", () => {
+    const result = getRevealCopy(session("content", {
+      answers: {
+        sourceName: "ebk-now-platform-reference-guide.pdf",
+        sourceTitle: "Now Platform Reference Guide",
+        audience: "Data and AI platform leaders",
+        objective: "Increase content engagement"
+      }
+    }));
+
+    expect(result.kicker).toContain("Now Platform Reference Guide");
+    expect(result.headline).toContain("Now Platform Reference Guide");
+    expect(JSON.stringify(result)).not.toContain("ebk-now-platform-reference-guide");
+  });
+
   it("keeps the campaign reveal private and avoids brand-name word collisions", () => {
     const campaign = session("campaign", {
       companyDomain: "servicenow.com",

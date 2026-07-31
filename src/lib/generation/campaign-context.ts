@@ -223,7 +223,7 @@ function sourceTitleFor(
   answers: SessionAnswers,
   sourceContent?: PublicContentEvidence | null
 ): string | null {
-  const value = answers.sourceName || sourceContent?.title || "";
+  const value = answers.sourceTitle || sourceContent?.title || answers.sourceName || "";
   return value ? cleanSourceTitle(value) || null : null;
 }
 

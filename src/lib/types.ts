@@ -114,6 +114,7 @@ export interface SessionAnswers {
   eventSource?: string;
   sourceUrl?: string;
   sourceName?: string;
+  sourceTitle?: string;
   sourceOpenAIFileId?: string;
   sourceUploadId?: string;
   sourceUploadReservedAt?: string;

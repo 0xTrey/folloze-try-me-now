@@ -1168,7 +1168,7 @@ export async function duplicateSession(
 
 export async function finalizePdfSource(
   id: string,
-  input: { uploadId: string; sourceName: string; sourceOpenAIFileId?: string }
+  input: { uploadId: string; sourceName: string; sourceTitle?: string; sourceOpenAIFileId?: string }
 ): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean }> {
   assertProductionSessionStore();
   const updated = await updateSession(id, (session) => {
@@ -1185,6 +1185,8 @@ export async function finalizePdfSource(
       );
     }
     session.answers.sourceName = input.sourceName;
+    if (input.sourceTitle) session.answers.sourceTitle = input.sourceTitle;
+    else delete session.answers.sourceTitle;
     session.answers.sourceOpenAIFileId = input.sourceOpenAIFileId;
     delete session.answers.sourceConfirmed;
     session.sourceConfirmation = {

@@ -10,6 +10,7 @@ import { config, hasOpenAI } from "@/lib/config";
 import { apiError, HttpError, logServerError, noStoreHeaders } from "@/lib/http";
 import { canEditSession, finalizePdfSource, runStoryStage } from "@/lib/orchestrator";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
+import { extractPdfDocumentTitle, pdfTitleFallback } from "@/lib/pdf-title";
 import { getSession, sessionStoreMode, updateSession } from "@/lib/session-store";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -416,6 +417,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
             throw new HttpError(400, "invalid_pdf_signature", "That file is not a valid PDF.");
           }
 
+          const sourceTitle =
+            (await extractPdfDocumentTitle(bytes, payload.originalName)) ?? pdfTitleFallback();
+
           let sourceOpenAIFileId = hasOpenAI ? processingStatus.openAIFileId : undefined;
           if (hasOpenAI && !sourceOpenAIFileId) {
             const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -432,6 +436,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           const updated = await finalizePdfSource(id, {
             uploadId: payload.uploadId,
             sourceName: payload.originalName,
+            sourceTitle,
             sourceOpenAIFileId
           });
           processingSucceeded = true;
