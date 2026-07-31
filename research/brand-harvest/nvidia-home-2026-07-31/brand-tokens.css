@@ -1,0 +1,13 @@
+:root {
+  --brand-primary: #76B900;
+  --brand-accent: #1A1A1A;
+  --brand-text: #111827;
+  --brand-surface: #FFFFFF;
+  --brand-font-display: "Font Awesome 6 Pro";
+  --brand-font-body: NVIDIA-NALA, Arial, Helvetica, sans-serif;
+  --brand-button-radius: 0px;
+  --brand-button-padding: 0px;
+  --brand-button-font-weight: 400;
+  --brand-card-radius: 0px;
+  --brand-card-shadow: none;
+}

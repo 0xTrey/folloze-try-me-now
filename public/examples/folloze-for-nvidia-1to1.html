@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A focused Folloze account experience for NVIDIA marketing and revenue teams.">
+  <title>Folloze for NVIDIA | Make Every Launch Account-Specific</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23071428'/%3E%3Cpath d='M17 32c8-12 22-14 32-5-7-3-16-1-21 6 5-4 12-4 17 0-8 11-21 13-31 4 2-1 4-3 5-5h-2z' fill='%2376b900'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #1c293f;
+      --deep: #071428;
+      --action: #0a1230;
+      --body: #2c3d59;
+      --muted: #6b7e9d;
+      --violet: #5b5bff;
+      --violet-dark: #3b3be0;
+      --violet-soft: #eeeeff;
+      --green: #76b900;
+      --green-soft: #eef9dc;
+      --line: #e6e8f0;
+      --canvas: #fafafb;
+      --band: #f4f4fb;
+      --cream: #f4eee1;
+      --white: #fff;
+      --ease: cubic-bezier(.645,.045,.355,1);
+      --rail: min(1240px, calc(100vw - 64px));
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      color: var(--body);
+      background: var(--canvas);
+      font-family: Inter, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, a { font: inherit; }
+    button { color: inherit; }
+    .page { min-height: 100vh; }
+    .rail { width: var(--rail); margin-inline: auto; }
+    .skip {
+      position: fixed; z-index: 1000; left: 18px; top: 14px; transform: translateY(-140%);
+      padding: 10px 15px; border: 0; border-radius: 999px; background: var(--action); color: white;
+    }
+    .skip:focus { transform: none; }
+    :focus-visible { outline: 3px solid color-mix(in srgb, var(--violet) 52%, white); outline-offset: 3px; }
+    .eyebrow {
+      margin: 0 0 18px; color: var(--violet); font-size: 12px; line-height: 1;
+      font-weight: 700; letter-spacing: .15em; text-transform: uppercase;
+    }
+    .eyebrow.on-dark { color: #abaaff; }
+    .display { font-family: "Instrument Sans", system-ui, sans-serif; font-weight: 500; letter-spacing: -.04em; }
+    .button {
+      min-height: 54px; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 14px 24px; border: 1px solid var(--action); border-radius: 999px; cursor: pointer;
+      color: white; background: var(--action); text-decoration: none; transition: .2s var(--ease);
+    }
+    .button:hover { border-color: var(--violet); background: var(--violet); transform: translateY(-2px); }
+    .button.secondary { color: var(--action); border-color: var(--line); background: white; }
+    .button.secondary:hover { color: var(--violet); border-color: var(--violet); background: white; }
+    .button.light { color: var(--action); border-color: white; background: white; }
+    .button.light:hover { color: white; border-color: var(--violet); background: var(--violet); }
+    .arrow { font-size: 18px; line-height: 1; }
+
+    .site-header {
+      height: 76px; position: sticky; z-index: 100; top: 0; display: flex; align-items: center;
+      border-bottom: 1px solid rgba(230,232,240,.9); background: rgba(255,255,255,.94); backdrop-filter: blur(16px);
+    }
+    .header-inner { width: var(--rail); margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 26px; }
+    .brand-lockup { display: flex; align-items: center; gap: 17px; min-width: 265px; }
+    .folloze-logo { width: 116px; height: auto; display: block; }
+    .brand-divider { width: 1px; height: 28px; background: var(--line); }
+    .nvidia-logo { width: 114px; height: auto; display: block; fill: #111; }
+    .nav { display: flex; align-items: center; gap: 6px; }
+    .nav button {
+      min-height: 42px; padding: 0 13px; border: 0; border-radius: 999px; cursor: pointer;
+      color: var(--body); background: transparent; font-size: 14px; font-weight: 600;
+    }
+    .nav button:hover { color: var(--violet); background: var(--violet-soft); }
+    .header-cta { min-height: 42px; padding: 9px 17px; font-size: 14px; }
+
+    .hero { padding: 54px 0 72px; position: relative; background: white; }
+    .hero::after {
+      content: ""; width: 430px; height: 430px; position: absolute; z-index: 0; left: -270px; bottom: -270px;
+      border: 1px solid rgba(91,91,255,.18); border-radius: 50%; box-shadow: 0 0 0 75px rgba(91,91,255,.035), 0 0 0 150px rgba(118,185,0,.025);
+    }
+    .hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0,.92fr) minmax(560px,1.08fr); gap: 64px; align-items: center; }
+    .hero h1 { max-width: 690px; margin: 0; color: var(--ink); font-size: clamp(58px,6vw,84px); line-height: .95; }
+    .hero h1 span { color: var(--violet); }
+    .hero-copy { max-width: 625px; margin: 27px 0 0; color: var(--body); font-size: 19px; line-height: 1.55; }
+    .hero-actions { margin-top: 32px; display: flex; flex-wrap: wrap; gap: 12px; }
+    .hero-note { margin: 21px 0 0; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+    .hero-note i { width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px var(--green-soft); }
+
+    .hero-stage {
+      min-height: 590px; position: relative; overflow: hidden; border-radius: 32px;
+      color: white; background: radial-gradient(circle at 76% 10%, rgba(118,185,0,.18), transparent 27%), linear-gradient(150deg,#0c1330,#070b1f 68%);
+      box-shadow: 0 32px 90px rgba(7,20,40,.18);
+    }
+    .stage-top { padding: 24px 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .stage-top strong { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+    .live-state { display: flex; align-items: center; gap: 8px; color: #c8d0df; font-size: 11px; }
+    .live-state i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(118,185,0,.12); animation: live 2.2s ease-in-out infinite; }
+    @keyframes live { 50% { box-shadow: 0 0 0 11px rgba(118,185,0,0); } }
+    .stage-canvas { padding: 32px 28px 28px; }
+    .stage-label { color: #9aa7ba; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .stage-title { max-width: 430px; margin: 10px 0 26px; font: 500 30px/1.08 "Instrument Sans",sans-serif; letter-spacing: -.035em; }
+    .flow {
+      display: grid; grid-template-columns: 150px 42px minmax(0,1fr); gap: 11px; align-items: stretch;
+    }
+    .source-stack, .buyer-stack { display: grid; gap: 9px; }
+    .source-card, .buyer-card {
+      min-height: 67px; padding: 13px 14px; display: flex; align-items: center; gap: 11px;
+      border: 1px solid rgba(255,255,255,.11); border-radius: 14px; background: rgba(255,255,255,.055);
+    }
+    .source-card i { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 2px; background: var(--violet); }
+    .source-card span, .buyer-card span { display: block; }
+    .source-card strong, .buyer-card strong { display: block; font-size: 11px; line-height: 1.25; }
+    .source-card small, .buyer-card small { display: block; margin-top: 4px; color: #9aa7ba; font-size: 9px; line-height: 1.3; }
+    .flow-rail { display: grid; place-items: center; position: relative; }
+    .flow-rail::before { content: ""; width: 1px; position: absolute; inset: 14px auto; background: linear-gradient(transparent,var(--violet),var(--green),transparent); }
+    .flow-rail b { width: 28px; height: 28px; display: grid; place-items: center; z-index: 1; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: #111a39; color: #b5b4ff; animation: turn 7s linear infinite; }
+    @keyframes turn { to { transform: rotate(360deg); } }
+    .buyer-card { position: relative; background: white; color: var(--deep); border-color: white; }
+    .buyer-card::after { content: ""; width: 3px; position: absolute; inset: 12px auto 12px 0; border-radius: 3px; background: var(--green); }
+    .buyer-card small { color: var(--muted); }
+    .signal-receipt {
+      margin-top: 19px; padding: 17px 18px; display: grid; grid-template-columns: auto 1fr auto; gap: 13px; align-items: center;
+      border: 1px solid rgba(118,185,0,.28); border-radius: 16px; background: rgba(118,185,0,.08);
+    }
+    .signal-icon { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: #0b1602; font-weight: 800; }
+    .signal-receipt strong { display: block; font-size: 11px; }
+    .signal-receipt small { display: block; margin-top: 4px; color: #a8b2c2; font-size: 9px; }
+    .signal-receipt em { color: var(--green); font-size: 9px; font-style: normal; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+
+    .section { padding: 112px 0; }
+    .section-head { max-width: 930px; margin-bottom: 52px; }
+    .section h2 { margin: 0; color: var(--ink); font-size: clamp(48px,5vw,68px); line-height: 1.02; }
+    .section-lede { max-width: 710px; margin: 22px 0 0; font-size: 18px; line-height: 1.6; }
+
+    .paths { background: var(--band); }
+    .path-workbench { display: grid; grid-template-columns: 330px minmax(0,1fr); gap: 18px; }
+    .path-tabs { display: grid; align-content: start; gap: 9px; }
+    .path-tab {
+      min-height: 112px; padding: 19px 20px; display: grid; grid-template-columns: 34px 1fr; gap: 13px; text-align: left;
+      border: 1px solid var(--line); border-radius: 18px; cursor: pointer; background: white; transition: .2s var(--ease);
+    }
+    .path-tab:hover { transform: translateX(4px); border-color: #c9c9ff; }
+    .path-tab[aria-selected="true"] { color: white; border-color: var(--action); background: var(--action); box-shadow: 0 18px 45px rgba(7,20,40,.15); }
+    .path-num { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; font-weight: 700; opacity: .65; }
+    .path-tab strong { display: block; color: inherit; font-size: 16px; }
+    .path-tab small { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .path-tab[aria-selected="true"] small { color: #abb6c7; }
+    .path-panel { min-height: 355px; padding: 38px; display: grid; grid-template-columns: 1fr 280px; gap: 38px; border: 1px solid var(--line); border-radius: 24px; background: white; }
+    .path-panel h3 { margin: 0; color: var(--ink); font: 500 38px/1.04 "Instrument Sans",sans-serif; letter-spacing: -.035em; }
+    .path-panel > div > p { margin: 18px 0 0; font-size: 16px; line-height: 1.6; }
+    .message-stack { margin-top: 27px; display: grid; gap: 10px; }
+    .message-line { padding: 13px 15px; border-left: 3px solid var(--violet); background: var(--canvas); font-size: 12px; line-height: 1.45; }
+    .path-side { padding: 20px; border-radius: 18px; background: var(--green-soft); }
+    .path-side span { color: #466e00; font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .path-side strong { display: block; margin-top: 10px; color: #193100; font: 500 23px/1.12 "Instrument Sans",sans-serif; }
+    .path-side p { margin: 14px 0 0; color: #3b5a13; font-size: 12px; line-height: 1.5; }
+
+    .system { background: white; }
+    .system-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+    .system-card { min-height: 470px; padding: 27px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 24px; overflow: hidden; }
+    .system-card.build { background: var(--cream); }
+    .system-card.activate { color: white; border-color: transparent; background: linear-gradient(155deg,#1560ff,#0a2ecc 60%,#061c8f); }
+    .system-card.signal { color: white; border-color: #25283c; background: #0a0a12; }
+    .system-index { display: flex; justify-content: space-between; color: inherit; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
+    .system-visual { height: 172px; margin: 26px 0; display: grid; place-items: center; position: relative; border: 1px solid color-mix(in srgb,currentColor 14%,transparent); border-radius: 17px; background: color-mix(in srgb,currentColor 5%,transparent); }
+    .system-orbit { width: 96px; height: 96px; display: grid; place-items: center; border: 1px solid color-mix(in srgb,currentColor 25%,transparent); border-radius: 50%; }
+    .system-orbit::before, .system-orbit::after { content: ""; position: absolute; border: 1px solid color-mix(in srgb,currentColor 14%,transparent); border-radius: 50%; }
+    .system-orbit::before { width: 132px; height: 132px; }
+    .system-orbit::after { width: 52px; height: 52px; }
+    .system-orbit b { z-index: 2; font: 500 26px "Instrument Sans",sans-serif; }
+    .system-card h3 { margin: auto 0 0; color: inherit; font: 500 38px/1 "Instrument Sans",sans-serif; letter-spacing: -.04em; }
+    .system-card p { min-height: 70px; margin: 15px 0 0; color: inherit; font-size: 13px; line-height: 1.55; opacity: .72; }
+    .system-proof { margin-top: 22px; padding-top: 16px; border-top: 1px solid color-mix(in srgb,currentColor 16%,transparent); color: inherit; font-size: 11px; font-weight: 700; }
+
+    .handoff { color: white; background: linear-gradient(145deg,#0c1330,#070b1f 72%); }
+    .handoff .section-head h2 { color: white; }
+    .handoff .section-lede { color: #aab4c5; }
+    .signal-grid { display: grid; grid-template-columns: minmax(0,.95fr) minmax(520px,1.05fr); gap: 22px; }
+    .field-panel, .console { border: 1px solid rgba(255,255,255,.1); border-radius: 24px; background: rgba(255,255,255,.045); }
+    .field-panel { padding: 31px; }
+    .field-panel h3, .console h3 { margin: 0; color: white; font: 500 31px/1.08 "Instrument Sans",sans-serif; letter-spacing: -.03em; }
+    .field-panel > p { margin: 15px 0 28px; color: #aab4c5; font-size: 14px; line-height: 1.55; }
+    .field-steps { display: grid; gap: 10px; }
+    .field-step { padding: 15px; display: grid; grid-template-columns: 30px 1fr; gap: 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.035); }
+    .field-step b { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--violet); font-size: 10px; }
+    .field-step strong { display: block; font-size: 12px; }
+    .field-step span { display: block; margin-top: 5px; color: #95a2b5; font-size: 10px; line-height: 1.4; }
+    .console { overflow: hidden; background: #080d1d; }
+    .console-head { padding: 24px 26px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid rgba(255,255,255,.09); }
+    .console-head small { color: #7f8da1; font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .console-body { padding: 24px 26px 27px; }
+    .signal-tabs { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
+    .signal-tab { min-height: 49px; padding: 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; cursor: pointer; color: #a7b2c2; background: rgba(255,255,255,.035); font-size: 10px; }
+    .signal-tab[aria-pressed="true"] { color: #112000; border-color: var(--green); background: var(--green); font-weight: 800; }
+    .signal-map { min-height: 228px; margin-top: 18px; padding: 22px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 17px; background: radial-gradient(circle at 83% 16%,rgba(118,185,0,.13),transparent 35%),rgba(255,255,255,.025); }
+    .signal-map::before { content: ""; position: absolute; inset: 0; opacity: .12; background-image: linear-gradient(rgba(255,255,255,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.18) 1px,transparent 1px); background-size: 28px 28px; }
+    .signal-content { position: relative; z-index: 1; }
+    .signal-kicker { color: var(--green); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .signal-content h4 { max-width: 390px; margin: 12px 0 0; color: white; font: 500 28px/1.08 "Instrument Sans",sans-serif; letter-spacing: -.03em; }
+    .signal-content p { max-width: 430px; margin: 15px 0 0; color: #9da8ba; font-size: 12px; line-height: 1.55; }
+    .next-move { margin-top: 22px; padding-top: 17px; display: flex; align-items: center; gap: 11px; border-top: 1px solid rgba(255,255,255,.09); color: white; font-size: 11px; }
+    .next-move i { width: 9px; height: 9px; border-radius: 50%; background: var(--violet); box-shadow: 0 0 0 5px rgba(91,91,255,.12); }
+
+    .closing { padding: 108px 0; background: var(--canvas); }
+    .closing-panel { padding: 74px; position: relative; overflow: hidden; border-radius: 32px; color: white; background: linear-gradient(150deg,#0c1740,#070b22); }
+    .closing-panel::after { content: ""; width: 320px; height: 320px; position: absolute; right: -120px; top: -150px; border: 1px solid rgba(118,185,0,.35); border-radius: 50%; box-shadow: 0 0 0 60px rgba(118,185,0,.035),0 0 0 120px rgba(91,91,255,.035); }
+    .closing-panel > * { position: relative; z-index: 1; }
+    .closing-panel h2 { max-width: 850px; margin: 0; color: white; font-size: clamp(48px,5.8vw,76px); line-height: .98; }
+    .closing-panel p { max-width: 650px; margin: 22px 0 0; color: #aab4c5; font-size: 17px; line-height: 1.55; }
+    .closing-actions { margin-top: 31px; display: flex; flex-wrap: wrap; gap: 11px; }
+    .source-links { margin-top: 42px; padding-top: 22px; display: flex; flex-wrap: wrap; gap: 19px; border-top: 1px solid rgba(255,255,255,.1); }
+    .source-links a { color: #b7c0cf; font-size: 12px; text-decoration: none; }
+    .source-links a:hover { color: white; }
+
+    .modal { width: min(680px,calc(100vw - 32px)); padding: 0; border: 0; border-radius: 26px; color: var(--body); background: white; box-shadow: 0 35px 110px rgba(3,10,24,.34); }
+    .modal::backdrop { background: rgba(4,10,24,.7); backdrop-filter: blur(6px); }
+    .modal-inner { padding: 34px; }
+    .modal-top { display: flex; justify-content: space-between; gap: 24px; }
+    .modal h3 { margin: 0; color: var(--ink); font: 500 38px/1.03 "Instrument Sans",sans-serif; letter-spacing: -.035em; }
+    .modal-close { width: 42px; height: 42px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 50%; cursor: pointer; background: white; font-size: 21px; }
+    .modal-copy { margin: 16px 0 0; line-height: 1.55; }
+    .sprint-grid { margin: 25px 0; display: grid; grid-template-columns: repeat(2,1fr); gap: 9px; }
+    .sprint-card { padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas); }
+    .sprint-card span { color: var(--violet); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .sprint-card strong { display: block; margin-top: 8px; color: var(--ink); font-size: 13px; }
+    .modal-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    @media (max-width: 1100px) {
+      :root { --rail: min(100% - 40px, 980px); }
+      .nav { display: none; }
+      .hero-grid { grid-template-columns: 1fr; }
+      .hero-copy { max-width: 760px; }
+      .hero-stage { min-height: 560px; }
+      .path-panel { grid-template-columns: 1fr; }
+      .signal-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px) {
+      :root { --rail: calc(100% - 28px); }
+      .site-header { height: 68px; }
+      .brand-lockup { min-width: 0; gap: 10px; }
+      .folloze-logo { width: 92px; }
+      .nvidia-logo { width: 88px; }
+      .brand-divider { height: 22px; }
+      .header-cta { display: none; }
+      .hero { padding: 46px 0 56px; }
+      .hero h1 { font-size: 51px; }
+      .hero-copy { font-size: 16px; }
+      .hero-actions { align-items: stretch; flex-direction: column; }
+      .hero-actions .button { width: 100%; }
+      .hero-stage { min-height: 640px; border-radius: 22px; }
+      .stage-top { padding: 19px; }
+      .stage-canvas { padding: 24px 19px; }
+      .stage-title { font-size: 26px; }
+      .flow { grid-template-columns: 1fr; }
+      .flow-rail { min-height: 36px; }
+      .flow-rail::before { width: auto; height: 1px; inset: auto 14px; background: linear-gradient(90deg,transparent,var(--violet),var(--green),transparent); }
+      .source-stack, .buyer-stack { grid-template-columns: repeat(3,1fr); }
+      .source-card, .buyer-card { min-height: 82px; padding: 10px; align-items: flex-start; }
+      .source-card small, .buyer-card small { display: none; }
+      .signal-receipt { grid-template-columns: auto 1fr; }
+      .signal-receipt em { grid-column: 2; }
+      .section { padding: 82px 0; }
+      .section h2 { font-size: 44px; }
+      .section-lede { font-size: 16px; }
+      .path-workbench { grid-template-columns: 1fr; }
+      .path-tabs { grid-template-columns: 1fr; }
+      .path-tab { min-height: 90px; }
+      .path-panel { min-height: 0; padding: 25px; }
+      .path-panel h3 { font-size: 33px; }
+      .system-grid { grid-template-columns: 1fr; }
+      .system-card { min-height: 410px; }
+      .signal-tabs { grid-template-columns: 1fr; }
+      .signal-tab { text-align: left; }
+      .closing { padding: 70px 0; }
+      .closing-panel { padding: 44px 25px; border-radius: 24px; }
+      .closing-panel h2 { font-size: 46px; }
+      .closing-actions { align-items: stretch; flex-direction: column; }
+      .closing-actions .button { width: 100%; }
+      .sprint-grid { grid-template-columns: 1fr; }
+      .modal-actions { flex-direction: column; }
+      .modal-actions .button { width: 100%; }
+    }
+    @media (max-width: 370px) {
+      .hero h1 { font-size: 44px; }
+      .source-stack, .buyer-stack { grid-template-columns: 1fr; }
+      .hero-stage { min-height: 850px; }
+      .stage-top strong { font-size: 10px; }
+      .section h2 { font-size: 39px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition-duration: .001ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <button class="skip" type="button" data-scroll-target="main">Skip to content</button>
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="brand-lockup" aria-label="Folloze for NVIDIA">
+          <img class="folloze-logo" src="https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6464087fdf877a12a8bd4d26_folloze-logo.svg" alt="Folloze">
+          <span class="brand-divider" aria-hidden="true"></span>
+          <svg class="nvidia-logo" viewBox="0 0 108.472 20" role="img" aria-labelledby="nvidia-title nvidia-desc" xmlns="http://www.w3.org/2000/svg">
+            <title id="nvidia-title">NVIDIA</title><desc id="nvidia-desc">NVIDIA logo</desc>
+            <path d="M1072.628,253.918v-.3h.192c.105,0,.248.008.248.136s-.073.163-.2.163h-.243m0,.211h.129l.3.524h.327l-.33-.545a.3.3,0,0,0,.311-.323c0-.285-.2-.377-.53-.377h-.482v1.245h.276v-.524m1.4-.1a1.2,1.2,0,1,0-1.2,1.157,1.14,1.14,0,0,0,1.2-1.157m-.347,0a.854.854,0,0,1-.855.891v0a.889.889,0,1,1,.855-.887Z" transform="translate(-965.557 -237.878)"></path>
+            <path d="M463.9,151.934v13.127h3.707V151.934Zm-29.164-.018v13.145h3.74v-10.2l2.918.01a2.674,2.674,0,0,1,2.086.724c.586.625.826,1.632.826,3.476v5.995h3.624V157.8c0-5.183-3.3-5.882-6.536-5.882Zm35.134.018v13.127h6.013c3.2,0,4.249-.533,5.38-1.727a7.352,7.352,0,0,0,1.316-4.692,7.789,7.789,0,0,0-1.2-4.516c-1.373-1.833-3.352-2.191-6.306-2.191Zm3.677,2.858h1.594c2.312,0,3.808,1.039,3.808,3.733s-1.5,3.734-3.808,3.734h-1.594Zm-14.992-2.858-3.094,10.4-2.965-10.4h-4l4.234,13.127h5.343l4.267-13.127Zm25.749,13.127h3.708V151.935h-3.709ZM494.7,151.939l-5.177,13.117h3.656l.819-2.318h6.126l.775,2.318h3.969l-5.216-13.118Zm2.407,2.393,2.246,6.145h-4.562Z" transform="translate(-399.551 -148.155)"></path>
+            <path d="M129.832,124.085v-1.807c.175-.013.353-.022.533-.028,4.941-.155,8.183,4.246,8.183,4.246s-3.5,4.863-7.255,4.863a4.553,4.553,0,0,1-1.461-.234v-5.478c1.924.232,2.31,1.082,3.467,3.01l2.572-2.169a6.81,6.81,0,0,0-5.042-2.462,9.328,9.328,0,0,0-1,.059m0-5.968v2.7c.177-.014.355-.025.533-.032,6.871-.232,11.348,5.635,11.348,5.635s-5.142,6.253-10.5,6.253a7.906,7.906,0,0,1-1.383-.122v1.668a9.1,9.1,0,0,0,1.151.075c4.985,0,8.59-2.546,12.081-5.559.578.463,2.948,1.591,3.435,2.085-3.319,2.778-11.055,5.018-15.44,5.018-.423,0-.829-.026-1.228-.064v2.344h18.947v-20Zm0,13.009v1.424c-4.611-.822-5.89-5.615-5.89-5.615a9.967,9.967,0,0,1,5.89-2.85v1.563h-.007a4.424,4.424,0,0,0-3.437,1.571s.845,3.035,3.444,3.908m-8.189-4.4a11.419,11.419,0,0,1,8.189-4.449v-1.463c-6.043.485-11.277,5.6-11.277,5.6s2.964,8.569,11.277,9.354v-1.555C123.731,133.451,121.643,126.728,121.643,126.728Z" transform="translate(-118.555 -118.117)" fill="#76B900"></path>
+          </svg>
+        </div>
+        <nav class="nav" aria-label="Primary navigation">
+          <button type="button" data-scroll-target="paths">Shape the story</button>
+          <button type="button" data-scroll-target="system">Run the campaign</button>
+          <button type="button" data-scroll-target="signals">See the next move</button>
+        </nav>
+        <button class="button header-cta" type="button" data-open-sprint>Plan the sprint</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="rail hero-grid">
+          <div>
+            <p class="eyebrow">Folloze for NVIDIA</p>
+            <h1 class="display">Make every NVIDIA launch feel <span>built for the account.</span></h1>
+            <p class="hero-copy">Turn launch content, partner proof, and AI-created campaign assets into governed 1:1 experiences that adapt by buying role, capture first-party engagement, and give the field a clear next move.</p>
+            <div class="hero-actions">
+              <button class="button" type="button" data-open-sprint>Plan an account sprint <span class="arrow">→</span></button>
+              <button class="button secondary" type="button" data-scroll-target="paths">Explore the account paths <span class="arrow">↓</span></button>
+            </div>
+            <p class="hero-note"><i aria-hidden="true"></i>One global story. A specific entry point for every priority account.</p>
+          </div>
+
+          <div class="hero-stage" aria-label="Illustration of NVIDIA launch content becoming personalized account paths">
+            <div class="stage-top"><strong>Account activation system</strong><span class="live-state"><i></i>Account brief active</span></div>
+            <div class="stage-canvas">
+              <span class="stage-label">One governed launch system</span>
+              <h2 class="stage-title">From NVIDIA launch assets to buying-group experiences.</h2>
+              <div class="flow">
+                <div class="source-stack">
+                  <div class="source-card"><i></i><span><strong>Launch story</strong><small>Product + industry narrative</small></span></div>
+                  <div class="source-card"><i></i><span><strong>Partner proof</strong><small>Validated route to market</small></span></div>
+                  <div class="source-card"><i></i><span><strong>Field offer</strong><small>One clear next action</small></span></div>
+                </div>
+                <div class="flow-rail"><b>✦</b></div>
+                <div class="buyer-stack">
+                  <div class="buyer-card"><span><strong>AI platform leaders</strong><small>Production, governance, software</small></span></div>
+                  <div class="buyer-card"><span><strong>Infrastructure leaders</strong><small>Scale, architecture, economics</small></span></div>
+                  <div class="buyer-card"><span><strong>Executive sponsors</strong><small>Time to value, operating change</small></span></div>
+                </div>
+              </div>
+              <div class="signal-receipt"><span class="signal-icon">↗</span><span><strong>Buying-group signal captured</strong><small>The field sees which question earned attention.</small></span><em>Ready for action</em></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section paths" id="paths">
+        <div class="rail">
+          <div class="section-head">
+            <p class="eyebrow">Start with the account's real question</p>
+            <h2 class="display">One NVIDIA story. Three very different ways in.</h2>
+            <p class="section-lede">A CIO evaluating an AI factory should not see the same proof path as an operations leader exploring physical AI. Choose the entry point and watch the experience sharpen around it.</p>
+          </div>
+          <div class="path-workbench">
+            <div class="path-tabs" role="tablist" aria-label="NVIDIA campaign entry points">
+              <button class="path-tab" type="button" role="tab" aria-selected="true" data-path="factory"><span class="path-num">01</span><span><strong>AI factory modernization</strong><small>Infrastructure, scale, partner confidence</small></span></button>
+              <button class="path-tab" type="button" role="tab" aria-selected="false" data-path="enterprise"><span class="path-num">02</span><span><strong>Enterprise AI in production</strong><small>Software, data, governance, adoption</small></span></button>
+              <button class="path-tab" type="button" role="tab" aria-selected="false" data-path="physical"><span class="path-num">03</span><span><strong>Physical AI deployment</strong><small>Simulation, edge, operations, ecosystem</small></span></button>
+            </div>
+            <div class="path-panel" role="tabpanel" aria-live="polite">
+              <div>
+                <p class="eyebrow" id="pathEyebrow">AI factory account path</p>
+                <h3 id="pathTitle">Make the architecture credible before asking the account to move.</h3>
+                <p id="pathCopy">Lead infrastructure, AI platform, and finance stakeholders through the validated deployment story that matches their operating environment.</p>
+                <div class="message-stack" id="messageStack">
+                  <div class="message-line">Open with the account's workload and deployment pressure.</div>
+                  <div class="message-line">Route each role to the NVIDIA and partner proof it needs.</div>
+                  <div class="message-line">Give the field one shared engagement record.</div>
+                </div>
+              </div>
+              <aside class="path-side"><span>Recommended next move</span><strong id="pathAction">Build one account architecture review.</strong><p id="pathDetail">Use the first sprint to align the account, partner, proof, and field action around one priority AI factory motion.</p></aside>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section system" id="system">
+        <div class="rail">
+          <div class="section-head">
+            <p class="eyebrow">Build. Activate. Signal.</p>
+            <h2 class="display">A launch should get sharper as it travels.</h2>
+            <p class="section-lede">Folloze keeps the narrative governed while the experience changes around account, role, partner route, source, and behavior.</p>
+          </div>
+          <div class="system-grid">
+            <article class="system-card build">
+              <div class="system-index"><span>01</span><span>Build</span></div>
+              <div class="system-visual"><div class="system-orbit"><b>1:1</b></div></div>
+              <h3>Move from launch assets to account-ready.</h3>
+              <p>Bring the brief, product story, partner proof, and AI-created content. Folloze turns them into a governed experience without another web sprint.</p>
+              <div class="system-proof">One reusable system, many account-specific versions.</div>
+            </article>
+            <article class="system-card activate">
+              <div class="system-index"><span>02</span><span>Activate</span></div>
+              <div class="system-visual"><div class="system-orbit"><b>↗</b></div></div>
+              <h3>Give every buying role the right door.</h3>
+              <p>Change the message, proof, CTA, and content path by account, role, industry, source, or partner while the campaign stays governed.</p>
+              <div class="system-proof">Campaign, field, partner, event, and web paths stay connected.</div>
+            </article>
+            <article class="system-card signal">
+              <div class="system-index"><span>03</span><span>Signal</span></div>
+              <div class="system-visual"><div class="system-orbit"><b>●</b></div></div>
+              <h3>Show the field what earned attention.</h3>
+              <p>Capture feature interest, content exploration, persona context, CTA activity, and buying-group behavior, then route the next move.</p>
+              <div class="system-proof">The campaign becomes a first-party account signal.</div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section handoff" id="signals">
+        <div class="rail">
+          <div class="section-head">
+            <p class="eyebrow on-dark">From attention to field action</p>
+            <h2 class="display">The page should tell the NVIDIA team what to do next.</h2>
+            <p class="section-lede">Not another click report. A shared view of the business question the account explored, the proof it trusted, and the conversation the field should open.</p>
+          </div>
+          <div class="signal-grid">
+            <article class="field-panel">
+              <h3>One account motion, handed off cleanly.</h3>
+              <p>Marketing, partners, and sales stay inside the same story while each team gets the action it owns.</p>
+              <div class="field-steps">
+                <div class="field-step"><b>1</b><div><strong>Marketing sees the active narrative.</strong><span>Which use case, proof path, and role earned meaningful engagement.</span></div></div>
+                <div class="field-step"><b>2</b><div><strong>Partner teams see the route that matters.</strong><span>Which validated architecture or ecosystem proof moved the account forward.</span></div></div>
+                <div class="field-step"><b>3</b><div><strong>Sales gets a useful next conversation.</strong><span>A specific question to open, with the account context already attached.</span></div></div>
+              </div>
+            </article>
+            <article class="console">
+              <div class="console-head"><h3>Illustrative account signal</h3><small>Choose a buying role</small></div>
+              <div class="console-body">
+                <div class="signal-tabs" aria-label="Buying role signal selector">
+                  <button class="signal-tab" type="button" aria-pressed="true" data-signal="platform">AI platform</button>
+                  <button class="signal-tab" type="button" aria-pressed="false" data-signal="infrastructure">Infrastructure</button>
+                  <button class="signal-tab" type="button" aria-pressed="false" data-signal="executive">Executive</button>
+                </div>
+                <div class="signal-map">
+                  <div class="signal-content">
+                    <span class="signal-kicker" id="signalKicker">Role-level interest</span>
+                    <h4 id="signalTitle">Governed AI software moved to the center of the visit.</h4>
+                    <p id="signalCopy">The account explored the production software and governance path after entering through the AI factory story.</p>
+                    <div class="next-move"><i></i><span id="signalAction">Next move: open the production AI operating-model conversation.</span></div>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="closing">
+        <div class="rail closing-panel">
+          <p class="eyebrow on-dark">Start focused</p>
+          <h2 class="display">One NVIDIA launch. One priority account list. Three buying-role paths.</h2>
+          <p>Use a focused sprint to build the first governed 1:1 experience, align the field handoff, and define the signals that should trigger the next move.</p>
+          <div class="closing-actions">
+            <button class="button light" type="button" data-open-sprint>See the sprint plan <span class="arrow">→</span></button>
+            <a class="button secondary" href="https://www.folloze.com/request-demo" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'final CTA', url:this.href}, this)">See Folloze in action <span class="arrow">↗</span></a>
+          </div>
+          <div class="source-links" aria-label="Source links">
+            <a href="https://www.nvidia.com/en-us/programs/" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'sources', url:this.href}, this)">NVIDIA Programs ↗</a>
+            <a href="https://www.nvidia.com/en-us/data-center/gpu-cloud-computing/partners/" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'sources', url:this.href}, this)">NVIDIA Cloud Partners ↗</a>
+            <a href="https://nvidianews.nvidia.com/online-press-kit/gtc-2026-news" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'sources', url:this.href}, this)">GTC 2026 News ↗</a>
+            <a href="https://www.folloze.com/platform/how-it-works" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'sources', url:this.href}, this)">How Folloze works ↗</a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog class="modal" id="sprintModal" aria-labelledby="sprintTitle">
+    <div class="modal-inner">
+      <div class="modal-top"><h3 id="sprintTitle">The first account sprint.</h3><button class="modal-close" type="button" data-close-sprint aria-label="Close sprint plan">×</button></div>
+      <p class="modal-copy">A focused working session turns one NVIDIA launch into a governed 1:1 experience the field can actually use.</p>
+      <div class="sprint-grid">
+        <div class="sprint-card"><span>Input</span><strong>One launch and priority account list</strong></div>
+        <div class="sprint-card"><span>Shape</span><strong>Three buying-role entry paths</strong></div>
+        <div class="sprint-card"><span>Activation</span><strong>Field, partner, and campaign routes</strong></div>
+        <div class="sprint-card"><span>Signal</span><strong>One trigger for the next move</strong></div>
+      </div>
+      <div class="modal-actions">
+        <a class="button" href="https://www.folloze.com/request-demo" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click', {text:this.innerText.trim(), area:'sprint modal', url:this.href}, this)">Plan it with Folloze <span class="arrow">↗</span></a>
+        <button class="button secondary" type="button" data-close-sprint>Keep exploring</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    window.flzAnalytic = window.flzAnalytic || function(action, data) {
+      window.__follozeExampleEvents = window.__follozeExampleEvents || [];
+      window.__follozeExampleEvents.push({ action: action, data: data, at: Date.now() });
+    };
+
+    const pathData = {
+      factory: {
+        eyebrow: "AI factory account path",
+        title: "Make the architecture credible before asking the account to move.",
+        copy: "Lead infrastructure, AI platform, and finance stakeholders through the validated deployment story that matches their operating environment.",
+        messages: ["Open with the account's workload and deployment pressure.", "Route each role to the NVIDIA and partner proof it needs.", "Give the field one shared engagement record."],
+        action: "Build one account architecture review.",
+        detail: "Use the first sprint to align the account, partner, proof, and field action around one priority AI factory motion."
+      },
+      enterprise: {
+        eyebrow: "Enterprise AI account path",
+        title: "Move the conversation from model access to production confidence.",
+        copy: "Give AI platform, data, security, and application teams the proof path that answers how enterprise AI will be deployed, governed, and adopted.",
+        messages: ["Lead with the account's production AI operating question.", "Change the proof path for platform, data, security, and application roles.", "Show sales which governance or deployment question stayed active."],
+        action: "Build one production AI decision path.",
+        detail: "Use the first sprint to connect software, governance, adoption, and follow-up around one enterprise use case."
+      },
+      physical: {
+        eyebrow: "Physical AI account path",
+        title: "Connect the simulation story to the operating environment.",
+        copy: "Help engineering, operations, IT, and executive teams move through the physical AI story from development and simulation to edge deployment and scale.",
+        messages: ["Open with the account's real operating system or workflow.", "Bring ecosystem and industry proof forward by role.", "Route technical depth and business value without splitting the campaign."],
+        action: "Build one deployment-readiness path.",
+        detail: "Use the first sprint to align simulation, edge, ecosystem, and executive value for one priority physical AI account."
+      }
+    };
+
+    const signalData = {
+      platform: { kicker: "Role-level interest", title: "Governed AI software moved to the center of the visit.", copy: "The account explored the production software and governance path after entering through the AI factory story.", action: "Next move: open the production AI operating-model conversation." },
+      infrastructure: { kicker: "Architecture interest", title: "The account stayed with scale, partner proof, and deployment design.", copy: "Infrastructure content and the partner route earned deeper attention than the general launch narrative.", action: "Next move: bring the validated architecture and partner team into the review." },
+      executive: { kicker: "Business-value interest", title: "Time to value and operating change became the active questions.", copy: "The executive path focused on deployment confidence, cross-team alignment, and the business result behind the technology choice.", action: "Next move: frame a short executive decision session around the first production outcome." }
+    };
+
+    document.querySelectorAll('[data-scroll-target]').forEach(function(control) {
+      control.addEventListener('click', function() {
+        const id = control.getAttribute('data-scroll-target');
+        const target = document.getElementById(id);
+        if (!target) return;
+        flzAnalytic('anchor_click', { text: control.innerText.trim(), area: 'navigation', target: id }, control);
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+
+    document.querySelectorAll('[data-path]').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        const key = tab.getAttribute('data-path');
+        const data = pathData[key];
+        document.querySelectorAll('[data-path]').forEach(function(item) { item.setAttribute('aria-selected', String(item === tab)); });
+        document.getElementById('pathEyebrow').textContent = data.eyebrow;
+        document.getElementById('pathTitle').textContent = data.title;
+        document.getElementById('pathCopy').textContent = data.copy;
+        document.getElementById('messageStack').innerHTML = data.messages.map(function(message) { return '<div class="message-line">' + message + '</div>'; }).join('');
+        document.getElementById('pathAction').textContent = data.action;
+        document.getElementById('pathDetail').textContent = data.detail;
+        flzAnalytic('path_select', { text: tab.innerText.trim(), area: 'account paths', value: key }, tab);
+      });
+    });
+
+    document.querySelectorAll('[data-signal]').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        const key = tab.getAttribute('data-signal');
+        const data = signalData[key];
+        document.querySelectorAll('[data-signal]').forEach(function(item) { item.setAttribute('aria-pressed', String(item === tab)); });
+        document.getElementById('signalKicker').textContent = data.kicker;
+        document.getElementById('signalTitle').textContent = data.title;
+        document.getElementById('signalCopy').textContent = data.copy;
+        document.getElementById('signalAction').textContent = data.action;
+        flzAnalytic('signal_view', { text: tab.innerText.trim(), area: 'signal console', value: key }, tab);
+      });
+    });
+
+    const modal = document.getElementById('sprintModal');
+    document.querySelectorAll('[data-open-sprint]').forEach(function(button) {
+      button.addEventListener('click', function() {
+        modal.showModal();
+        flzAnalytic('brief_open', { text: button.innerText.trim(), area: 'account sprint' }, button);
+      });
+    });
+    document.querySelectorAll('[data-close-sprint]').forEach(function(button) {
+      button.addEventListener('click', function() {
+        modal.close();
+        flzAnalytic('brief_close', { text: button.innerText.trim(), area: 'account sprint' }, button);
+      });
+    });
+    modal.addEventListener('click', function(event) { if (event.target === modal) modal.close(); });
+  </script>
+</body>
+</html>

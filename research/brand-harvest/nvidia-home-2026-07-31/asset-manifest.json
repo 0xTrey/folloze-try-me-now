@@ -1,0 +1,984 @@
+{
+  "logos": [],
+  "images": [
+    {
+      "src": "https://www.nvidia.com/content/dam/en-zz/nvidiaweb/homepage/mfg/osaia-corp-blog-wmfg-center-d.jpg",
+      "alt": "",
+      "className": "",
+      "width": 2560,
+      "height": 770,
+      "rect": {
+        "x": -560,
+        "y": 45,
+        "width": 2560,
+        "height": 770
+      }
+    },
+    {
+      "src": "https://www.nvidia.com/content/nvidiaGDC/us/en_US/home/_jcr_content/root/responsivegrid/nv_carousel_10568374/item_1669196231595.coreimg.100.410.jpeg/1785524158619/pretraining-gb300-nvl72-sfg.jpeg",
+      "alt": "AI Training on NVIDIA GB300 NVL72 Sets World Record",
+      "className": "cmp-image__image",
+      "width": 410,
+      "height": 230,
+      "rect": {
+        "x": 625,
+        "y": 951,
+        "width": 410,
+        "height": 230
+      }
+    },
+    {
+      "src": "https://www.nvidia.com/content/nvidiaGDC/us/en_US/home/_jcr_content/root/responsivegrid/nv_carousel_10568374/item_1669196231595_c_431732407.coreimg.100.410.jpeg/1785524158670/new-vera-cpu-sfg.jpeg",
+      "alt": "NVIDIA Harnesses Vera CPU to Speed Up  Next-Gen CPU and GPU Design ",
+      "className": "cmp-image__image",
+      "width": 410,
+      "height": 230,
+      "rect": {
+        "x": 1065,
+        "y": 951,
+        "width": 410,
+        "height": 230
+      }
+    },
+    {
+      "src": "https://www.nvidia.com/content/nvidiaGDC/us/en_US/home/_jcr_content/root/responsivegrid/nv_carousel_10568374/item_1722277565106_c.coreimg.100.410.jpeg/1785524158720/osaia-corp-blog-sfg.jpeg",
+      "alt": "Industry Leaders Join Open Secure AI Alliance for AI Safety ",
+      "className": "cmp-image__image",
+      "width": 410,
+      "height": 230,
+      "rect": {
+        "x": 1505,
+        "y": 951,
+        "width": 410,
+        "height": 230
+      }
+    },
+    {
+      "src": "https://www.nvidia.com/content/nvidiaGDC/us/en_US/home/_jcr_content/root/responsivegrid/nv_carousel_10568374/item_1669196241041.coreimg.100.410.jpeg/1785524158761/mcp-blog-siggraph26-sfg.jpeg",
+      "alt": "NVIDIA Top Software Partners Bring AI Agents to Millions of Creators",
+      "className": "cmp-image__image",
+      "width": 410,
+      "height": 230,
+      "rect": {
+        "x": 1945,
+        "y": 951,
+        "width": 410,
+        "height": 230
+      }
+    },
+    {
+      "src": "https://www.nvidia.com/content/nvidiaGDC/us/en_US/home/_jcr_content/root/responsivegrid/nv_carousel_10568374/item_1722277565106_c_1801676144.coreimg.100.410.jpeg/1785524158828/svd-blog-siggraph-26-sfg.jpeg",
+      "alt": "NVIDIA Synthetic Video Detector Model Verifies Video in Age of AI ",
+      "className": "cmp-image__image",
+      "width": 410,
+      "height": 230,
+      "rect": {
+        "x": 2385,
+        "y": 951,
+        "width": 410,
+        "height": 230
+      }
+    },
+    {
+      "src": "https://www.nvidia.com/content/nvidiaGDC/us/en_US/home/_jcr_content/root/responsivegrid/nv_carousel_10568374/item_1722277565106.coreimg.100.410.jpeg/1785524158868/nvidia-cosmos-sfg.jpeg",
+      "alt": "Now Available, NVIDIA Cosmos Edge Brings World Models To Edge GPUs",
+      "className": "cmp-image__image",
+      "width": 410,
+      "height": 230,
+      "rect": {
+        "x": 2825,
+        "y": 951,
+        "width": 410,
+        "height": 230
+      }
+    },
+    {
+      "src": "https://www.nvidia.com/content/nvidiaGDC/us/en_US/home/_jcr_content/root/responsivegrid/nv_carousel_10568374/item_1760642695091.coreimg.100.410.jpeg/1785524158907/agentic-ai-sfg-nemoclaw-on-dgx-station-siggraph-26-1920x1080.jpeg",
+      "alt": "Agents Made Easy With NVIDIA NemoClaw on DGX Station",
+      "className": "cmp-image__image",
+      "width": 410,
+      "height": 230,
+      "rect": {
+        "x": 3265,
+        "y": 951,
+        "width": 410,
+        "height": 230
+      }
+    },
+    {
+      "src": "https://www.nvidia.com/content/nvidiaGDC/us/en_US/home/_jcr_content/root/responsivegrid/nv_carousel_10568374/item_1711342352043.coreimg.100.410.gif/1785524158931/motionbricks.gif",
+      "alt": "NVIDIA Turns Graphics Research Into Real-Time Systems for AI Worlds",
+      "className": "cmp-image__image",
+      "width": 492,
+      "height": 276,
+      "rect": {
+        "x": 3705,
+        "y": 951,
+        "width": 410,
+        "height": 230
+      }
+    },
+    {
+      "src": "https://www.nvidia.com/content/nvidiaGDC/us/en_US/home/_jcr_content/root/responsivegrid/nv_carousel_10568374/item_1691512647007.coreimg.100.410.jpeg/1785524158970/nvidia-vera-rubin-sfg.jpeg",
+      "alt": "Build Specialized AI Agents on NVIDIA Vera Rubin",
+      "className": "cmp-image__image",
+      "width": 410,
+      "height": 230,
+      "rect": {
+        "x": 4145,
+        "y": 951,
+        "width": 410,
+        "height": 230
+      }
+    },
+    {
+      "src": "https://www.nvidia.com/content/nvidiaGDC/us/en_US/home/_jcr_content/root/responsivegrid/nv_carousel_10568374/item_1670311956184.coreimg.100.410.jpeg/1785524158994/creating-new-nv-sfg-2560x1440.jpeg",
+      "alt": "RTX AI Garage: NVIDIA Accelerates Google DeepMind's DiffusionGemma for Local AI",
+      "className": "cmp-image__image",
+      "width": 410,
+      "height": 230,
+      "rect": {
+        "x": 4585,
+        "y": 951,
+        "width": 410,
+        "height": 230
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Arup Advances Low-Carbon Structural Design With NVIDIA DGX Spark",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 625,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Agent Toolkit Expands With NVIDIA PhysicsNeMo, CUDA-X",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1065,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Build Simulation-Ready Workflows Into 3D Apps",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1505,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Digital Twins for Ecommerce: Zalando Scales 3D Visualization",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1945,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Industrial Software Leaders Build Autonomous AI Engineers ",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2385,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA and TSMC Bring AI Into Fabs to Advance Chipmaking ",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2825,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "How Dassault Systèmes Is Building AI That Understands Physics",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3265,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "The Future of AI-Driven Manufacturing at Hannover Messe",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3705,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA at Hannover Messe 2026",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 4145,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "New NVIDIA Vera Rubin DSX AI Factory Reference Design",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 4585,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA RTX-Accelerated Computers Now Connect to Apple Vision Pro",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 5025,
+        "y": 1660,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Powers Over 400 of the World’s 500 Fastest Supercomputers",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 625,
+        "y": 2549,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Vera CPUs Lead the Way for Agentic Scientific AI",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1065,
+        "y": 2549,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "New NVIDIA AI Software Unlocks Scientific Discoveries",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1505,
+        "y": 2549,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "JUPITER Shows What Exascale Science Looks Like",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1945,
+        "y": 2549,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Europe Unveils 35 New NVIDIA AI Supercomputers",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2385,
+        "y": 2549,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "20 Years of CUDA: Honoring the Architects of Progress",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2825,
+        "y": 2549,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Announcing NVIDIA cuEST for Semiconductor Design",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3265,
+        "y": 2549,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Launches Earth-2 Family of Open Models",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3705,
+        "y": 2549,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Introducing NVIDIA RTX Spark",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 625,
+        "y": 3388,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Student Recommended. RTX Accelerated Laptops",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1065,
+        "y": 3388,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "GeForce RTX 50 Series Graphics Cards and Desktops",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1505,
+        "y": 3388,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "GeForce RTX 50 Series Laptops",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1945,
+        "y": 3388,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA DLSS",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2385,
+        "y": 3388,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA DLSS",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2825,
+        "y": 3388,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Best in Class: Stream PC Games and Study on the Same Laptop With GeForce NOW",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3265,
+        "y": 3388,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "RTX AI Garage: NVIDIA Levels Up Local AI Agents on RTX PCs and DGX Spark",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3705,
+        "y": 3388,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "RTX AI Garage: NVIDIA Accelerates Google DeepMind's DiffusionGemma for Local AI",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 4145,
+        "y": 3388,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Toyota and NVIDIA Expand Partnership to Advance Physical AI",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 625,
+        "y": 4302,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "The World Is Building Robotaxis on NVIDIA DRIVE Hyperion",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1065,
+        "y": 4302,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Unveils Alpamayo 2 Super Open Reasoning Model ",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1505,
+        "y": 4302,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Hyundai, Kia, and NVIDIA Expand Partnership for Next-Gen AV Tech",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1945,
+        "y": 4302,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Automotive Special Address: Scaling Autonomous Vehicles",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2385,
+        "y": 4302,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Leading Automakers Adopt NVIDIA DRIVE Hyperion for L4 Vehicles",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2825,
+        "y": 4302,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Automotive GTC Conference Sessions",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3265,
+        "y": 4302,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA DRIVE AV Raises the Bar for Vehicle Safety as Mercedes-Benz CLA Earns Top Euro NCAP Award",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3705,
+        "y": 4302,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Mercedes-Benz Unveils New S-Class Built on NVIDIA DRIVE AV",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 4145,
+        "y": 4302,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA DRIVE AV Software Debuts in All-New Mercedes-Benz CLA",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 4585,
+        "y": 4302,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Firefly Aerospace Brings NVIDIA Jetson to Lunar Orbit",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 625,
+        "y": 5166,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Halos for Robotics: A Full-Stack Physical AI Safety System",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1065,
+        "y": 5166,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA and LG Group to Advance Physical AI, Mobility, and AI Infrastructure ",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1505,
+        "y": 5166,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA and Doosan Group to Advance Physical AI and AI Factories",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1945,
+        "y": 5166,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Jetson Is Agentic-Ready to Unlock Physical AI Frontier",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2385,
+        "y": 5166,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA and Global Robotics Leaders Take Physical AI to the Real World",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2825,
+        "y": 5166,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "From Model to Machine: Building Robots With NVIDIA",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3265,
+        "y": 5166,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA and Telecom Leaders Build AI Grids to Optimize Inference on Distributed Networks",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3705,
+        "y": 5166,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Wistron and NVIDIA Reindustrialize U.S. With Texas Factory Opening",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 625,
+        "y": 6005,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Vera Rubin Is Here, With 10x Better Performance per Watt",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1065,
+        "y": 6005,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Vera Delivers Max Single-Thread Performance",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1505,
+        "y": 6005,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Spectrum-6",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1945,
+        "y": 6005,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Japan and NVIDIA Launch the World's First National AI Infrastructure",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2385,
+        "y": 6005,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA Vera CPU Maximizes AI Factory Throughput ",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2825,
+        "y": 6005,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Anthropic Claude Now Powered by NVIDIA in Microsoft Foundry",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3265,
+        "y": 6005,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Delivering World-Class Supercomputers for Science",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3705,
+        "y": 6005,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Building in America, for America ",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 625,
+        "y": 6844,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Join NVIDIA at SIGGRAPH 2026",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1065,
+        "y": 6844,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Save the Date for GTC Berlin 2026 | October 20–22",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1505,
+        "y": 6844,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA CEO Jensen Huang’s GTC Taipei Keynote",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1945,
+        "y": 6844,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA GTC Live at COMPUTEX 2026",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2385,
+        "y": 6844,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "NVIDIA GTC Live Keynote Pregame",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2825,
+        "y": 6844,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "AI is a Five-Layer Cake",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3265,
+        "y": 6844,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Building Blocks of AI.",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3705,
+        "y": 6844,
+        "width": 410,
+        "height": 410
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "alt": "Our Story",
+      "className": "cmp-image__image cmp-image__image--is-loading",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 4145,
+        "y": 6844,
+        "width": 410,
+        "height": 410
+      }
+    }
+  ],
+  "background_images": [],
+  "brandfetch_logos": [],
+  "screenshots": {
+    "desktop_full": {
+      "path": "research/brand-harvest/nvidia-home-2026-07-31/screenshots/homepage-desktop-full.png",
+      "width": 1440,
+      "height": 8291,
+      "clipped": false
+    },
+    "mobile_full": {
+      "path": "research/brand-harvest/nvidia-home-2026-07-31/screenshots/homepage-mobile-full.png",
+      "width": 390,
+      "height": 10860,
+      "clipped": false
+    }
+  },
+  "manual_screenshots": []
+}
