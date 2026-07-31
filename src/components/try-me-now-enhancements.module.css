@@ -9,7 +9,6 @@
 .toneFieldset,
 .variantFieldset,
 .assetFieldset,
-.deviceToolbar,
 .signalToast,
 .signalPanel,
 .qualityReceipt,
@@ -32,11 +31,11 @@
   font-family: var(--font-body), "Avenir Next", "Helvetica Neue", sans-serif;
 }
 
-:where(.pathCard,.brandStrip,.evidenceTray,.sourceCard,.controlCard,.artifactStream,.briefDrawer,.blockControl,.toneFieldset,.variantFieldset,.assetFieldset,.deviceToolbar,.signalToast,.signalPanel,.qualityReceipt,.savePanel,.savedCockpit) *,
-:where(.pathCard,.brandStrip,.evidenceTray,.sourceCard,.controlCard,.artifactStream,.briefDrawer,.blockControl,.toneFieldset,.variantFieldset,.assetFieldset,.deviceToolbar,.signalToast,.signalPanel,.qualityReceipt,.savePanel,.savedCockpit) *::before,
-:where(.pathCard,.brandStrip,.evidenceTray,.sourceCard,.controlCard,.artifactStream,.briefDrawer,.blockControl,.toneFieldset,.variantFieldset,.assetFieldset,.deviceToolbar,.signalToast,.signalPanel,.qualityReceipt,.savePanel,.savedCockpit) *::after { box-sizing: border-box; }
+:where(.pathCard,.brandStrip,.evidenceTray,.sourceCard,.controlCard,.artifactStream,.briefDrawer,.blockControl,.toneFieldset,.variantFieldset,.assetFieldset,.signalToast,.signalPanel,.qualityReceipt,.savePanel,.savedCockpit) *,
+:where(.pathCard,.brandStrip,.evidenceTray,.sourceCard,.controlCard,.artifactStream,.briefDrawer,.blockControl,.toneFieldset,.variantFieldset,.assetFieldset,.signalToast,.signalPanel,.qualityReceipt,.savePanel,.savedCockpit) *::before,
+:where(.pathCard,.brandStrip,.evidenceTray,.sourceCard,.controlCard,.artifactStream,.briefDrawer,.blockControl,.toneFieldset,.variantFieldset,.assetFieldset,.signalToast,.signalPanel,.qualityReceipt,.savePanel,.savedCockpit) *::after { box-sizing: border-box; }
 
-:where(.pathCard,.brandStrip,.evidenceTray,.sourceCard,.controlCard,.artifactStream,.briefDrawer,.blockControl,.toneFieldset,.variantFieldset,.assetFieldset,.deviceToolbar,.signalToast,.signalPanel,.qualityReceipt,.savePanel,.savedCockpit) :is(button,input,select,textarea,a):focus-visible {
+:where(.pathCard,.brandStrip,.evidenceTray,.sourceCard,.controlCard,.artifactStream,.briefDrawer,.blockControl,.toneFieldset,.variantFieldset,.assetFieldset,.signalToast,.signalPanel,.qualityReceipt,.savePanel,.savedCockpit) :is(button,input,select,textarea,a):focus-visible {
   outline: 3px solid color-mix(in srgb,var(--accent) 48%,transparent);
   outline-offset: 3px;
 }
@@ -141,10 +140,11 @@
 /* Editorial controls. */
 .controlCard { min-width:0;margin:0;padding:21px;border:1px solid var(--border);border-radius:19px;background:#fff }
 fieldset.controlCard { min-inline-size:0 }
+.controlIntro { max-width:600px;margin:9px 0 0;color:var(--muted);font-size:12px;line-height:1.5 }
 .fieldLegend { position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0) }
 .controlHeader { display:flex;align-items:flex-start;justify-content:space-between;gap:18px }
 .controlHeader>svg { color:var(--accent) }
-.switchControl { min-height:44px;display:flex;align-items:center;gap:9px;color:var(--muted);font-size:9px;cursor:pointer }
+.switchControl { min-height:44px;display:flex;align-items:center;gap:9px;color:var(--muted);font-size:11px;cursor:pointer }
 .switchControl input { position:absolute;opacity:0;pointer-events:none }
 .switchControl i { width:38px;height:22px;padding:3px;display:block;border-radius:999px;background:#cfd4dd;transition:background .2s }
 .switchControl i::after { content:"";width:16px;height:16px;display:block;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(7,20,40,.2);transition:transform .2s var(--ease) }
@@ -158,8 +158,25 @@ fieldset.controlCard { min-inline-size:0 }
 .messageGrid textarea:focus { border-color:var(--accent);background:#fff }
 .messageArrow { width:32px;height:32px;display:grid;place-items:center;color:var(--accent);background:var(--accent-tint);border-radius:50% }
 .segmentedControl { margin-top:18px;padding:4px;display:grid;grid-template-columns:repeat(4,1fr);gap:3px;border-radius:12px;background:#f1f2f6 }
-.segmentedControl button { min-height:39px;padding:7px;color:var(--muted);border:0;border-radius:9px;background:transparent;cursor:pointer;font-size:9px;font-weight:700 }
+.segmentedControl button { min-height:39px;padding:7px;color:var(--muted);border:0;border-radius:9px;background:transparent;cursor:pointer;font-size:11px;font-weight:700 }
 .segmentedControl button[aria-pressed="true"] { color:var(--ink);background:#fff;box-shadow:0 2px 8px rgba(10,22,48,.08) }
+.ctaComposer { margin-top:16px;display:grid;grid-template-columns:minmax(150px,.55fr) minmax(280px,1.45fr);gap:14px;align-items:start }
+.ctaLabelField>span,.ctaStyleFieldset>legend { display:block;margin-bottom:7px;color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase }
+.ctaLabelField input { width:100%;min-height:70px;padding:0 15px;color:var(--ink);border:1px solid var(--border);border-radius:13px;background:var(--canvas);outline:0;font:600 12px/1.2 var(--font-body),sans-serif }
+.ctaLabelField input:focus { border-color:var(--accent);background:#fff }
+.ctaStyleFieldset { min-inline-size:0;margin:0;padding:0;border:0 }
+.ctaStyleGrid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px }
+.ctaStyleGrid>button { min-width:0;min-height:102px;padding:9px;display:grid;align-content:start;gap:4px;text-align:left;color:var(--body);border:1px solid var(--border);border-radius:13px;background:#fff;cursor:pointer;transition:transform .18s var(--ease),border-color .18s var(--ease),box-shadow .18s var(--ease) }
+.ctaStyleGrid>button:hover { transform:translateY(-2px);border-color:var(--accent) }
+.ctaStyleGrid>button[aria-pressed="true"] { border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 9%,transparent) }
+.ctaStyleGrid>button>span { width:100%;min-height:34px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800 }
+.ctaPreviewsolid { color:#fff;border:1px solid var(--accent);border-radius:999px;background:var(--accent) }
+.ctaPreviewoutline { color:var(--accent);border:1px solid var(--accent);border-radius:999px;background:#fff }
+.ctaPreviewtext { justify-content:flex-start!important;padding-left:2px;color:var(--accent);border-bottom:1px solid var(--accent) }
+.ctaStyleGrid strong { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font-size:12px }
+.ctaStyleGrid small { color:var(--muted);font-size:11px;line-height:1.35 }
+.ctaActivationNote { margin:13px 0 0;display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px }
+.ctaActivationNote svg { color:var(--green) }
 .twoFields { margin-top:16px;display:grid;grid-template-columns:.7fr 1.3fr;gap:10px }
 .twoFields input,.drawerFields input,.drawerFields select { width:100%;min-height:46px;padding:0 12px;color:var(--ink);border:1px solid var(--border);border-radius:11px;background:#fff;outline:0;font-size:11px }
 .inputWithIcon { min-height:46px;padding:0 12px;display:flex;align-items:center;gap:7px;color:var(--accent);border:1px solid var(--border);border-radius:11px }
@@ -169,23 +186,45 @@ fieldset.controlCard { min-inline-size:0 }
 
 /* Progressive assembly. */
 .streamHeader strong { color:var(--accent);font:650 24px/1 var(--font-display),Georgia,serif }
-.progressTrack { height:4px;margin:17px 0 9px;overflow:hidden;background:#eceef3;border-radius:999px }
+.activeBuild { min-height:116px;margin:19px 0 13px;padding:17px;display:grid;grid-template-columns:42px minmax(0,1fr) 74px;align-items:center;gap:14px;overflow:hidden;position:relative;color:#fff;border:1px solid rgba(255,255,255,.08);border-radius:17px;background:radial-gradient(circle at 92% 0,color-mix(in srgb,var(--accent) 36%,transparent),transparent 45%),linear-gradient(145deg,#0c1930,#070c1d);box-shadow:0 16px 36px rgba(7,20,40,.13) }
+.activeBuild:after { content:"";position:absolute;inset:auto -8% -70% 48%;height:130%;border:1px solid rgba(255,255,255,.08);border-radius:50%;pointer-events:none }
+.buildSignal { width:38px;height:38px;display:grid;place-items:center;position:relative;border:1px solid rgba(255,255,255,.16);border-radius:50%;background:rgba(255,255,255,.06) }
+.buildSignal i:first-child { width:8px;height:8px;border-radius:50%;background:#8e8cff;box-shadow:0 0 0 7px rgba(142,140,255,.12);animation:buildSignalPulse 1.7s ease-out infinite }
+.buildSignal i:nth-child(2),.buildSignal i:nth-child(3) { position:absolute;inset:-5px;border:1px solid rgba(142,140,255,.14);border-radius:50%;animation:buildSignalOrbit 5s linear infinite }
+.buildSignal i:nth-child(3) { inset:4px;animation-direction:reverse;animation-duration:3.2s }
+.activeBuild>div { min-width:0;position:relative;z-index:1 }
+.activeBuild>div>span { color:#8fe9bc;font-size:11px;font-weight:850;letter-spacing:.12em;text-transform:uppercase }
+.activeBuild>div>strong { display:block;margin:4px 0;color:#fff;font:600 15px/1.14 var(--font-display),Georgia,serif }
+.activeBuild>div>p { max-width:570px;margin:0;color:#aab6c9;font-size:12px;line-height:1.45 }
+.buildCadence { height:38px;display:flex;align-items:center;justify-content:flex-end;gap:4px;position:relative;z-index:1 }
+.buildCadence i { width:3px;height:8px;border-radius:99px;background:#8e8cff;animation:buildCadence 1.1s ease-in-out infinite }
+.buildCadence i:nth-child(2),.buildCadence i:nth-child(6) { animation-delay:.1s }.buildCadence i:nth-child(3),.buildCadence i:nth-child(5) { animation-delay:.2s }.buildCadence i:nth-child(4) { animation-delay:.3s }
+.activeBuildComplete { background:radial-gradient(circle at 92% 0,rgba(27,200,119,.25),transparent 45%),linear-gradient(145deg,#0b2d25,#071b18) }
+.activeBuildComplete .buildSignal i:first-child { background:#61e9ad;box-shadow:0 0 0 7px rgba(97,233,173,.13);animation:none }
+.activeBuildComplete .buildCadence i { height:3px;background:#61e9ad;animation:none }
+.activeBuildFailed { background:radial-gradient(circle at 92% 0,rgba(255,106,96,.28),transparent 45%),linear-gradient(145deg,#381917,#1f0d0c) }
+.activeBuildFailed .buildSignal i:first-child { background:#ff8178;box-shadow:0 0 0 7px rgba(255,129,120,.12);animation:none }
+.buildProgressMeta { display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase }
+.progressTrack { height:4px;margin:7px 0 9px;overflow:hidden;background:#eceef3;border-radius:999px }
 .progressTrack span { height:100%;display:block;background:linear-gradient(90deg,var(--green),var(--accent));border-radius:inherit;transition:width .6s var(--ease) }
 .artifactList { margin:0;padding:0;list-style:none }
 .artifactRow { min-height:76px;padding:12px 0;display:grid;grid-template-columns:25px 23px minmax(0,1fr) auto;align-items:start;gap:9px;position:relative;border-bottom:1px solid var(--border) }
 .artifactRow:last-child { border-bottom:0 }
-.artifactIndex { padding-top:7px;color:#9ba4b4;font-size:8px;font-weight:800 }
+.artifactIndex { padding-top:7px;color:#9ba4b4;font-size:11px;font-weight:800 }
 .artifactGlyph { width:21px;height:21px;margin-top:3px;display:grid;place-items:center;position:relative;color:#aeb5c1;border:1px solid #cbd0da;border-radius:50%;background:#fff }
 .artifactGlyph i { width:6px;height:6px;border-radius:50%;background:currentColor }
-.artifactRow>div>span { color:var(--muted);font-size:7px;font-weight:800;letter-spacing:.12em;text-transform:uppercase }
+.artifactRow>div>span { color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase }
 .artifactRow>div>strong { display:block;margin:3px 0;font:600 13px/1.2 var(--font-display),Georgia,serif }
-.artifactRow p { margin:0;color:var(--muted);font-size:9px;line-height:1.4 }
-.artifactRow>small { margin-top:4px;padding:4px 6px;color:var(--accent);background:var(--accent-tint);border-radius:999px;font-size:7px;font-weight:800;letter-spacing:.06em;text-transform:uppercase }
+.artifactRow p { margin:0;color:var(--muted);font-size:12px;line-height:1.4 }
+.artifactRow>small { margin-top:4px;padding:4px 6px;color:var(--accent);background:var(--accent-tint);border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase }
 .artifactready .artifactGlyph { color:#fff;border-color:var(--green);background:var(--green) }
 .artifactrunning .artifactGlyph { color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,#fff);background:var(--accent-tint) }
 .artifactrunning .artifactGlyph i { animation:artifactBeat 1s ease-in-out infinite }
 .artifactfailed .artifactGlyph { color:#fff;border-color:#b42318;background:#b42318 }
 @keyframes artifactBeat { 50%{transform:scale(1.6);opacity:.35} }
+@keyframes buildSignalPulse { 65%{box-shadow:0 0 0 13px transparent} }
+@keyframes buildSignalOrbit { to{transform:rotate(360deg)} }
+@keyframes buildCadence { 50%{height:30px;opacity:.42} }
 
 /* Dialog surfaces. */
 .modalBackdrop { position:fixed;inset:0;z-index:240;display:flex;justify-content:flex-end;background:rgba(7,20,40,.5);backdrop-filter:blur(6px);animation:backdropIn .2s ease both }
@@ -249,11 +288,6 @@ fieldset.controlCard { min-inline-size:0 }
 .assetCard strong { font-size:10px }
 .assetCard small { margin-top:3px;color:var(--muted);font-size:8px;text-transform:capitalize }
 .assetCheck { width:20px;height:20px;display:grid;place-items:center;color:#fff;background:var(--accent);border-radius:50%;font-style:normal }
-.deviceToolbar { min-height:54px;padding:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--border);border-radius:14px;background:#fff;box-shadow:0 10px 32px rgba(10,22,48,.07) }
-.deviceToolbar>div { display:flex;gap:3px }
-.deviceToolbar button { min-height:40px;padding:0 11px;display:flex;align-items:center;gap:6px;color:var(--muted);border:0;border-radius:10px;background:transparent;cursor:pointer;font-size:9px }
-.deviceToolbar button[aria-pressed="true"] { color:var(--ink);background:#f1f2f5 }
-.fitButton { border-left:1px solid var(--border)!important;border-radius:0!important }
 
 /* Analytics proof. */
 .signalToast { width:min(470px,calc(100vw - 28px));min-height:88px;padding:13px;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:11px;position:fixed;z-index:210;right:20px;bottom:20px;color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:17px;background:radial-gradient(circle at 15% 10%,rgba(91,91,255,.28),transparent 35%),linear-gradient(145deg,#0b1932,#070b1f);box-shadow:0 22px 70px rgba(7,20,40,.3);animation:toastIn .45s var(--ease) both }
@@ -368,12 +402,12 @@ fieldset.controlCard { min-inline-size:0 }
   .messageGrid { grid-template-columns:1fr }
   .messageArrow { transform:rotate(90deg);justify-self:center }
   .segmentedControl { grid-template-columns:1fr 1fr }
+  .ctaComposer { grid-template-columns:1fr }
   .twoFields { grid-template-columns:1fr }
   .variantGrid,.assetGrid { grid-template-columns:1fr 1fr }
   .blockControl { align-items:stretch;flex-direction:column }
   .blockActions { display:grid;grid-template-columns:1fr 1.4fr 1fr }
   .blockActions button { justify-content:center }
-  .deviceToolbar button span { display:none }
   .qualityReceipt { grid-template-columns:1fr }
   .qualityScore { width:82px;height:82px }
   .qualityCopy>div { grid-template-columns:1fr }
@@ -398,16 +432,17 @@ fieldset.controlCard { min-inline-size:0 }
   .brandStrip>.tertiaryAction { grid-column:1 / -1 }
   .audienceTools { padding-left:14px }
   .sourceCard,.evidenceTray,.artifactStream,.controlCard,.qualityReceipt,.savePanel { padding:16px;border-radius:16px }
+  .ctaStyleGrid { grid-template-columns:1fr }
+  .ctaStyleGrid>button { min-height:74px;grid-template-columns:90px minmax(0,1fr);align-items:center;column-gap:10px }
+  .ctaStyleGrid>button>span { grid-row:1 / span 2;margin:0 }
+  .activeBuild { grid-template-columns:38px minmax(0,1fr);padding:15px }
+  .buildCadence { display:none }
   .sourcePreview { min-height:175px }
   .inlineActions { display:grid }
   .inlineActions>* { width:100% }
   .variantGrid,.assetGrid { grid-template-columns:1fr }
   .variantCard { min-height:205px }
   .assetCard { min-height:64px }
-  .deviceToolbar { align-items:stretch;flex-direction:column }
-  .deviceToolbar>div { display:grid;grid-template-columns:repeat(3,1fr) }
-  .deviceToolbar button { justify-content:center }
-  .fitButton { width:100%;border-top:1px solid var(--border)!important;border-left:0!important }
   .signalToast { right:14px;bottom:14px;grid-template-columns:auto minmax(0,1fr) auto }
   .signalOpen { grid-column:1 / -1;width:100%;justify-content:center }
   .signalDismiss { grid-column:3;grid-row:1 }
@@ -425,7 +460,7 @@ fieldset.controlCard { min-inline-size:0 }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pathCard,.brandStrip,.briefDrawer,.signalPanel,.signalToast,.demoOrigin,.demoResult,.demoSignal,.demoPulse,.orbit,.artifactrunning .artifactGlyph i,.signalPulse { animation:none!important;transition-duration:.001ms!important }
+  .pathCard,.brandStrip,.briefDrawer,.signalPanel,.signalToast,.demoOrigin,.demoResult,.demoSignal,.demoPulse,.orbit,.artifactrunning .artifactGlyph i,.signalPulse,.buildSignal i,.buildCadence i { animation:none!important;transition-duration:.001ms!important }
   .demoOrigin,.demoResult,.demoSignal { opacity:1;transform:none }
   .demoPulse { display:none }
 }

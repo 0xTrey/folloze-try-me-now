@@ -5,6 +5,7 @@ import disposableEmailDomains from "disposable-email-domains";
 import { z } from "zod";
 
 import {
+  CTA_STYLES,
   CTA_TYPES,
   CURATED_SECTION_FAMILIES,
   EXPERIENCE_BLOCK_IDS,
@@ -63,9 +64,7 @@ export const answersSchema = z
     messageBelief: z.string().trim().min(4).max(240).optional(),
     messageAction: z.string().trim().min(2).max(160).optional(),
     ctaType: z.enum(CTA_TYPES).optional(),
-    // An empty value is an explicit "clear" operation. The orchestrator removes
-    // it from the stored answers so only validated HTTPS destinations persist.
-    ctaDestination: z.union([httpsDestinationSchema, z.literal("")]).optional(),
+    ctaStyle: z.enum(CTA_STYLES).optional(),
     styleVariant: z.enum(STYLE_VARIANTS).optional(),
     toneVariant: z.enum(TONE_VARIANTS).optional(),
     layoutVariant: z.enum(LAYOUT_VARIANTS).optional(),

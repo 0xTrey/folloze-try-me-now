@@ -13,7 +13,10 @@ describe("generated experience security headers", () => {
     expect(policy).toContain("script-src 'nonce-qa-nonce'");
     expect(policy).not.toContain("script-src 'unsafe-inline'");
     expect(policy).toContain("connect-src 'self'");
+    expect(policy).toContain("img-src 'self' data:");
+    expect(policy).not.toContain("img-src 'self' https:");
     expect(policy).toContain("form-action 'none'");
+    expect(headers["Referrer-Policy"]).toBe("no-referrer");
     expect(headers["Permissions-Policy"]).toContain("camera=()");
   });
 
@@ -24,5 +27,13 @@ describe("generated experience security headers", () => {
     expect(protectedHtml).toContain('<script>alert("injected")</script>');
     expect(protectedHtml).toContain('<script data-flz-runtime nonce="qa-nonce">run()</script>');
     expect(protectedHtml.match(/nonce="qa-nonce"/g)).toHaveLength(1);
+  });
+
+  it("does not nonce an arbitrary legacy script when the runtime marker is absent", () => {
+    const html = '<main>Legacy artifact</main><script>runUnknown()</script>';
+    const protectedHtml = nonceExperienceRuntime(html, "qa-nonce");
+
+    expect(protectedHtml).toBe(html);
+    expect(protectedHtml).not.toContain('nonce="qa-nonce"');
   });
 });

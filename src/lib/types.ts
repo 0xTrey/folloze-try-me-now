@@ -8,6 +8,7 @@ export const CTA_TYPES = [
   "explore",
   "custom"
 ] as const;
+export const CTA_STYLES = ["solid", "outline", "text"] as const;
 export const STYLE_VARIANTS = ["brand-led", "editorial", "technical", "minimal"] as const;
 export const TONE_VARIANTS = ["executive", "technical", "provocative", "consultative"] as const;
 export const LAYOUT_VARIANTS = ["narrative", "modular", "immersive", "compact"] as const;
@@ -50,6 +51,7 @@ export const CURATED_SECTION_FAMILIES = [
 export type UseCase = (typeof USE_CASES)[number];
 export type ExperienceMode = (typeof EXPERIENCE_MODES)[number];
 export type CtaType = (typeof CTA_TYPES)[number];
+export type CtaStyle = (typeof CTA_STYLES)[number];
 export type StyleVariant = (typeof STYLE_VARIANTS)[number];
 export type ToneVariant = (typeof TONE_VARIANTS)[number];
 export type LayoutVariant = (typeof LAYOUT_VARIANTS)[number];
@@ -125,7 +127,7 @@ export interface SessionAnswers {
   messageBelief?: string;
   messageAction?: string;
   ctaType?: CtaType;
-  ctaDestination?: string;
+  ctaStyle?: CtaStyle;
   styleVariant?: StyleVariant;
   toneVariant?: ToneVariant;
   layoutVariant?: LayoutVariant;
@@ -266,6 +268,7 @@ export interface ClaimCockpitMetadata {
   audience?: string;
   objective?: string;
   ctaType?: CtaType;
+  ctaStyle?: CtaStyle;
   styleVariant?: StyleVariant;
   toneVariant?: ToneVariant;
   layoutVariant?: LayoutVariant;
@@ -361,6 +364,11 @@ export interface ExperienceSpecV1 {
     logoUrl?: string;
   };
   draft: Record<string, unknown>;
+  cta: {
+    intent: CtaType;
+    style: CtaStyle;
+    label: string;
+  };
   selectedAssetIds: string[];
   evidenceItemIds: string[];
   curatedSections: CuratedSectionControl[];

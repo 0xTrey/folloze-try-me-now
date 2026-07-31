@@ -40,8 +40,7 @@ import {
   AssetPicker,
   AudienceEvidenceTray,
   ContentSourceConfirmation,
-  CtaDestinationControl,
-  DevicePreviewToolbar,
+  CtaStyleControl,
   EditBriefDrawer,
   EntryPathMicroDemo,
   ExpirySaveValuePanel,
@@ -55,8 +54,7 @@ import {
   ToneChips,
   type AnalyticsSignal,
   type CtaValue,
-  type EntryPathOption,
-  type PreviewDevice
+  type EntryPathOption
 } from "@/components/try-me-now-enhancements";
 
 import type {
@@ -74,6 +72,8 @@ import {
   uploadErrorCode,
   validatePdfFile
 } from "@/lib/client-response";
+import { primaryActionFor } from "@/lib/cta-presentation";
+import { imageDeliveryPath } from "@/lib/image-delivery";
 
 type ClientEvent = { action: string; label: string; at: number };
 
@@ -204,7 +204,7 @@ const exampleSeeds: Record<UseCase, { companyDomain: string; answers: SessionAns
       messageBelief: "Integration architecture can become an AI advantage instead of another source of sprawl.",
       messageAction: "Bring the first enterprise automation use case into a working session.",
       ctaType: "book-meeting",
-      ctaDestination: "https://www.jitterbit.com/contact/",
+      ctaStyle: "solid",
       styleVariant: "brand-led",
       toneVariant: "executive",
       layoutVariant: "immersive"
@@ -221,6 +221,7 @@ const exampleSeeds: Record<UseCase, { companyDomain: string; answers: SessionAns
       messageBelief: "Secure AI agents need an integration foundation built for enterprise systems.",
       messageAction: "Explore the architecture and identify the first workflow to activate.",
       ctaType: "explore",
+      ctaStyle: "outline",
       styleVariant: "technical",
       toneVariant: "provocative",
       layoutVariant: "modular"
@@ -238,6 +239,7 @@ const exampleSeeds: Record<UseCase, { companyDomain: string; answers: SessionAns
       messageBelief: "MCP becomes enterprise-ready when governance and integration are designed together.",
       messageAction: "Choose the architecture question you want to resolve first.",
       ctaType: "explore",
+      ctaStyle: "text",
       styleVariant: "editorial",
       toneVariant: "technical",
       layoutVariant: "narrative"
@@ -264,6 +266,23 @@ function defaultCtaLabel(value: CtaValue["type"]): string {
   if (value === "content") return "Explore the content";
   if (value === "custom") return "Take the next step";
   return "Book a meeting";
+}
+
+export function ctaValueForSession(session: PublicTryMeSession): CtaValue {
+  const type = uiCtaType(session.answers.ctaType);
+  const explicitLabel = session.blockControls?.find((control) => control.id === "closing")?.ctaLabel?.trim();
+  const generatedLabel = session.answers.objective
+    ? primaryActionFor({
+        useCase: session.useCase,
+        objective: session.answers.objective,
+        campaignType: session.answers.campaignType
+      })
+    : undefined;
+  return {
+    type,
+    label: explicitLabel || generatedLabel || defaultCtaLabel(type),
+    style: session.answers.ctaStyle || "solid"
+  };
 }
 
 const likelyDomain = /^(?:https?:\/\/)?(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\/?$/i;
@@ -320,6 +339,10 @@ function trimLabel(value: string, max = 42): string {
   if (compact.length <= max) return compact;
   const candidate = compact.slice(0, max + 1).replace(/\s+\S*$/, "").trim();
   return `${candidate || compact.slice(0, max).trim()}…`;
+}
+
+function lowercaseInitial(value: string): string {
+  return value ? `${value.charAt(0).toLocaleLowerCase()}${value.slice(1)}` : value;
 }
 
 function brandNameFor(session: PublicTryMeSession): string {
@@ -588,7 +611,7 @@ export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
     return {
       kicker: `${brandName} × ${targetName} · 1:1 experience`,
       headline,
-      summary: `${targetName} now has a ${brandName} story for ${audience}, with one job: ${objective.toLowerCase()}.`,
+      summary: `${targetName} now has a ${brandName} story for ${lowercaseInitial(audience)}, with one job: ${lowercaseInitial(objective)}.`,
       counterpart: targetName,
       receipts: [
         { number: "01", label: `${trimLabel(brandName, 24)} identity matched` },
@@ -603,7 +626,7 @@ export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
     return {
       kicker: `${sourceName} · transformed`,
       headline,
-      summary: `${sourceName} is now a guided ${brandName} path for ${audience}, built to ${objective.toLowerCase()}.`,
+      summary: `${sourceName} is now a guided ${brandName} path for ${lowercaseInitial(audience)}, built to ${lowercaseInitial(objective)}.`,
       counterpart: sourceName,
       receipts: [
         { number: "01", label: `${trimLabel(brandName, 24)} identity matched` },
@@ -617,7 +640,7 @@ export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
   return {
     kicker: `${brandName} · ${campaignType.toLowerCase()}`,
     headline,
-    summary: `${brandName} now has a live ${campaignType.toLowerCase()} for ${audience}, built to ${objective.toLowerCase()}.`,
+    summary: `A private ${campaignType.toLowerCase()} preview for ${lowercaseInitial(audience)}, built to ${lowercaseInitial(objective)}.`,
     counterpart: campaignType,
     receipts: [
       { number: "01", label: `${trimLabel(brandName, 24)} identity matched` },
@@ -636,7 +659,7 @@ export function getRevealShellHeadline(session: PublicTryMeSession): string {
   if (session.useCase === "content") {
     return `${sourceNameFor(session)}, rebuilt for buyers.`;
   }
-  return `${brandName}'s ${campaignTypeFor(session).toLowerCase()}, ready to launch.`;
+  return `Your ${brandName} ${campaignTypeFor(session).toLowerCase()} is ready to explore.`;
 }
 
 function getWhyCopy(session: PublicTryMeSession): { key: string; title: string; body: string } {
@@ -1259,6 +1282,19 @@ function RevealBrandToken({
   );
 }
 
+function previewLogoUrl(
+  session: PublicTryMeSession,
+  owner: "seller" | "target" = "seller"
+): string | undefined {
+  const profile = owner === "seller" ? session.brand : session.targetBrand;
+  if (!profile?.logoUrl) return undefined;
+  return imageDeliveryPath(
+    session.id,
+    `${owner}-logo`,
+    session.experience?.artifactRevision
+  );
+}
+
 function RevealCeremony({ session, onDismiss }: { session: PublicTryMeSession; onDismiss: () => void }) {
   const brandName = brandNameFor(session);
   const copy = getRevealCopy(session);
@@ -1280,11 +1316,11 @@ function RevealCeremony({ session, onDismiss }: { session: PublicTryMeSession; o
       </div>
       <div className="ceremonyCore">
         <div className="ceremonyLockup" aria-label={`${brandName} experience · ${copy.counterpart}`}>
-          <RevealBrandToken name={brandName} logoUrl={session.brand?.logoUrl} />
+          <RevealBrandToken name={brandName} logoUrl={previewLogoUrl(session)} />
           <span className="ceremonyConnector" aria-hidden="true"><i /><ArrowRight size={17} /><i /></span>
           <RevealBrandToken
             name={copy.counterpart}
-            logoUrl={session.useCase === "abm" ? session.targetBrand?.logoUrl : undefined}
+            logoUrl={session.useCase === "abm" ? previewLogoUrl(session, "target") : undefined}
             accent
           />
         </div>
@@ -1312,7 +1348,7 @@ export function getAssemblyPreviewKey(
   return `${session.id}:${session.experience?.artifactRevision ?? 0}`;
 }
 
-function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; iframeRef?: RefObject<HTMLIFrameElement | null> }) {
+export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; iframeRef?: RefObject<HTMLIFrameElement | null> }) {
   const brandReady = ["complete", "fallback"].includes(session.stages.brand.status);
   const audienceReady = session.stages.audience.status === "complete" || Boolean(session.answers.audience);
   const storyReady = Boolean(session.experience);
@@ -1346,6 +1382,9 @@ function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; 
           // other script through CSP. The iframe retains same-origin access only
           // for protected preview fonts and allowlisted engagement delivery.
           allow="fullscreen"
+          scrolling="yes"
+          tabIndex={0}
+          data-preview-scroll="contained"
         />
       ) : (
         <div className="assemblyCanvas" style={canvasStyle}>
@@ -1356,9 +1395,9 @@ function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; 
           </div>
           <div className={`artifact brandArtifact ${brandReady ? "isPlaced" : ""}`}>
             <div className="assemblyIdentity">
-              {session.brand?.logoUrl ? (
+              {previewLogoUrl(session) ? (
                 <Image
-                  src={session.brand.logoUrl}
+                  src={previewLogoUrl(session) ?? ""}
                   alt={`${brandName} logo`}
                   width={140}
                   height={40}
@@ -1490,10 +1529,8 @@ export function TryMeNowApp() {
   const [showEditBrief, setShowEditBrief] = useState(false);
   const [showAnalyticsPanel, setShowAnalyticsPanel] = useState(false);
   const [showAnalyticsToast, setShowAnalyticsToast] = useState(false);
-  const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
-  const [previewFit, setPreviewFit] = useState(true);
   const [messageDirection, setMessageDirection] = useState({ enabled: false, belief: "", action: "" });
-  const [ctaValue, setCtaValue] = useState<CtaValue>({ type: "meeting", label: "Book a meeting", destination: "" });
+  const [ctaValue, setCtaValue] = useState<CtaValue>({ type: "meeting", label: "Book a meeting", style: "solid" });
   const [claimEmail, setClaimEmail] = useState("");
   const [claimStatus, setClaimStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [claimError, setClaimError] = useState("");
@@ -1505,6 +1542,7 @@ export function TryMeNowApp() {
   const revealTracked = useRef(false);
   const ceremonySession = useRef<string | undefined>(undefined);
   const directionSession = useRef<string | undefined>(undefined);
+  const ctaSessionSignature = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const patchRequestRef = useRef(0);
   const persistedSectionSignals = useRef(new Set<string>());
@@ -1522,10 +1560,8 @@ export function TryMeNowApp() {
     setShowEditBrief(false);
     setShowAnalyticsPanel(false);
     setShowAnalyticsToast(false);
-    setPreviewDevice("desktop");
-    setPreviewFit(true);
     setMessageDirection({ enabled: false, belief: "", action: "" });
-    setCtaValue({ type: "meeting", label: "Book a meeting", destination: "" });
+    setCtaValue({ type: "meeting", label: "Book a meeting", style: "solid" });
     setClaimEmail("");
     setClaimStatus("idle");
     setClaimError("");
@@ -1535,6 +1571,7 @@ export function TryMeNowApp() {
     revealTracked.current = false;
     ceremonySession.current = undefined;
     directionSession.current = undefined;
+    ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
     track("use_case_selected", { useCase: selected });
   }, []);
@@ -1552,10 +1589,8 @@ export function TryMeNowApp() {
     setShowEditBrief(false);
     setShowAnalyticsPanel(false);
     setShowAnalyticsToast(false);
-    setPreviewDevice("desktop");
-    setPreviewFit(true);
     setMessageDirection({ enabled: false, belief: "", action: "" });
-    setCtaValue({ type: "meeting", label: "Book a meeting", destination: "" });
+    setCtaValue({ type: "meeting", label: "Book a meeting", style: "solid" });
     setClaimEmail("");
     setClaimStatus("idle");
     setClaimError("");
@@ -1567,6 +1602,7 @@ export function TryMeNowApp() {
     revealTracked.current = false;
     ceremonySession.current = undefined;
     directionSession.current = undefined;
+    ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
   }, []);
 
@@ -1624,17 +1660,20 @@ export function TryMeNowApp() {
   useEffect(() => {
     if (!session || directionSession.current === session.id) return;
     directionSession.current = session.id;
-    const ctaType = uiCtaType(session.answers.ctaType);
     setMessageDirection({
       enabled: Boolean(session.answers.messageBelief || session.answers.messageAction),
       belief: session.answers.messageBelief || "",
       action: session.answers.messageAction || ""
     });
-    setCtaValue({
-      type: ctaType,
-      label: session.blockControls?.find((control) => control.id === "closing")?.ctaLabel || defaultCtaLabel(ctaType),
-      destination: session.answers.ctaDestination || ""
-    });
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    const next = ctaValueForSession(session);
+    const signature = `${session.id}:${next.type}:${next.style}:${next.label}`;
+    if (ctaSessionSignature.current === signature) return;
+    ctaSessionSignature.current = signature;
+    setCtaValue(next);
   }, [session]);
 
   useEffect(() => {
@@ -1826,11 +1865,6 @@ export function TryMeNowApp() {
   };
 
   const saveCreativeDirection = async () => {
-    const destination = ctaValue.destination.trim();
-    if (destination && !/^https:\/\/[^\s]+$/i.test(destination)) {
-      setError("Use a public HTTPS destination for the CTA.");
-      return;
-    }
     await patchWorkspace({
       answers: {
         messageBelief: messageDirection.enabled && messageDirection.belief.trim()
@@ -1840,7 +1874,7 @@ export function TryMeNowApp() {
           ? messageDirection.action.trim()
           : undefined,
         ctaType: serverCtaType(ctaValue.type),
-        ctaDestination: destination || undefined
+        ctaStyle: ctaValue.style
       },
       blockControls: [{
         id: "closing",
@@ -1858,8 +1892,7 @@ export function TryMeNowApp() {
       audience: session.answers.customAudience || session.answers.audience || "",
       objective: session.answers.objective || "",
       belief: session.answers.messageBelief || "",
-      action: session.answers.messageAction || "",
-      ctaDestination: session.answers.ctaDestination || ""
+      action: session.answers.messageAction || ""
     });
     setShowEditBrief(true);
   };
@@ -1899,8 +1932,7 @@ export function TryMeNowApp() {
           customAudience: undefined,
           objective: briefDraft.objective?.trim() || session.answers.objective,
           messageBelief: briefDraft.belief?.trim() || undefined,
-          messageAction: briefDraft.action?.trim() || undefined,
-          ctaDestination: briefDraft.ctaDestination?.trim() || ""
+          messageAction: briefDraft.action?.trim() || undefined
         }
       });
     }
@@ -1924,13 +1956,13 @@ export function TryMeNowApp() {
       revealTracked.current = false;
       ceremonySession.current = undefined;
       directionSession.current = undefined;
+      ctaSessionSignature.current = undefined;
       if (openEditor) {
         setBriefDraft({
           audience: result.session.answers.customAudience || result.session.answers.audience || "",
           objective: result.session.answers.objective || "",
           belief: result.session.answers.messageBelief || "",
-          action: result.session.answers.messageAction || "",
-          ctaDestination: result.session.answers.ctaDestination || ""
+          action: result.session.answers.messageAction || ""
         });
         setShowEditBrief(true);
       }
@@ -2097,7 +2129,7 @@ export function TryMeNowApp() {
               brand={session.brand ? {
                 companyName: session.brand.companyName,
                 domain: session.brand.domain,
-                logoUrl: session.brand.logoUrl,
+                logoUrl: previewLogoUrl(session),
                 colors: session.brand.colors,
                 confidenceLabel: session.brand.source === "fallback" ? "Reconstructed" : "Public signals"
               } : { companyName: displayNameFromDomain(session.companyDomain), domain: session.companyDomain }}
@@ -2115,7 +2147,7 @@ export function TryMeNowApp() {
             {answers.objective && (
               <div className="creativeBriefControls">
                 <MessageDirectionControl value={messageDirection} onChange={setMessageDirection} />
-                <CtaDestinationControl
+                <CtaStyleControl
                   value={ctaValue}
                   onChange={(next) => {
                     setCtaValue((current) => ({
@@ -2125,9 +2157,6 @@ export function TryMeNowApp() {
                         : next.label
                     }));
                   }}
-                  destinationError={ctaValue.destination && !/^https:\/\/[^\s]+$/i.test(ctaValue.destination)
-                    ? "Use a public HTTPS destination."
-                    : undefined}
                 />
                 <button
                   className="buttonSecondary creativeApply"
@@ -2196,19 +2225,17 @@ export function TryMeNowApp() {
           <div className="revealGrid">
             <div className="revealPreview">
               <div className="previewControlBar">
-                <DevicePreviewToolbar
-                  device={previewDevice}
-                  fit={previewFit}
-                  onDeviceChange={setPreviewDevice}
-                  onFitChange={setPreviewFit}
-                />
+                <div className="desktopPreviewLabel">
+                  <Globe2 size={16} aria-hidden="true" />
+                  <span><strong>Interactive desktop preview</strong><small>Scroll inside the page to explore the full experience.</small></span>
+                </div>
                 {session.status !== "claimed" && (
                   <button className="buttonSecondary editBriefButton" type="button" onClick={openBriefEditor}>
                     <Sparkles size={15} />Edit the brief
                   </button>
                 )}
               </div>
-              <div className={`devicePreviewShell is-${previewDevice} ${previewFit ? "isFit" : "isActual"}`}>
+              <div className="desktopPreviewShell">
                 <AssemblyPreview session={session} iframeRef={previewFrameRef} />
               </div>
               <AnalyticsSignalToast
@@ -2222,7 +2249,7 @@ export function TryMeNowApp() {
               />
               {session.status !== "claimed" && (
                 <details className="experienceControlDeck">
-                  <summary><span><Sparkles size={17} />Tune and personalize</span><small>Copy, layout, assets, and blocks</small><ChevronDown size={16} /></summary>
+                  <summary><span><Sparkles size={17} />Tune and personalize</span><small>Copy, layout, CTA, assets, and blocks</small><ChevronDown size={16} /></summary>
                   <div className="experienceControlBody">
                     <ToneChips
                       label="Message tone"
@@ -2246,6 +2273,26 @@ export function TryMeNowApp() {
                       ]}
                       onChange={(id) => void patchWorkspace({ answers: { styleVariant: id as NonNullable<SessionAnswers["styleVariant"]> } })}
                     />
+                    <CtaStyleControl
+                      value={ctaValue}
+                      onChange={(next) => {
+                        setCtaValue((current) => ({
+                          ...next,
+                          label: current.type !== next.type && current.label === defaultCtaLabel(current.type)
+                            ? defaultCtaLabel(next.type)
+                            : next.label
+                        }));
+                      }}
+                    />
+                    <button
+                      className="buttonSecondary creativeApply"
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => void saveCreativeDirection()}
+                    >
+                      {isSaving ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}
+                      Apply CTA treatment
+                    </button>
                     <ExperienceVariantCards
                       label="Choose the page rhythm"
                       selectedId={answers.layoutVariant || "narrative"}
@@ -2396,8 +2443,7 @@ export function TryMeNowApp() {
         { id: "audience", label: "Audience", value: briefDraft.audience || "" },
         { id: "objective", label: "Objective", value: briefDraft.objective || "" },
         { id: "belief", label: "What should they believe?", value: briefDraft.belief || "" },
-        { id: "action", label: "What should they do next?", value: briefDraft.action || "" },
-        { id: "ctaDestination", label: "CTA destination", value: briefDraft.ctaDestination || "", type: "url" as const, hint: "Public HTTPS URL only." }
+        { id: "action", label: "What should they do next?", value: briefDraft.action || "" }
       ]}
       saving={isSaving}
       onFieldChange={(id, value) => setBriefDraft((current) => ({ ...current, [id]: value }))}

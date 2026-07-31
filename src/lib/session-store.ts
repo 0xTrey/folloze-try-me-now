@@ -4,7 +4,7 @@ import { Redis } from "@upstash/redis";
 import { BlobPreconditionFailedError, del, get, put } from "@vercel/blob";
 
 import { config, hasBlob, hasRedis } from "@/lib/config";
-import type { PublicTryMeSession, TryMeSession } from "@/lib/types";
+import type { PublicTryMeSession, SessionAnswers, TryMeSession } from "@/lib/types";
 
 type StoredEntry = { value: TryMeSession; expiresAt?: number };
 type BlobSnapshot = { entry: StoredEntry; etag: string };
@@ -224,11 +224,14 @@ export async function deleteSession(id: string): Promise<void> {
 }
 
 export function toPublicSession(session: TryMeSession): PublicTryMeSession {
-  const answers = { ...session.answers };
+  const answers = { ...session.answers } as SessionAnswers & { ctaDestination?: string };
   delete answers.sourceOpenAIFileId;
   delete answers.sourceUploadId;
   delete answers.sourceUploadReservedAt;
   delete answers.offerSourceUrl;
+  // Legacy sessions may contain a CTA URL. Try Me Now v2 intentionally carries
+  // only CTA intent, label, and visual treatment into the public workspace.
+  delete answers.ctaDestination;
   // The browser only needs to know that these sources exist. Raw filenames,
   // source paths/query strings, and pasted event details remain server-side.
   if (answers.sourceName) answers.sourceName = "Uploaded PDF";

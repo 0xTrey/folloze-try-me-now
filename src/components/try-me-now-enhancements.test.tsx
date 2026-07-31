@@ -11,8 +11,7 @@ import {
   AssetPicker,
   AudienceEvidenceTray,
   ContentSourceConfirmation,
-  CtaDestinationControl,
-  DevicePreviewToolbar,
+  CtaStyleControl,
   EditBriefDrawer,
   EntryPathMicroDemo,
   ExperienceBlockControl,
@@ -114,22 +113,26 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(onExclude).toHaveBeenCalledWith("architecture", true);
   });
 
-  it("keeps optional message direction and the real CTA destination controlled", () => {
+  it("keeps CTA intent, label, and style controlled without asking for a URL", () => {
     const onMessage = vi.fn();
     const onCta = vi.fn();
     render(
       <>
         <MessageDirectionControl value={{ enabled: true, belief: "Fragmentation creates risk.", action: "Map the first boundary." }} onChange={onMessage} />
-        <CtaDestinationControl value={{ type: "meeting", label: "Book the workshop", destination: "https://example.com/book" }} onChange={onCta} />
+        <CtaStyleControl value={{ type: "meeting", label: "Book the workshop", style: "solid" }} onChange={onCta} />
       </>
     );
 
     fireEvent.change(screen.getByLabelText("What should the buyer believe?"), { target: { value: "Governed connections create leverage." } });
     fireEvent.click(screen.getByRole("button", { name: "Register" }));
-    fireEvent.change(screen.getByLabelText("Destination URL"), { target: { value: "https://example.com/register" } });
+    fireEvent.change(screen.getByLabelText("Button label"), { target: { value: "Reserve my seat" } });
+    fireEvent.click(screen.getByRole("button", { name: "Outline: Measured invitation" }));
     expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ belief: "Governed connections create leverage." }));
     expect(onCta).toHaveBeenCalledWith(expect.objectContaining({ type: "registration" }));
-    expect(onCta).toHaveBeenCalledWith(expect.objectContaining({ destination: "https://example.com/register" }));
+    expect(onCta).toHaveBeenCalledWith(expect.objectContaining({ label: "Reserve my seat" }));
+    expect(onCta).toHaveBeenCalledWith(expect.objectContaining({ style: "outline" }));
+    expect(screen.queryByLabelText(/Destination URL/i)).not.toBeInTheDocument();
+    expect(onCta.mock.calls.some(([next]) => "destination" in next)).toBe(false);
   });
 
   it("announces progressive artifacts and lets the brief drawer close with Escape", () => {
@@ -153,7 +156,9 @@ describe("Try Me Now prospect enhancement components", () => {
     );
 
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
-    expect(screen.getByText("Building now")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-atomic", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Working now");
+    expect(screen.getAllByText("Working now").length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText("Audience"), { target: { value: "Platform owners" } });
     fireEvent.click(screen.getByRole("button", { name: /Update experience/i }));
     fireEvent.keyDown(document, { key: "Escape" });
@@ -162,21 +167,40 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it("exposes block, tone, variant, asset, and device editing callbacks", () => {
+  it("moves the informative build focus as stages finish", () => {
+    const queued = [
+      { id: "brand", phase: "Brand", title: "Public identity captured", detail: "Reading the public brand system", status: "ready" as const },
+      { id: "buyer", phase: "Buyer", title: "Mapping account roles", detail: "Connecting account evidence to likely buyers", status: "running" as const },
+      { id: "story", phase: "Story", title: "Composing the buyer journey", detail: "Building the narrative and proof path", status: "queued" as const }
+    ];
+    const { rerender } = render(<ProgressiveArtifactStream artifacts={queued} />);
+
+    expect(screen.getAllByText("Mapping account roles").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("1 completed")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "33");
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", expect.stringContaining("Working now"));
+
+    rerender(
+      <ProgressiveArtifactStream artifacts={queued.map((artifact) => ({ ...artifact, status: "ready" as const }))} />
+    );
+    expect(screen.getByText("Build complete")).toBeInTheDocument();
+    expect(screen.getByText("All 3 build stages are complete. Your preview is ready for the reveal.")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
+  });
+
+  it("exposes block, tone, variant, and asset editing callbacks", () => {
     const edit = vi.fn();
     const generate = vi.fn();
     const lock = vi.fn();
     const tone = vi.fn();
     const variant = vi.fn();
     const asset = vi.fn();
-    const device = vi.fn();
     render(
       <>
         <ExperienceBlockControl blockId="hero" label="Hero promise" onEdit={edit} onGenerateOptions={generate} onLockChange={lock} />
         <ToneChips options={[{ id: "direct", label: "Direct" }, { id: "provocative", label: "Provocative" }]} selectedId="direct" onChange={tone} />
         <ExperienceVariantCards variants={[{ id: "editorial", name: "Editorial proof", eyebrow: "Layout 01", description: "A measured account narrative.", kind: "layout" }]} onSelect={variant} />
         <AssetPicker assets={[{ id: "hero-image", name: "Hero image", type: "image" }]} selectedIds={[]} onToggle={asset} />
-        <DevicePreviewToolbar device="desktop" onDeviceChange={device} />
       </>
     );
 
@@ -186,14 +210,12 @@ describe("Try Me Now prospect enhancement components", () => {
     fireEvent.click(screen.getByRole("button", { name: "Provocative" }));
     fireEvent.click(screen.getByRole("button", { name: /Editorial proof/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Hero image/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Mobile" }));
     expect(edit).toHaveBeenCalledWith("hero");
     expect(generate).toHaveBeenCalledWith("hero");
     expect(lock).toHaveBeenCalledWith("hero", true);
     expect(tone).toHaveBeenCalledWith("provocative");
     expect(variant).toHaveBeenCalledWith("editorial");
     expect(asset).toHaveBeenCalledWith("hero-image", true);
-    expect(device).toHaveBeenCalledWith("mobile");
   });
 
   it("turns analytics from a claim into an accessible live proof surface", () => {

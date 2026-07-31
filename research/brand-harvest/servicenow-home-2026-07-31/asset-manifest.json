@@ -1,0 +1,107 @@
+{
+  "logos": [
+    {
+      "src": "https://www.servicenow.com/content/dam/servicenow-assets/images/naas/servicenow-header-logo-white.svg",
+      "alt": "ServiceNow",
+      "className": "cmp-nav__logo-icon cmp-nav__logo-icon--desktop--dark",
+      "width": 132,
+      "height": 20,
+      "rect": {
+        "x": 40,
+        "y": 19,
+        "width": 144,
+        "height": 26
+      }
+    },
+    {
+      "src": "https://www.servicenow.com/content/dam/servicenow-assets/public/en-us/images/global-nav/images/logo/1024-up.svg",
+      "alt": "ServiceNow logo",
+      "className": "",
+      "width": 132,
+      "height": 20,
+      "rect": {
+        "x": 40,
+        "y": 8485,
+        "width": 112,
+        "height": 17
+      }
+    }
+  ],
+  "images": [
+    {
+      "src": "https://www.servicenow.com/content/dam/servicenow-assets/images/naas/servicenow-header-logo-white.svg",
+      "alt": "ServiceNow",
+      "className": "cmp-nav__logo-icon cmp-nav__logo-icon--desktop--dark",
+      "width": 132,
+      "height": 20,
+      "rect": {
+        "x": 40,
+        "y": 19,
+        "width": 144,
+        "height": 26
+      }
+    },
+    {
+      "src": "https://www.servicenow.com/content/dam/servicenow-assets/images/naas/search-icon.svg",
+      "alt": "Search across ServiceNow",
+      "className": "search-icon",
+      "width": 24,
+      "height": 24,
+      "rect": {
+        "x": 1074,
+        "y": 12,
+        "width": 40,
+        "height": 40
+      }
+    },
+    {
+      "src": "https://www.servicenow.com/content/dam/servicenow-assets/images/naas/language-selector-light.svg",
+      "alt": "Select your country",
+      "className": "",
+      "width": 22,
+      "height": 23,
+      "rect": {
+        "x": 1142,
+        "y": 20,
+        "width": 24,
+        "height": 24
+      }
+    },
+    {
+      "src": "https://www.servicenow.com/content/dam/servicenow-assets/public/en-us/images/global-nav/images/logo/1024-up.svg",
+      "alt": "ServiceNow logo",
+      "className": "",
+      "width": 132,
+      "height": 20,
+      "rect": {
+        "x": 40,
+        "y": 8485,
+        "width": 112,
+        "height": 17
+      }
+    }
+  ],
+  "background_images": [],
+  "brandfetch_logos": [],
+  "screenshots": {
+    "desktop_full": {
+      "path": "research/brand-harvest/servicenow-home-2026-07-31/screenshots/homepage-desktop-full.png",
+      "width": 1440,
+      "height": 8638,
+      "clipped": false
+    },
+    "mobile_full": {
+      "path": "research/brand-harvest/servicenow-home-2026-07-31/screenshots/homepage-mobile-full.png",
+      "width": 390,
+      "height": 900,
+      "clipped": false
+    }
+  },
+  "manual_screenshots": [
+    {
+      "source": "/var/folders/3j/0zw35hjd0p38rbqnvffx48bh0000gn/T/TemporaryItems/NSIRD_screencaptureui_cYmbVd/Screenshot 2026-07-31 at 6.40.24 AM.png",
+      "status": "copied",
+      "path": "research/brand-harvest/servicenow-home-2026-07-31/screenshots/manual-1.png"
+    }
+  ]
+}

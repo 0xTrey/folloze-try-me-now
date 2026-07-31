@@ -189,7 +189,7 @@ describe("session workspace foundation", () => {
         messageBelief: "Cisco can govern automation across connected infrastructure.",
         messageAction: "Plan the first architecture workshop",
         ctaType: "book-meeting",
-        ctaDestination: "https://jitterbit.com/contact",
+        ctaStyle: "outline",
         styleVariant: "brand-led",
         toneVariant: "technical",
         layoutVariant: "narrative",
@@ -220,7 +220,7 @@ describe("session workspace foundation", () => {
         audience: "Network operations leaders",
         messageAction: "Plan the first architecture workshop",
         ctaType: "book-meeting",
-        ctaDestination: "https://jitterbit.com/contact",
+        ctaStyle: "outline",
         styleVariant: "brand-led",
         toneVariant: "technical",
         layoutVariant: "narrative",
@@ -272,20 +272,18 @@ describe("session workspace foundation", () => {
     expect(JSON.stringify(stored?.events)).not.toContain("Automation control");
   });
 
-  it("clears dependent account context and optional CTA destinations explicitly", async () => {
+  it("clears dependent account context explicitly", async () => {
     const id = `clear-workspace-${Date.now()}`;
     ids.add(id);
     const seeded = workspaceSession(id);
-    seeded.answers.ctaDestination = "https://jitterbit.com/contact";
     await putSession(seeded);
 
     const result = await patchSessionWorkspace(id, {
-      answers: { targetDomain: "", ctaDestination: "" }
+      answers: { targetDomain: "" }
     });
 
     expect(result.shouldGenerate).toBe(false);
     expect(result.session.answers.targetDomain).toBeUndefined();
-    expect(result.session.answers.ctaDestination).toBeUndefined();
     expect(result.session.answers.audience).toBeUndefined();
     expect(result.session.targetBrand).toBeUndefined();
     expect(result.session.evidenceItems).toEqual([]);

@@ -240,6 +240,11 @@ describe("campaign contract", () => {
       renderers: {
         web: { status: "ready" },
         folloze: { status: "not-requested" }
+      },
+      cta: {
+        intent: "explore",
+        style: "solid",
+        label: "Plan the architecture session"
       }
     });
     expect(spec.artifactDigest).toMatch(/^[a-f0-9]{64}$/);

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "domain": "servicenow.com",
+  "companyName": "ServiceNow",
+  "sourceUrl": "https://www.servicenow.com/",
+  "verifiedAt": "2026-07-31T11:44:45Z",
+  "source": "brand-harvester-browser",
+  "description": "Streamline enterprise workflows with the ServiceNow AI Platform for customers and employees.",
+  "publicTopics": [
+    "Put AI to work across enterprise workflows",
+    "Connect AI, data, workflows, and governance",
+    "Meet the autonomous workforce"
+  ],
+  "logoUrl": "https://www.servicenow.com/content/dam/servicenow-assets/images/naas/servicenow-header-logo-white.svg",
+  "imageUrls": [
+    "https://www.servicenow.com/content/dam/servicenow-assets/public/en-us/images/ds-og-images/hp-put-ai-to-work-og-image.jpg"
+  ],
+  "colors": [
+    "#032D42",
+    "#63DF4E",
+    "#FFFFFF",
+    "#00718F",
+    "#D7E0E6",
+    "#E0F7DC"
+  ],
+  "primaryColor": "#032D42",
+  "accentColor": "#63DF4E",
+  "surfaceColor": "#FFFFFF",
+  "displayFontFamily": "Instrument Sans",
+  "bodyFontFamily": "Inter",
+  "displayFontUrl": "https://fonts.gstatic.com/s/instrumentsans/v4/pxiTypc9vsFDm051Uf6KVwgkfoSxQ0GsQv8ToedPibnr0SZe1ZuWi3g.woff2",
+  "bodyFontUrl": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2",
+  "typographyDecision": {
+    "mode": "licensed-open-fallback",
+    "observedDisplayFamily": "ServiceNowSansBold",
+    "observedBodyFamily": "ServiceNowSansLight",
+    "fallbackLicense": "SIL Open Font License 1.1",
+    "reason": "ServiceNowSans is publicly loaded by the source site, but no permission to copy, store, transmit, or proxy its proprietary font files was found. Use the project's existing OFL Instrument Sans and Inter pair instead."
+  },
+  "presentation": {
+    "heroTheme": "dark",
+    "darkSurfaceColor": "#032D42",
+    "softSurfaceColor": "#E0F7DC",
+    "supportingAccentColor": "#52B8FF",
+    "lightSurfaceAccentColor": "#1A610E",
+    "lightTextColor": "#1D1D1D",
+    "mutedTextColor": "#666666",
+    "dividerColor": "#D7E0E6",
+    "primaryButtonBackground": "#63DF4E",
+    "primaryButtonText": "#032D42",
+    "primaryButtonHover": "#9FE793",
+    "primaryButtonActive": "#81DF71",
+    "secondaryButtonBorder": "#63DF4E",
+    "secondaryButtonText": "#FFFFFF",
+    "focusColor": "#3EAA2B",
+    "buttonRadiusPx": 500,
+    "buttonHeightPx": 56,
+    "buttonBorderWidthPx": 2,
+    "cardRadiusPx": 32,
+    "fontFallback": "sans"
+  }
+}

@@ -85,6 +85,12 @@ describe("target-aware ABM audience orchestration", () => {
       expect(harvested?.audienceSuggestions.join(" ")).toMatch(
         /network|security|cloud|data center|resilien/i
       );
+      expect(harvested?.audienceRecommendations?.[0]?.rationale).toContain(
+        "Cisco's public focus:"
+      );
+      expect(harvested?.audienceRecommendations?.[0]?.rationale).not.toContain(
+        "public public"
+      );
     } finally {
       await deleteSession(id);
     }

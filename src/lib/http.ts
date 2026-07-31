@@ -40,7 +40,10 @@ function safeLogText(value: string): string {
     .replace(/https?:\/\/\S+/gi, "[redacted-url]")
     .replace(/\b[^\s/\\]+\.pdf\b/gi, "[redacted-pdf]")
     .replace(/\bfile-[A-Za-z0-9_-]{8,}\b/g, "[redacted-file-id]")
-    .replace(/\b(?:sk|vercel_blob)_[A-Za-z0-9_-]{12,}\b/g, "[redacted-secret]")
+    .replace(
+      /\b(?:sk_[A-Za-z0-9_-]{12,}|sk-(?:proj-)?[A-Za-z0-9_-]{12,}|vercel_blob_[A-Za-z0-9_-]{12,})\b/g,
+      "[redacted-secret]"
+    )
     .slice(0, 240);
 }
 

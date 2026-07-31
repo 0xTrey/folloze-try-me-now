@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { PublicBrandProfile, PublicTryMeSession, StageStatus, UseCase } from "@/lib/types";
 import {
   ceremonyDuration,
+  ctaValueForSession,
   getAssemblyPreviewKey,
   getBuildPanelCopy,
   getGuidedQuestionCopy,
-  getRevealCopy
+  getRevealCopy,
+  getRevealShellHeadline
 } from "./try-me-now-app";
 
 function brand(domain: string, companyName: string): PublicBrandProfile {
@@ -68,7 +70,7 @@ describe("Try Me Now experience copy", () => {
 
     expect(result.headline).toBe("Connect Cisco's next operating model without adding another maze.");
     expect(result.kicker).toContain("Jitterbit × Cisco");
-    expect(result.summary).toContain("Enterprise architecture leaders");
+    expect(result.summary).toContain("enterprise architecture leaders");
     expect(result.summary).toContain("accelerate an opportunity");
     expect(result.receipts.map(({ label }) => label).join(" ")).toMatch(/Jitterbit.*Cisco/);
   });
@@ -84,8 +86,47 @@ describe("Try Me Now experience copy", () => {
 
     expect(result.kicker).toContain("2026 Integration Benchmark");
     expect(result.headline).toContain("2026 Integration Benchmark");
-    expect(result.summary).toContain("Automation platform owners");
+    expect(result.summary).toContain("automation platform owners");
     expect(result.summary).toContain("increase content engagement");
+  });
+
+  it("keeps the campaign reveal private and avoids brand-name word collisions", () => {
+    const campaign = session("campaign", {
+      companyDomain: "servicenow.com",
+      brand: brand("servicenow.com", "ServiceNow"),
+      answers: {
+        campaignType: "product",
+        audience: "Data and AI platform leaders",
+        objective: "Generate demand",
+        ctaType: "explore",
+        ctaStyle: "solid"
+      }
+    });
+
+    expect(getRevealShellHeadline(campaign)).toBe(
+      "Your ServiceNow product campaign is ready to explore."
+    );
+    expect(getRevealCopy(campaign).summary).toBe(
+      "A private product campaign preview for data and AI platform leaders, built to generate demand."
+    );
+  });
+
+  it("keeps the CTA editor aligned with the generated product campaign action", () => {
+    const campaign = session("campaign", {
+      answers: {
+        campaignType: "product",
+        audience: "Data and AI platform leaders",
+        objective: "Generate demand",
+        ctaType: "explore",
+        ctaStyle: "solid"
+      }
+    });
+
+    expect(ctaValueForSession(campaign)).toEqual({
+      type: "content",
+      label: "Explore the first use case",
+      style: "solid"
+    });
   });
 
   it("changes the live-build promise with the actual session state", () => {

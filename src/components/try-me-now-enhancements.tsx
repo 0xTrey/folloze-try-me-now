@@ -11,17 +11,12 @@ import {
   Gauge,
   Globe2,
   ImageIcon,
-  Laptop,
-  Link2,
   Lock,
   Mail,
-  Monitor,
   Pencil,
   Pin,
   RefreshCw,
-  Smartphone,
   Sparkles,
-  Tablet,
   Target,
   WandSparkles,
   X
@@ -310,17 +305,17 @@ export function MessageDirectionControl({ value, onChange, optionalLabel = "Opti
 }
 
 export type CtaType = "meeting" | "registration" | "content" | "custom";
+export type CtaStyle = "solid" | "outline" | "text";
 
 export interface CtaValue {
   type: CtaType;
   label: string;
-  destination: string;
+  style: CtaStyle;
 }
 
-export interface CtaDestinationControlProps {
+export interface CtaStyleControlProps {
   value: CtaValue;
   onChange: (value: CtaValue) => void;
-  destinationError?: string;
 }
 
 const CTA_TYPES: Array<{ id: CtaType; label: string }> = [
@@ -330,19 +325,43 @@ const CTA_TYPES: Array<{ id: CtaType; label: string }> = [
   { id: "custom", label: "Custom action" }
 ];
 
-export function CtaDestinationControl({ value, onChange, destinationError }: CtaDestinationControlProps) {
+const CTA_STYLES: Array<{ id: CtaStyle; label: string; detail: string }> = [
+  { id: "solid", label: "Solid", detail: "High-emphasis action" },
+  { id: "outline", label: "Outline", detail: "Measured invitation" },
+  { id: "text", label: "Text", detail: "Editorial next step" }
+];
+
+export function CtaStyleControl({ value, onChange }: CtaStyleControlProps) {
   return (
     <fieldset className={styles.controlCard}>
-      <legend className={styles.fieldLegend}>Real destination</legend>
-      <div className={styles.controlHeader}><div><span>Conversion path</span><h3>Where should the CTA go?</h3></div><Link2 size={20} /></div>
+      <legend className={styles.fieldLegend}>CTA treatment</legend>
+      <div className={styles.controlHeader}><div><span>Conversion moment</span><h3>Shape the next step</h3></div><Target size={20} /></div>
+      <p className={styles.controlIntro}>Choose the action, words, and visual emphasis. No link is needed to build the preview.</p>
       <div className={styles.segmentedControl}>
         {CTA_TYPES.map((type) => <button key={type.id} type="button" aria-pressed={value.type === type.id} onClick={() => onChange({ ...value, type: type.id })}>{type.label}</button>)}
       </div>
-      <div className={styles.twoFields}>
-        <label><span>Button label</span><input value={value.label} onChange={(event) => onChange({ ...value, label: event.target.value })} /></label>
-        <label><span>Destination URL</span><div className={styles.inputWithIcon}><Globe2 size={16} /><input type="url" aria-invalid={Boolean(destinationError)} aria-describedby={destinationError ? "cta-destination-error" : undefined} value={value.destination} onChange={(event) => onChange({ ...value, destination: event.target.value })} placeholder="https://" /></div></label>
+      <div className={styles.ctaComposer}>
+        <label className={styles.ctaLabelField}><span>Button label</span><input value={value.label} onChange={(event) => onChange({ ...value, label: event.target.value })} /></label>
+        <fieldset className={styles.ctaStyleFieldset}>
+          <legend>Button style</legend>
+          <div className={styles.ctaStyleGrid}>
+            {CTA_STYLES.map((style) => (
+              <button
+                key={style.id}
+                type="button"
+                aria-pressed={value.style === style.id}
+                aria-label={`${style.label}: ${style.detail}`}
+                onClick={() => onChange({ ...value, style: style.id })}
+              >
+                <span className={styles[`ctaPreview${style.id}`]}>Next step</span>
+                <strong>{style.label}</strong>
+                <small>{style.detail}</small>
+              </button>
+            ))}
+          </div>
+        </fieldset>
       </div>
-      {destinationError && <p id="cta-destination-error" className={styles.fieldError}>{destinationError}</p>}
+      <p className={styles.ctaActivationNote}><Check size={13} />This is a visual treatment only. No live destination is connected.</p>
     </fieldset>
   );
 }
@@ -366,20 +385,41 @@ export interface ProgressiveArtifactStreamProps {
 export function ProgressiveArtifactStream({ artifacts, headline = "Your experience is assembling live" }: ProgressiveArtifactStreamProps) {
   const ready = artifacts.filter((artifact) => artifact.status === "ready").length;
   const progress = artifacts.length ? Math.round((ready / artifacts.length) * 100) : 0;
+  const failed = artifacts.find((artifact) => artifact.status === "failed");
+  const running = artifacts.find((artifact) => artifact.status === "running");
+  const queued = artifacts.find((artifact) => artifact.status === "queued");
+  const focus = failed ?? running ?? queued ?? artifacts.at(-1);
+  const complete = Boolean(artifacts.length) && ready === artifacts.length;
+  const focusLabel = failed
+    ? "Needs attention"
+    : complete
+      ? "Build complete"
+      : running
+        ? "Working now"
+        : "Up next";
+  const focusDetail = complete
+    ? `All ${artifacts.length} build stages are complete. Your preview is ready for the reveal.`
+    : focus?.detail ?? "Waiting for the first build signal.";
   return (
-    <section className={styles.artifactStream} aria-labelledby="artifact-stream-title" aria-live="polite">
+    <section className={styles.artifactStream} aria-labelledby="artifact-stream-title">
       <div className={styles.streamHeader}>
         <div><span>Progressive build</span><h3 id="artifact-stream-title">{headline}</h3></div>
         <strong>{ready}/{artifacts.length}</strong>
       </div>
-      <div className={styles.progressTrack} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-label="Experience build progress"><span style={{ width: `${progress}%` }} /></div>
+      <div className={classes(styles.activeBuild, complete && styles.activeBuildComplete, failed && styles.activeBuildFailed)} data-build-state={failed ? "failed" : complete ? "complete" : running ? "running" : "queued"}>
+        <span className={styles.buildSignal} aria-hidden="true"><i /><i /><i /></span>
+        <div role="status" aria-live="polite" aria-atomic="true"><span>{focusLabel}</span><strong>{focus?.title ?? "Waiting for the build"}</strong><p>{focusDetail}</p></div>
+        <span className={styles.buildCadence} aria-hidden="true">{Array.from({ length: 7 }, (_, index) => <i key={index} />)}</span>
+      </div>
+      <div className={styles.buildProgressMeta}><span>{ready} completed</span><span>{Math.max(artifacts.length - ready, 0)} remaining</span></div>
+      <div className={styles.progressTrack} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${ready} of ${artifacts.length} stages complete. ${focusLabel}: ${focus?.title ?? "Waiting"}.`} aria-label="Experience build progress"><span style={{ width: `${progress}%` }} /></div>
       <ol className={styles.artifactList}>
         {artifacts.map((artifact, index) => (
           <li key={artifact.id} className={classes(styles.artifactRow, styles[`artifact${artifact.status}`])}>
             <span className={styles.artifactIndex}>{String(index + 1).padStart(2, "0")}</span>
             <span className={styles.artifactGlyph}>{artifact.status === "ready" ? <Check size={14} /> : artifact.status === "failed" ? <X size={14} /> : <i />}</span>
             <div><span>{artifact.phase}</span><strong>{artifact.title}</strong><p>{artifact.artifact || artifact.detail}</p></div>
-            {artifact.status === "running" && <small>Building now</small>}
+            {artifact.status === "running" && <small>Working now</small>}
           </li>
         ))}
       </ol>
@@ -549,23 +589,6 @@ export function AssetPicker({ assets, selectedIds, maxSelections = 3, onToggle }
   );
 }
 
-export type PreviewDevice = "desktop" | "tablet" | "mobile";
-
-const DEVICES: Array<{ id: PreviewDevice; label: string; icon: typeof Monitor }> = [
-  { id: "desktop", label: "Desktop", icon: Monitor },
-  { id: "tablet", label: "Tablet", icon: Tablet },
-  { id: "mobile", label: "Mobile", icon: Smartphone }
-];
-
-export function DevicePreviewToolbar({ device, fit = true, onDeviceChange, onFitChange }: { device: PreviewDevice; fit?: boolean; onDeviceChange: (device: PreviewDevice) => void; onFitChange?: (fit: boolean) => void }) {
-  return (
-    <div className={styles.deviceToolbar} role="toolbar" aria-label="Preview device">
-      <div>{DEVICES.map(({ id, label, icon: Icon }) => <button type="button" key={id} aria-label={label} aria-pressed={device === id} onClick={() => onDeviceChange(id)}><Icon size={16} /><span>{label}</span></button>)}</div>
-      {onFitChange && <button type="button" className={styles.fitButton} aria-pressed={fit} onClick={() => onFitChange(!fit)}><Laptop size={15} />{fit ? "Fit preview" : "Actual size"}</button>}
-    </div>
-  );
-}
-
 export interface AnalyticsSignal {
   id: string;
   label: string;
@@ -711,14 +734,13 @@ export type EnhancementComponent =
   | typeof AudienceEvidenceTray
   | typeof ContentSourceConfirmation
   | typeof MessageDirectionControl
-  | typeof CtaDestinationControl
+  | typeof CtaStyleControl
   | typeof ProgressiveArtifactStream
   | typeof EditBriefDrawer
   | typeof ExperienceBlockControl
   | typeof ToneChips
   | typeof ExperienceVariantCards
   | typeof AssetPicker
-  | typeof DevicePreviewToolbar
   | typeof AnalyticsSignalToast
   | typeof AnalyticsSignalPanel
   | typeof PersonalizationQualityReceipt

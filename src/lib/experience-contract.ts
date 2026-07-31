@@ -252,6 +252,11 @@ export function buildExperienceSpec(
       ...(brand.logoUrl ? { logoUrl: brand.logoUrl } : {})
     },
     draft: structuredClone(draft) as Record<string, unknown>,
+    cta: {
+      intent: session.answers.ctaType ?? "explore",
+      style: session.answers.ctaStyle ?? "solid",
+      label: draft.primaryCta
+    },
     selectedAssetIds: [...(session.answers.selectedAssetIds ?? [])],
     evidenceItemIds: (session.evidenceItems ?? [])
       .filter((item) => item.disposition !== "excluded")

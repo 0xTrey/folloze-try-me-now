@@ -99,7 +99,7 @@ describe("session workspace API", () => {
       answers: {
         messageBelief: "Cisco can govern automation across connected infrastructure.",
         ctaType: "book-meeting",
-        ctaDestination: "https://jitterbit.com/contact",
+        ctaStyle: "outline",
         toneVariant: "technical"
       },
       evidenceDecisions: [{ id: "evidence_network", disposition: "pinned" }],

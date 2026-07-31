@@ -3,6 +3,7 @@ import {
   narrativeProfileFor,
   type BrandCategory
 } from "@/lib/brand-intelligence";
+import { primaryActionFor } from "@/lib/cta-presentation";
 import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
 
 export const campaignRegisters = [
@@ -173,23 +174,6 @@ function buyerStageFor(objective: string): CampaignGenerationContext["brief"]["b
   if (/qualified|capture|evaluate/.test(normalized)) return "evaluation";
   if (/educate|engagement/.test(normalized)) return "education";
   return "awareness";
-}
-
-function primaryActionFor(input: {
-  useCase: UseCase;
-  objective: string;
-  campaignType?: SessionAnswers["campaignType"];
-}): string {
-  const normalized = input.objective.toLowerCase();
-  if (/meeting|working session|book|accelerate|decision/.test(normalized)) return "Plan the working session";
-  if (/registr|attend|rsvp/.test(normalized)) return "Save your place";
-  if (input.campaignType === "event") return "Continue the event conversation";
-  if (input.campaignType === "product" || /launch|announce|introduce/.test(normalized)) return "Explore the first use case";
-  if (/demand/.test(normalized)) return "Explore the offer";
-  if (input.useCase === "content" && /qualified|capture/.test(normalized)) return "Apply the framework";
-  if (input.useCase === "content" && /engagement/.test(normalized)) return "Choose your path";
-  if (input.useCase === "content" || /educate/.test(normalized)) return "Explore the key ideas";
-  return "Explore the operating path";
 }
 
 function registerFor(useCase: UseCase, answers: SessionAnswers): CampaignRegister {

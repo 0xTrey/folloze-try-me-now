@@ -1,0 +1,83 @@
+// @vitest-environment jsdom
+
+import "@testing-library/jest-dom/vitest";
+
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+
+import type { PublicTryMeSession } from "@/lib/types";
+
+import { AssemblyPreview } from "./try-me-now-app";
+
+afterEach(() => cleanup());
+
+const readySession: PublicTryMeSession = {
+  id: "desktop-preview-session",
+  useCase: "campaign",
+  companyDomain: "jitterbit.com",
+  status: "preview_ready_unclaimed",
+  createdAt: "2026-07-31T10:00:00.000Z",
+  updatedAt: "2026-07-31T10:00:10.000Z",
+  temporaryUrl: "https://example.test/e/desktop-preview-session",
+  revision: 2,
+  stages: {
+    brand: { status: "complete" },
+    audience: { status: "complete" },
+    story: { status: "complete" }
+  },
+  answers: { audience: "Enterprise architects", objective: "Generate demand" },
+  brand: {
+    domain: "jitterbit.com",
+    companyName: "Jitterbit",
+    colors: ["#1B3E51", "#F44414"],
+    primaryColor: "#1B3E51",
+    accentColor: "#F44414",
+    surfaceColor: "#FFFFFF",
+    source: "brand-harvester"
+  },
+  audienceSuggestions: [],
+  experience: {
+    ready: true,
+    title: "Jitterbit campaign",
+    headline: "A generated buyer experience",
+    generationSource: "openai",
+    artifactRevision: 1
+  }
+};
+
+describe("AssemblyPreview", () => {
+  it("keeps the generated desktop page as a focusable native scroll region", () => {
+    render(<AssemblyPreview session={readySession} />);
+
+    const frame = screen.getByTitle("Generated buyer experience preview");
+    expect(frame).toHaveAttribute("src", "/e/desktop-preview-session?embed=1");
+    expect(frame).toHaveAttribute("scrolling", "yes");
+    expect(frame).toHaveAttribute("tabindex", "0");
+    expect(frame).toHaveAttribute("data-preview-scroll", "contained");
+  });
+
+  it("uses the first-party image route for the in-progress brand logo", () => {
+    render(
+      <AssemblyPreview
+        session={{
+          ...readySession,
+          status: "collecting",
+          brand: {
+            ...readySession.brand!,
+            logoUrl: "https://cdn.example.test/jitterbit-logo.svg"
+          },
+          stages: {
+            ...readySession.stages,
+            story: { status: "running" }
+          },
+          experience: undefined
+        }}
+      />
+    );
+
+    expect(screen.getByRole("img", { name: "Jitterbit logo" })).toHaveAttribute(
+      "src",
+      "/api/sessions/desktop-preview-session/image/seller-logo"
+    );
+  });
+});

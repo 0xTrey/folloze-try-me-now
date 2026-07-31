@@ -1,7 +1,13 @@
 import { hasRemoteBrandHarvester } from "@/lib/config";
 import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
+import { logServerError } from "@/lib/http";
 import { fetchPinnedPublicText } from "@/lib/safe-fetch";
 import type { BrandProfile } from "@/lib/types";
+import {
+  brandPresentationFor,
+  type PresentedBrandProfile,
+  verifiedBrandProfileFor
+} from "@/lib/verified-brand-profiles";
 
 const htmlEntityMap: Record<string, string> = {
   "&amp;": "&",
@@ -700,36 +706,98 @@ function normalizeRemoteProfile(value: unknown, domain: string): BrandProfile | 
   };
 }
 
+function mergeVerifiedDesign(
+  profile: BrandProfile,
+  verified: PresentedBrandProfile | undefined
+): BrandProfile {
+  if (!verified) return profile;
+  const presentation = brandPresentationFor(verified);
+  return {
+    ...profile,
+    companyName: verified.companyName,
+    logoUrl: verified.logoUrl ?? profile.logoUrl,
+    imageUrls: [...new Set([...verified.imageUrls, ...profile.imageUrls])].slice(0, 6),
+    colors: [...verified.colors],
+    primaryColor: verified.primaryColor,
+    accentColor: verified.accentColor,
+    surfaceColor: verified.surfaceColor,
+    displayFontFamily: verified.displayFontFamily ?? profile.displayFontFamily,
+    bodyFontFamily: verified.bodyFontFamily ?? profile.bodyFontFamily,
+    displayFontUrl: verified.displayFontUrl ?? profile.displayFontUrl,
+    bodyFontUrl: verified.bodyFontUrl ?? profile.bodyFontUrl,
+    sourceUrl: profile.sourceUrl || verified.sourceUrl,
+    source: "brand-harvester",
+    ...(presentation ? { presentation: { ...presentation } } : {})
+  } as PresentedBrandProfile;
+}
+
 export async function harvestBrand(domain: string): Promise<BrandProfile> {
+  const verified = verifiedBrandProfileFor(domain);
   if (hasRemoteBrandHarvester && process.env.BRAND_HARVESTER_URL) {
-    const response = await fetch(process.env.BRAND_HARVESTER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(process.env.BRAND_HARVESTER_TOKEN ? { Authorization: `Bearer ${process.env.BRAND_HARVESTER_TOKEN}` } : {})
-      },
-      body: JSON.stringify({ domain, sourceUrl: `https://${domain}`, capture: "progressive" }),
-      signal: AbortSignal.timeout(25_000)
-    });
-    if (!response.ok) throw new Error(`Brand Harvester returned ${response.status}.`);
-    const normalized = normalizeRemoteProfile(await response.json(), domain);
-    if (normalized) return normalized;
+    try {
+      const response = await fetch(process.env.BRAND_HARVESTER_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(process.env.BRAND_HARVESTER_TOKEN ? { Authorization: `Bearer ${process.env.BRAND_HARVESTER_TOKEN}` } : {})
+        },
+        body: JSON.stringify({ domain, sourceUrl: `https://${domain}`, capture: "progressive" }),
+        signal: AbortSignal.timeout(25_000)
+      });
+      if (response.ok) {
+        const normalized = normalizeRemoteProfile(await response.json(), domain);
+        if (normalized) return mergeVerifiedDesign(normalized, verified);
+        logServerError(new Error("Remote Brand Harvester returned an invalid profile."), {
+          operation: "brand_harvest_remote",
+          code: "brand_harvest_invalid_profile",
+          details: { domain }
+        });
+      } else {
+        logServerError(new Error(`Remote Brand Harvester returned HTTP ${response.status}.`), {
+          operation: "brand_harvest_remote",
+          code: "brand_harvest_upstream_failed",
+          status: response.status,
+          details: { domain }
+        });
+      }
+    } catch (error) {
+      // A browser-backed remote harvester is preferred, but a temporary remote
+      // failure must not discard a reviewed profile or the safe fast extractor.
+      logServerError(error, {
+        operation: "brand_harvest_remote",
+        code: "brand_harvest_remote_error",
+        details: { domain }
+      });
+    }
   }
 
-  const { text: html, finalUrl } = await fetchPublicText(
-    new URL(`https://${domain}`),
-    AbortSignal.timeout(8_500)
-  );
-  const styles = await Promise.allSettled(
-    stylesheetUrls(html, finalUrl).map(async (url) =>
-      (await fetchPublicText(new URL(url), AbortSignal.timeout(2_500))).text
-    )
-  );
-  const css = styles
-    .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled")
-    .map((result) => result.value)
-    .join("\n");
-  return extractFastBrandProfile({ domain, html, css, finalUrl });
+  try {
+    const { text: html, finalUrl } = await fetchPublicText(
+      new URL(`https://${domain}`),
+      AbortSignal.timeout(8_500)
+    );
+    const styles = await Promise.allSettled(
+      stylesheetUrls(html, finalUrl).map(async (url) =>
+        (await fetchPublicText(new URL(url), AbortSignal.timeout(2_500))).text
+      )
+    );
+    const css = styles
+      .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled")
+      .map((result) => result.value)
+      .join("\n");
+    return mergeVerifiedDesign(
+      extractFastBrandProfile({ domain, html, css, finalUrl }),
+      verified
+    );
+  } catch (error) {
+    logServerError(error, {
+      operation: "brand_harvest_public_fallback",
+      code: verified ? "brand_harvest_verified_fallback" : "brand_harvest_failed",
+      details: { domain }
+    });
+    if (verified) return verified;
+    throw error;
+  }
 }
 
 export async function extractPublicContent(

@@ -177,11 +177,15 @@ describe("anonymous preview and claim publication boundary", () => {
       status: "preview_ready_unclaimed",
       experience: { generationSource: "deterministic-fallback" },
       qualityReceipt: {
-        status: "needs-review",
+        status: "passed",
         artifactRevision: expect.any(Number),
         checks: expect.arrayContaining([
           expect.objectContaining({ id: "copy", status: "passed" }),
-          expect.objectContaining({ id: "cta", status: "warning" })
+          expect.objectContaining({
+            id: "cta",
+            status: "passed",
+            detail: "The explore intent and solid treatment are ready."
+          })
         ])
       }
     });
@@ -196,6 +200,31 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(recordLeadCapture).not.toHaveBeenCalled();
     expect(updateLeadOutcome).not.toHaveBeenCalled();
     expect(sendClaimEmail).not.toHaveBeenCalled();
+  });
+
+  it("passes CTA readiness from intent and style without requiring a destination URL", async () => {
+    const pending = session({ id: "cta-style-only-preview" });
+    pending.answers.ctaType = "book-meeting";
+    pending.answers.ctaStyle = "outline";
+    await putSession(pending);
+
+    await runStoryStage(pending.id);
+
+    const stored = await getSession(pending.id);
+    expect("ctaDestination" in (stored?.answers ?? {})).toBe(false);
+    expect(stored?.qualityReceipt?.checks).toContainEqual(
+      expect.objectContaining({
+        id: "cta",
+        status: "passed",
+        detail: "The book-meeting intent and outline treatment are ready."
+      })
+    );
+    expect(stored?.experienceSpec?.cta).toEqual({
+      intent: "book-meeting",
+      style: "outline",
+      label: draft.primaryCta
+    });
+    expect(stored?.experience?.html).toContain('data-cta-style="outline"');
   });
 
   it("renders selected assets, block overrides, and the quality receipt into the regenerated preview", async () => {
@@ -236,7 +265,12 @@ describe("anonymous preview and claim publication boundary", () => {
       subhead: "This supporting message is persisted as an explicit workspace override.",
       primaryCta: "Explore the architecture"
     });
-    expect(stored?.experience?.html).toContain("selected-platform-visual.jpg");
+    expect(stored?.experience?.html).toMatch(
+      /\/api\/sessions\/workspace-render-controls\/image\/seller-image-0\?v=\d+/
+    );
+    expect(stored?.experience?.html).not.toContain(
+      "https://jitterbit.com/selected-platform-visual.jpg"
+    );
     expect(stored?.experience?.html).toContain("data-quality-receipt");
     expect(stored?.experience?.html).toContain('data-layout-variant="immersive"');
     expect(stored?.qualityReceipt?.checks).toEqual(

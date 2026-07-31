@@ -1,0 +1,22 @@
+:root {
+  --brand-primary: #032D42;
+  --brand-accent: #63DF4E;
+  --brand-accent-on-light: #1A610E;
+  --brand-link: #00718F;
+  --brand-text: #1D1D1D;
+  --brand-surface: #FFFFFF;
+  --brand-surface-soft: #E0F7DC;
+  --brand-surface-neutral: #D7E0E6;
+  --brand-font-display-observed: ServiceNowSansBold, ServiceNowSansMedium;
+  --brand-font-body-observed: ServiceNowSansLight;
+  --brand-font-button-observed: ServiceNowSansBook;
+  --brand-font-display: "Instrument Sans", "Segoe UI", Arial, sans-serif;
+  --brand-font-body: Inter, "Segoe UI", Arial, sans-serif;
+  --brand-font-button: Inter, "Segoe UI", Arial, sans-serif;
+  --brand-button-radius: 500px;
+  --brand-button-height: 56px;
+  --brand-button-padding: 0 24px;
+  --brand-button-font-weight: 600;
+  --brand-card-radius: 32px;
+  --brand-card-shadow: 0 16px 24px rgba(3, 45, 66, 0.15);
+}

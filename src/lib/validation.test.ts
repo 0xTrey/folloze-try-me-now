@@ -228,7 +228,7 @@ describe("expanded session workspace validation", () => {
           messageBelief: "Cisco can govern automation across connected infrastructure.",
           messageAction: "Plan the first architecture workshop",
           ctaType: "book-meeting",
-          ctaDestination: "https://jitterbit.com/contact",
+          ctaStyle: "outline",
           styleVariant: "brand-led",
           toneVariant: "technical",
           layoutVariant: "narrative",
@@ -254,13 +254,13 @@ describe("expanded session workspace validation", () => {
     });
   });
 
-  it("rejects unsafe CTA destinations and duplicate evidence or block decisions", () => {
+  it("rejects legacy CTA destinations and duplicate evidence or block decisions", () => {
     expect(() =>
       answersSchema.parse({
         ctaType: "book-meeting",
         ctaDestination: "javascript:alert(1)"
       })
-    ).toThrow("public HTTPS");
+    ).toThrow();
     expect(() =>
       sessionWorkspacePatchSchema.parse({
         operation: "update-workspace",
@@ -281,8 +281,19 @@ describe("expanded session workspace validation", () => {
     ).toThrow("unique");
   });
 
-  it("accepts an explicit empty CTA destination so an editor can clear it", () => {
-    expect(answersSchema.parse({ ctaDestination: "" })).toEqual({ ctaDestination: "" });
+  it("does not accept a CTA destination in the public answer contract", () => {
+    expect(() =>
+      answersSchema.parse({ ctaDestination: "https://jitterbit.com/contact" })
+    ).toThrow();
+  });
+
+  it("accepts only the supported CTA visual treatments without requiring a URL", () => {
+    expect(
+      answersSchema.parse({ ctaType: "book-meeting", ctaStyle: "outline" })
+    ).toEqual({ ctaType: "book-meeting", ctaStyle: "outline" });
+    expect(() =>
+      answersSchema.parse({ ctaType: "register", ctaStyle: "neon" })
+    ).toThrow();
   });
 
   it("uses one operation contract for preview telemetry and duplicate/version creation", () => {

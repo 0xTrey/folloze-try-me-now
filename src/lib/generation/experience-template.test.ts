@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import type { BrandProfile } from "@/lib/types";
+import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 
 const brand: BrandProfile = {
   domain: "jitterbit.com",
@@ -76,6 +77,7 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain('<meta charset="utf-8">');
     expect(html).toContain('<meta name="viewport" content="width=device-width,initial-scale=1">');
     expect(html).toContain("<title>Jitterbit | Integration and automation</title>");
+    expect(html).toContain('<link rel="icon" href="/brand/folloze-symbol.png" type="image/png">');
     expect(html).toContain('<link rel="stylesheet" href="https://assets.folloze.com/theme.css">');
     expect(html).toContain("<style>");
     expect(html).toContain("<script data-flz-runtime>");
@@ -86,6 +88,11 @@ describe("renderExperienceHtml", () => {
   it("contains the journey links so mobile buyers can scroll to every section", () => {
     expect(html).toContain(".journey-links{min-width:0;width:100%");
     expect(html).toContain("overflow-x:auto;overscroll-behavior-inline:contain");
+  });
+
+  it("keeps wheel scrolling native inside embedded desktop previews", () => {
+    expect(html).toContain("html{scroll-behavior:auto;");
+    expect(html).toContain("scrollIntoView({behavior:reducedMotion?'auto':'smooth'");
   });
 
   // Regression: QA ISSUE-005. Protected Vercel previews require their SSO
@@ -102,12 +109,93 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("settleImage(image,'has-asset')");
   });
 
+  it("uses an intentional experience blueprint when approved imagery is unavailable", () => {
+    const withoutImages = renderExperienceHtml({
+      draft,
+      brand: { ...brand, imageUrls: [] },
+      useCase: "campaign",
+      answers: {}
+    });
+
+    expect(withoutImages).toContain('data-fallback-kind="experience-blueprint"');
+    expect(withoutImages).toContain("Experience blueprint");
+    expect(withoutImages).toContain("Context.<br>Proof.<br>Next step.");
+    expect(withoutImages).toContain(".media.media .media-fallback:before,.media.media .media-fallback:after{display:none}");
+    expect(withoutImages).not.toContain("<div class=\"media-fallback\" aria-hidden=\"true\"><span></span><span></span><span></span></div>");
+    expect(withoutImages).not.toMatch(/<figure[^>]*>\s*<img/i);
+  });
+
   it("uses the harvested seller palette, typography, wordmark, and imagery", () => {
     expect(html).toContain("--brand-ink:#1B3E51");
     expect(html).toContain("--brand-accent:#F44414");
     expect(html).toContain('--display:"Roboto Slab"');
     expect(html).toContain("Jitterbit-logo-2.svg");
     expect(html).toContain("HarmonyTitle-HeroImage-Ring.jpg");
+  });
+
+  it("renders the reviewed ServiceNow design DNA instead of the generic indigo and serif fallback", () => {
+    const serviceNow = verifiedBrandProfileFor("servicenow.com");
+    expect(serviceNow).toBeDefined();
+
+    const serviceNowHtml = renderExperienceHtml({
+      draft: {
+        ...draft,
+        title: "ServiceNow | Put AI to work",
+        headline: "Put AI to work across every enterprise workflow."
+      },
+      brand: serviceNow!,
+      useCase: "campaign",
+      answers: { ctaStyle: "solid" },
+      fontDeliveryUrls: {
+        display: "/api/sessions/servicenow-font/font/display",
+        body: "/api/sessions/servicenow-font/font/body"
+      }
+    });
+
+    expect(serviceNowHtml).toContain("brand-hero-dark");
+    expect(serviceNowHtml).toContain(
+      "body.brand-hero-dark .hero h1::first-line{-webkit-text-fill-color:var(--brand-accent)"
+    );
+    expect(serviceNowHtml).not.toContain(
+      "background:linear-gradient(180deg,var(--brand-accent) 0 31%"
+    );
+    expect(serviceNowHtml).toContain('data-hero-theme="dark"');
+    expect(serviceNowHtml).toContain("--brand-ink:#032D42");
+    expect(serviceNowHtml).toContain("--brand-accent:#63DF4E");
+    expect(serviceNowHtml).toContain("--brand-accent-on-light:#1A610E");
+    expect(serviceNowHtml).toContain("--brand-support:#52B8FF");
+    expect(serviceNowHtml).toContain("--text:#1D1D1D");
+    expect(serviceNowHtml).toContain("--button-radius:500px");
+    expect(serviceNowHtml).not.toContain(
+      "body.design-source-brand-technical .primary,body.design-source-brand-technical .secondary"
+    );
+    expect(serviceNowHtml).not.toContain(
+      "body.style-technical .primary,body.style-technical .secondary"
+    );
+    expect(serviceNowHtml).toContain("--button-height:56px");
+    expect(serviceNowHtml).toContain("--button-border-width:2px");
+    expect(serviceNowHtml).toContain("--card-radius:32px");
+    expect(serviceNowHtml).toContain(
+      '--display:"Instrument Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto'
+    );
+    expect(serviceNowHtml).toContain(
+      '@font-face{font-family:"Instrument Sans";src:url("/api/sessions/servicenow-font/font/display") format("woff2")'
+    );
+    expect(serviceNowHtml).toContain(
+      '@font-face{font-family:"Inter";src:url("/api/sessions/servicenow-font/font/body") format("woff2")'
+    );
+    expect(serviceNowHtml).not.toContain("fonts.gstatic.com");
+    expect(serviceNowHtml).toContain("servicenow-header-logo-white.svg");
+    expect(serviceNowHtml).toContain("hp-put-ai-to-work-og-image.jpg");
+    expect(serviceNowHtml).toContain("radial-gradient(ellipse 80% 48%");
+    expect(serviceNowHtml).toContain(
+      ".eyebrow,.journey-index{color:var(--brand-accent-on-light)}"
+    );
+    expect(serviceNowHtml).toContain(
+      "body.brand-hero-dark .hero .eyebrow,.signature-event .eyebrow,.close .eyebrow{color:var(--brand-accent)}"
+    );
+    expect(serviceNowHtml).not.toContain("--brand-accent:#5B5BFF");
+    expect(serviceNowHtml).not.toContain('--display:"Instrument Sans",ui-serif');
   });
 
   it("puts the strongest evergreen product visual in the hero", () => {
@@ -226,10 +314,10 @@ describe("renderExperienceHtml", () => {
     expect(html).not.toContain("email:");
   });
 
-  it("shows a polite first-interaction signal once and honors motion preferences", () => {
+  it("shows a reusable polite interaction signal and honors motion preferences", () => {
     expect(html).toContain('data-signal-toast role="status" aria-live="polite" aria-atomic="true" hidden');
-    expect(html).toContain("var signalShown=false");
-    expect(html).toContain("if(signalShown||!toast||!toastCopy)return");
+    expect(html).not.toContain("var signalShown=false");
+    expect(html).toContain("if(toastTimer)window.clearTimeout(toastTimer)");
     expect(html).toContain("toastCopy.textContent=message");
     expect(html).toContain("@media(prefers-reduced-motion:reduce)");
     expect(html).toContain("transition:none!important");
@@ -282,7 +370,7 @@ describe("renderExperienceHtml", () => {
   });
 
   it("uses the approved register and wireframe to change page shape", () => {
-    expect(html).toContain('class="register-campaign-product design-source-brand-editorial variant-standard style-standard"');
+    expect(html).toContain('class="register-campaign-product design-source-brand-editorial variant-standard style-standard cta-solid brand-hero-light"');
     expect(html).toContain('data-wireframe="product-launch-landing-page"');
     expect(html).toContain('data-layout-variant="standard"');
     expect(html).toContain('data-style-variant="standard"');
@@ -313,7 +401,7 @@ describe("renderExperienceHtml", () => {
       answers: enhancedAnswers
     });
 
-    expect(enhanced).toContain('class="register-content-magic design-source-brand-editorial variant-immersive style-editorial"');
+    expect(enhanced).toContain('class="register-content-magic design-source-brand-editorial variant-immersive style-editorial cta-solid brand-hero-light"');
     expect(enhanced).toContain('data-layout-variant="immersive"');
     expect(enhanced).toContain('data-style-variant="editorial"');
     expect(enhanced).toContain('data-quality-receipt="true"');
@@ -374,6 +462,36 @@ describe("renderExperienceHtml", () => {
     expect(checked).toContain("<strong>100</strong>/100 quality");
     expect(checked).toContain("Copy quality");
     expect(checked).toContain("CTA path");
+  });
+
+  it("renders CTA visual treatment from intent-only preview input", () => {
+    const outline = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: { ctaType: "book-meeting", ctaStyle: "outline" }
+    });
+    const text = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: { ctaType: "download", ctaStyle: "text" }
+    });
+    const fallback = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: Object.assign({}, { ctaStyle: "<script>alert(1)</script>" }) as unknown as Parameters<
+        typeof renderExperienceHtml
+      >[0]["answers"]
+    });
+
+    expect(outline).toContain("cta-outline");
+    expect(outline).toContain('data-cta-style="outline"');
+    expect(text).toContain("cta-text");
+    expect(text).toContain('data-cta-style="text"');
+    expect(fallback).toContain("cta-solid");
+    expect(fallback).not.toContain("<script>alert(1)</script>");
   });
 
   it("renders materially different signature interactions for product, ABM, and content", () => {
@@ -477,6 +595,15 @@ describe("renderExperienceHtml", () => {
   it("keeps internal build mechanics out of buyer-facing chrome", () => {
     expect(html).not.toMatch(/Prepared for|>Source:|Continue the evaluation|guided content/i);
     expect(html).toContain("Questions for the first use case");
-    expect(html).toContain(`>${draft.primaryCta}</a>`);
+    expect(html).toContain(`>${draft.primaryCta}</button>`);
+  });
+
+  it("keeps the configured CTA as an in-preview style demonstration without a live destination", () => {
+    expect(html).toContain('data-demo-cta="true" data-flz-cta-id="hero-primary"');
+    expect(html).toContain('data-demo-cta="true" data-flz-cta-id="close-primary"');
+    expect(html).not.toMatch(/data-scroll-target="[^"]+"[^>]+data-flz-cta-id="hero-primary"/);
+    expect(html).not.toMatch(/<a class="primary"[^>]+data-flz-cta-id="close-primary"/);
+    expect(html).not.toContain("if(signalShown||!toast||!toastCopy)return");
+    expect(html).toContain("CTA style preview — no destination is connected.");
   });
 });

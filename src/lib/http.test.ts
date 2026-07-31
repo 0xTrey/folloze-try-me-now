@@ -27,4 +27,22 @@ describe("structured error logging", () => {
     expect(logged).not.toContain("file-privateSource1234");
     expect(logged).not.toContain("buyer@example.com");
   });
+
+  it("redacts modern OpenAI secret formats while preserving non-secret text", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const standardKey = `sk-${"a".repeat(24)}`;
+    const projectKey = `sk-proj-${"b".repeat(24)}`;
+    const nonSecretText = "provider retry kept sk-short and sk-proj-demo visible";
+
+    logServerError(new Error(`${nonSecretText}: ${standardKey}`), {
+      operation: "test",
+      details: { providerMessage: `Project authentication failed for ${projectKey}` }
+    });
+
+    const logged = String(error.mock.calls[0]?.[0]);
+    expect(logged.match(/\[redacted-secret\]/g)).toHaveLength(2);
+    expect(logged).not.toContain(standardKey);
+    expect(logged).not.toContain(projectKey);
+    expect(logged).toContain(nonSecretText);
+  });
 });

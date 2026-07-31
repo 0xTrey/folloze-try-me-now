@@ -11,6 +11,10 @@ import { targetAccountEvidenceFor } from "@/lib/generation/campaign-context";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import { HttpError, logServerError } from "@/lib/http";
+import {
+  brandWithFirstPartyImages,
+  imageDeliverySources
+} from "@/lib/image-delivery";
 import { harvestBrand, fallbackBrand } from "@/lib/integrations/brand-harvester";
 import { sendClaimEmail } from "@/lib/integrations/email";
 import { publishClaimedExperience } from "@/lib/integrations/folloze";
@@ -79,6 +83,10 @@ function audienceRecommendationsFor(
   const companyContext = target ?? seller;
   return suggestions.map((label, index) => {
     const evidence = usableEvidence[index % Math.max(usableEvidence.length, 1)];
+    const evidenceFocus = evidence?.text
+      .replace(/\s+/g, " ")
+      .replace(/[.!?]+$/g, "")
+      .slice(0, 120);
     const companySpecific = Boolean(
       companyContext && companyContext.source !== "fallback" && usableEvidence.length
     );
@@ -86,9 +94,9 @@ function audienceRecommendationsFor(
       id: stableId("audience", seller?.domain, target?.domain, label),
       label,
       rationale: companySpecific
-        ? `${target ? "Connects the seller's offer" : "Connects the campaign"} to ${companyContext?.companyName}'s public ${
-            evidence?.label.toLocaleLowerCase() ?? "operating context"
-          }: ${evidence?.signals.slice(0, 2).join(" and ") || "account context"}.`
+        ? `${target ? "Connects the seller's offer" : "Connects the campaign"} to ${companyContext?.companyName}'s public focus: ${
+            evidenceFocus || "relevant operating priorities"
+          }.`
         : `A ${companyContext?.companyName ?? "company"}-category starting point until stronger public context is available.`,
       evidenceItemIds: evidence ? [evidence.id] : [],
       confidence: companySpecific ? (usableEvidence.length >= 2 ? "high" : "medium") : "hypothesis",
@@ -324,9 +332,6 @@ function qualityReceiptFor(session: TryMeSession, artifactRevision: number): Qua
   const sourceConfirmed = session.useCase === "abm"
     ? usableEvidence > 0
     : session.sourceConfirmation?.status === "confirmed";
-  const ctaNeedsDestination = Boolean(
-    session.answers.ctaType && session.answers.ctaType !== "explore"
-  );
   const checks: QualityReceipt["checks"] = [
     {
       id: "copy",
@@ -367,17 +372,8 @@ function qualityReceiptFor(session: TryMeSession, artifactRevision: number): Qua
     {
       id: "cta",
       label: "CTA readiness",
-      status:
-        !session.answers.ctaType ||
-        (ctaNeedsDestination && !session.answers.ctaDestination)
-          ? "warning"
-          : "passed",
-      detail:
-        !session.answers.ctaType
-          ? "Choose a CTA type before sharing."
-          : ctaNeedsDestination && !session.answers.ctaDestination
-            ? "Add the public HTTPS destination for the selected CTA."
-            : "The CTA intent and destination are ready."
+      status: "passed",
+      detail: `The ${session.answers.ctaType ?? "explore"} intent and ${session.answers.ctaStyle ?? "solid"} treatment are ready.`
     },
     {
       id: "structure",
@@ -729,10 +725,8 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const targetWasSupplied = Object.hasOwn(patch, "targetDomain");
   const sourceUrlWasSupplied = Object.hasOwn(patch, "sourceUrl");
   const eventSourceWasSupplied = Object.hasOwn(patch, "eventSource");
-  const ctaDestinationWasSupplied = Object.hasOwn(patch, "ctaDestination");
   const offerSourceUrlWasSupplied = Object.hasOwn(patch, "offerSourceUrl");
   if (patch.targetDomain) patch.targetDomain = normalizeDomain(patch.targetDomain);
-  if (patch.ctaDestination) patch.ctaDestination = new URL(patch.ctaDestination).toString();
   if (patch.offerSourceUrl) patch.offerSourceUrl = new URL(patch.offerSourceUrl).toString();
   if (
     patch.offerSourceConfirmed &&
@@ -762,9 +756,6 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   if (targetWasSupplied && !patch.targetDomain) delete session.answers.targetDomain;
   if (sourceUrlWasSupplied && !patch.sourceUrl) delete session.answers.sourceUrl;
   if (eventSourceWasSupplied && !patch.eventSource) delete session.answers.eventSource;
-  if (ctaDestinationWasSupplied && !patch.ctaDestination) {
-    delete session.answers.ctaDestination;
-  }
   if (offerSourceUrlWasSupplied && !patch.offerSourceUrl) {
     delete session.answers.offerSourceUrl;
     delete session.answers.offerSourceTitle;
@@ -849,7 +840,7 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   if (patch.objective) appendEvent(session, "objective_selected");
   if (patch.sourceUrl || patch.sourceName) appendEvent(session, "source_submitted");
   if (patch.messageBelief || patch.messageAction) appendEvent(session, "message_spine_updated");
-  if (patch.ctaType || patch.ctaDestination) appendEvent(session, "cta_configured");
+  if (patch.ctaType || patch.ctaStyle) appendEvent(session, "cta_configured");
   if (patch.styleVariant || patch.toneVariant || patch.layoutVariant) {
     appendEvent(session, "creative_direction_updated");
   }
@@ -1268,10 +1259,25 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     );
     const webDraft = draftFromExperienceSpec(experienceSpec);
     const generationQualityReceipt = qualityReceiptFor(latest, latest.revision + 1);
+    const imageSources = imageDeliverySources(latest, brand, targetBrand);
+    const renderBrand = brandWithFirstPartyImages(
+      id,
+      selectedBrands.brand,
+      imageSources,
+      generationQualityReceipt.artifactRevision
+    );
+    const renderTargetBrand = selectedBrands.targetBrand
+      ? brandWithFirstPartyImages(
+          id,
+          selectedBrands.targetBrand,
+          imageSources,
+          generationQualityReceipt.artifactRevision
+        )
+      : undefined;
     const html = renderExperienceHtml({
       draft: webDraft,
-      brand: selectedBrands.brand,
-      targetBrand: selectedBrands.targetBrand,
+      brand: renderBrand,
+      targetBrand: renderTargetBrand,
       useCase: latest.useCase,
       answers: latest.answers,
       themeUrl: process.env.FOLLOZE_THEME_URL,
@@ -1781,6 +1787,7 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
           audience: session.answers.customAudience || session.answers.audience,
           objective: session.answers.objective,
           ctaType: session.answers.ctaType,
+          ctaStyle: session.answers.ctaStyle,
           styleVariant: session.answers.styleVariant,
           toneVariant: session.answers.toneVariant,
           layoutVariant: session.answers.layoutVariant,
