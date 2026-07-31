@@ -39,6 +39,7 @@ function safeLogText(value: string): string {
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]")
     .replace(/https?:\/\/\S+/gi, "[redacted-url]")
     .replace(/\b[^\s/\\]+\.pdf\b/gi, "[redacted-pdf]")
+    .replace(/\bfile-[A-Za-z0-9_-]{8,}\b/g, "[redacted-file-id]")
     .replace(/\b(?:sk|vercel_blob)_[A-Za-z0-9_-]{12,}\b/g, "[redacted-secret]")
     .slice(0, 240);
 }

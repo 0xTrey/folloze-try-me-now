@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import OpenAI, { toFile } from "openai";
 import { BlobPreconditionFailedError, del, get, head, put } from "@vercel/blob";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
@@ -6,9 +8,9 @@ import { z } from "zod";
 
 import { config, hasOpenAI } from "@/lib/config";
 import { apiError, HttpError, logServerError, noStoreHeaders } from "@/lib/http";
-import { canEditSession, patchSessionAnswers, runStoryStage } from "@/lib/orchestrator";
+import { canEditSession, finalizePdfSource, runStoryStage } from "@/lib/orchestrator";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
-import { getSession } from "@/lib/session-store";
+import { getSession, sessionStoreMode, updateSession } from "@/lib/session-store";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -32,6 +34,7 @@ const uploadStatusSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   leaseUntil: z.string().optional(),
+  leaseOwner: z.uuid().optional(),
   attemptCount: z.number().int().nonnegative(),
   openAIFileId: z.string().min(5).max(100).optional(),
   errorCode: z.string().regex(/^[a-z0-9_]{1,64}$/).optional(),
@@ -39,6 +42,8 @@ const uploadStatusSchema = z.object({
 });
 
 type UploadStatus = z.infer<typeof uploadStatusSchema>;
+
+const CALLBACK_LEASE_MS = 6 * 60_000;
 
 function editorToken(request: NextRequest, id: string): string | undefined {
   const value = request.cookies.get("tmn_editor")?.value;
@@ -92,6 +97,65 @@ async function writeUploadStatus(status: UploadStatus, ifMatch?: string): Promis
     cacheControlMaxAge: 60,
     contentType: "application/json",
     ifMatch
+  });
+}
+
+async function writeOwnedUploadStatus(status: UploadStatus, leaseOwner: string): Promise<void> {
+  const current = await readUploadStatus(status.sessionId, status.uploadId);
+  if (
+    !current ||
+    current.value.status !== "processing" ||
+    current.value.leaseOwner !== leaseOwner
+  ) {
+    throw new HttpError(503, "upload_claim_lost", "The upload callback ownership changed.");
+  }
+  try {
+    await writeUploadStatus(status, current.etag);
+  } catch (error) {
+    if (error instanceof BlobPreconditionFailedError) {
+      throw new HttpError(503, "upload_claim_conflict", "The upload callback is already processing.");
+    }
+    throw error;
+  }
+}
+
+async function reserveSessionUpload(id: string, uploadId: string): Promise<boolean> {
+  if (sessionStoreMode === "upstash-redis") {
+    throw new HttpError(
+      503,
+      "pdf_upload_store_unsupported",
+      "PDF uploads are temporarily unavailable while storage is being upgraded."
+    );
+  }
+  const now = Date.now();
+  const reservedAt = new Date(now).toISOString();
+  const updated = await updateSession(id, (session) => {
+    if (session.useCase !== "content" || session.answers.sourceUrl) return session;
+
+    const currentUploadId = session.answers.sourceUploadId;
+    if (session.answers.sourceName && currentUploadId !== uploadId) return session;
+    if (currentUploadId === uploadId) return session;
+
+    const currentReservedAt = Date.parse(session.answers.sourceUploadReservedAt ?? "");
+    const currentReservationIsActive =
+      Boolean(currentUploadId) &&
+      (!Number.isFinite(currentReservedAt) || now - currentReservedAt < CALLBACK_LEASE_MS);
+    if (currentReservationIsActive) return session;
+
+    session.answers.sourceUploadId = uploadId;
+    session.answers.sourceUploadReservedAt = reservedAt;
+    return session;
+  });
+  return updated?.answers.sourceUploadId === uploadId;
+}
+
+async function releaseSessionUpload(id: string, uploadId: string): Promise<void> {
+  await updateSession(id, (session) => {
+    if (session.answers.sourceUploadId === uploadId && !session.answers.sourceName) {
+      delete session.answers.sourceUploadId;
+      delete session.answers.sourceUploadReservedAt;
+    }
+    return session;
   });
 }
 
@@ -177,6 +241,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       body: body as HandleUploadBody,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         await enforceRateLimit(`upload:${anonymousClientKey(request)}`, 8, 3600);
+        if (sessionStoreMode === "upstash-redis") {
+          throw new HttpError(
+            503,
+            "pdf_upload_store_unsupported",
+            "PDF uploads are temporarily unavailable while storage is being upgraded."
+          );
+        }
         const origin = request.headers.get("origin");
         if (origin && origin !== new URL(request.url).origin) {
           throw new HttpError(403, "cross_origin_upload", "This upload request is not allowed.");
@@ -258,6 +329,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
               status: snapshot.value.status
             })
           );
+          if (snapshot.value.status === "failed") {
+            await releaseSessionUpload(id, payload.uploadId);
+          }
           if (!(await discardBlob(blob.pathname, id, payload.uploadId))) {
             throw new HttpError(503, "blob_cleanup_pending", "Upload cleanup is still in progress.");
           }
@@ -272,11 +346,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
           throw new HttpError(503, "upload_processing_in_progress", "The upload callback is already processing.");
         }
 
+        const leaseOwner = randomUUID();
         const processingStatus: UploadStatus = {
           ...snapshot.value,
           status: "processing",
           updatedAt: new Date().toISOString(),
-          leaseUntil: new Date(Date.now() + 60_000).toISOString(),
+          leaseUntil: new Date(Date.now() + CALLBACK_LEASE_MS).toISOString(),
+          leaseOwner,
           attemptCount: snapshot.value.attemptCount + 1,
           errorCode: undefined,
           requestId: undefined
@@ -292,16 +368,31 @@ export async function POST(request: NextRequest, context: RouteContext) {
             throw error;
           }
 
+          if (!(await reserveSessionUpload(id, payload.uploadId))) {
+            throw new HttpError(
+              409,
+              "upload_superseded",
+              "Another PDF upload is already being processed for this experience."
+            );
+          }
+
           const recoveredSession = await getSession(id);
-          if (recoveredSession?.answers.sourceName === payload.originalName) {
+          if (
+            recoveredSession?.answers.sourceUploadId === payload.uploadId &&
+            recoveredSession.answers.sourceName === payload.originalName
+          ) {
             processingSucceeded = true;
-            await writeUploadStatus({
-              ...processingStatus,
-              status: "complete",
-              updatedAt: new Date().toISOString(),
-              leaseUntil: undefined,
-              openAIFileId: undefined
-            });
+            await writeOwnedUploadStatus(
+              {
+                ...processingStatus,
+                status: "complete",
+                updatedAt: new Date().toISOString(),
+                leaseUntil: undefined,
+                leaseOwner: undefined,
+                openAIFileId: undefined
+              },
+              leaseOwner
+            );
             after(() => runStoryStage(id));
             if (!(await discardBlob(blob.pathname, id, payload.uploadId))) {
               throw new HttpError(503, "blob_cleanup_pending", "Upload cleanup is still in progress.");
@@ -335,21 +426,26 @@ export async function POST(request: NextRequest, context: RouteContext) {
             });
             sourceOpenAIFileId = uploaded.id;
             processingStatus.openAIFileId = sourceOpenAIFileId;
-            await writeUploadStatus(processingStatus);
+            await writeOwnedUploadStatus(processingStatus, leaseOwner);
           }
 
-          const updated = await patchSessionAnswers(id, {
+          const updated = await finalizePdfSource(id, {
+            uploadId: payload.uploadId,
             sourceName: payload.originalName,
             sourceOpenAIFileId
           });
           processingSucceeded = true;
-          await writeUploadStatus({
-            ...processingStatus,
-            status: "complete",
-            updatedAt: new Date().toISOString(),
-            leaseUntil: undefined,
-            openAIFileId: undefined
-          });
+          await writeOwnedUploadStatus(
+            {
+              ...processingStatus,
+              status: "complete",
+              updatedAt: new Date().toISOString(),
+              leaseUntil: undefined,
+              leaseOwner: undefined,
+              openAIFileId: undefined
+            },
+            leaseOwner
+          );
           if (updated.shouldGenerate) after(() => runStoryStage(id));
 
           console.info(
@@ -367,7 +463,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
           }
         } catch (error) {
           if (processingSucceeded) throw error;
-          if (error instanceof HttpError && error.code === "upload_claim_conflict") throw error;
+          if (
+            error instanceof HttpError &&
+            (error.code === "upload_claim_conflict" || error.code === "upload_claim_lost")
+          ) {
+            throw error;
+          }
           const errorCode = error instanceof HttpError ? error.code : "upload_processing_failed";
           const requestId = logServerError(error, {
             route: "/api/sessions/[id]/upload",
@@ -379,15 +480,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
             details: { uploadId: payload.uploadId }
           });
           try {
-            await writeUploadStatus({
-              ...processingStatus,
-              status: "failed",
-              updatedAt: new Date().toISOString(),
-              leaseUntil: undefined,
-              openAIFileId: undefined,
-              errorCode,
-              requestId
-            });
+            await writeOwnedUploadStatus(
+              {
+                ...processingStatus,
+                status: "failed",
+                updatedAt: new Date().toISOString(),
+                leaseUntil: undefined,
+                leaseOwner: undefined,
+                openAIFileId: undefined,
+                errorCode,
+                requestId
+              },
+              leaseOwner
+            );
+            await releaseSessionUpload(id, payload.uploadId);
           } catch (statusError) {
             logServerError(statusError, {
               route: "/api/sessions/[id]/upload",

@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { config } from "@/lib/config";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
+import { HttpError } from "@/lib/http";
 import { harvestBrand, fallbackBrand } from "@/lib/integrations/brand-harvester";
 import { sendClaimEmail } from "@/lib/integrations/email";
 import { publishClaimedExperience } from "@/lib/integrations/folloze";
@@ -138,6 +139,16 @@ export async function patchSessionAnswers(
   const normalizedPatch = { ...patch };
   if (patch.targetDomain) normalizedPatch.targetDomain = normalizeDomain(patch.targetDomain);
   const updated = await updateSession(id, (session) => {
+    if (
+      normalizedPatch.sourceUrl &&
+      (session.answers.sourceName || session.answers.sourceUploadId)
+    ) {
+      throw new HttpError(
+        409,
+        "source_conflict",
+        "A PDF source is already being processed for this experience."
+      );
+    }
     session.answers = { ...session.answers, ...normalizedPatch };
     const resolvedAudience =
       session.answers.audience === "Other"
@@ -169,6 +180,35 @@ export async function patchSessionAnswers(
   });
   if (!updated) throw new Error("This temporary experience has expired.");
   return { session: toPublicSession(updated), shouldGenerate: isGenerationReady(updated.useCase, updated.answers) };
+}
+
+export async function finalizePdfSource(
+  id: string,
+  input: { uploadId: string; sourceName: string; sourceOpenAIFileId?: string }
+): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean }> {
+  const updated = await updateSession(id, (session) => {
+    if (
+      session.useCase !== "content" ||
+      session.answers.sourceUploadId !== input.uploadId ||
+      session.answers.sourceUrl ||
+      (session.answers.sourceName && session.answers.sourceName !== input.sourceName)
+    ) {
+      throw new HttpError(
+        409,
+        "upload_superseded",
+        "Another content source was selected before this PDF finished processing."
+      );
+    }
+    session.answers.sourceName = input.sourceName;
+    session.answers.sourceOpenAIFileId = input.sourceOpenAIFileId;
+    appendEvent(session, "source_submitted");
+    return session;
+  });
+  if (!updated) throw new Error("This temporary experience has expired.");
+  return {
+    session: toPublicSession(updated),
+    shouldGenerate: isGenerationReady(updated.useCase, updated.answers)
+  };
 }
 
 export async function runStoryStage(id: string): Promise<void> {

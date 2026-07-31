@@ -20,8 +20,7 @@ export const answersSchema = z
     objective: z.string().min(2).max(120).optional(),
     campaignType: z.enum(["product", "demand", "event"]).optional(),
     eventSource: z.string().max(1000).optional(),
-    sourceUrl: z.string().max(1000).optional(),
-    sourceName: z.string().max(255).optional()
+    sourceUrl: z.string().max(1000).optional()
   })
   .strict();
 

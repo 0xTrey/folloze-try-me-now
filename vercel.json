@@ -3,6 +3,15 @@
   "functions": {
     "src/app/api/sessions/**": {
       "maxDuration": 300
+    },
+    "src/app/api/maintenance/**": {
+      "maxDuration": 300
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/maintenance/upload-cleanup",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }

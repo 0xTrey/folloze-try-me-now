@@ -8,7 +8,7 @@ import {
   validatePdfFile
 } from "@/lib/client-response";
 import { apiError } from "@/lib/http";
-import { assertBusinessEmail, maskEmail, normalizeDomain } from "@/lib/validation";
+import { answersSchema, assertBusinessEmail, maskEmail, normalizeDomain } from "@/lib/validation";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -84,6 +84,10 @@ describe("client API responses", () => {
 });
 
 describe("PDF validation", () => {
+  it("does not allow clients to inject a server-owned PDF filename", () => {
+    expect(() => answersSchema.parse({ sourceName: "unprocessed.pdf" })).toThrow();
+  });
+
   it("accepts a PDF with the correct extension, type, size, and signature", async () => {
     const file = new File(["%PDF-1.7\nvalid"], "brief.pdf", { type: "application/pdf" });
     await expect(validatePdfFile(file)).resolves.toBeUndefined();

@@ -45,7 +45,14 @@ export interface SessionAnswers {
   sourceUrl?: string;
   sourceName?: string;
   sourceOpenAIFileId?: string;
+  sourceUploadId?: string;
+  sourceUploadReservedAt?: string;
 }
+
+export type PublicSessionAnswers = Omit<
+  SessionAnswers,
+  "sourceOpenAIFileId" | "sourceUploadId" | "sourceUploadReservedAt"
+>;
 
 export interface ExperienceSection {
   eyebrow: string;
@@ -106,7 +113,8 @@ export interface TryMeSession {
   events: SessionEvent[];
 }
 
-export type PublicTryMeSession = Omit<TryMeSession, "claim" | "editorTokenHash"> & {
+export type PublicTryMeSession = Omit<TryMeSession, "answers" | "claim" | "editorTokenHash"> & {
+  answers: PublicSessionAnswers;
   claim?: Omit<ClaimState, "email">;
 };
 

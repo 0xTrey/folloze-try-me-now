@@ -157,8 +157,12 @@ export async function deleteSession(id: string): Promise<void> {
 
 export function toPublicSession(session: TryMeSession): PublicTryMeSession {
   const safeSession = Object.fromEntries(
-    Object.entries(session).filter(([key]) => key !== "editorTokenHash")
-  ) as Omit<TryMeSession, "editorTokenHash">;
+    Object.entries(session).filter(([key]) => key !== "editorTokenHash" && key !== "answers")
+  ) as Omit<TryMeSession, "answers" | "editorTokenHash">;
+  const answers = { ...session.answers };
+  delete answers.sourceOpenAIFileId;
+  delete answers.sourceUploadId;
+  delete answers.sourceUploadReservedAt;
   const claim = session.claim
     ? {
         emailMasked: session.claim.emailMasked,
@@ -168,7 +172,7 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
         designerUrl: session.claim.designerUrl
       }
     : undefined;
-  return { ...safeSession, claim };
+  return { ...safeSession, answers, claim };
 }
 
 export const sessionStoreMode = hasRedis

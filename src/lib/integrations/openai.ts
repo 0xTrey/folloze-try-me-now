@@ -90,7 +90,12 @@ export async function generateExperienceDraft(input: {
     target: input.targetBrand
       ? { domain: input.targetBrand.domain, name: input.targetBrand.companyName }
       : null,
-    answers: { ...input.answers, sourceOpenAIFileId: undefined },
+    answers: {
+      ...input.answers,
+      sourceOpenAIFileId: undefined,
+      sourceUploadId: undefined,
+      sourceUploadReservedAt: undefined
+    },
     sourceContent
   });
   const responseInput: OpenAI.Responses.ResponseInput = [
