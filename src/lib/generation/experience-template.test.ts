@@ -78,7 +78,7 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("<title>Jitterbit | Integration and automation</title>");
     expect(html).toContain('<link rel="stylesheet" href="https://assets.folloze.com/theme.css">');
     expect(html).toContain("<style>");
-    expect(html).toContain("<script>");
+    expect(html).toContain("<script data-flz-runtime>");
   });
 
   // Regression: QA ISSUE-004. A grid child with its default intrinsic minimum
@@ -86,6 +86,20 @@ describe("renderExperienceHtml", () => {
   it("contains the journey links so mobile buyers can scroll to every section", () => {
     expect(html).toContain(".journey-links{min-width:0;width:100%");
     expect(html).toContain("overflow-x:auto;overscroll-behavior-inline:contain");
+  });
+
+  // Regression: QA ISSUE-005. Protected Vercel previews require their SSO
+  // cookie on same-origin telemetry requests; the event body remains allowlisted.
+  it("keeps preview event delivery same-origin and credential bounded", () => {
+    expect(html).toContain("credentials:'same-origin'");
+    expect(html).not.toContain("credentials:'include'");
+  });
+
+  it("keeps asset fallback behavior inside the nonced runtime", () => {
+    expect(html).not.toMatch(/\son(?:load|error)=/i);
+    expect(html).toContain("function settleImage(image,readyClass)");
+    expect(html).toContain("settleImage(image,'has-image')");
+    expect(html).toContain("settleImage(image,'has-asset')");
   });
 
   it("uses the harvested seller palette, typography, wordmark, and imagery", () => {
@@ -202,7 +216,7 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("experience_view:true");
     expect(html).toContain("window.fetch('/api/events'");
     expect(html).not.toContain("window.fetch('/events'");
-    expect(html).toContain("credentials:'omit',keepalive:true");
+    expect(html).toContain("credentials:'same-origin',keepalive:true");
     expect(html).toContain("request.catch(function(){})");
     expect(html).toContain("document.visibilityState==='visible'");
     expect(html).toContain("document.addEventListener('visibilitychange',visibilityChanged)");

@@ -1342,7 +1342,10 @@ function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; 
           key={getAssemblyPreviewKey(session)}
           src={`/e/${session.id}?embed=1`}
           title="Generated buyer experience preview"
-          sandbox="allow-scripts allow-popups"
+          // The generated route nonces the one trusted runtime and blocks every
+          // other script through CSP. The iframe retains same-origin access only
+          // for protected preview fonts and allowlisted engagement delivery.
+          allow="fullscreen"
         />
       ) : (
         <div className="assemblyCanvas" style={canvasStyle}>

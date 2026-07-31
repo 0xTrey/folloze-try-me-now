@@ -1,14 +1,10 @@
+import { randomBytes } from "node:crypto";
+
 import { getSession } from "@/lib/session-store";
 
-type RouteContext = { params: Promise<{ id: string }> };
+import { experienceDocumentHeaders, nonceExperienceRuntime } from "./security-headers";
 
-const headers = {
-  "Content-Type": "text/html; charset=utf-8",
-  "Cache-Control": "private, no-store, max-age=0",
-  "X-Robots-Tag": "noindex, nofollow",
-  "Content-Security-Policy":
-    "default-src 'none'; img-src 'self' https: data:; font-src 'self' https: data: http://localhost:* http://127.0.0.1:*; style-src 'unsafe-inline' https:; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self' https://*.folloze.com http://localhost:*; base-uri 'none'; form-action 'none'"
-};
+type RouteContext = { params: Promise<{ id: string }> };
 
 function statusPage(input: { title: string; body: string; refresh?: boolean; actionHref?: string; actionLabel?: string }) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">${
@@ -29,10 +25,16 @@ export async function GET(_request: Request, context: RouteContext) {
         actionHref: "/",
         actionLabel: "Return to Try Folloze"
       }),
-      { status: 410, headers }
+      { status: 410, headers: experienceDocumentHeaders() }
     );
   }
-  if (session.experience?.html) return new Response(session.experience.html, { status: 200, headers });
+  if (session.experience?.html) {
+    const nonce = randomBytes(18).toString("base64");
+    return new Response(nonceExperienceRuntime(session.experience.html, nonce), {
+      status: 200,
+      headers: experienceDocumentHeaders(nonce)
+    });
+  }
   if (session.status === "generation_failed") {
     return new Response(
       statusPage({
@@ -41,7 +43,7 @@ export async function GET(_request: Request, context: RouteContext) {
         actionHref: "/",
         actionLabel: "Return to Try Folloze"
       }),
-      { status: 503, headers }
+      { status: 503, headers: experienceDocumentHeaders() }
     );
   }
   return new Response(
@@ -50,6 +52,6 @@ export async function GET(_request: Request, context: RouteContext) {
       body: "We are finding the brand, understanding the audience, and creating the story. This URL will update automatically.",
       refresh: true
     }),
-    { status: 202, headers }
+    { status: 202, headers: experienceDocumentHeaders() }
   );
 }

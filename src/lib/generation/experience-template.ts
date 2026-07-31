@@ -117,7 +117,7 @@ function fontFace(
 function wordmark(profile: BrandProfile, className: string): string {
   const logo = safeAssetUrl(profile.logoUrl);
   return `<span class="wordmark ${className}">
-    ${logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(profile.companyName)}" onload="if(this.naturalWidth){this.parentElement.classList.add('has-image')}" onerror="this.parentElement.classList.remove('has-image');this.remove()">` : ""}
+    ${logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(profile.companyName)}">` : ""}
     <span class="wordmark-fallback">${escapeHtml(profile.companyName)}</span>
   </span>`;
 }
@@ -127,7 +127,7 @@ function imageFigure(url: string | undefined, alt: string, className: string, ea
   const roleClass = safeUrl && /diagram|architecture|marketecture|workflow|chart/i.test(safeUrl) ? " is-diagram" : "";
   return `<figure class="media ${className}${roleClass}">
     <div class="media-fallback" aria-hidden="true"><span></span><span></span><span></span></div>
-    ${safeUrl ? `<img src="${escapeHtml(safeUrl)}" alt="${escapeHtml(alt)}" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'} onload="if(this.naturalWidth){this.parentElement.classList.add('has-asset')}" onerror="this.parentElement.classList.remove('has-asset');this.remove()">` : ""}
+    ${safeUrl ? `<img src="${escapeHtml(safeUrl)}" alt="${escapeHtml(alt)}" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>` : ""}
   </figure>`;
 }
 
@@ -523,7 +523,7 @@ export function renderExperienceHtml(input: {
   <span class="signal-toast-mark" aria-hidden="true"><span></span></span>
   <span><strong>Signal captured</strong><span data-signal-copy>Your path is now in focus.</span></span>
 </div>
-<script>
+<script data-flz-runtime>
   (function(){
     var body=document.body;
     var reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -552,7 +552,7 @@ export function renderExperienceHtml(input: {
     function persistEvent(action,payload){
       if(!experienceSessionId||!durableEvents[action]||!window.fetch)return;
       try{
-        var request=window.fetch('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'omit',keepalive:true,body:JSON.stringify({sessionId:experienceSessionId,event:action,context:durableContext(payload)})});
+        var request=window.fetch('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',keepalive:true,body:JSON.stringify({sessionId:experienceSessionId,event:action,context:durableContext(payload)})});
         if(request&&request.catch)request.catch(function(){})
       }catch(_eventSinkError){}
     }
@@ -563,6 +563,18 @@ export function renderExperienceHtml(input: {
       persistEvent(action,payload);
     };
     window.flzAnalytic('experience_view',{});
+
+    function settleImage(image,readyClass){
+      var parent=image&&image.parentElement;
+      if(!parent)return;
+      function failed(){parent.classList.remove(readyClass);image.remove()}
+      function loaded(){if(image.naturalWidth)parent.classList.add(readyClass);else failed()}
+      image.addEventListener('load',loaded,{once:true});
+      image.addEventListener('error',failed,{once:true});
+      if(image.complete){if(image.naturalWidth)loaded();else failed()}
+    }
+    document.querySelectorAll('.wordmark img').forEach(function(image){settleImage(image,'has-image')});
+    document.querySelectorAll('.media img').forEach(function(image){settleImage(image,'has-asset')});
 
     var toast=document.querySelector('[data-signal-toast]');
     var toastCopy=toast&&toast.querySelector('[data-signal-copy]');
