@@ -204,12 +204,24 @@ describe("Try Me Now prospect enhancement components", () => {
     render(
       <>
         <AnalyticsSignalToast signal={signal} open onDismiss={dismiss} onOpenPanel={openPanel} />
-        <AnalyticsSignalPanel open signals={[signal]} engagedSeconds={18} onClose={closePanel} />
+        <AnalyticsSignalPanel
+          open
+          signals={[signal]}
+          engagedSeconds={18}
+          sessionId="analytics-session"
+          audienceLabel="Enterprise architects and platform owners"
+          onClose={closePanel}
+        />
       </>
     );
 
     expect(screen.getByText("Signal captured")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "This is what Folloze sees." })).toBeInTheDocument();
+    expect(screen.getByText("Your activity in this preview")).toBeInTheDocument();
+    expect(screen.getByText("Placeholder people")).toBeInTheDocument();
+    expect(screen.getByText("Illustrative activity only. These names and actions are not captured leads.")).toBeInTheDocument();
+    expect(screen.getByText(/John Smith spent/)).toBeInTheDocument();
+    expect(screen.getAllByText(/VP Enterprise Architecture/)).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: /See what Folloze knows/i }));
     fireEvent.click(screen.getByRole("button", { name: "Dismiss signal" }));
     fireEvent.click(screen.getByRole("button", { name: "Close analytics signals" }));

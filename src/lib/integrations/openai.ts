@@ -586,12 +586,16 @@ export function experienceQualityFailure(input: {
     return "copy_quality_source_boilerplate";
   }
   if (!normalizedIncludes(heroCopy, brand.companyName)) return "copy_quality_missing_seller_hero";
+  if (!heroCopy.includes(brand.companyName)) return "copy_quality_seller_name_casing";
   if (draft.audienceLabel !== context.brief.audience) return "copy_quality_audience_mismatch";
   if (draft.primaryCta !== context.brief.primaryAction) return "copy_quality_cta_mismatch";
   if (context.brief.campaignRegister === "one-to-one-abm") {
     const target = context.brief.targetAccount?.name || targetBrand?.companyName;
     if (!target || !normalizedIncludes(heroCopy, target)) return "copy_quality_missing_target_hero";
     if (!normalizedIncludes(accountNarrativeCopy, target)) return "copy_quality_logo_swap_narrative";
+    if (!heroCopy.includes(target) || !accountNarrativeCopy.includes(target)) {
+      return "copy_quality_target_name_casing";
+    }
     if (
       /\bpublic(?:ly)?\s+(?:\w+\s+){0,2}(?:focus|positioning|context|profile|signals?|technology|description)\b|\bdescribes itself\b|\bproducts?\s+(?:and|&)\s+services?\b/i.test(visibleCopy)
     ) {
@@ -808,6 +812,7 @@ export async function generateExperienceDraft(input: {
       "campaignContext is the internally approved brief, campaign design context, and wireframe compiled from explicit visitor inputs and harvested public evidence. Follow it; do not invent a different register or structure.",
       "Copy campaignRegister, designRegister, wireframeName, experienceShape, sectionSequence, sectionLabels, audienceLabel, and primaryCta exactly from campaignContext.",
       "The seller is the company whose brand and offering lead the experience. Folloze is the hosting product and must not appear in buyer-facing copy unless Folloze is the seller.",
+      "Render seller and target company names with the exact public casing supplied in their name fields.",
       "For one-to-one ABM, the seller and target must both appear in hero copy, and the target must appear again in the thesis or close so swapping the logo would break the story.",
       "For one-to-one ABM, use the 2-3 typed campaignContext.brief.accountEvidence.evidenceItems as the public account evidence contract. Carry the meaning and distinctive terms from at least one item into the thesis or narrativeArc, and from a different item into at least one section. Verbatim repetition is not required. A target name alone is not personalization and must never be the only account-specific element.",
       "Never splice a harvested heading into a sentence. Rewrite evidence as natural English and avoid repeated constructions such as 'at ... at'.",

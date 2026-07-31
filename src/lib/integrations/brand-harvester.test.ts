@@ -78,6 +78,35 @@ describe("fast brand extraction", () => {
     expect(profile.displayFontUrl).toContain("roboto-slab.woff2");
   });
 
+  it("preserves the public casing of mixed-case company names", () => {
+    const target = extractFastBrandProfile({
+      domain: "servicenow.com",
+      html: `<!doctype html><html><head>
+        <title>Servicenow - Put AI to work</title>
+      </head><body><h1>Enterprise workflows</h1></body></html>`,
+      finalUrl: new URL("https://www.servicenow.com/")
+    });
+
+    expect(target.companyName).toBe("ServiceNow");
+  });
+
+  it("uses a matching Organization schema name when social metadata is absent", () => {
+    const target = extractFastBrandProfile({
+      domain: "northstar.com",
+      html: `<!doctype html><html><head>
+        <title>Put workflows in motion</title>
+        <script type="application/ld+json">{
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          "name": "NorthStar"
+        }</script>
+      </head></html>`,
+      finalUrl: new URL("https://northstar.com/")
+    });
+
+    expect(target.companyName).toBe("NorthStar");
+  });
+
   it("drops navigation-only headings before they become public account evidence", () => {
     const target = extractFastBrandProfile({
       domain: "cisco.com",

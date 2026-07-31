@@ -7,7 +7,7 @@ const headers = {
   "Cache-Control": "private, no-store, max-age=0",
   "X-Robots-Tag": "noindex, nofollow",
   "Content-Security-Policy":
-    "default-src 'none'; img-src 'self' https: data:; font-src 'self' https: data: http://localhost:* http://127.0.0.1:*; style-src 'unsafe-inline' https:; script-src 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self' https://*.folloze.com http://localhost:*; base-uri 'none'; form-action 'none'"
+    "default-src 'none'; img-src 'self' https: data:; font-src 'self' https: data: http://localhost:* http://127.0.0.1:*; style-src 'unsafe-inline' https:; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self' https://*.folloze.com http://localhost:*; base-uri 'none'; form-action 'none'"
 };
 
 function statusPage(input: { title: string; body: string; refresh?: boolean; actionHref?: string; actionLabel?: string }) {

@@ -34,6 +34,8 @@ import {
   useRef
 } from "react";
 
+import { buildSimulatedEngagement } from "@/lib/simulated-engagement";
+
 import styles from "./try-me-now-enhancements.module.css";
 
 function classes(...values: Array<string | false | null | undefined>): string {
@@ -570,6 +572,9 @@ export interface AnalyticsSignal {
   detail: string;
   atLabel: string;
   type?: "view" | "choice" | "cta";
+  actorLabel?: string;
+  roleLabel?: string;
+  isExample?: boolean;
 }
 
 export function AnalyticsSignalToast({ signal, open, onDismiss, onOpenPanel }: { signal?: AnalyticsSignal; open: boolean; onDismiss: () => void; onOpenPanel: () => void }) {
@@ -589,18 +594,49 @@ export interface AnalyticsSignalPanelProps {
   signals: AnalyticsSignal[];
   visitorLabel?: string;
   engagedSeconds?: number;
+  sessionId?: string;
+  audienceLabel?: string;
+  exampleSignals?: AnalyticsSignal[];
   onClose: () => void;
 }
 
-export function AnalyticsSignalPanel({ open, signals, visitorLabel = "Anonymous visitor", engagedSeconds = 0, onClose }: AnalyticsSignalPanelProps) {
+export function AnalyticsSignalPanel({
+  open,
+  signals,
+  visitorLabel = "Anonymous visitor",
+  engagedSeconds = 0,
+  sessionId,
+  audienceLabel,
+  exampleSignals,
+  onClose
+}: AnalyticsSignalPanelProps) {
   const ref = useModalAccess(open, onClose);
+  const buyingGroupSignals = exampleSignals ?? (sessionId
+    ? buildSimulatedEngagement({ sessionId, audienceLabel })
+    : []);
   if (!open) return null;
   return (
     <div className={styles.modalBackdrop} onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
       <aside ref={ref} className={styles.signalPanel} role="dialog" aria-modal="true" aria-labelledby="signal-panel-title" onKeyDown={(event) => trapModalFocus(event, ref.current)}>
         <div className={styles.drawerHeader}><div><span>Live engagement</span><h2 id="signal-panel-title">This is what Folloze sees.</h2></div><button type="button" onClick={onClose} aria-label="Close analytics signals"><X size={20} /></button></div>
         <div className={styles.signalStats}><div><strong>1</strong><span>{visitorLabel}</span></div><div><strong>{signals.length}</strong><span>interactions</span></div><div><strong>{engagedSeconds}s</strong><span>engaged</span></div></div>
-        <div className={styles.signalTimeline}>{signals.map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel}</span><strong>{signal.label}</strong><p>{signal.detail}</p></div></article>)}</div>
+        <section className={styles.realSignalSection} aria-labelledby="real-signal-title">
+          <div className={styles.signalSectionHeading}><div><span>Real-time proof</span><h3 id="real-signal-title">Your activity in this preview</h3></div><b>Live</b></div>
+          <div className={styles.signalTimeline}>
+            {signals.map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel}</span><strong>{signal.label}</strong><p>{signal.detail}</p></div></article>)}
+            {!signals.length && <p className={styles.signalEmpty}>Explore the preview to see your first live signal arrive here.</p>}
+          </div>
+        </section>
+        {buyingGroupSignals.length > 0 && (
+          <section className={styles.exampleSignalSection} aria-labelledby="example-signal-title">
+            <div className={styles.exampleSignalLabel}><span>Example analytics</span><strong>Placeholder people</strong></div>
+            <div className={styles.signalSectionHeading}><div><span>Buying-group view</span><h3 id="example-signal-title">What account-level depth could look like</h3></div></div>
+            <p className={styles.exampleSignalDisclosure}>Illustrative activity only. These names and actions are not captured leads.</p>
+            <div className={classes(styles.signalTimeline, styles.exampleTimeline)}>
+              {buyingGroupSignals.map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel} · {signal.roleLabel}</span><strong>{signal.label}</strong><p>{signal.detail}</p></div></article>)}
+            </div>
+          </section>
+        )}
         <div className={styles.signalValue}><BarChart3 size={20} /><p>In a live campaign, these signals can route to campaign and sales systems so the next move starts with context.</p></div>
       </aside>
     </div>

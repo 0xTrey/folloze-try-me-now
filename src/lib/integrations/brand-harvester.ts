@@ -1,4 +1,5 @@
 import { hasRemoteBrandHarvester } from "@/lib/config";
+import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
 import { fetchPinnedPublicText } from "@/lib/safe-fetch";
 import type { BrandProfile } from "@/lib/types";
 
@@ -57,13 +58,7 @@ export function extractReadableContent(html: string): string {
   return stripTags(cleaned).slice(0, 7000);
 }
 
-const titleCaseDomain = (domain: string) =>
-  domain
-    .split(".")[0]
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+const titleCaseDomain = fallbackCompanyName;
 
 const entityKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -637,10 +632,13 @@ export function extractFastBrandProfile(input: {
   const title = stripTags(input.html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
   const ogSiteName = extractMeta(input.html, "og:site_name");
   const description = extractMeta(input.html, "description") ?? extractMeta(input.html, "og:description");
-  const titleName = title.split(/[|–—-]/)[0]?.trim();
   const companyName = canonicalCompanyName(
-    stripTags(ogSiteName ?? "") ||
-      (titleName && titleName.length <= 48 && !titleName.includes(":") ? titleName : titleCaseDomain(input.domain)),
+    resolvePublicCompanyName({
+      domain: input.domain,
+      html: input.html,
+      ogSiteName: stripTags(ogSiteName ?? ""),
+      title
+    }),
     input.domain
   );
   const logoUrl = extractLogo(input.html, finalUrl, companyName);

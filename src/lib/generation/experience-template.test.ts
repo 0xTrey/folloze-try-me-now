@@ -189,6 +189,22 @@ describe("renderExperienceHtml", () => {
     expect(html).not.toContain("url:this.href");
   });
 
+  it("captures visibility-aware engagement depth through the non-blocking API sink", () => {
+    expect(html).toContain("section_dwell:true");
+    expect(html).toContain("page_heartbeat:true");
+    expect(html).toContain("experience_view:true");
+    expect(html).toContain("window.fetch('/api/events'");
+    expect(html).not.toContain("window.fetch('/events'");
+    expect(html).toContain("credentials:'omit',keepalive:true");
+    expect(html).toContain("request.catch(function(){})");
+    expect(html).toContain("document.visibilityState==='visible'");
+    expect(html).toContain("document.addEventListener('visibilitychange',visibilityChanged)");
+    expect(html).toContain("window.setInterval(heartbeat,15000)");
+    expect(html).toContain("entry.intersectionRatio>=.35");
+    expect(html).toContain("if(emit&&seconds>=3)");
+    expect(html).not.toContain("email:");
+  });
+
   it("shows a polite first-interaction signal once and honors motion preferences", () => {
     expect(html).toContain('data-signal-toast role="status" aria-live="polite" aria-atomic="true" hidden');
     expect(html).toContain("var signalShown=false");

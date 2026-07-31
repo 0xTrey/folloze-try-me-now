@@ -458,6 +458,37 @@ describe("deterministic experience copy", () => {
     ).toBeUndefined();
   });
 
+  it("rejects target-account copy that flattens harvested company-name casing", () => {
+    const serviceNow: BrandProfile = {
+      ...cisco,
+      domain: "servicenow.com",
+      companyName: "ServiceNow",
+      description: "AI-powered workflows and enterprise service operations.",
+      publicContext: "ServiceNow connects enterprise workflows, service operations, and governed AI.",
+      publicTopics: ["Enterprise workflows", "Service operations", "Governed AI"]
+    };
+    const answers = {
+      targetDomain: "servicenow.com",
+      audience: "Enterprise platform leaders",
+      objective: "Book a meeting"
+    };
+    const { context, draft } = draftFor("abm", answers, serviceNow);
+    const flattened = JSON.parse(
+      JSON.stringify(draft).replaceAll("ServiceNow", "Servicenow")
+    ) as typeof draft;
+
+    expect(
+      experienceQualityFailure({
+        draft: flattened,
+        brand: jitterbit,
+        targetBrand: serviceNow,
+        useCase: "abm",
+        answers,
+        context
+      })
+    ).toBe("copy_quality_target_name_casing");
+  });
+
   it("routes ABM, demand, product, event, and content into distinct registers and page shapes", () => {
     const variants = [
       draftFor(
