@@ -122,6 +122,23 @@ describe("renderExperienceHtml", () => {
       fontDeliveryUrls: { display: brand.displayFontUrl }
     });
     expect(arbitraryDeliveryUrl).not.toContain("@font-face");
+
+    const relativeDeliveryRoute = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: {},
+      fontDeliveryUrls: {
+        display: "/api/sessions/font-session/font/display",
+        body: "/api/sessions/font-session/font/body"
+      }
+    });
+    expect(relativeDeliveryRoute).toContain(
+      'src:url("/api/sessions/font-session/font/display") format("woff2")'
+    );
+    expect(relativeDeliveryRoute).toContain(
+      'src:url("/api/sessions/font-session/font/body") format("woff")'
+    );
   });
 
   it("includes three functional decision lenses, three compact question cards, and analytics hooks", () => {

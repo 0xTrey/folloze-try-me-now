@@ -34,7 +34,7 @@ function opaqueId(): string {
 
 function fontDeliveryUrls(id: string, brand: BrandProfile): { display?: string; body?: string } {
   const route = (slot: "display" | "body") =>
-    new URL(`/api/sessions/${encodeURIComponent(id)}/font/${slot}`, `${config.appUrl}/`).toString();
+    `/api/sessions/${encodeURIComponent(id)}/font/${slot}`;
   return {
     display: brand.displayFontUrl ? route("display") : undefined,
     body: brand.bodyFontUrl ? route("body") : undefined

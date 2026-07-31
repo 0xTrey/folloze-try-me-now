@@ -73,6 +73,9 @@ function safeFontName(value: string | undefined, fallback: string): string {
 
 function safeFontDeliveryUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
+  if (/^\/api\/sessions\/[a-z0-9_-]{1,128}\/font\/(?:display|body)$/i.test(value)) {
+    return value;
+  }
   try {
     const url = new URL(value);
     if (url.username || url.password) return undefined;
