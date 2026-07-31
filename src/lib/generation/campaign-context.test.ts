@@ -79,7 +79,8 @@ describe("compileCampaignContext", () => {
           sourceUrl: target.sourceUrl,
           signals: expect.any(Array)
         }),
-        expect.objectContaining({ type: "public-operating-context" })
+        expect.objectContaining({ type: "public-focus-area", text: "Networking" }),
+        expect.objectContaining({ type: "public-focus-area", text: "Security" })
       ])
     );
     expect(

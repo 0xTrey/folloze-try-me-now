@@ -12,7 +12,9 @@ import { experienceDraftSchema, type ExperienceDraft } from "@/lib/generation/ex
 import { extractPublicContent } from "@/lib/integrations/brand-harvester";
 import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
 
-const bannedCopy = /\b(unlock|revolutionize|supercharge|game-changing|seamless|robust|innovative|elevate|empower)\b|make the next move easier to believe|brings the problem, proof, and next step together|generic pages|relevance is a sequence|one clear goal|see the path forward|aligned to the objective|focused on the objective|grounded in .*public|public platform story|build process|source:|guided story|campaign landing page|buyer path|decision path|prepared for/i;
+const bannedCopy = /make the next move easier to believe|brings the problem, proof, and next step together|generic pages|relevance is a sequence|one clear goal|see the path forward|aligned to the objective|focused on the objective|grounded in .*public|public platform story|build process|source:|guided story|campaign landing page|buyer path|decision path|prepared for/i;
+const marketingCliche =
+  /\b(unlock|revolutionize|supercharge|game-changing|seamless|robust|innovative|elevate|empower)\b/i;
 
 const trimSentence = (value: string, max: number) =>
   value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1)).replace(/[\s,;:.]+$/g, "")}…`;
@@ -112,6 +114,15 @@ function sourceEvidencePhrases(
   return phrases;
 }
 
+function conciseRolePhrase(value: string): string {
+  const leadingClause = value.split(
+    /\b(?:connecting|responsible for|focused on|across|who|that)\b/i,
+    1
+  )[0]?.trim();
+  const words = (leadingClause || value).split(/\s+/).filter(Boolean).slice(0, 8);
+  return words.join(" ").replace(/[\s,;:/-]+$/g, "") || "the team";
+}
+
 export function deterministicDraft(input: {
   brand: BrandProfile;
   targetBrand?: BrandProfile;
@@ -124,6 +135,7 @@ export function deterministicDraft(input: {
   const profile = narrativeProfileFor(brand);
   const context = input.context ?? compileCampaignContext({ ...input, sourceContent });
   const audience = context.brief.audience;
+  const roleAudience = conciseRolePhrase(audience);
   const target = context.brief.targetAccount?.name;
   const sourceTitle = context.brief.sourceTitle || cleanSourceTitle(answers.sourceName || "") || "the source";
   const eventContext = context.brief.eventContext || "the session";
@@ -142,8 +154,8 @@ export function deterministicDraft(input: {
     const narrativeSignal = narrativeEvidence?.signals[0] ?? profile.signalLabels[0];
     const sectionSignal = sectionEvidence?.signals[0] ?? profile.signalLabels[1];
     const abmSignalLabels = [
-      narrativeSignal,
       sectionSignal,
+      narrativeSignal,
       profile.signalLabels[2]
     ] as ExperienceDraft["signalLabels"];
     return {
@@ -151,11 +163,11 @@ export function deterministicDraft(input: {
       title: trimSentence(`${brand.companyName} for ${account} | ${profile.offerLabel}`, 90),
       eyebrow: trimSentence(`${brand.companyName} for ${account}`, 52),
       headline: trimSentence(
-        `${account}: make ${narrativeSignal.toLowerCase()} the start of one provable ${profile.offerLabel.toLowerCase()} path.`,
+        `${account}: connect ${narrativeSignal.toLowerCase()} through ${profile.offerLabel.toLowerCase()}.`,
         120
       ),
       subhead: trimSentence(
-        `${brand.companyName} helps ${audience.toLowerCase()} connect ${narrativeSignal.toLowerCase()} and ${sectionSignal.toLowerCase()} through one path the team can validate together.`,
+        `${brand.companyName} helps ${roleAudience.toLowerCase()} connect ${narrativeSignal.toLowerCase()} and ${sectionSignal.toLowerCase()} through one path the team can validate together.`,
         280
       ),
       thesisHeadline: trimSentence(
@@ -167,7 +179,7 @@ export function deterministicDraft(input: {
         320
       ),
       narrativeArc: trimSentence(
-        `How should ${account}'s ${audience.toLowerCase()} connect ${narrativeSignal.toLowerCase()} to the first use case worth validating?`,
+        `How should ${account}'s ${roleAudience.toLowerCase()} connect ${narrativeSignal.toLowerCase()} to the first use case worth validating?`,
         180
       ),
       signalLabels: abmSignalLabels,
@@ -215,8 +227,8 @@ export function deterministicDraft(input: {
       ),
       subhead: trimSentence(
         registration
-          ? `${brand.companyName} gives ${audience.toLowerCase()} a practical session for examining ${profile.offerLabel.toLowerCase()} through the questions they already own.`
-          : `${brand.companyName} gives ${audience.toLowerCase()} a practical way to carry the ${profile.offerLabel.toLowerCase()} discussion into the next useful action.`,
+          ? `${brand.companyName} gives ${roleAudience.toLowerCase()} a practical session for examining ${profile.offerLabel.toLowerCase()} through the questions they already own.`
+          : `${brand.companyName} gives ${roleAudience.toLowerCase()} a practical way to carry the ${profile.offerLabel.toLowerCase()} discussion into the next useful action.`,
         280
       ),
       thesisHeadline: trimSentence(
@@ -233,7 +245,7 @@ export function deterministicDraft(input: {
       ),
       narrativeArc: trimSentence(
         registration
-          ? `What should ${audience.toLowerCase()} be ready to take from ${eventContext}?`
+          ? `What should ${roleAudience.toLowerCase()} be ready to take from ${eventContext}?`
           : `Which questions from ${eventContext} deserve a deeper look?`,
         180
       ),
@@ -262,8 +274,8 @@ export function deterministicDraft(input: {
       ),
       closingBody: trimSentence(
         registration
-          ? `Choose the question that matters most to ${audience.toLowerCase()}, then bring it to the session.`
-          : `Choose the path that matters most to ${audience.toLowerCase()}, then make the follow-up specific.`,
+          ? `Choose the question that matters most to ${roleAudience.toLowerCase()}, then bring it to the session.`
+          : `Choose the path that matters most to ${roleAudience.toLowerCase()}, then make the follow-up specific.`,
         260
       )
     };
@@ -276,12 +288,12 @@ export function deterministicDraft(input: {
       eyebrow: trimSentence(`${brand.companyName} | What changes`, 52),
       headline: trimSentence(`Bring ${profile.theme} into the way the team actually works.`, 120),
       subhead: trimSentence(
-        `${brand.companyName} gives ${audience.toLowerCase()} a product path grounded in ${profile.theme}, the operating change, and the first use case worth validating.`,
+        `${brand.companyName} gives ${roleAudience.toLowerCase()} a product path grounded in ${profile.theme}, the operating change, and the first use case worth validating.`,
         280
       ),
       thesisHeadline: trimSentence(`${profile.offerLabel} matters when the operating change is concrete.`, 130),
       thesisBody: trimSentence(profile.thesisBody, 320),
-      narrativeArc: trimSentence(`What should ${audience.toLowerCase()} test in the first use case?`, 180),
+      narrativeArc: trimSentence(`What should ${roleAudience.toLowerCase()} test in the first use case?`, 180),
       sections: profileSections(profile).map((section, index) =>
         index === 1
           ? {
@@ -308,7 +320,7 @@ export function deterministicDraft(input: {
             headline: "Start with the finding buyers can use.",
             body: trimSentence(sourceDetail || section.body, 320),
             proof: trimSentence(
-              `What should ${audience.toLowerCase()} validate against this finding?`,
+              `What should ${roleAudience.toLowerCase()} validate against this finding?`,
               180
             )
           }
@@ -325,7 +337,7 @@ export function deterministicDraft(input: {
               eyebrow: "Decision",
               headline: "Choose the implication worth acting on.",
               proof: trimSentence(
-                `Which implication should ${audience.toLowerCase()} carry into the next decision?`,
+                `Which implication should ${roleAudience.toLowerCase()} carry into the next decision?`,
                 180
               )
             }
@@ -341,11 +353,11 @@ export function deterministicDraft(input: {
       eyebrow: trimSentence(`${brand.companyName} | ${sourceTitle}`, 52),
       headline: trimWords(sourceLead || `${sourceTitle}: find the useful decision inside it.`, 11),
       subhead: trimSentence(
-        `${brand.companyName} helps ${audience.toLowerCase()} connect the argument to ${profile.offerLabel.toLowerCase()} and the next operating question.`,
+        `${brand.companyName} helps ${roleAudience.toLowerCase()} connect the argument to ${profile.offerLabel.toLowerCase()} and the next operating question.`,
         280
       ),
       thesisHeadline: trimSentence(
-        `What ${sourceTitle} changes for ${audience.toLowerCase()}.`,
+        `What ${sourceTitle} changes for ${roleAudience.toLowerCase()}.`,
         130
       ),
       thesisBody: trimSentence(
@@ -354,14 +366,14 @@ export function deterministicDraft(input: {
         320
       ),
       narrativeArc: trimSentence(
-        `Where should ${audience.toLowerCase()} apply the argument first?`,
+        `Where should ${roleAudience.toLowerCase()} apply the argument first?`,
         180
       ),
       signalLabels: ["Core finding", profile.signalLabels[1], "Decision"] as ExperienceDraft["signalLabels"],
       sections: contentSections,
       closingHeadline: trimSentence(`Put the strongest idea in ${sourceTitle} to work.`, 130),
       closingBody: trimSentence(
-        `Choose the implication that matters most to ${audience.toLowerCase()}, then connect it to one practical action.`,
+        `Choose the implication that matters most to ${roleAudience.toLowerCase()}, then connect it to one practical action.`,
         260
       )
     };
@@ -376,12 +388,12 @@ export function deterministicDraft(input: {
       120
     ),
     subhead: trimSentence(
-      `${brand.companyName} helps ${audience.toLowerCase()} ${profile.buyerOutcome}. Start with the operating outcome and the first useful action.`,
+      `${brand.companyName} helps ${roleAudience.toLowerCase()} ${profile.buyerOutcome}. Start with the operating outcome and the first useful action.`,
       280
     ),
     thesisHeadline: trimSentence(profile.thesis, 130),
     thesisBody: trimSentence(profile.thesisBody, 320),
-    narrativeArc: trimSentence(`What should ${audience.toLowerCase()} explore before taking the next step?`, 180),
+    narrativeArc: trimSentence(`What should ${roleAudience.toLowerCase()} explore before taking the next step?`, 180),
     closingHeadline: trimSentence(profile.closingHeadline, 130),
     closingBody: trimSentence(profile.closingBody, 260)
   };
@@ -423,7 +435,8 @@ const incompleteThoughtEnding =
   /(?:\u2026|\.{3}|\b(?:and|or|but|because|although|while|with|without|within|across|into|through|for|from|to|of|the|a|an|that|which|who|whose|where|when)|\b(?:without|while|by)\s+[a-z]+ing)[.!?\s]*$/i;
 
 function endsMidThought(value: string): boolean {
-  return incompleteThoughtEnding.test(value.trim());
+  const cleaned = value.trim();
+  return /[,;:]$/.test(cleaned) || incompleteThoughtEnding.test(cleaned);
 }
 
 const groundingStopWords = new Set([
@@ -505,11 +518,26 @@ export function experienceQualityFailure(input: {
   ];
   if (declarativeFields.some(endsMidThought)) return "copy_quality_incomplete_thought";
   if (bannedCopy.test(visibleCopy)) return "copy_quality_banned_phrase";
+  if (marketingCliche.test(visibleCopy)) return "copy_quality_cliche";
   if (/[—]/.test(visibleCopy)) return "copy_quality_em_dash";
   if (/\p{Script=Han}/u.test(visibleCopy)) return "copy_quality_unexpected_script";
   const headlineLimit = context.brief.campaignRegister === "content-magic" ? 11 : 14;
   if (wordCount(draft.headline) > headlineLimit) return "copy_quality_headline_too_long";
   if (wordCount(draft.subhead) > 32) return "copy_quality_subhead_too_long";
+  if (wordCount(draft.thesisHeadline) > 20) return "copy_quality_thesis_too_long";
+  if (wordCount(draft.narrativeArc) > 20) return "copy_quality_narrative_too_long";
+  if (draft.sections.some((section) => wordCount(section.headline) > 12)) {
+    return "copy_quality_section_headline_too_long";
+  }
+  if (
+    draft.sections.some(
+      (section, index) =>
+        section.eyebrow.trim().toLocaleLowerCase() !==
+        draft.signalLabels[index]?.trim().toLocaleLowerCase()
+    )
+  ) {
+    return "copy_quality_lens_label_mismatch";
+  }
   if (context.brief.campaignRegister === "content-magic" && sourceBoilerplate.test(visibleCopy)) {
     return "copy_quality_source_boilerplate";
   }
@@ -520,7 +548,9 @@ export function experienceQualityFailure(input: {
     const target = context.brief.targetAccount?.name || targetBrand?.companyName;
     if (!target || !normalizedIncludes(heroCopy, target)) return "copy_quality_missing_target_hero";
     if (!normalizedIncludes(accountNarrativeCopy, target)) return "copy_quality_logo_swap_narrative";
-    if (/\bpublic (?:focus|positioning|context)\b|\bproducts?\s+(?:and|&)\s+services?\b/i.test(visibleCopy)) {
+    if (
+      /\bpublic(?:ly)?\s+(?:\w+\s+){0,2}(?:focus|positioning|context|profile|signals?|technology|description)\b|\bdescribes itself\b|\bproducts?\s+(?:and|&)\s+services?\b/i.test(visibleCopy)
+    ) {
       return "copy_quality_navigation_as_account_insight";
     }
     const evidenceItems = context.brief.accountEvidence.evidenceItems;
@@ -629,18 +659,7 @@ export function experienceQualityFailure(input: {
 }
 
 function isNonBlockingStyleFailure(failure: string): boolean {
-  return new Set([
-    "copy_quality_banned_phrase",
-    "copy_quality_em_dash",
-    "copy_quality_incomplete_thought",
-    "copy_quality_navigation_as_account_insight",
-    "copy_quality_headline_too_long",
-    "copy_quality_subhead_too_long",
-    "copy_quality_missing_source_grounding",
-    "copy_quality_source_grounding_not_distributed",
-    "copy_quality_repeated_close",
-    "copy_quality_repeated_section"
-  ]).has(failure);
+  return failure === "copy_quality_em_dash" || failure === "copy_quality_cliche";
 }
 
 export async function generateExperienceDraft(input: {
@@ -737,6 +756,7 @@ export async function generateExperienceDraft(input: {
       "The seller is the company whose brand and offering lead the experience. Folloze is the hosting product and must not appear in buyer-facing copy unless Folloze is the seller.",
       "For one-to-one ABM, the seller and target must both appear in hero copy, and the target must appear again in the thesis or close so swapping the logo would break the story.",
       "For one-to-one ABM, use the 2-3 typed campaignContext.brief.accountEvidence.evidenceItems as the public account evidence contract. Carry at least one item's exact signal phrase into the thesis or narrativeArc, and a different item's exact signal phrase into at least one section. A target name alone is not personalization and must never be the only account-specific element.",
+      "For one-to-one ABM, write the business implication directly. Never mention public evidence, public context, public focus, website language, or say that the target 'describes itself'. Never use 'prepared for'.",
       "Treat one-to-one personalization as public professional preparation: company identity, public context, and role-level framing only. Never expose or imply behavioral tracking, private priorities, pain, intent, budget, technology, org structure, or individual details.",
       "campaignContext.brief.accountEvidence.unresolvedAxes are deliberately unresolved. Never fabricate Business Priorities, Operational Challenges, Market and Innovation Focus, urgency, or a why-now claim when no explicit public evidence supports them.",
       "For campaign-demand, write an offer-led one-to-many path. For campaign-product, write a launch and first-use-case workbench. For campaign-event, use only supplied event context and never invent dates, speakers, agenda items, or registration details.",
@@ -748,12 +768,13 @@ export async function generateExperienceDraft(input: {
       "Follow campaignContext.brief.proofMode. If proof is unavailable, use mechanism, use-case, scenario, resource, and validation-question proof without implying hidden customers. Do not invent customers, logos, metrics, outcomes, events, speakers, dates, awards, integrations, proof, or urgency.",
       "Build one message spine: recognizable context, why the decision matters, the relevant seller path, and one objective-specific action.",
       "Make all three sections do different jobs and make every run specific to seller category, selected audience, objective, subtype or source, and available public evidence. Make signalLabels concrete buyer decision lenses whose matching section content can be shown in an interactive tab panel.",
+      "Set each section eyebrow to exactly the corresponding signalLabels value so every selector, panel, and question card uses one coherent lens name.",
       "Write each section proof field as a distinct buyer-facing validation question ending in a question mark. Never use that field for sourcing, attribution, internal rationale, or form selections.",
       "The closing headline and body must advance the argument and must not repeat the hero.",
-      "Keep the hero headline to 7-11 words for content-magic and no more than 14 words for every other register. Keep the subhead to one sentence and no more than 32 words.",
+      "Keep the hero headline to 7-11 words for content-magic and no more than 14 words for every other register. Keep the subhead to one sentence and no more than 32 words. Keep thesisHeadline and narrativeArc to no more than 20 words, and every section headline to no more than 12 words.",
       "Preserve audienceLabel exactly for metadata, but use concise natural role language elsewhere when the supplied audience includes a longer explanatory clause.",
       "Never carry website navigation, phone, support, language-selector, cookie, footer, or legal boilerplate into buyer-facing copy.",
-      "Every field must express a complete grammatical thought. Never truncate with an ellipsis or end on a conjunction, preposition, article, or unfinished phrase such as 'without treating'.",
+      "Every field must express a complete grammatical thought. Never truncate with an ellipsis, end with a comma, semicolon, or colon, or end on a conjunction, preposition, article, or unfinished phrase such as 'without treating'.",
       "Do not mention demos, templates, boards, microsites, agents, prompts, AI generation, source material, form fields, objectives, or the build process.",
       "Never use these phrases: make the next move easier to believe; brings the problem, proof, and next step together; generic pages; relevance is a sequence; one clear goal; see the path forward.",
       "Avoid unlock, transform, seamless, robust, innovative, game-changing, revolutionize, elevate, supercharge, and empower.",

@@ -169,7 +169,7 @@ function cleanEventContext(value: string | undefined): string | null {
 
 function buyerStageFor(objective: string): CampaignGenerationContext["brief"]["buyerStage"] {
   const normalized = objective.toLowerCase();
-  if (/meeting|accelerate|decision/.test(normalized)) return "decision-support";
+  if (/meeting|working session|book|accelerate|decision/.test(normalized)) return "decision-support";
   if (/qualified|capture|evaluate/.test(normalized)) return "evaluation";
   if (/educate|engagement/.test(normalized)) return "education";
   return "awareness";
@@ -181,7 +181,7 @@ function primaryActionFor(input: {
   campaignType?: SessionAnswers["campaignType"];
 }): string {
   const normalized = input.objective.toLowerCase();
-  if (/meeting|accelerate|decision/.test(normalized)) return "Plan the working session";
+  if (/meeting|working session|book|accelerate|decision/.test(normalized)) return "Plan the working session";
   if (/registr|attend|rsvp/.test(normalized)) return "Save your place";
   if (input.campaignType === "event") return "Continue the event conversation";
   if (input.campaignType === "product" || /launch|announce|introduce/.test(normalized)) return "Explore the first use case";
@@ -263,7 +263,7 @@ const evidenceStopWords = new Set([
 
 const unsafePublicEvidence =
   /\b(ignore|disregard|instructions?|system prompt|developer message|assistant|password|secret|api key)\b/i;
-const navigationOnlyEvidence = /^(?:(?:explore|view|see|browse)\s+)?(?:(?:all|our|featured|latest)\s+)?(?:products?(?:\s+(?:and|&)\s+services?)?|services?|solutions?|resources?|support|partners?|customers?|customer stories|company|about(?:\s+us)?|contact(?:\s+us)?|news|events?|careers?|industries|use cases?)$/i;
+const navigationOnlyEvidence = /^(?:(?:explore|view|see|browse)\s+)?(?:(?:all|our|featured|latest)\s+)?(?:products?(?:\s+(?:and|&)\s+services?)?|services?|solutions?|resources?|support|partners?|customers?|customer stories|company|about(?:\s+us)?|contact(?:\s+us)?|news|events?|careers?|industries|use cases?|why\s+[\p{L}\p{N}.&'-]+|take your next steps?|quick links?|resources and legal)$/iu;
 const navigationEvidenceFragment =
   /\b(?:products?\s+(?:and|&)\s+services?|(?:featured|latest)\s+resources?|(?:view|explore|browse)\s+all\s+(?:products?|solutions?|resources?))\b/gi;
 
@@ -304,15 +304,16 @@ function evidenceSignalsFor(
     .filter((topic): topic is string => Boolean(topic))
     .filter((topic) => !navigationOnlyEvidence.test(topic))
     .map(normalizeSignal)
-    .filter((topic) => topic.length >= 3 && topic.split(/\s+/).length <= 5)
+    .filter((topic) => topic.length >= 3 && topic.split(/\s+/).length <= 8)
     .filter((topic) => value.toLocaleLowerCase().includes(topic.toLocaleLowerCase()));
-  const wordSignals = normalizeSignal(value)
+  const signalWords = normalizeSignal(value)
     .split(/\s+/)
-    .filter((word) => word.length >= 4)
+    .filter((word) => word.length >= 4 || word.toLocaleUpperCase() === "AI")
     .filter((word) => !evidenceStopWords.has(word.toLocaleLowerCase()))
     .filter((word) => !companyTokens.has(word.toLocaleLowerCase()));
+  const phraseSignal = signalWords.length >= 2 ? signalWords.slice(0, 3).join(" ") : null;
 
-  const signals = [...topicSignals, ...wordSignals]
+  const signals = [...topicSignals, ...(phraseSignal ? [phraseSignal] : []), ...signalWords]
     .filter((signal) => !unsafePublicEvidence.test(signal))
     .filter((signal) => !usedSignals.has(signal.toLocaleLowerCase()))
     .filter(
@@ -336,11 +337,33 @@ export function targetAccountEvidenceFor(
     return [];
   }
 
+  const topicCandidates = profile.publicTopics
+    .map((topic, index) => ({ topic: safeEvidenceText(topic, 72), index }))
+    .filter((item): item is { topic: string; index: number } => Boolean(item.topic))
+    .sort((left, right) => {
+      const operatingPattern =
+        /\b(infrastructure|operations?|network(?:ing)?|security|platform|cloud|data centers?|workplaces?|resilien\w*|govern\w*|observab\w*|automation|integration)\b/i;
+      const aiPattern = /\b(?:artificial intelligence|AI)\b/i;
+      const proofOrNewsPattern =
+        /\b(trusted by|customers? worldwide|latest|discuss|hands-on|awards?|other .+ innovations?|rewriting|playbook)\b/i;
+      const score = (value: string) =>
+        (operatingPattern.test(value) ? 30 : 0) +
+        (aiPattern.test(value) ? 5 : 0) -
+        (proofOrNewsPattern.test(value) ? 20 : 0) +
+        Math.min(value.split(/\s+/).length, 10);
+      return score(right.topic) - score(left.topic) || left.index - right.index;
+    });
+  const focusCandidates = topicCandidates.slice(0, 2).map(({ topic }) => ({
+    type: "public-focus-area" as const,
+    label: "Public focus area",
+    text: topic
+  }));
   const candidates: Array<{
     type: TargetAccountEvidenceType;
     label: string;
     text: string | null;
   }> = [
+    ...focusCandidates,
     {
       type: "public-positioning",
       label: "Public positioning",
@@ -351,10 +374,10 @@ export function targetAccountEvidenceFor(
       label: "Public operating context",
       text: safeEvidenceText(profile.publicContext, 260)
     },
-    ...profile.publicTopics.slice(0, 4).map((topic) => ({
+    ...topicCandidates.slice(2, 5).map(({ topic }) => ({
       type: "public-focus-area" as const,
       label: "Public focus area",
-      text: safeEvidenceText(topic, 72)
+      text: topic
     }))
   ];
   const usedSignals = new Set<string>();

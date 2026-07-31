@@ -298,8 +298,8 @@ describe("deterministic experience copy", () => {
     const { context, draft } = draftFor("abm", answers, cisco);
     expect(draft.eyebrow).toBe("Jitterbit for Cisco");
     expect(draft.title).toMatch(/Jitterbit for Cisco/i);
-    expect(draft.headline).toMatch(/Cisco: make networking.*provable integration and automation path/i);
-    expect(draft.subhead).toMatch(/networking.*infrastructure/i);
+    expect(draft.headline).toMatch(/Cisco: connect networking.*integration and automation/i);
+    expect(draft.subhead).toMatch(/networking.*security/i);
     expect(JSON.stringify(draft)).not.toMatch(/we know|your current process|struggles with|intent|budget/i);
     expect(draft.primaryCta).toBe("Plan the working session");
     expect(
@@ -390,15 +390,21 @@ describe("deterministic experience copy", () => {
       objective: "Book a meeting"
     };
     const { context, draft } = draftFor("abm", answers, cisco);
+    const genericLabels = [
+      "Operating question",
+      "Validation boundary",
+      "Next action"
+    ] as typeof draft.signalLabels;
     const nameOnly = {
       ...draft,
+      signalLabels: genericLabels,
       thesisHeadline: "For Cisco, the first operating question should stay focused.",
       thesisBody:
         "Jitterbit connects the relevant mechanism, validation boundary, and next action without widening the first conversation.",
       narrativeArc: "What should Cisco and its IT operations teams validate first?",
-      sections: draft.sections.map((section) => ({
+      sections: draft.sections.map((section, index) => ({
         ...section,
-        eyebrow: "Operating question",
+        eyebrow: genericLabels[index],
         headline: "Make the first validation boundary concrete.",
         body: "Connect the systems, workflow, and result the team needs to examine.",
         proof: "Which operating boundary should the team validate first?"

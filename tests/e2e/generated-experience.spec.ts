@@ -243,7 +243,7 @@ test.describe("generated 1:1 experience", () => {
       expect(visibleCopy, `forbidden copy found: ${phrase}`).not.toContain(phrase);
     }
 
-    await expect(page.locator(".close .primary")).toHaveText(`Explore ${sellerBrand.companyName}`);
+    await expect(page.locator(".close .primary")).toHaveText(experienceDraft.primaryCta);
     const carryForwardQuestions = await page.locator(".journey-card h3").allTextContents();
     expect(carryForwardQuestions).toHaveLength(3);
     expect(carryForwardQuestions.every((question) => question.trim().endsWith("?"))).toBe(true);
