@@ -7,6 +7,25 @@ import {
 import { apiError, logServerError, noStoreHeaders } from "@/lib/http";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Max-Age": "86400"
+};
+
+function withEventCors(response: NextResponse): NextResponse {
+  for (const [name, value] of Object.entries(corsHeaders)) response.headers.set(name, value);
+  return response;
+}
+
+export function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: { ...noStoreHeaders, ...corsHeaders }
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const payload = parseEngagementEventPayload(await request.json());
@@ -29,12 +48,11 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(
+    return withEventCors(NextResponse.json(
       { accepted: true, persisted },
       { status: 202, headers: noStoreHeaders }
-    );
+    ));
   } catch (error) {
-    return apiError(error, { route: "/api/events", method: "POST" });
+    return withEventCors(apiError(error, { route: "/api/events", method: "POST" }));
   }
 }
-

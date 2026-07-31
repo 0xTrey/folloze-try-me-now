@@ -155,6 +155,30 @@ test.describe("generated 1:1 experience", () => {
     });
   }
 
+  // Regression: QA ISSUE-004. The journey links must shrink as a grid item so
+  // their deliberate horizontal overflow stays scrollable on a phone.
+  test("keeps every journey destination reachable at 390px", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fulfillFixtureAssets(page);
+    await loadGeneratedExperience(page);
+
+    const links = page.locator(".journey-links");
+    const lastDestination = links.getByRole("button").last();
+    await links.evaluate((node) => { node.scrollLeft = node.scrollWidth; });
+    await expect.poll(() => links.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+
+    const [linksBox, destinationBox] = await Promise.all([
+      links.boundingBox(),
+      lastDestination.boundingBox()
+    ]);
+    expect(linksBox).not.toBeNull();
+    expect(destinationBox).not.toBeNull();
+    expect(destinationBox!.x).toBeGreaterThanOrEqual(linksBox!.x - 1);
+    expect(destinationBox!.x + destinationBox!.width).toBeLessThanOrEqual(
+      linksBox!.x + linksBox!.width + 1
+    );
+  });
+
   test("implements an accessible, keyboard-operable tab set", async ({ page }) => {
     await fulfillFixtureAssets(page);
     await loadGeneratedExperience(page);

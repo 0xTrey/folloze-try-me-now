@@ -81,6 +81,13 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("<script>");
   });
 
+  // Regression: QA ISSUE-004. A grid child with its default intrinsic minimum
+  // width expands past a phone viewport instead of becoming a scrollable nav.
+  it("contains the journey links so mobile buyers can scroll to every section", () => {
+    expect(html).toContain(".journey-links{min-width:0;width:100%");
+    expect(html).toContain("overflow-x:auto;overscroll-behavior-inline:contain");
+  });
+
   it("uses the harvested seller palette, typography, wordmark, and imagery", () => {
     expect(html).toContain("--brand-ink:#1B3E51");
     expect(html).toContain("--brand-accent:#F44414");

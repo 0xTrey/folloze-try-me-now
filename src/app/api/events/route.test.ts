@@ -6,7 +6,7 @@ import {
   getMemoryEngagementEventsForTest
 } from "@/lib/engagement-events";
 
-import { POST } from "./route";
+import { OPTIONS, POST } from "./route";
 
 function request(body: unknown) {
   return new NextRequest("https://preview.example.com/api/events", {
@@ -33,10 +33,20 @@ describe("POST /api/events", () => {
     }));
 
     expect(response.status).toBe(202);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
     await expect(response.json()).resolves.toEqual({ accepted: true, persisted: true });
     expect(getMemoryEngagementEventsForTest()).toEqual([
       expect.objectContaining({ event: "page_heartbeat", context: { seconds: 15 } })
     ]);
+  });
+
+  it("allows a sandboxed generated experience to complete its CORS preflight", () => {
+    const response = OPTIONS();
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(response.headers.get("access-control-allow-methods")).toContain("POST");
+    expect(response.headers.get("access-control-allow-headers")).toContain("Content-Type");
   });
 
   it("rejects non-allowlisted events before persistence", async () => {
@@ -51,4 +61,3 @@ describe("POST /api/events", () => {
     expect(getMemoryEngagementEventsForTest()).toHaveLength(0);
   });
 });
-
