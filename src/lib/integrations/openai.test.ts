@@ -221,6 +221,31 @@ describe("deterministic experience copy", () => {
     expect(draft.headline.split(/\s+/).length).toBeLessThanOrEqual(11);
   });
 
+  it("uses the source title instead of clipping a long source sentence mid-thought", () => {
+    const sourceContent = {
+      sourceUrl: "https://example.com/enterprise-ai-agents",
+      title: "Jitterbit MCP: The Secure Foundation for Enterprise AI Agents",
+      description:
+        "Enterprises are racing to deploy AI agents, but most lack the governed infrastructure needed to let those agents act safely across critical systems.",
+      excerpt:
+        "Enterprises are racing to deploy AI agents, but most lack the governed infrastructure needed to let those agents act safely across critical systems."
+    };
+    const answers = {
+      sourceUrl: sourceContent.sourceUrl,
+      audience: "Enterprise architects and platform owners",
+      objective: "Educate buyers"
+    };
+    const draft = deterministicDraft({
+      brand: jitterbit,
+      useCase: "content",
+      answers,
+      sourceContent
+    });
+
+    expect(draft.headline).toBe(sourceContent.title);
+    expect(draft.headline).not.toContain("but most lack");
+  });
+
   it("rejects title-only content wrapping that ignores the supplied public source", () => {
     const answers = {
       sourceUrl: governedAutomationSource.sourceUrl,

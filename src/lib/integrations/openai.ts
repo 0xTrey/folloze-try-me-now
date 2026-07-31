@@ -123,16 +123,26 @@ function conciseRolePhrase(value: string): string {
   return words.join(" ").replace(/[\s,;:/-]+$/g, "") || "the team";
 }
 
-function compactContentHeadline(value: string, maxWords = 11): string {
-  const sentence = value.trim().split(/(?<=[.!?])\s+/, 1)[0]?.trim() || value.trim();
-  const words = sentence.split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords && !endsMidThought(sentence)) return sentence;
-  return words
+function compactContentHeadline(value: string, fallbackTitle: string, maxWords = 11): string {
+  const normalized = value.trim();
+  const firstCompleteSentence = normalized.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim();
+  if (
+    firstCompleteSentence &&
+    firstCompleteSentence.split(/\s+/).filter(Boolean).length <= maxWords &&
+    !endsMidThought(firstCompleteSentence)
+  ) {
+    return firstCompleteSentence;
+  }
+
+  const title = fallbackTitle.trim();
+  const titleWords = title.split(/\s+/).filter(Boolean);
+  if (titleWords.length <= maxWords) return title;
+
+  return titleWords
     .slice(0, maxWords)
     .join(" ")
     .replace(/\s+\b(?:and|or|but|with|to|for|of|the|a|an)$/i, "")
-    .replace(/[\s,;:\u2014-]+$/g, "")
-    .concat(".");
+    .replace(/[\s,;:\u2014-]+$/g, "");
 }
 
 export function deterministicDraft(input: {
@@ -363,7 +373,7 @@ export function deterministicDraft(input: {
         90
       ),
       eyebrow: trimSentence(`${brand.companyName} | ${sourceTitle}`, 52),
-      headline: compactContentHeadline(sourceLead || sourceTitle),
+      headline: compactContentHeadline(sourceLead || sourceTitle, sourceTitle),
       subhead: trimSentence(
         `${brand.companyName} helps ${roleAudience.toLowerCase()} connect the argument to ${profile.offerLabel.toLowerCase()} and the next operating question.`,
         280
