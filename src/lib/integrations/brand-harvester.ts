@@ -819,6 +819,8 @@ export async function extractPublicContent(
 }
 
 export function fallbackBrand(domain: string): BrandProfile {
+  const verified = verifiedBrandProfileFor(domain);
+  if (verified) return verified;
   return {
     domain,
     companyName: titleCaseDomain(domain),

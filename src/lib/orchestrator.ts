@@ -620,7 +620,17 @@ export async function runTargetBrandStage(id: string): Promise<void> {
   assertProductionSessionStore();
   const current = await getSession(id);
   const expectedDomain = current?.answers.targetDomain;
-  if (!current || !expectedDomain || current.targetBrand?.domain === expectedDomain) return;
+  const needsVerifiedUpgrade = Boolean(
+    expectedDomain &&
+    current?.targetBrand?.domain === expectedDomain &&
+    current.targetBrand.source === "fallback" &&
+    verifiedBrandProfileFor(expectedDomain)
+  );
+  if (
+    !current ||
+    !expectedDomain ||
+    (current.targetBrand?.domain === expectedDomain && !needsVerifiedUpgrade)
+  ) return;
 
   const lease = await acquireSessionLease(id, `target-brand:${expectedDomain}`, 30);
   if (!lease) return;

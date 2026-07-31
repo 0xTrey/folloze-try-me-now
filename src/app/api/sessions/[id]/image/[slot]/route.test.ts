@@ -15,6 +15,9 @@ const svg = new TextEncoder().encode(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10"><path fill="#fff" d="M0 0h20v10H0z"/></svg>'
 );
 const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+const webp = new Uint8Array([
+  0x52, 0x49, 0x46, 0x46, 0x04, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50
+]);
 
 function context(slot: string = "seller-logo", id: string = "image-session") {
   return { params: Promise.resolve({ id, slot }) };
@@ -65,7 +68,8 @@ function installImage(input: {
 
 describe("harvested image delivery route", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.mocked(fetchPinnedPublicBytes).mockReset();
+    vi.mocked(getSession).mockReset();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     installSession();
     installImage();
@@ -206,6 +210,44 @@ describe("harvested image delivery route", () => {
     expect([...bytes.slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   });
 
+  it("serves reviewed Medidata and Lilly logos from immutable local assets", async () => {
+    const medidata = verifiedBrandProfileFor("medidata.com")!;
+    vi.mocked(getSession).mockResolvedValue({ answers: {}, brand: medidata } as never);
+
+    const sellerResponse = await GET(request, context("seller-logo"));
+    const sellerSvg = await sellerResponse.text();
+    expect(sellerResponse.status).toBe(200);
+    expect(sellerResponse.headers.get("content-type")).toBe("image/svg+xml; charset=utf-8");
+    expect(sellerSvg).toContain("<title id=\"title\">Medidata</title>");
+
+    const lilly = verifiedBrandProfileFor("lilly.com")!;
+    vi.mocked(getSession).mockResolvedValue({
+      answers: {},
+      brand: medidata,
+      targetBrand: lilly
+    } as never);
+    const targetResponse = await GET(request, context("target-logo"));
+    const targetSvg = await targetResponse.text();
+    expect(targetResponse.status).toBe(200);
+    expect(targetResponse.headers.get("content-type")).toBe("image/svg+xml; charset=utf-8");
+    expect(targetSvg).toContain("<title id=\"title\">Lilly</title>");
+    expect(fetchPinnedPublicBytes).not.toHaveBeenCalled();
+  });
+
+  it("accepts a CDN-negotiated WebP when declared MIME and detected bytes agree", async () => {
+    installImage({
+      bytes: webp,
+      contentType: "image/webp",
+      finalUrl: "https://cdn.example/official-logo.png"
+    });
+
+    const response = await GET(request, context("seller-logo"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/webp");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(webp);
+  });
+
   it("does not activate the original fallback for near-match domains or unverified asset URLs", async () => {
     const verified = verifiedBrandProfileFor("servicenow.com")!;
     installImage({ status: 403 });
@@ -268,7 +310,7 @@ describe("harvested image delivery route", () => {
     expect(logged).not.toContain("cdn.example");
   });
 
-  it("rejects over-limit, MIME-confused, extension-confused, and bad-magic payloads", async () => {
+  it("rejects over-limit, MIME-confused, untyped extension-confused, and bad-magic payloads", async () => {
     installImage({ truncated: true });
     expect((await GET(request, context())).status).toBe(413);
 
@@ -279,6 +321,13 @@ describe("harvested image delivery route", () => {
     expect((await GET(request, context())).status).toBe(415);
 
     installImage({ bytes: jpeg, contentType: "image/jpeg", finalUrl: "https://cdn.example/image.png" });
+    expect((await GET(request, context())).status).toBe(200);
+
+    installImage({
+      bytes: jpeg,
+      contentType: "application/octet-stream",
+      finalUrl: "https://cdn.example/image.png"
+    });
     expect((await GET(request, context())).status).toBe(415);
 
     installImage({

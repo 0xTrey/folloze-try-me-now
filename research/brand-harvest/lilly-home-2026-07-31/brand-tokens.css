@@ -1,0 +1,13 @@
+:root {
+  --brand-primary: #D31710;
+  --brand-accent: #FFFFFF;
+  --brand-text: #111827;
+  --brand-surface: #FFFFFF;
+  --brand-font-display: "Garamond Narrow Condensed", "ITC Garamond Std", Garamond, garamond, serif;
+  --brand-font-body: "Ringside Sans", Ringside, sans-serif;
+  --brand-button-radius: 0px;
+  --brand-button-padding: 0px;
+  --brand-button-font-weight: 400;
+  --brand-card-radius: 0px;
+  --brand-card-shadow: none;
+}

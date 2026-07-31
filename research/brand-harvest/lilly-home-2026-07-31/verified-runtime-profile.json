@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "domain": "lilly.com",
+  "companyName": "Lilly",
+  "sourceUrl": "https://www.lilly.com/",
+  "verifiedAt": "2026-07-31T15:02:53Z",
+  "source": "brand-harvester-browser",
+  "description": "A medicine company that puts health above all.",
+  "publicTopics": [
+    "Medicine discovery and development",
+    "Clinical trials",
+    "Manufacturing quality and medicine safety"
+  ],
+  "logoUrl": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:2843cade-80ee-42b6-b285-a1450fef6b77/renditions/original/as/LillyLogo_RGB_Red_v3.svg?assetname=LillyLogo_RGB_Red_v3.svg",
+  "logoEvidence": {
+    "sourcePage": "https://www.lilly.com/",
+    "altText": "Lilly logo",
+    "assetType": "first-party SVG"
+  },
+  "logoDeliveryFallback": {
+    "path": "public/verified-brands/lilly/official-wordmark.svg",
+    "sha256": "c6067126cd4046a44c0d7065ee8c51b868b9bc8460f3facc3a6c225c6ae396c8",
+    "mimeType": "image/svg+xml",
+    "dimensions": { "width": 97, "height": 52 },
+    "sourcePage": "https://www.lilly.com/",
+    "reason": "This sanitized vector preserves the exact path and red fill from the public, ready-for-use first-party Lilly SVG while removing non-rendering metadata."
+  },
+  "imageUrls": [],
+  "colors": [
+    "#D31710",
+    "#191919",
+    "#FFFFFF",
+    "#333333",
+    "#D3D3D3"
+  ],
+  "primaryColor": "#D31710",
+  "accentColor": "#191919",
+  "surfaceColor": "#FFFFFF",
+  "displayFontFamily": "Georgia",
+  "bodyFontFamily": "Arial"
+}

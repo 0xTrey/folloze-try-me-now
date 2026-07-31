@@ -1,0 +1,320 @@
+{
+  "logos": [
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:2843cade-80ee-42b6-b285-a1450fef6b77/renditions/original/as/LillyLogo_RGB_Red_v3.svg?assetname=LillyLogo_RGB_Red_v3.svg",
+      "alt": "Lilly logo",
+      "className": "icon-img",
+      "width": 280,
+      "height": 150,
+      "rect": {
+        "x": 688,
+        "y": 964,
+        "width": 64,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:4ab9e605-1e9b-46ab-b500-2596a934a0a1/renditions/original/as/Lilly-Direct-H-white-RGB-Rball.svg?assetname=Lilly-Direct-H-white-RGB-Rball.svg",
+      "alt": "LillyDirect logo",
+      "className": "icon col-12",
+      "width": 300,
+      "height": 72,
+      "rect": {
+        "x": 64,
+        "y": 3370,
+        "width": 189,
+        "height": 45
+      }
+    }
+  ],
+  "images": [
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:2843cade-80ee-42b6-b285-a1450fef6b77/renditions/original/as/LillyLogo_RGB_Red_v3.svg?assetname=LillyLogo_RGB_Red_v3.svg",
+      "alt": "Lilly logo",
+      "className": "icon-img",
+      "width": 280,
+      "height": 150,
+      "rect": {
+        "x": 688,
+        "y": 964,
+        "width": 64,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:0a7b0304-6b54-4e88-ac2b-60972fbf1c44/renditions/original/as/HandHeart.svg?assetname=HandHeart.svg",
+      "alt": "hand holding a heart icon",
+      "className": "icon-img",
+      "width": 48,
+      "height": 48,
+      "rect": {
+        "x": 175,
+        "y": 1464,
+        "width": 64,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.lilly.com/eds/icons/arrow-right.svg",
+      "alt": "arrow-right",
+      "className": "",
+      "width": 20,
+      "height": 21,
+      "rect": {
+        "x": 314,
+        "y": 1822,
+        "width": 16,
+        "height": 16
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:43477b14-155e-451a-97ab-465a42fc4744/renditions/original/as/prescription.svg?assetname=prescription.svg",
+      "alt": "",
+      "className": "icon-img",
+      "width": 32,
+      "height": 32,
+      "rect": {
+        "x": 509,
+        "y": 1464,
+        "width": 64,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.lilly.com/eds/icons/arrow-right.svg",
+      "alt": "arrow-right",
+      "className": "",
+      "width": 20,
+      "height": 21,
+      "rect": {
+        "x": 665,
+        "y": 1822,
+        "width": 16,
+        "height": 16
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:19a75759-301a-4010-9aff-83e4f8704898/renditions/original/as/first-aid.svg?assetname=first-aid.svg",
+      "alt": "",
+      "className": "icon-img",
+      "width": 32,
+      "height": 32,
+      "rect": {
+        "x": 955,
+        "y": 1464,
+        "width": 64,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.lilly.com/eds/icons/arrow-right.svg",
+      "alt": "arrow-right",
+      "className": "",
+      "width": 20,
+      "height": 21,
+      "rect": {
+        "x": 1087,
+        "y": 1792,
+        "width": 16,
+        "height": 16
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:54c9067d-f229-4d08-8749-969fd54c5a39/as/couple-in-kitchen_G1779363002.avif?assetname=couple-in-kitchen_G1779363002.jpg",
+      "alt": "Older couple sitting on a living room couch as the woman looks at the man as he laughs",
+      "className": "media-carousel-image",
+      "width": 2048,
+      "height": 1366,
+      "rect": {
+        "x": -156,
+        "y": 2577,
+        "width": 459,
+        "height": 378
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:3569e588-50ac-4f90-b2f6-ceec7d62d185/as/woman_looking_out_window_cancer.avif?assetname=woman_looking_out_window_cancer.jpg",
+      "alt": "Woman with cancer wearing a headwrap and staring out a sunny window",
+      "className": "media-carousel-image",
+      "width": 2048,
+      "height": 1365,
+      "rect": {
+        "x": 342,
+        "y": 2530,
+        "width": 757,
+        "height": 472
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:4fb71091-0def-4552-b593-0b927ec2d037/as/woman_drying_face.avif?assetname=woman_drying_face.jpg",
+      "alt": "Woman drying her face after showering",
+      "className": "media-carousel-image",
+      "width": 2048,
+      "height": 1365,
+      "rect": {
+        "x": 1137,
+        "y": 2577,
+        "width": 459,
+        "height": 378
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:4ab9e605-1e9b-46ab-b500-2596a934a0a1/renditions/original/as/Lilly-Direct-H-white-RGB-Rball.svg?assetname=Lilly-Direct-H-white-RGB-Rball.svg",
+      "alt": "LillyDirect logo",
+      "className": "icon col-12",
+      "width": 300,
+      "height": 72,
+      "rect": {
+        "x": 64,
+        "y": 3370,
+        "width": 189,
+        "height": 45
+      }
+    },
+    {
+      "src": "https://www.lilly.com/eds/icons/arrow-right.svg",
+      "alt": "arrow-right",
+      "className": "",
+      "width": 20,
+      "height": 21,
+      "rect": {
+        "x": 219,
+        "y": 3853,
+        "width": 16,
+        "height": 16
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:1f205ed9-7829-4461-a43d-f9b1a3439f7c/as/MARYs-Story.avif?assetname=MARYs+Story.png",
+      "alt": "Photo of Mary standing in the doorway of her home",
+      "className": "video-carousel-image",
+      "width": 1920,
+      "height": 984,
+      "rect": {
+        "x": 64,
+        "y": 4198,
+        "width": 1312,
+        "height": 800
+      }
+    },
+    {
+      "src": "https://www.lilly.com/eds/icons/quote.svg",
+      "alt": "quote-icon",
+      "className": "",
+      "width": 0,
+      "height": 0,
+      "rect": {
+        "x": 136,
+        "y": 4270,
+        "width": 66,
+        "height": 40
+      }
+    },
+    {
+      "src": "https://www.lilly.com/eds/icons/play.svg",
+      "alt": "play",
+      "className": "",
+      "width": 0,
+      "height": 0,
+      "rect": {
+        "x": 352,
+        "y": 4896,
+        "width": 16,
+        "height": 16
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:92397694-12d6-4365-bf65-c2ee95cc3d85/as/Home_M&Q.avif?assetname=Home_M%26Q.jpg",
+      "alt": "Lilly employee working on a manufacturing line",
+      "className": "",
+      "width": 0,
+      "height": 0,
+      "rect": {
+        "x": 176,
+        "y": 5896,
+        "width": 347,
+        "height": 260
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:dfce8208-645c-489c-a130-6730c23ad94d/as/pills_with_drinking_glass.avif?assetname=pills_with_drinking_glass.jpg",
+      "alt": "Glass of water on a table with a pill organizer and three loose pills",
+      "className": "",
+      "width": 0,
+      "height": 0,
+      "rect": {
+        "x": 547,
+        "y": 5896,
+        "width": 347,
+        "height": 260
+      }
+    },
+    {
+      "src": "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:87f28a6c-dbc0-46ad-a1c3-c8be1dc5ebf4/as/woman_sitting_on_bed.avif?assetname=woman_sitting_on_bed.jpg",
+      "alt": "Woman siting on a bed",
+      "className": "",
+      "width": 0,
+      "height": 0,
+      "rect": {
+        "x": 917,
+        "y": 5896,
+        "width": 347,
+        "height": 260
+      }
+    }
+  ],
+  "background_images": [
+    {
+      "urls": [
+        "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:915cefe5-268d-49bb-99f4-c2ba0d51c606/as/Lilly_150_Stills_Dads_Joke_Nico_4025.avif?assetname=Lilly_150_Stills_Dads_Joke_Nico_4025.jpg"
+      ],
+      "tag": "div",
+      "className": "hero large",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900
+      },
+      "style": {
+        "backgroundColor": null,
+        "backgroundSize": "cover",
+        "backgroundPosition": "50% 50%"
+      }
+    },
+    {
+      "urls": [
+        "https://delivery-p137454-e1438138.adobeaemcloud.com/adobe/assets/urn:aaid:aem:b1647106-8193-4a27-aa40-5bca04ddb0dc/as/Woman_in_a_field.avif?assetname=Woman_in_a_field.jpg"
+      ],
+      "tag": "div",
+      "className": "hero large",
+      "rect": {
+        "x": 0,
+        "y": 3178,
+        "width": 1440,
+        "height": 900
+      },
+      "style": {
+        "backgroundColor": null,
+        "backgroundSize": "cover",
+        "backgroundPosition": "50% 50%"
+      }
+    }
+  ],
+  "brandfetch_logos": [],
+  "screenshots": {
+    "desktop_full": {
+      "path": "/Users/treyharnden/Projects/folloze-try-me-now/research/brand-harvest/lilly-home-2026-07-31/screenshots/homepage-desktop-full.png",
+      "width": 1440,
+      "height": 7887,
+      "clipped": false
+    },
+    "mobile_full": {
+      "path": "/Users/treyharnden/Projects/folloze-try-me-now/research/brand-harvest/lilly-home-2026-07-31/screenshots/homepage-mobile-full.png",
+      "width": 390,
+      "height": 8727,
+      "clipped": false
+    }
+  },
+  "manual_screenshots": []
+}

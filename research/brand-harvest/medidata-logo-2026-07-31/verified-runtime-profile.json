@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "domain": "medidata.com",
+  "companyName": "Medidata",
+  "sourceUrl": "https://www.medidata.com/en/",
+  "verifiedAt": "2026-07-31T15:02:58Z",
+  "source": "brand-harvester-browser",
+  "description": "Medidata powers smarter clinical trials with unified data, AI-driven insights, and patient-centric technology to accelerate research.",
+  "publicTopics": [
+    "Unified clinical trial data",
+    "AI-driven research insights",
+    "Patient-centric clinical technology"
+  ],
+  "logoUrl": "https://www.medidata.com/wp-content/uploads/2025/02/3DS_MEDIDATA_Logotype_Navy-2.png",
+  "logoEvidence": {
+    "sourcePage": "https://www.medidata.com/en/logo/",
+    "label": "Official Medidata Logo",
+    "assetType": "first-party PNG"
+  },
+  "logoDeliveryFallback": {
+    "path": "public/verified-brands/medidata/official-wordmark.svg",
+    "sha256": "d779e765addf531428ef0a4f31338eebd5621f5abd9a739f43497721a71930b3",
+    "mimeType": "image/svg+xml",
+    "dimensions": { "width": 827, "height": 145 },
+    "sourcePage": "https://www.medidata.com/en/logo/",
+    "reason": "The reviewed first-party PNG may be content-negotiated by the source CDN. This sanitized vector preserves the exact official inline wordmark geometry and navy brand color."
+  },
+  "imageUrls": [],
+  "colors": [
+    "#002855",
+    "#009CDE",
+    "#FFFFFF",
+    "#00214B",
+    "#F2F4F6"
+  ],
+  "primaryColor": "#002855",
+  "accentColor": "#009CDE",
+  "surfaceColor": "#FFFFFF",
+  "displayFontFamily": "Arial",
+  "bodyFontFamily": "Arial"
+}

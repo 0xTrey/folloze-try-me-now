@@ -13,6 +13,7 @@ import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
 import { patchSessionAnswers, runTargetBrandStage } from "@/lib/orchestrator";
 import { deleteSession, getSession, putSession } from "@/lib/session-store";
 import type { BrandProfile, TryMeSession } from "@/lib/types";
+import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 
 function profile(
   overrides: Partial<BrandProfile> & Pick<BrandProfile, "domain" | "companyName">
@@ -91,6 +92,63 @@ describe("target-aware ABM audience orchestration", () => {
       expect(harvested?.audienceRecommendations?.[0]?.rationale).not.toContain(
         "public public"
       );
+    } finally {
+      await deleteSession(id);
+    }
+  });
+
+  it("upgrades a same-domain target fallback when a reviewed profile becomes available", async () => {
+    const id = "target-brand-verified-upgrade";
+    const seller = profile({
+      domain: "medidata.com",
+      companyName: "Medidata",
+      description: "Clinical trial technology."
+    });
+    const staleTarget = profile({
+      domain: "lilly.com",
+      companyName: "Lilly",
+      source: "fallback",
+      logoUrl: undefined
+    });
+    const verifiedTarget = verifiedBrandProfileFor("lilly.com")!;
+    const now = new Date().toISOString();
+    await putSession({
+      id,
+      editorTokenHash: "private-editor-hash",
+      useCase: "abm",
+      companyDomain: seller.domain,
+      status: "collecting",
+      createdAt: now,
+      updatedAt: now,
+      temporaryUrl: `https://example.com/e/${id}`,
+      revision: 1,
+      stages: {
+        brand: { status: "complete" },
+        audience: { status: "running", startedAt: now },
+        story: { status: "pending" }
+      },
+      answers: { targetDomain: "lilly.com" },
+      brand: seller,
+      targetBrand: staleTarget,
+      audienceSuggestions: [],
+      events: []
+    });
+    integrationMocks.harvestBrand.mockResolvedValueOnce(verifiedTarget);
+
+    try {
+      await runTargetBrandStage(id);
+      const upgraded = await getSession(id);
+
+      expect(integrationMocks.harvestBrand).toHaveBeenCalledWith("lilly.com");
+      expect(upgraded?.targetBrand).toMatchObject({
+        companyName: "Lilly",
+        logoUrl: expect.stringContaining("LillyLogo_RGB_Red_v3.svg"),
+        source: "brand-harvester"
+      });
+      expect(upgraded?.events.map(({ name }) => name)).toEqual(expect.arrayContaining([
+        "target_harvest_started",
+        "target_harvest_completed"
+      ]));
     } finally {
       await deleteSession(id);
     }

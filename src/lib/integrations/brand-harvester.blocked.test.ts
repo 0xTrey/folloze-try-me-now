@@ -51,6 +51,24 @@ describe("blocked public brand sites", () => {
     expect(profile.bodyFontUrl).toContain("fonts.gstatic.com/s/inter/");
   });
 
+  it("uses reviewed real logos when Medidata or Lilly blocks the fast fetch", async () => {
+    const medidata = await harvestBrand("medidata.com");
+    const lilly = await harvestBrand("lilly.com");
+
+    expect(medidata).toMatchObject({
+      companyName: "Medidata",
+      logoUrl: expect.stringContaining("3DS_MEDIDATA_Logotype_Navy-2.png"),
+      primaryColor: "#002855",
+      source: "brand-harvester"
+    });
+    expect(lilly).toMatchObject({
+      companyName: "Lilly",
+      logoUrl: expect.stringContaining("LillyLogo_RGB_Red_v3.svg"),
+      primaryColor: "#D31710",
+      source: "brand-harvester"
+    });
+  });
+
   it("does not mislabel an unknown blocked site as verified", async () => {
     await expect(harvestBrand("unknown-example.test")).rejects.toThrow("Akamai returned 403");
     const logged = vi.mocked(console.error).mock.calls

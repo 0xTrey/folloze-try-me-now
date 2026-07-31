@@ -19,6 +19,7 @@ const ids = new Set<string>();
 
 function fallbackSession(id: string, domain: string): TryMeSession {
   const now = new Date().toISOString();
+  const genericFallback = fallbackBrand("unverified-example.test");
   return {
     id,
     editorTokenHash: "private-editor-hash",
@@ -35,7 +36,12 @@ function fallbackSession(id: string, domain: string): TryMeSession {
       story: { status: "pending" }
     },
     answers: {},
-    brand: fallbackBrand(domain),
+    brand: {
+      ...genericFallback,
+      domain,
+      companyName: domain === "servicenow.com" ? "ServiceNow" : genericFallback.companyName,
+      sourceUrl: `https://${domain}`
+    },
     audienceSuggestions: [],
     events: []
   };

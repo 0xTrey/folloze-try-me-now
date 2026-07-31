@@ -1,0 +1,62 @@
+{
+  "logos": [
+    {
+      "src": "https://www.medidata.com/wp-content/uploads/2025/02/3DS_MEDIDATA_Logotype_Navy-2-816x0-c-top.webp",
+      "alt": "",
+      "className": "",
+      "width": 816,
+      "height": 149,
+      "rect": {
+        "x": 69,
+        "y": 394,
+        "width": 406,
+        "height": 74
+      }
+    }
+  ],
+  "images": [
+    {
+      "src": "https://cdn.userway.org/widgetapp/images/body_wh.svg",
+      "alt": "",
+      "className": "ui_w",
+      "width": 60,
+      "height": 60,
+      "rect": {
+        "x": 13,
+        "y": 943,
+        "width": 44,
+        "height": 44
+      }
+    },
+    {
+      "src": "https://www.medidata.com/wp-content/uploads/2025/02/3DS_MEDIDATA_Logotype_Navy-2-816x0-c-top.webp",
+      "alt": "",
+      "className": "",
+      "width": 816,
+      "height": 149,
+      "rect": {
+        "x": 69,
+        "y": 394,
+        "width": 406,
+        "height": 74
+      }
+    }
+  ],
+  "background_images": [],
+  "brandfetch_logos": [],
+  "screenshots": {
+    "desktop_full": {
+      "path": "/Users/treyharnden/Projects/folloze-try-me-now/research/brand-harvest/medidata-logo-2026-07-31/screenshots/homepage-desktop-full.png",
+      "width": 1440,
+      "height": 1763,
+      "clipped": false
+    },
+    "mobile_full": {
+      "path": "/Users/treyharnden/Projects/folloze-try-me-now/research/brand-harvest/medidata-logo-2026-07-31/screenshots/homepage-mobile-full.png",
+      "width": 390,
+      "height": 1969,
+      "clipped": false
+    }
+  },
+  "manual_screenshots": []
+}

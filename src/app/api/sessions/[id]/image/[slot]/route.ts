@@ -14,6 +14,7 @@ import { getSession } from "@/lib/session-store";
 import type { TryMeSession } from "@/lib/types";
 import {
   brandPresentationFor,
+  verifiedBrandLogoFallbackFor,
   verifiedBrandProfileFor
 } from "@/lib/verified-brand-profiles";
 
@@ -218,12 +219,72 @@ function canonicalDomain(value: string): string {
   return value.trim().toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
 }
 
-async function verifiedServiceNowFallback(
+async function readReviewedLogo(path: string): Promise<Uint8Array> {
+  switch (path) {
+    case "public/verified-brands/servicenow/homepage-header-logo.png":
+      return new Uint8Array(await readFile(join(
+        process.cwd(),
+        "public",
+        "verified-brands",
+        "servicenow",
+        "homepage-header-logo.png"
+      )));
+    case "public/verified-brands/medidata/official-wordmark.svg":
+      return new Uint8Array(await readFile(join(
+        process.cwd(),
+        "public",
+        "verified-brands",
+        "medidata",
+        "official-wordmark.svg"
+      )));
+    case "public/verified-brands/lilly/official-wordmark.svg":
+      return new Uint8Array(await readFile(join(
+        process.cwd(),
+        "public",
+        "verified-brands",
+        "lilly",
+        "official-wordmark.svg"
+      )));
+    default:
+      throw new Error("The reviewed logo path is not registered for delivery.");
+  }
+}
+
+async function verifiedLogoFallback(
   session: TryMeSession | null,
   slot: ImageSlot,
   sourceUrl: string
 ): Promise<OriginalImageFallback | undefined> {
-  if (!session) return undefined;
+  if (!session || !slot.endsWith("-logo")) return undefined;
+  const profile = slot.startsWith("seller-") ? session.brand : session.targetBrand;
+  if (!profile || profile.source !== "brand-harvester") return undefined;
+
+  const fallback = verifiedBrandLogoFallbackFor(profile.domain, sourceUrl);
+  if (!fallback) return undefined;
+  try {
+    const bytes = await readReviewedLogo(fallback.path);
+    const kind = detectImageKind(bytes);
+    if (!kind) throw new Error("The reviewed logo file is not a supported safe image.");
+    return { bytes, kind };
+  } catch (error) {
+    logServerError(error, {
+      route: "/api/sessions/[id]/image/[slot]",
+      method: "GET",
+      sessionId: session.id,
+      operation: "verified_brand_logo_read",
+      code: "verified_brand_logo_unavailable",
+      details: { slot }
+    });
+    return undefined;
+  }
+}
+
+async function verifiedServiceNowHeroFallback(
+  session: TryMeSession | null,
+  slot: ImageSlot,
+  sourceUrl: string
+): Promise<OriginalImageFallback | undefined> {
+  if (!session || !slot.endsWith("-image-0")) return undefined;
   const profile = slot.startsWith("seller-") ? session.brand : session.targetBrand;
   if (
     !profile ||
@@ -237,35 +298,8 @@ async function verifiedServiceNowFallback(
   if (!verified || canonicalDomain(verified.domain) !== canonicalDomain(profile.domain)) {
     return undefined;
   }
-  const expectedSource = slot.endsWith("-logo")
-    ? verified.logoUrl
-    : slot.endsWith("-image-0")
-      ? verified.imageUrls[0]
-      : undefined;
+  const expectedSource = verified.imageUrls[0];
   if (!expectedSource || sourceUrl !== expectedSource) return undefined;
-
-  if (slot.endsWith("-logo")) {
-    try {
-      const bytes = await readFile(join(
-        process.cwd(),
-        "public",
-        "verified-brands",
-        "servicenow",
-        "homepage-header-logo.png"
-      ));
-      return { bytes: new Uint8Array(bytes), kind: "png" };
-    } catch (error) {
-      logServerError(error, {
-        route: "/api/sessions/[id]/image/[slot]",
-        method: "GET",
-        sessionId: session.id,
-        operation: "verified_brand_asset_read",
-        code: "verified_brand_asset_unavailable",
-        details: { slot }
-      });
-      return undefined;
-    }
-  }
 
   const presentation = brandPresentationFor(verified);
   const navy = verified.primaryColor;
@@ -331,6 +365,9 @@ export async function GET(request: Request, context: RouteContext) {
     return imageError(404, "image_not_found", "This image asset is unavailable.");
   }
 
+  const reviewedLogo = await verifiedLogoFallback(session, slot, sourceUrl);
+  if (reviewedLogo) return imageResponse(reviewedLogo.bytes, reviewedLogo.kind);
+
   try {
     const result = await fetchPinnedPublicBytes(sourceUrl, {
       timeoutMs: IMAGE_TIMEOUT_MS,
@@ -341,7 +378,7 @@ export async function GET(request: Request, context: RouteContext) {
       }
     });
     if (result.status !== 200) {
-      const originalFallback = await verifiedServiceNowFallback(session, slot, sourceUrl);
+      const originalFallback = await verifiedServiceNowHeroFallback(session, slot, sourceUrl);
       if (originalFallback) return imageResponse(originalFallback.bytes, originalFallback.kind);
       return loggedImageError({
         status: 502,
@@ -374,7 +411,10 @@ export async function GET(request: Request, context: RouteContext) {
       !detected ||
       contentHint === "invalid" ||
       (contentHint !== "generic" && contentHint !== detected) ||
-      (pathHint && pathHint !== detected)
+      // Modern CDNs legitimately negotiate AVIF/WebP for a .png/.jpg URL.
+      // Explicit MIME must still match the detected bytes; the extension is a
+      // security signal only when the upstream supplies no useful MIME.
+      (contentHint === "generic" && pathHint && pathHint !== detected)
     ) {
       return loggedImageError({
         status: 415,
@@ -395,7 +435,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     return imageResponse(result.bytes, detected);
   } catch (error) {
-    const originalFallback = await verifiedServiceNowFallback(session, slot, sourceUrl);
+    const originalFallback = await verifiedServiceNowHeroFallback(session, slot, sourceUrl);
     if (originalFallback) return imageResponse(originalFallback.bytes, originalFallback.kind);
     const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
     const requestId = logServerError(new Error(timedOut ? "Image proxy timed out." : "Image proxy fetch failed."), {

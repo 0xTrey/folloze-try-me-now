@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   brandPresentationFor,
+  verifiedBrandLogoFallbackFor,
   verifiedBrandProfileFor
 } from "@/lib/verified-brand-profiles";
 
@@ -39,5 +40,43 @@ describe("verified browser-backed brand profiles", () => {
 
   it("does not pretend an unverified domain has a browser-backed profile", () => {
     expect(verifiedBrandProfileFor("unknown-example.test")).toBeUndefined();
+  });
+
+  it("provides exact reviewed Medidata and Lilly wordmarks", () => {
+    const medidata = verifiedBrandProfileFor("https://www.medidata.com/en/logo/");
+    const lilly = verifiedBrandProfileFor("www.lilly.com");
+
+    expect(medidata).toMatchObject({
+      companyName: "Medidata",
+      primaryColor: "#002855",
+      accentColor: "#009CDE",
+      logoUrl: expect.stringContaining("3DS_MEDIDATA_Logotype_Navy-2.png"),
+      source: "brand-harvester"
+    });
+    expect(lilly).toMatchObject({
+      companyName: "Lilly",
+      primaryColor: "#D31710",
+      logoUrl: expect.stringContaining("LillyLogo_RGB_Red_v3.svg"),
+      source: "brand-harvester"
+    });
+    expect(verifiedBrandLogoFallbackFor(medidata!.domain, medidata!.logoUrl!)).toEqual({
+      path: "public/verified-brands/medidata/official-wordmark.svg",
+      sourceUrl: medidata!.logoUrl
+    });
+    expect(verifiedBrandLogoFallbackFor(lilly!.domain, lilly!.logoUrl!)).toEqual({
+      path: "public/verified-brands/lilly/official-wordmark.svg",
+      sourceUrl: lilly!.logoUrl
+    });
+  });
+
+  it("does not map near-match domains or substituted URLs to local files", () => {
+    const medidata = verifiedBrandProfileFor("medidata.com")!;
+
+    expect(
+      verifiedBrandLogoFallbackFor("medidata.com.attacker.example", medidata.logoUrl!)
+    ).toBeUndefined();
+    expect(
+      verifiedBrandLogoFallbackFor("medidata.com", "https://attacker.example/logo.svg")
+    ).toBeUndefined();
   });
 });

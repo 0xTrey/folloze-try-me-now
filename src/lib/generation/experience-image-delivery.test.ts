@@ -74,6 +74,47 @@ describe("generated experience image delivery", () => {
     for (const rawUrl of source!.imageUrls) expect(html).not.toContain(rawUrl);
   });
 
+  it("renders distinct Medidata and Lilly logos in the ABM lockup", () => {
+    const seller = verifiedBrandProfileFor("medidata.com")!;
+    const target = verifiedBrandProfileFor("lilly.com")!;
+    const sources = imageDeliverySources({
+      answers: {},
+      brand: seller,
+      targetBrand: target
+    });
+    const deliveredSeller = brandWithFirstPartyImages(
+      "medidata-lilly-session",
+      seller,
+      sources,
+      9
+    );
+    const deliveredTarget = brandWithFirstPartyImages(
+      "medidata-lilly-session",
+      target,
+      sources,
+      9
+    );
+
+    const html = renderExperienceHtml({
+      draft: { ...draft, campaignRegister: "one-to-one-abm" },
+      brand: deliveredSeller,
+      targetBrand: deliveredTarget,
+      useCase: "abm",
+      answers: { targetDomain: "lilly.com" }
+    });
+
+    expect(html).toContain(
+      '<img src="/api/sessions/medidata-lilly-session/image/seller-logo?v=9" alt="" aria-hidden="true">'
+    );
+    expect(html).toContain(
+      '<img src="/api/sessions/medidata-lilly-session/image/target-logo?v=9" alt="" aria-hidden="true">'
+    );
+    expect(html).toContain('class="wordmark seller-wordmark" role="img" aria-label="Medidata"');
+    expect(html).toContain('class="wordmark target-wordmark" role="img" aria-label="Lilly"');
+    expect(html).not.toContain(seller.logoUrl);
+    expect(html).not.toContain(target.logoUrl);
+  });
+
   it("does not accept arbitrary same-origin paths that resemble image delivery", () => {
     const source = verifiedBrandProfileFor("servicenow.com")!;
     const html = renderExperienceHtml({

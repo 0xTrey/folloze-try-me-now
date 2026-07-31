@@ -1,0 +1,13 @@
+:root {
+  --brand-primary: #002855;
+  --brand-accent: #009CDE;
+  --brand-text: #111827;
+  --brand-surface: #FFFFFF;
+  --brand-font-display: Arial;
+  --brand-font-body: Arial, sans-serif;
+  --brand-button-radius: 8px;
+  --brand-button-padding: 0px 15px 0px 0px;
+  --brand-button-font-weight: 400;
+  --brand-card-radius: 8px;
+  --brand-card-shadow: rgba(0, 56, 255, 0.22) 0px 0px 0px 4px;
+}
