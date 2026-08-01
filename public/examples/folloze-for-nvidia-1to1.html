@@ -225,6 +225,14 @@
     .modal-top { display: flex; justify-content: space-between; gap: 24px; }
     .modal h3 { margin: 0; color: var(--ink); font: 500 38px/1.03 "Instrument Sans",sans-serif; letter-spacing: -.035em; }
     .modal-close { width: 42px; height: 42px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 50%; cursor: pointer; background: var(--white); font-size: 21px; }
+    /* Folloze injects shared fz-* component rules around published HTML. Keep
+       the bespoke desktop contract authoritative when those selectors collide. */
+    .page .nav.fz-navs-1 { margin: 0; padding: 0; font-weight: inherit; }
+    .page .button.fz-btn { font-weight: 400; line-height: normal; }
+    .page .display.fz-heading-2 { font-weight: var(--fz-weight-medium); }
+    .page .stage-title.fz-heading-2 { color: var(--white); font: 500 30px/1.08 "Instrument Sans",sans-serif; }
+    .page .path-tabs.fz-tabs-2 .path-tab[aria-selected="false"] { color: var(--body); border-radius: 18px; }
+    #sprintModal .modal-close.fz-btn-circle { width: 42px; height: 42px; min-height: 0; padding: 0; color: inherit; font-weight: 400; line-height: normal; }
     .modal-copy { margin: 16px 0 0; line-height: 1.55; }
     .sprint-grid { margin: 25px 0; display: grid; grid-template-columns: repeat(2,1fr); gap: 9px; }
     .sprint-card { padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas); }

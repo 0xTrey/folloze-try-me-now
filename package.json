@@ -17,8 +17,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "qa:visual:folloze": "playwright test tests/e2e/folloze-wrapper-desktop.spec.ts tests/e2e/verified-logo-lockup.spec.ts --project=desktop",
+    "qa:visual:folloze:live": "node scripts/compare-folloze-render.mjs",
     "db:migrate:leads": "node scripts/migrate-leads.mjs",
     "db:export:leads": "node scripts/export-leads.mjs",
+    "trace:inspect": "node scripts/inspect-trace.mjs",
     "qa:claim-ledger": "node scripts/verify-claim-ledger.mjs",
     "qa": "npm run lint && npm run typecheck && npm run test && npm run build && npm run build:webpack"
   },

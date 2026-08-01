@@ -1,0 +1,31 @@
+/*
+ * Frozen reproduction of the wrapper-sensitive declarations observed on the
+ * published Folloze NVIDIA board on 2026-07-31. This intentionally contains
+ * only selectors used by the checked-in example; it is not a Folloze theme.
+ */
+.folloze-runtime .fz-heading-2 {
+  color: #07182d;
+  font-weight: 600;
+}
+
+.folloze-runtime .fz-btn {
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.folloze-runtime .fz-navs-1 {
+  margin: 2px;
+  padding: 0 16px;
+  font-weight: 600;
+}
+
+.folloze-runtime .fz-tabs-2 .path-tab[aria-selected="false"] {
+  color: #6b7e9d;
+  border-radius: 5px;
+}
+
+.folloze-runtime .fz-btn-circle {
+  min-height: 42px;
+  padding: 1px 6px;
+  color: #ffffff;
+}
