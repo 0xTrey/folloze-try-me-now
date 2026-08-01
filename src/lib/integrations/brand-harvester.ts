@@ -125,14 +125,39 @@ function numericAttr(tag: string, name: string): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-function extractLogo(html: string, base: URL, companyName: string): string | undefined {
+function extractLogo(
+  html: string,
+  base: URL,
+  companyName: string
+): {
+  logoUrl?: string;
+  receipt: NonNullable<BrandProfile["diagnostics"]>["logo"];
+} {
   const companyKeys = [entityKey(companyName), entityKey(base.hostname.split(".")[0] ?? "")]
     .filter((key) => key.length >= 2)
     .filter((key, index, values) => values.indexOf(key) === index);
+  let imageCandidateCount = 0;
+  let rejectedImageCount = 0;
+  const inlineSvgCandidateCount = (html.match(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi) ?? [])
+    .filter((svg) => {
+      const descriptor = [
+        svg.match(/^<svg\b[^>]*>/i)?.[0],
+        svg.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1],
+        svg.match(/<desc\b[^>]*>([\s\S]*?)<\/desc>/i)?.[1]
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const descriptorKey = entityKey(stripTags(descriptor));
+      return (
+        companyKeys.some((key) => descriptorKey.includes(key)) &&
+        /logo|brand|role\s*=\s*["']img|aria-label|<title/i.test(svg)
+      );
+    }).length;
   const scored = (html.match(/<img\b[^>]*>/gi) ?? [])
     .map((tag) => {
       const source = imageSource(tag, base);
       if (!source) return null;
+      imageCandidateCount += 1;
       const sourceName = (() => {
         try {
           return new URL(source).pathname.split("/").at(-1) ?? "";
@@ -156,15 +181,24 @@ function extractLogo(html: string, base: URL, companyName: string): string | und
         !isVectorAsset &&
         (Boolean(width && height && (width > 600 || height > 300)) ||
           /hero|banner|photograph|building|campus|office|1600x900|1200x630/.test(descriptor));
-      if (looksLikePhotography) return null;
+      if (looksLikePhotography) {
+        rejectedImageCount += 1;
+        return null;
+      }
       const descriptorKey = entityKey(descriptor);
       const companyNameSignal = companyKeys.some((key) => descriptorKey.includes(key));
-      if (!companyNameSignal) return null;
+      if (!companyNameSignal) {
+        rejectedImageCount += 1;
+        return null;
+      }
       const nonLogoRole =
         /app[-_ ]?store|google[-_ ]?play|download(?:[^a-z]+\w+){0,4}[^a-z]+app|badge|customer|partner|testimonial/.test(
           descriptor
         );
-      if (nonLogoRole) return null;
+      if (nonLogoRole) {
+        rejectedImageCount += 1;
+        return null;
+      }
       const structuralLogoSignal = /mainnav|site[-_ ]?logo|navbar.*logo|header.*logo/.test(descriptor);
       const compactCompanyMark =
         companyNameSignal &&
@@ -172,7 +206,10 @@ function extractLogo(html: string, base: URL, companyName: string): string | und
           Boolean(width && height && width <= 400 && height <= 180 && width > height * 1.2)) &&
         !/hero|banner|building|campus|office/.test(descriptor);
       const namedLogoSignal = companyNameSignal && /\blogo\b/.test(descriptor);
-      if (!structuralLogoSignal && !namedLogoSignal && !compactCompanyMark) return null;
+      if (!structuralLogoSignal && !namedLogoSignal && !compactCompanyMark) {
+        rejectedImageCount += 1;
+        return null;
+      }
       let score = 0;
       if (descriptor.includes("logo")) score += 50;
       if (companyNameSignal) score += 35;
@@ -184,17 +221,45 @@ function extractLogo(html: string, base: URL, companyName: string): string | und
     })
     .filter((candidate): candidate is { source: string; score: number } => Boolean(candidate))
     .sort((a, b) => b.score - a.score);
-  if (scored[0] && scored[0].score >= 35) return scored[0].source;
+  if (scored[0] && scored[0].score >= 35) {
+    return {
+      logoUrl: scored[0].source,
+      receipt: {
+        strategy: "semantic-image",
+        imageCandidateCount,
+        rejectedImageCount,
+        inlineSvgCandidateCount,
+        selectedScore: scored[0].score
+      }
+    };
+  }
 
   const links = html.match(/<link\b[^>]*>/gi) ?? [];
   for (const tag of links) {
     const rel = attr(tag, "rel")?.toLowerCase() ?? "";
     if (/apple-touch-icon|icon/.test(rel)) {
       const href = absoluteHttpsUrl(attr(tag, "href"), base);
-      if (href) return href;
+      if (href) {
+        return {
+          logoUrl: href,
+          receipt: {
+            strategy: "favicon",
+            imageCandidateCount,
+            rejectedImageCount,
+            inlineSvgCandidateCount
+          }
+        };
+      }
     }
   }
-  return undefined;
+  return {
+    receipt: {
+      strategy: inlineSvgCandidateCount > 0 ? "inline-svg-unportable" : "none",
+      imageCandidateCount,
+      rejectedImageCount,
+      inlineSvgCandidateCount
+    }
+  };
 }
 
 function extractImageUrls(html: string, base: URL, logoUrl?: string): string[] {
@@ -647,7 +712,8 @@ export function extractFastBrandProfile(input: {
     }),
     input.domain
   );
-  const logoUrl = extractLogo(input.html, finalUrl, companyName);
+  const logoDecision = extractLogo(input.html, finalUrl, companyName);
+  const logoUrl = logoDecision.logoUrl;
   const imageUrls = extractImageUrls(input.html, finalUrl, logoUrl);
   const topics = extractPublicTopics(input.html);
   const cleanDescription = description ? stripTags(description).slice(0, 500) : undefined;
@@ -669,7 +735,8 @@ export function extractFastBrandProfile(input: {
     displayFontUrl: absoluteHttpsUrl(fonts.displayFontUrl, fontBase),
     bodyFontUrl: absoluteHttpsUrl(fonts.bodyFontUrl, fontBase),
     sourceUrl: finalUrl.toString(),
-    source: "fast-extractor"
+    source: "fast-extractor",
+    diagnostics: { logo: logoDecision.receipt }
   };
 }
 
@@ -702,7 +769,15 @@ function normalizeRemoteProfile(value: unknown, domain: string): BrandProfile | 
     displayFontUrl: typeof profile.displayFontUrl === "string" ? profile.displayFontUrl : undefined,
     bodyFontUrl: typeof profile.bodyFontUrl === "string" ? profile.bodyFontUrl : undefined,
     sourceUrl: typeof profile.sourceUrl === "string" ? profile.sourceUrl : `https://${domain}`,
-    source: "brand-harvester"
+    source: "brand-harvester",
+    diagnostics: {
+      logo: {
+        strategy: typeof profile.logoUrl === "string" ? "remote-profile" : "none",
+        imageCandidateCount: 0,
+        rejectedImageCount: 0,
+        inlineSvgCandidateCount: 0
+      }
+    }
   };
 }
 
@@ -727,6 +802,17 @@ function mergeVerifiedDesign(
     bodyFontUrl: verified.bodyFontUrl ?? profile.bodyFontUrl,
     sourceUrl: profile.sourceUrl || verified.sourceUrl,
     source: "brand-harvester",
+    diagnostics: verified.logoUrl
+      ? {
+          ...profile.diagnostics,
+          logo: {
+            strategy: "verified-profile",
+            imageCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
+            rejectedImageCount: profile.diagnostics?.logo.rejectedImageCount ?? 0,
+            inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0
+          }
+        }
+      : profile.diagnostics,
     ...(presentation ? { presentation: { ...presentation } } : {})
   } as PresentedBrandProfile;
 }
@@ -785,10 +871,13 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
       .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled")
       .map((result) => result.value)
       .join("\n");
-    return mergeVerifiedDesign(
-      extractFastBrandProfile({ domain, html, css, finalUrl }),
-      verified
-    );
+    const extracted = extractFastBrandProfile({ domain, html, css, finalUrl });
+    extracted.diagnostics = {
+      ...extracted.diagnostics!,
+      stylesheetAttempted: styles.length,
+      stylesheetSucceeded: styles.filter((result) => result.status === "fulfilled").length
+    };
+    return mergeVerifiedDesign(extracted, verified);
   } catch (error) {
     logServerError(error, {
       operation: "brand_harvest_public_fallback",
@@ -820,7 +909,19 @@ export async function extractPublicContent(
 
 export function fallbackBrand(domain: string): BrandProfile {
   const verified = verifiedBrandProfileFor(domain);
-  if (verified) return verified;
+  if (verified) {
+    return {
+      ...verified,
+      diagnostics: {
+        logo: {
+          strategy: verified.logoUrl ? "verified-profile" : "none",
+          imageCandidateCount: 0,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0
+        }
+      }
+    };
+  }
   return {
     domain,
     companyName: titleCaseDomain(domain),
@@ -833,6 +934,14 @@ export function fallbackBrand(domain: string): BrandProfile {
     displayFontFamily: "Instrument Sans",
     bodyFontFamily: "Inter",
     sourceUrl: `https://${domain}`,
-    source: "fallback"
+    source: "fallback",
+    diagnostics: {
+      logo: {
+        strategy: "none",
+        imageCandidateCount: 0,
+        rejectedImageCount: 0,
+        inlineSvgCandidateCount: 0
+      }
+    }
   };
 }

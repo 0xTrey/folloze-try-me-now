@@ -31,6 +31,7 @@ import {
   SourceFetchError
 } from "@/lib/integrations/openai";
 import { leadStoreMode, recordLeadCapture, updateLeadOutcome } from "@/lib/lead-store";
+import { emitObservabilityLog } from "@/lib/observability";
 import {
   acquireSessionLease,
   getSession,
@@ -40,6 +41,7 @@ import {
   updateSession
 } from "@/lib/session-store";
 import { appendEvent } from "@/lib/telemetry";
+import { traceIdForSession } from "@/lib/trace-store";
 import type {
   BrandProfile,
   ClaimResult,
@@ -583,6 +585,11 @@ function isStale(startedAt: string | undefined, maxAgeMs: number): boolean {
   return !Number.isFinite(started) || Date.now() - started >= maxAgeMs;
 }
 
+function durationSince(startedAt: string | undefined): number {
+  const started = startedAt ? Date.parse(startedAt) : Number.NaN;
+  return Number.isFinite(started) ? Math.max(0, Date.now() - started) : 0;
+}
+
 function stage(status: "pending" | "running", detail: string) {
   return {
     status,
@@ -619,7 +626,7 @@ export function isGenerationReady(useCase: UseCase, answers: SessionAnswers): bo
 
 export async function createSession(
   input: CreateSessionInput
-): Promise<{ session: PublicTryMeSession; editorToken: string }> {
+): Promise<{ session: PublicTryMeSession; editorToken: string; traceId: string }> {
   assertProductionSessionStore();
   const companyDomain = normalizeDomain(input.companyDomain);
   const now = new Date().toISOString();
@@ -628,6 +635,7 @@ export async function createSession(
   const session: TryMeSession = appendEvent(
     {
       id,
+      traceId: opaqueId(),
       editorTokenHash: createHash("sha256").update(editorToken).digest("hex"),
       useCase: input.useCase,
       companyDomain,
@@ -663,7 +671,7 @@ export async function createSession(
   appendEvent(session, "temp_url_created");
   syncCampaignContracts(session);
   await putSession(session, { ttlSeconds: 3600 });
-  return { session: toPublicSession(session), editorToken };
+  return { session: toPublicSession(session), editorToken, traceId: session.traceId! };
 }
 
 export async function canEditSession(id: string, editorToken: string | undefined): Promise<boolean> {
@@ -756,9 +764,18 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
         artifact: `${profile.companyName} · ${profile.colors.slice(0, 4).join(" · ") || "brand fallback"}`
       };
       appendEvent(session, "brand_harvest_completed", {
+        attemptId,
         source: profile.source,
         identityConfidence: profile.identity?.confidence ?? "unknown",
-        identityFallback: trusted.usedFallback
+        identityFallback: trusted.usedFallback,
+        durationMs: durationSince(session.stages.brand.startedAt),
+        logoStrategy: profile.diagnostics?.logo.strategy ?? (profile.logoUrl ? "remote-profile" : "none"),
+        logoAvailable: Boolean(profile.logoUrl),
+        logoCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
+        inlineLogoCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
+        stylesheetAttempted: profile.diagnostics?.stylesheetAttempted ?? 0,
+        stylesheetSucceeded: profile.diagnostics?.stylesheetSucceeded ?? 0,
+        colorCount: profile.colors.length
       });
       if (trusted.usedFallback) {
         appendEvent(session, "brand_identity_rejected", { domain: expectedDomain });
@@ -770,8 +787,10 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
       return session;
     });
   } catch (error) {
+    const failedSession = await getSession(id);
     const requestId = logServerError(error, {
       sessionId: id,
+      traceId: failedSession ? traceIdForSession(failedSession) : undefined,
       operation: "seller_brand_harvest",
       code: "brand_fetch_fallback",
       details: { domain: expectedDomain }
@@ -796,8 +815,10 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
         errorCode: "brand_fetch_fallback"
       };
       appendEvent(session, "brand_harvest_failed", {
+        attemptId,
         error: error instanceof Error ? error.name : "unknown",
-        requestId
+        requestId,
+        durationMs: durationSince(session.stages.brand.startedAt)
       });
       return session;
     });
@@ -897,9 +918,18 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       };
       appendEvent(session, "target_harvest_completed", {
         domain: expectedDomain,
+        attemptId,
         source: profile.source,
         identityConfidence: profile.identity?.confidence ?? "unknown",
-        identityFallback: trusted.usedFallback
+        identityFallback: trusted.usedFallback,
+        durationMs: durationSince(session.stages.audience.startedAt),
+        logoStrategy: profile.diagnostics?.logo.strategy ?? (profile.logoUrl ? "remote-profile" : "none"),
+        logoAvailable: Boolean(profile.logoUrl),
+        logoCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
+        inlineLogoCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
+        stylesheetAttempted: profile.diagnostics?.stylesheetAttempted ?? 0,
+        stylesheetSucceeded: profile.diagnostics?.stylesheetSucceeded ?? 0,
+        colorCount: profile.colors.length
       });
       if (trusted.usedFallback) {
         appendEvent(session, "target_identity_rejected", { domain: expectedDomain });
@@ -913,8 +943,10 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       return session;
     });
   } catch (error) {
+    const failedSession = await getSession(id);
     const requestId = logServerError(error, {
       sessionId: id,
+      traceId: failedSession ? traceIdForSession(failedSession) : undefined,
       operation: "target_brand_harvest",
       code: "target_brand_fetch_fallback",
       details: { domain: expectedDomain }
@@ -933,8 +965,10 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       syncExperienceFoundation(session);
       appendEvent(session, "target_harvest_failed", {
         domain: expectedDomain,
+        attemptId,
         error: error instanceof Error ? error.name : "unknown",
-        requestId
+        requestId,
+        durationMs: durationSince(session.stages.audience.startedAt)
       });
       return session;
     });
@@ -1129,7 +1163,7 @@ function completeInputMutation(session: TryMeSession, previousFingerprint: strin
 export async function patchSessionAnswers(
   id: string,
   patch: SessionAnswers
-): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean }> {
+): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean; traceId: string }> {
   assertProductionSessionStore();
   const updated = await updateSession(id, (session) => {
     const previousFingerprint = storyInputFingerprint(session);
@@ -1140,14 +1174,15 @@ export async function patchSessionAnswers(
   if (!updated) throw new Error("This temporary experience has expired.");
   return {
     session: toPublicSession(updated),
-    shouldGenerate: isGenerationReady(updated.useCase, updated.answers)
+    shouldGenerate: isGenerationReady(updated.useCase, updated.answers),
+    traceId: traceIdForSession(updated)
   };
 }
 
 export async function patchSessionWorkspace(
   id: string,
   patch: SessionWorkspacePatch
-): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean }> {
+): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean; traceId: string }> {
   assertProductionSessionStore();
   const updated = await updateSession(id, (session) => {
     const previousFingerprint = storyInputFingerprint(session);
@@ -1290,7 +1325,8 @@ export async function patchSessionWorkspace(
   if (!updated) throw new Error("This temporary experience has expired.");
   return {
     session: toPublicSession(updated),
-    shouldGenerate: isGenerationReady(updated.useCase, updated.answers)
+    shouldGenerate: isGenerationReady(updated.useCase, updated.answers),
+    traceId: traceIdForSession(updated)
   };
 }
 
@@ -1331,6 +1367,7 @@ export async function duplicateSession(
   session: PublicTryMeSession;
   editorToken: string;
   shouldGenerate: boolean;
+  traceId: string;
 }> {
   assertProductionSessionStore();
   const source = await getSession(id);
@@ -1346,6 +1383,7 @@ export async function duplicateSession(
   const next: TryMeSession = {
     ...structuredClone(source),
     id: nextId,
+    traceId: opaqueId(),
     editorTokenHash: createHash("sha256").update(editorToken).digest("hex"),
     status: "collecting",
     createdAt: now,
@@ -1404,7 +1442,8 @@ export async function duplicateSession(
   return {
     session: toPublicSession(next),
     editorToken,
-    shouldGenerate: isGenerationReady(next.useCase, next.answers)
+    shouldGenerate: isGenerationReady(next.useCase, next.answers),
+    traceId: traceIdForSession(next)
   };
 }
 
@@ -1520,7 +1559,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       startedAt: new Date().toISOString(),
       detail: "Turning the brief into a tension, value, proof, and next-step sequence."
     };
-    appendEvent(session, "generation_started");
+    appendEvent(session, "generation_started", { attemptId });
     return session;
   });
   if (!started || !acquiredGeneration) return false;
@@ -1591,6 +1630,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           generationQualityReceipt.artifactRevision
         )
       : undefined;
+    const renderStartedAt = Date.now();
     const html = renderExperienceHtml({
       draft: webDraft,
       brand: renderBrand,
@@ -1601,9 +1641,11 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       fontDeliveryUrls: fontDeliveryUrls(id, selectedBrands.brand),
       qualityReceipt: generationQualityReceipt
     });
+    const renderDurationMs = Date.now() - renderStartedAt;
     if (generated.error) {
       logServerError(generated.error, {
         sessionId: id,
+        traceId: traceIdForSession(latest),
         operation: "openai_story_generation",
         code: generated.fallbackReason ?? "openai_request_failed",
         details: { durationMs: generated.durationMs, model: config.openAIModel }
@@ -1612,17 +1654,17 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       generated.source === "deterministic-fallback" &&
       generated.fallbackReason !== "openai_not_configured"
     ) {
-      console.warn(
-        JSON.stringify({
-          level: "warning",
-          event: "openai_generation_fallback",
-          sessionId: id,
-          useCase: latest.useCase,
-          reason: generated.fallbackReason ?? "unknown",
-          durationMs: generated.durationMs,
-          model: config.openAIModel
-        })
-      );
+      emitObservabilityLog("warn", {
+        type: "try_me_trace",
+        event: "openai_generation_fallback",
+        traceId: traceIdForSession(latest),
+        stage: "story",
+        outcome: "fallback",
+        useCase: latest.useCase,
+        reason: generated.fallbackReason ?? "unknown",
+        durationMs: generated.durationMs,
+        model: config.openAIModel
+      });
     }
     const readyAt = Date.now();
     await updateSession(
@@ -1670,9 +1712,23 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           artifact: controlledDraft.narrativeArc
         };
         appendEvent(session, "generation_completed", {
+          attemptId,
           source: generated.source,
           durationMs: generated.durationMs,
-          fallbackReason: generated.fallbackReason ?? null
+          fallbackReason: generated.fallbackReason ?? null,
+          model: generated.source === "openai" ? config.openAIModel : null,
+          artifactRevision: session.revision + 1,
+          qualityGate: trustFallbackReason ?? "passed"
+        });
+        appendEvent(session, "render_completed", {
+          attemptId,
+          durationMs: renderDurationMs,
+          artifactRevision: session.revision + 1
+        });
+        appendEvent(session, "preview_ready", {
+          attemptId,
+          artifactRevision: session.revision + 1,
+          submissionToPreviewMs: Math.max(0, readyAt - Date.parse(session.createdAt))
         });
         return session;
       },
@@ -1680,8 +1736,10 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     );
   } catch (error) {
     const errorCode = error instanceof SourceFetchError ? "source_fetch_failed" : "generation_failed";
+    const failedSession = await getSession(id);
     const requestId = logServerError(error, {
       sessionId: id,
+      traceId: failedSession ? traceIdForSession(failedSession) : undefined,
       operation: "experience_generation",
       code: errorCode
     });
@@ -1717,8 +1775,10 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         errorCode
       };
       appendEvent(session, "generation_failed", {
+        attemptId,
         error: error instanceof Error ? error.name : "unknown",
-        requestId
+        requestId,
+        durationMs: durationSince(session.stages.story.startedAt)
       });
       return session;
     });
@@ -1864,7 +1924,10 @@ export async function reconcileLeadSession(id: string): Promise<LeadReconciliati
   return "pending";
 }
 
-export async function claimSession(id: string, emailInput: string): Promise<ClaimResult> {
+export async function claimSession(
+  id: string,
+  emailInput: string
+): Promise<ClaimResult & { traceId: string }> {
   assertProductionSessionStore();
   const email = assertBusinessEmail(emailInput);
   const lease = await acquireSessionLease(id, "claim", 300);
@@ -1878,7 +1941,10 @@ export async function claimSession(id: string, emailInput: string): Promise<Clai
   }
 }
 
-async function claimSessionUnlocked(id: string, email: string): Promise<ClaimResult> {
+async function claimSessionUnlocked(
+  id: string,
+  email: string
+): Promise<ClaimResult & { traceId: string }> {
   const current = await getSession(id);
   if (!current || !current.experience) throw new Error("This temporary experience is not ready or has expired.");
   if (current.claim?.email && current.claim.email !== email) {
@@ -1930,7 +1996,8 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
           current.claim.emailStatus === "sent" || current.claim.emailStatus === "failed"
             ? current.claim.emailStatus
             : "skipped",
-        publishMode: "preview-only"
+        publishMode: "preview-only",
+        traceId: traceIdForSession(resolved)
       };
     }
     throw new Error("This experience has already been claimed.");
@@ -2123,7 +2190,8 @@ async function claimSessionUnlocked(id: string, email: string): Promise<ClaimRes
     return {
       session: toPublicSession(claimed),
       emailDelivery: emailStatus,
-      publishMode: "preview-only"
+      publishMode: "preview-only",
+      traceId: traceIdForSession(claimed)
     };
   } catch (error) {
     logServerError(error, {

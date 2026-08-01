@@ -9,6 +9,7 @@ import {
   recordPreviewInteraction
 } from "@/lib/orchestrator";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { supportRefForTraceId } from "@/lib/observability";
 import { getSession } from "@/lib/session-store";
 
 vi.mock("next/server", async (importOriginal) => {
@@ -68,17 +69,20 @@ describe("session workspace API", () => {
     vi.mocked(canEditSession).mockResolvedValue(true);
     vi.mocked(patchSessionAnswers).mockResolvedValue({
       session: publicSession,
-      shouldGenerate: false
+      shouldGenerate: false,
+      traceId: "private-source-trace"
     } as never);
     vi.mocked(patchSessionWorkspace).mockResolvedValue({
       session: publicSession,
-      shouldGenerate: false
+      shouldGenerate: false,
+      traceId: "private-source-trace"
     } as never);
     vi.mocked(recordPreviewInteraction).mockResolvedValue(publicSession as never);
     vi.mocked(duplicateSession).mockResolvedValue({
       session: { ...publicSession, id: "new-version-id" },
       editorToken: "new-editor-token",
-      shouldGenerate: true
+      shouldGenerate: true,
+      traceId: "private-child-trace"
     } as never);
   });
 
@@ -104,6 +108,10 @@ describe("session workspace API", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+    expect(response.headers.get("x-support-ref")).toBe(
+      supportRefForTraceId("private-source-trace")
+    );
     expect(patchSessionAnswers).toHaveBeenCalledWith(sessionId, {
       audience: "Network operations leaders",
       objective: "Book a meeting"
@@ -162,6 +170,9 @@ describe("session workspace API", () => {
       context
     );
     expect(duplicateResponse.status).toBe(201);
+    expect(duplicateResponse.headers.get("x-support-ref")).toBe(
+      supportRefForTraceId("private-child-trace")
+    );
     expect(duplicateSession).toHaveBeenCalledWith(sessionId, {
       operation: "duplicate",
       mode: "version",

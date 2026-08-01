@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { canEditSession, finalizePdfSource } from "@/lib/orchestrator";
+import { supportRefForTraceId } from "@/lib/observability";
 import { extractPdfDocumentTitle } from "@/lib/pdf-title";
 import { getSession, updateSession } from "@/lib/session-store";
 
@@ -47,6 +48,8 @@ const uploadId = "123e4567-e89b-42d3-a456-426614174000";
 const pathname = `try-me/uploads/${sessionId}/${uploadId}.pdf`;
 const statusPathname = `try-me/upload-status/${sessionId}/${uploadId}.json`;
 const payload = JSON.stringify({ sessionId, uploadId, originalName: "brief.pdf" });
+const uploadTraceId = "private-upload-trace";
+let committedEventNames: string[] = [];
 
 function requestFor(body: unknown): NextRequest {
   return new NextRequest(`https://preview.example.com/api/sessions/${sessionId}/upload`, {
@@ -94,14 +97,25 @@ describe("PDF client upload route", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.spyOn(console, "info").mockImplementation(() => undefined);
     vi.mocked(canEditSession).mockResolvedValue(true);
+    committedEventNames = [];
     vi.mocked(getSession).mockResolvedValue({
+      id: sessionId,
+      traceId: uploadTraceId,
       useCase: "content",
-      answers: { sourceUploadId: uploadId }
+      answers: { sourceUploadId: uploadId },
+      events: []
     } as never);
-    vi.mocked(updateSession).mockResolvedValue({
-      useCase: "content",
-      answers: { sourceUploadId: uploadId }
-    } as never);
+    vi.mocked(updateSession).mockImplementation(async (_id, updater) => {
+      const updated = await updater({
+        id: sessionId,
+        traceId: uploadTraceId,
+        useCase: "content",
+        answers: { sourceUploadId: uploadId },
+        events: []
+      } as never);
+      committedEventNames.push(...(updated.events ?? []).map((event) => event.name));
+      return updated as never;
+    });
     vi.mocked(put).mockResolvedValue({} as never);
     vi.mocked(del).mockResolvedValue(undefined);
     vi.mocked(extractPdfDocumentTitle).mockResolvedValue("The Now Platform Reference Guide");
@@ -128,6 +142,11 @@ describe("PDF client upload route", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+    expect(response.headers.get("x-support-ref")).toBe(
+      supportRefForTraceId(uploadTraceId)
+    );
+    expect(committedEventNames).toContain("upload_token_issued");
     expect(canEditSession).toHaveBeenCalledWith(sessionId, "editor-token");
     expect(issuedOptions).toMatchObject({
       allowedContentTypes: ["application/pdf"],
@@ -222,6 +241,11 @@ describe("PDF client upload route", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+    expect(response.headers.get("x-support-ref")).toBe(
+      supportRefForTraceId(uploadTraceId)
+    );
+    expect(committedEventNames).toContain("upload_completed");
     expect(finalizePdfSource).toHaveBeenCalledWith(sessionId, {
       uploadId,
       sourceName: "brief.pdf",

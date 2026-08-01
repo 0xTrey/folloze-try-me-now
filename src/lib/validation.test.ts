@@ -322,7 +322,7 @@ describe("expanded session workspace validation", () => {
 });
 
 describe("server error logging", () => {
-  it("returns a correlated request ID and redacts sensitive message content", async () => {
+  it("returns a correlated request ID without serializing sensitive provider content", async () => {
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const response = apiError(
       new Error("Could not process secret.pdf for person@example.com from https://example.com/private"),
@@ -339,12 +339,10 @@ describe("server error logging", () => {
     expect(response.headers.get("x-request-id")).toBe(body.requestId);
     expect(logged).toContain(body.requestId);
     expect(logged).toContain('"operation":"pdf_upload"');
-    expect(logged).toContain("[redacted-pdf]");
-    expect(logged).toContain("[redacted-email]");
-    expect(logged).toContain("[redacted-url]");
     expect(logged).not.toContain("secret.pdf");
     expect(logged).not.toContain("person@example.com");
     expect(logged).not.toContain("example.com/private");
+    expect(logged).not.toContain("message");
   });
 
   it("does not return an unknown integration error message to the browser", async () => {

@@ -143,6 +143,31 @@ describe("fast brand extraction", () => {
     expect(target.logoUrl).not.toContain("building");
   });
 
+  // Regression: Cisco's primary header mark is an inline SVG rather than an
+  // externally addressable image. The trace must explain that distinction.
+  it("records an inline-only Cisco logo decision instead of reporting no evidence", () => {
+    const target = extractFastBrandProfile({
+      domain: "cisco.com",
+      html: `<!doctype html><html><head>
+        <title>Cisco</title>
+        <meta property="og:site_name" content="Cisco">
+      </head><body><header>
+        <svg role="img" viewBox="0 0 100 52" aria-labelledby="cisco-logo-title">
+          <title id="cisco-logo-title">Cisco.com Worldwide</title>
+          <path fill="#1BA0D7" d="M1 1h98v50H1z"></path>
+        </svg>
+      </header></body></html>`,
+      finalUrl: new URL("https://www.cisco.com/")
+    });
+
+    expect(target.logoUrl).toBeUndefined();
+    expect(target.diagnostics?.logo).toMatchObject({
+      strategy: "inline-svg-unportable",
+      inlineSvgCandidateCount: 1,
+      imageCandidateCount: 0
+    });
+  });
+
   it("rejects both a visible-logo hero photo and an unrelated airline logo", () => {
     const target = extractFastBrandProfile({
       domain: "cisco.com",

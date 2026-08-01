@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hasBlob } from "@/lib/config";
 import { hasValidCronAuthorization } from "@/lib/cron-auth";
 import { apiError, HttpError, noStoreHeaders } from "@/lib/http";
+import { emitObservabilityLog } from "@/lib/observability";
 import {
   selectExpiredUploadArtifacts,
   UPLOAD_PDF_PREFIX,
@@ -47,16 +48,16 @@ export async function GET(request: NextRequest) {
       sweepPrefix(UPLOAD_PDF_PREFIX, now),
       sweepPrefix(UPLOAD_STATUS_PREFIX, now)
     ]);
-    console.info(
-      JSON.stringify({
-        type: "try_me_upload_cleanup_completed",
-        at: new Date().toISOString(),
-        scanned: uploads.scanned + statuses.scanned,
-        deleted: uploads.deleted + statuses.deleted,
-        pdfsDeleted: uploads.deleted,
-        statusRecordsDeleted: statuses.deleted
-      })
-    );
+    emitObservabilityLog("info", {
+      type: "try_me_trace",
+      event: "upload_cleanup_completed",
+      stage: "maintenance",
+      outcome: "success",
+      scanned: uploads.scanned + statuses.scanned,
+      deleted: uploads.deleted + statuses.deleted,
+      pdfsDeleted: uploads.deleted,
+      statusRecordsDeleted: statuses.deleted
+    });
     return NextResponse.json(
       {
         ok: true,

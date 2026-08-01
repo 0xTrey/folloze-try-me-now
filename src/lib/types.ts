@@ -144,6 +144,24 @@ export interface BrandProfile {
   sourceUrl: string;
   source: "brand-harvester" | "fast-extractor" | "fallback";
   identity?: EntityIdentity;
+  /** Server-only receipt explaining bounded brand and logo extraction decisions. */
+  diagnostics?: {
+    logo: {
+      strategy:
+        | "semantic-image"
+        | "favicon"
+        | "inline-svg-unportable"
+        | "remote-profile"
+        | "verified-profile"
+        | "none";
+      imageCandidateCount: number;
+      rejectedImageCount: number;
+      inlineSvgCandidateCount: number;
+      selectedScore?: number;
+    };
+    stylesheetAttempted?: number;
+    stylesheetSucceeded?: number;
+  };
 }
 
 export interface SessionAnswers {
@@ -239,6 +257,7 @@ export type PublicExperienceSummary = Pick<
 > & { ready: true };
 
 export interface SessionEvent {
+  id?: string;
   name: string;
   at: string;
   meta?: Record<string, string | number | boolean | null>;
@@ -495,6 +514,8 @@ export interface ClaimState {
 
 export interface TryMeSession {
   id: string;
+  /** Server-only correlation ID. Never expose the public session URL as an ops identifier. */
+  traceId?: string;
   editorTokenHash: string;
   useCase: UseCase;
   companyDomain: string;
@@ -554,8 +575,10 @@ export type PublicTryMeSession = Omit<
   | "campaignOfferSource"
   | "stages"
   | "targetBrand"
+  | "traceId"
   | "sourceFingerprint"
 > & {
+  supportRef: string;
   answers: PublicSessionAnswers;
   brand?: PublicBrandProfile;
   targetBrand?: PublicBrandProfile;

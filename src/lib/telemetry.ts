@@ -1,21 +1,20 @@
+import { randomUUID } from "node:crypto";
+
+import { sanitizeObservabilityText } from "@/lib/observability";
 import type { SessionEvent, TryMeSession } from "@/lib/types";
 
-const privateKeyPattern = /(email|html|content|copy|token|secret|sourceurl|offeresourceurl)$/i;
+const privateSessionEventKey =
+  /(email|html|content|copy|token|secret|sourceurl|offeresourceurl|prompt|response|filename|filepath)$/i;
 
-function safeTelemetryText(value: string): string {
-  return value
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]")
-    .replace(/https?:\/\/\S+/gi, "[redacted-url]")
-    .replace(/\b(?:sk_[A-Za-z0-9_-]{12,}|sk-(?:proj-)?[A-Za-z0-9_-]{12,})\b/g, "[redacted-secret]")
-    .slice(0, 160);
-}
-
-function sanitize(meta: SessionEvent["meta"]): SessionEvent["meta"] {
+function sanitizeSessionEventMeta(meta: SessionEvent["meta"]): SessionEvent["meta"] {
   if (!meta) return undefined;
   return Object.fromEntries(
     Object.entries(meta)
-      .filter(([key]) => !privateKeyPattern.test(key))
-      .map(([key, value]) => [key, typeof value === "string" ? safeTelemetryText(value) : value])
+      .filter(([key]) => !privateSessionEventKey.test(key))
+      .map(([key, value]) => [
+        key,
+        typeof value === "string" ? sanitizeObservabilityText(value, 160) : value
+      ])
   );
 }
 
@@ -24,8 +23,12 @@ export function appendEvent(
   name: string,
   meta?: SessionEvent["meta"]
 ): TryMeSession {
-  const event = { name, at: new Date().toISOString(), meta: sanitize(meta) };
+  const event = {
+    id: randomUUID(),
+    name,
+    at: new Date().toISOString(),
+    meta: sanitizeSessionEventMeta(meta)
+  };
   session.events = [...session.events.slice(-79), event];
-  console.info(JSON.stringify({ type: "try_me_event", sessionId: session.id, ...event }));
   return session;
 }

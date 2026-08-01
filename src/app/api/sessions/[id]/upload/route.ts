@@ -7,11 +7,21 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { config, hasOpenAI } from "@/lib/config";
-import { apiError, HttpError, logServerError, noStoreHeaders } from "@/lib/http";
+import {
+  apiError,
+  type ErrorContext,
+  HttpError,
+  logServerError,
+  noStoreHeaders,
+  startServerOperation
+} from "@/lib/http";
 import { canEditSession, finalizePdfSource, runStoryStage } from "@/lib/orchestrator";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { extractPdfDocumentTitle, pdfTitleFallback } from "@/lib/pdf-title";
 import { getSession, sessionStoreMode, updateSession } from "@/lib/session-store";
+import { appendEvent } from "@/lib/telemetry";
+import { traceIdForSession } from "@/lib/trace-store";
+import type { SessionEvent } from "@/lib/types";
 
 import { readEditorToken } from "../../editor-cookie";
 
@@ -155,7 +165,32 @@ async function releaseSessionUpload(id: string, uploadId: string): Promise<void>
   });
 }
 
-async function discardBlob(pathname: string, id: string, uploadId: string): Promise<boolean> {
+async function recordUploadLifecycleEvent(
+  id: string,
+  name: string,
+  meta: SessionEvent["meta"],
+  context: ErrorContext
+): Promise<void> {
+  try {
+    await updateSession(id, (session) => {
+      appendEvent(session, name, meta);
+      return session;
+    });
+  } catch (error) {
+    logServerError(error, {
+      ...context,
+      operation: "pdf_upload_trace_commit",
+      code: "upload_trace_commit_failed"
+    });
+  }
+}
+
+async function discardBlob(
+  pathname: string,
+  id: string,
+  uploadId: string,
+  context: ErrorContext
+): Promise<boolean> {
   let finalError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -166,6 +201,7 @@ async function discardBlob(pathname: string, id: string, uploadId: string): Prom
     }
   }
   logServerError(finalError, {
+    ...context,
     route: "/api/sessions/[id]/upload",
     method: "POST",
     sessionId: id,
@@ -178,10 +214,19 @@ async function discardBlob(pathname: string, id: string, uploadId: string): Prom
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
+  const trace = startServerOperation({
+    route: "/api/sessions/[id]/upload",
+    method: "GET",
+    sessionId: id,
+    operation: "pdf_upload_status",
+    stage: "story"
+  });
   try {
     if (!(await canEditSession(id, readEditorToken(request, id)))) {
       throw new HttpError(403, "editor_inactive", "This editor session is no longer active.");
     }
+    const session = await getSession(id);
+    if (session) trace.setTraceId(traceIdForSession(session));
     const uploadId = z.uuid().parse(request.nextUrl.searchParams.get("uploadId"));
     const snapshot = await readUploadStatus(id, uploadId);
     if (!snapshot || snapshot.value.sessionId !== id) {
@@ -195,22 +240,30 @@ export async function GET(request: NextRequest, context: RouteContext) {
           requestId: snapshot.value.requestId
         }
       },
-      { headers: noStoreHeaders }
+      {
+        headers: {
+          ...noStoreHeaders,
+          ...trace.complete(200, { status: snapshot.value.status })
+        }
+      }
     );
   } catch (error) {
-    return apiError(error, {
-      route: "/api/sessions/[id]/upload",
-      method: "GET",
-      sessionId: id,
-      operation: "pdf_upload_status"
-    });
+    return apiError(error, trace.errorContext());
   }
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
+  const trace = startServerOperation({
+    route: "/api/sessions/[id]/upload",
+    method: "POST",
+    sessionId: id,
+    operation: "pdf_upload",
+    stage: "story"
+  });
 
   try {
+    await enforceRateLimit(`upload-request:${anonymousClientKey(request)}`, 40, 60);
     const body = (await request.json()) as unknown;
     const bodyType = body && typeof body === "object" && "type" in body ? (body as { type?: unknown }).type : undefined;
 
@@ -219,17 +272,44 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (!(await canEditSession(id, readEditorToken(request, id)))) {
         throw new HttpError(403, "editor_inactive", "This editor session is no longer active.");
       }
+      const session = await getSession(id);
+      if (session) trace.setTraceId(traceIdForSession(session));
       const report = clientErrorSchema.parse(body);
       const requestId = logServerError(new Error("Client PDF upload failed."), {
+        ...trace.errorContext(),
         route: "/api/sessions/[id]/upload",
         method: "POST",
         sessionId: id,
         operation: "pdf_client_upload",
         status: report.status,
         code: "client_upload_failed",
-        details: { clientCode: report.code, fileSize: report.fileSize }
+        details: {
+          clientCode: report.code,
+          fileSizeBucket:
+            report.fileSize < 1_000_000
+              ? "under-1mb"
+              : report.fileSize < 5_000_000
+                ? "1mb-to-5mb"
+                : "5mb-or-more"
+        }
       });
-      return NextResponse.json({ ok: true, requestId }, { status: 202, headers: noStoreHeaders });
+      await recordUploadLifecycleEvent(
+        id,
+        "upload_client_failed",
+        {
+          requestId,
+          status: report.status ?? 0,
+          mode: "direct-browser-upload"
+        },
+        trace.errorContext()
+      );
+      return NextResponse.json(
+        { ok: true, requestId },
+        {
+          status: 202,
+          headers: { ...noStoreHeaders, ...trace.complete(202, { status: "accepted" }) }
+        }
+      );
     }
 
     const response = await handleUpload({
@@ -255,6 +335,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         if (!session || session.useCase !== "content" || session.answers.sourceName || session.answers.sourceUrl) {
           throw new HttpError(400, "invalid_upload_session", "This session does not accept PDF uploads.");
         }
+        trace.setTraceId(traceIdForSession(session));
         const payload = parseClientPayload(clientPayload);
         if (payload.sessionId !== id || pathname !== uploadPath(id, payload.uploadId)) {
           throw new HttpError(400, "upload_path_mismatch", "The upload destination is invalid.");
@@ -270,14 +351,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
           attemptCount: 0
         });
 
-        console.info(
-          JSON.stringify({
-            type: "try_me_upload_token_issued",
-            at: new Date().toISOString(),
-            sessionId: id,
-            uploadId: payload.uploadId,
-            maximumSizeInBytes: config.maxPdfBytes
-          })
+        await recordUploadLifecycleEvent(
+          id,
+          "upload_token_issued",
+          { requestId: trace.requestId, mode: "direct-browser-upload" },
+          trace.errorContext()
         );
 
         return {
@@ -292,9 +370,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
         const payload = parseClientPayload(tokenPayload);
+        const callbackSession = await getSession(id);
+        if (callbackSession) trace.setTraceId(traceIdForSession(callbackSession));
         const expectedPath = uploadPath(id, payload.uploadId);
         if (payload.sessionId !== id || blob.pathname !== expectedPath) {
-          if (!(await discardBlob(blob.pathname, id, payload.uploadId))) {
+          if (!(await discardBlob(blob.pathname, id, payload.uploadId, trace.errorContext()))) {
             throw new HttpError(503, "blob_cleanup_pending", "Upload cleanup is still in progress.");
           }
           throw new HttpError(400, "upload_path_mismatch", "The completed upload is invalid.");
@@ -303,6 +383,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         const snapshot = await readUploadStatus(id, payload.uploadId);
         if (!snapshot || snapshot.value.sessionId !== id) {
           logServerError(new Error("Upload callback had no matching status record."), {
+            ...trace.errorContext(),
             route: "/api/sessions/[id]/upload",
             method: "POST",
             sessionId: id,
@@ -310,25 +391,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
             code: "upload_status_missing",
             details: { uploadId: payload.uploadId }
           });
-          if (!(await discardBlob(blob.pathname, id, payload.uploadId))) {
+          if (!(await discardBlob(blob.pathname, id, payload.uploadId, trace.errorContext()))) {
             throw new HttpError(503, "blob_cleanup_pending", "Upload cleanup is still in progress.");
           }
           return;
         }
         if (snapshot.value.status === "complete" || snapshot.value.status === "failed") {
-          console.info(
-            JSON.stringify({
-              type: "try_me_upload_callback_replayed",
-              at: new Date().toISOString(),
-              sessionId: id,
-              uploadId: payload.uploadId,
-              status: snapshot.value.status
-            })
+          await recordUploadLifecycleEvent(
+            id,
+            "upload_callback_replayed",
+            { requestId: trace.requestId, status: snapshot.value.status },
+            trace.errorContext()
           );
           if (snapshot.value.status === "failed") {
             await releaseSessionUpload(id, payload.uploadId);
           }
-          if (!(await discardBlob(blob.pathname, id, payload.uploadId))) {
+          if (!(await discardBlob(blob.pathname, id, payload.uploadId, trace.errorContext()))) {
             throw new HttpError(503, "blob_cleanup_pending", "Upload cleanup is still in progress.");
           }
           return;
@@ -390,7 +468,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               leaseOwner
             );
             after(() => runStoryStage(id));
-            if (!(await discardBlob(blob.pathname, id, payload.uploadId))) {
+            if (!(await discardBlob(blob.pathname, id, payload.uploadId, trace.errorContext()))) {
               throw new HttpError(503, "blob_cleanup_pending", "Upload cleanup is still in progress.");
             }
             return;
@@ -448,17 +526,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
           );
           if (updated.shouldGenerate) after(() => runStoryStage(id));
 
-          console.info(
-            JSON.stringify({
-              type: "try_me_upload_completed",
-              at: new Date().toISOString(),
-              sessionId: id,
-              uploadId: payload.uploadId,
-              byteSize: metadata.size,
+          await recordUploadLifecycleEvent(
+            id,
+            "upload_completed",
+            {
+              requestId: trace.requestId,
+              byteSizeBucket:
+                metadata.size < 1_000_000
+                  ? "under-1mb"
+                  : metadata.size < 5_000_000
+                    ? "1mb-to-5mb"
+                    : "5mb-to-limit",
               mode: sourceOpenAIFileId ? "openai-file" : "fixture-metadata"
-            })
+            },
+            trace.errorContext()
           );
-          if (!(await discardBlob(blob.pathname, id, payload.uploadId))) {
+          if (!(await discardBlob(blob.pathname, id, payload.uploadId, trace.errorContext()))) {
             throw new HttpError(503, "blob_cleanup_pending", "Upload cleanup is still in progress.");
           }
         } catch (error) {
@@ -471,6 +554,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           }
           const errorCode = error instanceof HttpError ? error.code : "upload_processing_failed";
           const requestId = logServerError(error, {
+            ...trace.errorContext(),
             route: "/api/sessions/[id]/upload",
             method: "POST",
             sessionId: id,
@@ -479,6 +563,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
             code: errorCode,
             details: { uploadId: payload.uploadId }
           });
+          await recordUploadLifecycleEvent(
+            id,
+            "upload_processing_failed",
+            { requestId, error: errorCode },
+            trace.errorContext()
+          );
           try {
             await writeOwnedUploadStatus(
               {
@@ -496,6 +586,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             await releaseSessionUpload(id, payload.uploadId);
           } catch (statusError) {
             logServerError(statusError, {
+              ...trace.errorContext(),
               route: "/api/sessions/[id]/upload",
               method: "POST",
               sessionId: id,
@@ -505,20 +596,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
             });
             throw statusError;
           }
-          if (!(await discardBlob(blob.pathname, id, payload.uploadId))) {
+          if (!(await discardBlob(blob.pathname, id, payload.uploadId, trace.errorContext()))) {
             throw new HttpError(503, "blob_cleanup_pending", "Upload cleanup is still in progress.");
           }
         }
       }
     });
 
-    return NextResponse.json(response, { headers: noStoreHeaders });
-  } catch (error) {
-    return apiError(error, {
-      route: "/api/sessions/[id]/upload",
-      method: "POST",
-      sessionId: id,
-      operation: "pdf_upload"
+    return NextResponse.json(response, {
+      headers: { ...noStoreHeaders, ...trace.complete(200) }
     });
+  } catch (error) {
+    return apiError(error, trace.errorContext());
   }
 }

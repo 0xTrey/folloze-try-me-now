@@ -1,6 +1,11 @@
 import { after, NextRequest, NextResponse } from "next/server";
 
-import { apiError, HttpError, noStoreHeaders } from "@/lib/http";
+import {
+  apiError,
+  HttpError,
+  noStoreHeaders,
+  startServerOperation
+} from "@/lib/http";
 import {
   canEditSession,
   duplicateSession,
@@ -13,6 +18,7 @@ import {
 } from "@/lib/orchestrator";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { getSession, toPublicSession } from "@/lib/session-store";
+import { traceIdForSession } from "@/lib/trace-store";
 import {
   answersSchema,
   sessionOperationSchema,
@@ -25,26 +31,37 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
+  const trace = startServerOperation({
+    route: "/api/sessions/[id]",
+    method: "GET",
+    sessionId: id,
+    operation: "read_session"
+  });
   try {
     const session = await getSession(id);
     if (!session) {
       throw new HttpError(410, "expired", "This temporary experience has expired.");
     }
+    trace.setTraceId(traceIdForSession(session));
     after(() => recoverSessionWork(id));
-    return NextResponse.json({ session: toPublicSession(session) }, { headers: noStoreHeaders });
+    return NextResponse.json(
+      { session: toPublicSession(session) },
+      { headers: { ...noStoreHeaders, ...trace.complete(200) } }
+    );
   } catch (error) {
-    return apiError(error, {
-      route: "/api/sessions/[id]",
-      method: "GET",
-      sessionId: id,
-      operation: "read_session"
-    });
+    return apiError(error, trace.errorContext());
   }
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  const { id } = await context.params;
+  const trace = startServerOperation({
+    route: "/api/sessions/[id]",
+    method: "PATCH",
+    sessionId: id,
+    operation: "update_session"
+  });
   try {
-    const { id } = await context.params;
     await enforceRateLimit(`input:${anonymousClientKey(request)}`, 60, 60);
     if (!(await canEditSession(id, readEditorToken(request, id)))) {
       throw new HttpError(403, "editor_forbidden", "This editor session is no longer active.");
@@ -63,20 +80,25 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     if (targetDomain) after(() => runTargetBrandStage(id));
     if (updated.shouldGenerate) after(() => runStoryStage(id));
-    return NextResponse.json({ session: updated.session }, { headers: noStoreHeaders });
+    trace.setTraceId(updated.traceId);
+    return NextResponse.json(
+      { session: updated.session },
+      { headers: { ...noStoreHeaders, ...trace.complete(200) } }
+    );
   } catch (error) {
-    return apiError(error, {
-      route: "/api/sessions/[id]",
-      method: "PATCH",
-      sessionId: (await context.params).id,
-      operation: "update_session"
-    });
+    return apiError(error, trace.errorContext());
   }
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  const { id } = await context.params;
+  const trace = startServerOperation({
+    route: "/api/sessions/[id]",
+    method: "POST",
+    sessionId: id,
+    operation: "session_operation"
+  });
   try {
-    const { id } = await context.params;
     // Preview interactions are session-scoped. Including the session ID prevents
     // one completed preview (or multiple prospects behind one corporate NAT) from
     // exhausting the interaction allowance for every other active experience.
@@ -87,14 +109,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const operation = sessionOperationSchema.parse(await request.json());
     if (operation.operation === "preview-interaction") {
       const session = await recordPreviewInteraction(id, operation);
-      return NextResponse.json({ session }, { headers: noStoreHeaders });
+      const internal = await getSession(id);
+      if (internal) trace.setTraceId(traceIdForSession(internal));
+      return NextResponse.json(
+        { session },
+        { headers: { ...noStoreHeaders, ...trace.complete(200, { mode: operation.operation }) } }
+      );
     }
 
     const duplicated = await duplicateSession(id, operation);
     after(() => recoverSessionWork(duplicated.session.id));
+    trace.setTraceId(duplicated.traceId);
     const response = NextResponse.json(
       { session: duplicated.session, mode: operation.mode },
-      { status: 201, headers: noStoreHeaders }
+      {
+        status: 201,
+        headers: { ...noStoreHeaders, ...trace.complete(201, { mode: operation.mode }) }
+      }
     );
     setEditorTokenCookie(
       request,
@@ -104,11 +135,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
     return response;
   } catch (error) {
-    return apiError(error, {
-      route: "/api/sessions/[id]",
-      method: "POST",
-      sessionId: (await context.params).id,
-      operation: "session_operation"
-    });
+    return apiError(error, trace.errorContext());
   }
 }

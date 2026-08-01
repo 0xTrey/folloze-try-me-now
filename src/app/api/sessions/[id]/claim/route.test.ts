@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { canEditSession, claimSession } from "@/lib/orchestrator";
+import { supportRefForTraceId } from "@/lib/observability";
 
 vi.mock("@/lib/orchestrator", () => ({
   canEditSession: vi.fn(),
@@ -38,7 +39,8 @@ describe("POST /api/sessions/[id]/claim", () => {
     vi.mocked(claimSession).mockResolvedValue({
       session: { id, status: "claimed" },
       emailDelivery: "skipped",
-      publishMode: "preview-only"
+      publishMode: "preview-only",
+      traceId: "private-claim-trace"
     } as never);
   });
 
@@ -57,6 +59,11 @@ describe("POST /api/sessions/[id]/claim", () => {
     const response = await POST(request({ email: "Buyer@Folloze.com" }), context);
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+    expect(response.headers.get("x-support-ref")).toBe(
+      supportRefForTraceId("private-claim-trace")
+    );
+    await expect(response.clone().json()).resolves.not.toHaveProperty("traceId");
     expect(canEditSession).toHaveBeenCalledWith(id, "scoped-editor-token");
     expect(claimSession).toHaveBeenCalledOnce();
     expect(claimSession).toHaveBeenCalledWith(id, "buyer@folloze.com");

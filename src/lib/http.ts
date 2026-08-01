@@ -1,8 +1,13 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
+import {
+  emitObservabilityLog,
+  supportRefForTraceId,
+  type ObservabilityMeta
+} from "@/lib/observability";
 import { RateLimitError, RateLimitUnavailableError } from "@/lib/rate-limit";
 
 export const noStoreHeaders = {
@@ -10,17 +15,28 @@ export const noStoreHeaders = {
   "X-Robots-Tag": "noindex, nofollow"
 };
 
-type LogValue = string | number | boolean | null | undefined;
-
 export type ErrorContext = {
   route?: string;
   method?: string;
   sessionId?: string;
+  traceId?: string;
+  supportRef?: string;
+  requestId?: string;
   operation?: string;
+  stage?: string;
   status?: number;
   code?: string;
-  details?: Record<string, LogValue>;
+  details?: ObservabilityMeta;
 };
+
+export interface ServerOperationTrace {
+  readonly requestId: string;
+  setSessionId(sessionId: string): void;
+  setTraceId(traceId: string): void;
+  setSupportRef(supportRef: string): void;
+  complete(status: number, details?: ObservabilityMeta): Record<string, string>;
+  errorContext(details?: ObservabilityMeta): ErrorContext;
+}
 
 export class HttpError extends Error {
   readonly status: number;
@@ -34,47 +50,109 @@ export class HttpError extends Error {
   }
 }
 
-function safeLogText(value: string): string {
-  return value
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]")
-    .replace(/https?:\/\/\S+/gi, "[redacted-url]")
-    .replace(/\b[^\s/\\]+\.pdf\b/gi, "[redacted-pdf]")
-    .replace(/\bfile-[A-Za-z0-9_-]{8,}\b/g, "[redacted-file-id]")
-    .replace(
-      /\b(?:sk_[A-Za-z0-9_-]{12,}|sk-(?:proj-)?[A-Za-z0-9_-]{12,}|vercel_blob_[A-Za-z0-9_-]{12,})\b/g,
-      "[redacted-secret]"
-    )
-    .slice(0, 240);
-}
-
-function safeDetails(details: ErrorContext["details"]): Record<string, LogValue> | undefined {
-  if (!details) return undefined;
-  return Object.fromEntries(
-    Object.entries(details).map(([key, value]) => [key, typeof value === "string" ? safeLogText(value) : value])
-  );
+function fallbackTraceId(sessionId: string | undefined): string | undefined {
+  return sessionId
+    ? `lookup_${createHash("sha256")
+        .update(`try-me-request-trace-v1\u0000${sessionId}`)
+        .digest("hex")
+        .slice(0, 24)}`
+    : undefined;
 }
 
 export function logServerError(error: unknown, context: ErrorContext = {}): string {
-  const requestId = randomUUID();
+  const requestId = context.requestId ?? randomUUID();
   const errorName = error instanceof Error ? error.name : "UnknownError";
-  const message = error instanceof Error ? error.message : "Unknown server error";
-  console.error(
-    JSON.stringify({
-      type: "try_me_error",
-      at: new Date().toISOString(),
-      requestId,
-      code: context.code ?? "request_failed",
-      status: context.status,
-      route: context.route,
-      method: context.method,
-      sessionId: context.sessionId,
-      operation: context.operation,
-      errorName,
-      message: safeLogText(message),
-      details: safeDetails(context.details)
-    })
-  );
+  emitObservabilityLog("error", {
+    type: "try_me_error",
+    event: "request_failed",
+    requestId,
+    traceId: context.traceId ?? fallbackTraceId(context.sessionId),
+    supportRef: context.supportRef,
+    code: context.code ?? "request_failed",
+    status: context.status,
+    route: context.route,
+    method: context.method,
+    operation: context.operation,
+    stage: context.stage,
+    errorName,
+    details: context.details
+  });
   return requestId;
+}
+
+export function startServerOperation(context: ErrorContext): ServerOperationTrace {
+  const requestId = context.requestId ?? randomUUID();
+  const startedAt = Date.now();
+  let sessionId = context.sessionId;
+  let traceId = context.traceId;
+  let supportRef = context.supportRef;
+  let completed = false;
+
+  emitObservabilityLog("info", {
+    type: "try_me_request",
+    event: "request_started",
+    requestId,
+    traceId: traceId ?? fallbackTraceId(sessionId),
+    supportRef,
+    route: context.route,
+    method: context.method,
+    operation: context.operation,
+    stage: context.stage
+  });
+
+  const correlationHeaders = () => {
+    const currentTraceId = traceId ?? fallbackTraceId(sessionId);
+    const currentSupportRef = supportRef ?? (currentTraceId ? supportRefForTraceId(currentTraceId) : undefined);
+    return {
+      "X-Request-Id": requestId,
+      ...(currentSupportRef ? { "X-Support-Ref": currentSupportRef } : {})
+    };
+  };
+
+  return {
+    requestId,
+    setSessionId(nextSessionId) {
+      sessionId = nextSessionId;
+    },
+    setTraceId(nextTraceId) {
+      traceId = nextTraceId;
+      supportRef = supportRefForTraceId(nextTraceId);
+    },
+    setSupportRef(nextSupportRef) {
+      supportRef = nextSupportRef;
+    },
+    complete(status, details) {
+      if (!completed) {
+        completed = true;
+        emitObservabilityLog("info", {
+          type: "try_me_request",
+          event: "request_completed",
+          requestId,
+          traceId: traceId ?? fallbackTraceId(sessionId),
+          supportRef,
+          route: context.route,
+          method: context.method,
+          operation: context.operation,
+          stage: context.stage,
+          status,
+          durationMs: Date.now() - startedAt,
+          outcome: "success",
+          details
+        });
+      }
+      return correlationHeaders();
+    },
+    errorContext(details) {
+      return {
+        ...context,
+        requestId,
+        sessionId,
+        traceId: traceId ?? fallbackTraceId(sessionId),
+        supportRef,
+        details: { ...context.details, ...details }
+      };
+    }
+  };
 }
 
 export function apiError(error: unknown, context: ErrorContext = {}): NextResponse {
@@ -125,7 +203,28 @@ export function apiError(error: unknown, context: ErrorContext = {}): NextRespon
     }
   }
 
-  const requestId = logServerError(error, { ...context, status, code });
+  const requestId = context.requestId ?? randomUUID();
+  if (status >= 500) {
+    logServerError(error, { ...context, requestId, status, code });
+  } else {
+    emitObservabilityLog("warn", {
+      type: "try_me_request",
+      event: "request_rejected",
+      requestId,
+      traceId: context.traceId ?? fallbackTraceId(context.sessionId),
+      supportRef: context.supportRef,
+      route: context.route,
+      method: context.method,
+      operation: context.operation,
+      stage: context.stage,
+      status,
+      code,
+      outcome: "rejected"
+    });
+  }
   responseHeaders["X-Request-Id"] = requestId;
+  const traceId = context.traceId ?? fallbackTraceId(context.sessionId);
+  const supportRef = context.supportRef ?? (traceId ? supportRefForTraceId(traceId) : undefined);
+  if (supportRef) responseHeaders["X-Support-Ref"] = supportRef;
   return NextResponse.json({ error: message, code, requestId }, { status, headers: responseHeaders });
 }

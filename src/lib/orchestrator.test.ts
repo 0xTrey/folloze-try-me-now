@@ -105,6 +105,8 @@ describe("public session projection", () => {
 
     const projected = toPublicSession(session);
     expect(projected).not.toHaveProperty("editorTokenHash");
+    expect(projected).not.toHaveProperty("traceId");
+    expect(projected.supportRef).toMatch(/^TMN-/);
     expect(projected.answers).toEqual({
       sourceName: "Uploaded PDF",
       sourceUrl: "https://source-provided.invalid/",

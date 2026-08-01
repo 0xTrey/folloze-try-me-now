@@ -4,6 +4,8 @@ import { Redis } from "@upstash/redis";
 import { BlobPreconditionFailedError, del, get, put } from "@vercel/blob";
 
 import { config, hasBlob, hasRedis } from "@/lib/config";
+import { supportRefForTraceId } from "@/lib/observability";
+import { recordCommittedSessionEvents, traceIdForSession } from "@/lib/trace-store";
 import type { PublicTryMeSession, SessionAnswers, TryMeSession } from "@/lib/types";
 
 type StoredEntry = { value: TryMeSession; expiresAt?: number };
@@ -163,7 +165,7 @@ async function writeBlobEntry(
   });
 }
 
-export async function putSession(
+async function writeSession(
   session: TryMeSession,
   options: { persist?: boolean; ttlSeconds?: number } = {}
 ): Promise<void> {
@@ -185,6 +187,14 @@ export async function putSession(
   }
 
   memory.set(session.id, storedEntry(session, { ...options, ttlSeconds }));
+}
+
+export async function putSession(
+  session: TryMeSession,
+  options: { persist?: boolean; ttlSeconds?: number } = {}
+): Promise<void> {
+  await writeSession(session, options);
+  await recordCommittedSessionEvents(session);
 }
 
 export async function getSession(id: string): Promise<TryMeSession | null> {
@@ -230,6 +240,7 @@ export async function updateSession(
       next.revision += 1;
       try {
         await writeBlobEntry(id, storedEntry(next, options), { ifMatch: snapshot.etag });
+        await recordCommittedSessionEvents(next, snapshot.entry.value.events);
         return next;
       } catch (error) {
         if (error instanceof BlobPreconditionFailedError) continue;
@@ -241,10 +252,12 @@ export async function updateSession(
 
   const current = await getSession(id);
   if (!current) return null;
+  const previousEvents = structuredClone(current.events);
   const next = await updater(current);
   next.updatedAt = new Date().toISOString();
   next.revision += 1;
-  await putSession(next, options);
+  await writeSession(next, options);
+  await recordCommittedSessionEvents(next, previousEvents);
   return next;
 }
 
@@ -297,6 +310,7 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
 
   return {
     id: session.id,
+    supportRef: supportRefForTraceId(traceIdForSession(session)),
     useCase: session.useCase,
     companyDomain: session.companyDomain,
     status: session.status,

@@ -35,6 +35,7 @@ function session(
 ): PublicTryMeSession {
   return {
     id: "session-1",
+    supportRef: "TMN-TESTSESSION1",
     useCase,
     companyDomain: "jitterbit.com",
     status: "collecting",

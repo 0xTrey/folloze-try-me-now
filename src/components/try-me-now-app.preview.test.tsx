@@ -13,6 +13,7 @@ afterEach(() => cleanup());
 
 const readySession: PublicTryMeSession = {
   id: "desktop-preview-session",
+  supportRef: "TMN-DESKTOPPREV",
   useCase: "campaign",
   companyDomain: "jitterbit.com",
   status: "preview_ready_unclaimed",
