@@ -95,6 +95,7 @@ npm run qa
 - [Product requirements](docs/product-requirements.md)
 - [Architecture](docs/architecture.md)
 - [Integration readiness](docs/integration-readiness.md)
+- [Observability and QA runbook](docs/observability-and-qa.md)
 - [Launch plan](docs/launch-plan.md)
 - [Decision log](docs/decision-log.md)
 - [June 1 source recovery](docs/research/2026-06-01-source-recovery.md)
