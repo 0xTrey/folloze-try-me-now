@@ -1,7 +1,11 @@
 import { hasRemoteBrandHarvester } from "@/lib/config";
 import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
 import { logServerError } from "@/lib/http";
-import { fetchPinnedPublicText } from "@/lib/safe-fetch";
+import {
+  portableBrandLogoFromBytes,
+  portableBrandLogoFromSvg
+} from "@/lib/portable-brand-logo";
+import { fetchPinnedPublicBytes, fetchPinnedPublicText } from "@/lib/safe-fetch";
 import type { BrandProfile } from "@/lib/types";
 import {
   brandPresentationFor,
@@ -131,6 +135,7 @@ function extractLogo(
   companyName: string
 ): {
   logoUrl?: string;
+  portableLogo?: BrandProfile["portableLogo"];
   receipt: NonNullable<BrandProfile["diagnostics"]>["logo"];
 } {
   const companyKeys = [entityKey(companyName), entityKey(base.hostname.split(".")[0] ?? "")]
@@ -138,10 +143,13 @@ function extractLogo(
     .filter((key, index, values) => values.indexOf(key) === index);
   let imageCandidateCount = 0;
   let rejectedImageCount = 0;
-  const inlineSvgCandidateCount = (html.match(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi) ?? [])
+  const inlineSvgCandidates = (html.match(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi) ?? [])
     .filter((svg) => {
+      const openingTag = svg.match(/^<svg\b[^>]*>/i)?.[0] ?? "";
       const descriptor = [
-        svg.match(/^<svg\b[^>]*>/i)?.[0],
+        attr(openingTag, "aria-label"),
+        attr(openingTag, "id"),
+        attr(openingTag, "class"),
         svg.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1],
         svg.match(/<desc\b[^>]*>([\s\S]*?)<\/desc>/i)?.[1]
       ]
@@ -150,9 +158,10 @@ function extractLogo(
       const descriptorKey = entityKey(stripTags(descriptor));
       return (
         companyKeys.some((key) => descriptorKey.includes(key)) &&
-        /logo|brand|role\s*=\s*["']img|aria-label|<title/i.test(svg)
+        (/logo|brand/i.test(descriptor) || /role\s*=\s*["']img|aria-label|<title/i.test(svg))
       );
-    }).length;
+    });
+  const inlineSvgCandidateCount = inlineSvgCandidates.length;
   const scored = (html.match(/<img\b[^>]*>/gi) ?? [])
     .map((tag) => {
       const source = imageSource(tag, base);
@@ -230,6 +239,24 @@ function extractLogo(
         rejectedImageCount,
         inlineSvgCandidateCount,
         selectedScore: scored[0].score
+      }
+    };
+  }
+
+  // Many official navigation wordmarks (including Cisco's) are authored
+  // directly in the page. Preserve only self-contained, inert SVG; the
+  // session image route serves the validated bytes from the first-party app.
+  const portableLogo = inlineSvgCandidates
+    .map((svg) => portableBrandLogoFromSvg(svg))
+    .find((candidate): candidate is NonNullable<BrandProfile["portableLogo"]> => Boolean(candidate));
+  if (portableLogo) {
+    return {
+      portableLogo,
+      receipt: {
+        strategy: "inline-svg-portable",
+        imageCandidateCount,
+        rejectedImageCount,
+        inlineSvgCandidateCount
       }
     };
   }
@@ -729,6 +756,8 @@ export function extractFastBrandProfile(input: {
     publicContext,
     publicTopics: topics,
     logoUrl,
+    logoSourceUrl: logoUrl,
+    portableLogo: logoDecision.portableLogo,
     imageUrls,
     ...palette,
     ...fonts,
@@ -751,6 +780,7 @@ function normalizeRemoteProfile(value: unknown, domain: string): BrandProfile | 
   const record = value as Record<string, unknown>;
   const profile = (record.profile && typeof record.profile === "object" ? record.profile : record) as Record<string, unknown>;
   const colors = strings(profile.colors, 8).map(normalizeHex).filter((color): color is string => Boolean(color));
+  const logoUrl = typeof profile.logoUrl === "string" ? profile.logoUrl : undefined;
   return {
     domain,
     companyName: typeof profile.companyName === "string" ? profile.companyName : titleCaseDomain(domain),
@@ -758,7 +788,8 @@ function normalizeRemoteProfile(value: unknown, domain: string): BrandProfile | 
     description: typeof profile.description === "string" ? profile.description.slice(0, 500) : undefined,
     publicContext: typeof profile.publicContext === "string" ? profile.publicContext.slice(0, 2400) : undefined,
     publicTopics: strings(profile.publicTopics, 12),
-    logoUrl: typeof profile.logoUrl === "string" ? profile.logoUrl : undefined,
+    logoUrl,
+    logoSourceUrl: logoUrl,
     imageUrls: strings(profile.imageUrls, 6),
     colors,
     primaryColor: typeof profile.primaryColor === "string" ? normalizeHex(profile.primaryColor) ?? "#1C293F" : colors[0] ?? "#1C293F",
@@ -787,10 +818,13 @@ function mergeVerifiedDesign(
 ): BrandProfile {
   if (!verified) return profile;
   const presentation = brandPresentationFor(verified);
+  const logoUrl = verified.logoUrl ?? profile.logoUrl;
   return {
     ...profile,
     companyName: verified.companyName,
-    logoUrl: verified.logoUrl ?? profile.logoUrl,
+    logoUrl,
+    logoSourceUrl: logoUrl ?? profile.logoSourceUrl,
+    portableLogo: verified.logoUrl ? undefined : profile.portableLogo,
     imageUrls: [...new Set([...verified.imageUrls, ...profile.imageUrls])].slice(0, 6),
     colors: [...verified.colors],
     primaryColor: verified.primaryColor,
@@ -817,8 +851,189 @@ function mergeVerifiedDesign(
   } as PresentedBrandProfile;
 }
 
+const brandProfileCache = new Map<string, { expiresAt: number; profile: BrandProfile }>();
+const BRAND_PROFILE_CACHE_MS = 15 * 60 * 1000;
+const BRAND_PROFILE_CACHE_MAX = 100;
+
+function cachedBrandProfile(domain: string): BrandProfile | undefined {
+  if (process.env.NODE_ENV === "test") return undefined;
+  const entry = brandProfileCache.get(domain);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    brandProfileCache.delete(domain);
+    return undefined;
+  }
+  return structuredClone(entry.profile);
+}
+
+function cacheBrandProfile(domain: string, profile: BrandProfile): BrandProfile {
+  const completed: BrandProfile = {
+    ...profile,
+    logoSourceUrl: profile.logoSourceUrl ?? profile.logoUrl,
+    diagnostics: {
+      ...profile.diagnostics,
+      logo: {
+        strategy: profile.diagnostics?.logo.strategy ?? (profile.logoUrl ? "remote-profile" : "none"),
+        imageCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
+        rejectedImageCount: profile.diagnostics?.logo.rejectedImageCount ?? 0,
+        inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
+        selectedScore: profile.diagnostics?.logo.selectedScore,
+        resolutionComplete: true
+      }
+    }
+  };
+  if (process.env.NODE_ENV !== "test") {
+    if (brandProfileCache.size >= BRAND_PROFILE_CACHE_MAX) {
+      const oldest = brandProfileCache.keys().next().value as string | undefined;
+      if (oldest) brandProfileCache.delete(oldest);
+    }
+    brandProfileCache.set(domain, {
+      expiresAt: Date.now() + BRAND_PROFILE_CACHE_MS,
+      profile: structuredClone(completed)
+    });
+  }
+  return completed;
+}
+
+interface BrandfetchLogoResult {
+  companyName?: string;
+  colors: string[];
+  portableLogo: NonNullable<BrandProfile["portableLogo"]>;
+}
+
+function brandfetchLogoFormats(payload: Record<string, unknown>): string[] {
+  const logos = Array.isArray(payload.logos) ? payload.logos : [];
+  return logos
+    .filter((logo): logo is Record<string, unknown> => Boolean(logo && typeof logo === "object"))
+    .flatMap((logo) => {
+      const logoType = typeof logo.type === "string" ? logo.type.toLowerCase() : "";
+      const typeScore = logoType === "logo" ? 100 : logoType === "symbol" ? 40 : 0;
+      const formats = Array.isArray(logo.formats) ? logo.formats : [];
+      return formats
+        .filter((format): format is Record<string, unknown> => Boolean(format && typeof format === "object"))
+        .map((format) => ({
+          src: typeof format.src === "string" ? format.src : "",
+          score:
+            typeScore +
+            (format.format === "svg" ? 30 : format.format === "png" ? 20 : format.format === "webp" ? 10 : 0)
+        }));
+    })
+    .filter(({ src }) => {
+      try {
+        const url = new URL(src);
+        return url.protocol === "https:" && !url.username && !url.password;
+      } catch {
+        return false;
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+    .map(({ src }) => src)
+    .filter((src, index, values) => values.indexOf(src) === index)
+    .slice(0, 6);
+}
+
+async function fetchBrandfetchLogo(domain: string): Promise<BrandfetchLogoResult | undefined> {
+  const token = process.env.BRANDFETCH_API_KEY;
+  if (!token) return undefined;
+  try {
+    // The authenticated request is fixed to Brandfetch's API and stays
+    // server-side. Returned CDN assets are fetched anonymously through the
+    // pinned public-address boundary, validated, and copied into the session.
+    const response = await fetch(
+      `https://api.brandfetch.io/v2/brands/${encodeURIComponent(domain)}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        redirect: "error",
+        signal: AbortSignal.timeout(8_000)
+      }
+    );
+    if (!response.ok) {
+      logServerError(new Error(`Brandfetch returned HTTP ${response.status}.`), {
+        operation: "brandfetch_logo_lookup",
+        code: "brandfetch_upstream_failed",
+        status: response.status,
+        details: { domain }
+      });
+      return undefined;
+    }
+    const payload = await response.json() as Record<string, unknown>;
+    const colors = (Array.isArray(payload.colors) ? payload.colors : [])
+      .filter((color): color is Record<string, unknown> => Boolean(color && typeof color === "object"))
+      .map((color) => normalizeHex(typeof color.hex === "string" ? color.hex : ""))
+      .filter((color): color is string => Boolean(color))
+      .filter((color, index, values) => values.indexOf(color) === index)
+      .slice(0, 8);
+    for (const sourceUrl of brandfetchLogoFormats(payload)) {
+      try {
+        const asset = await fetchPinnedPublicBytes(sourceUrl, {
+          timeoutMs: 5_000,
+          maxBytes: 350_000,
+          maxRedirects: 2,
+          headers: {
+            Accept: "image/svg+xml,image/png,image/webp,image/jpeg,image/avif,image/gif;q=0.8,*/*;q=0.1"
+          }
+        });
+        if (asset.status !== 200 || asset.truncated) continue;
+        const portableLogo = portableBrandLogoFromBytes(asset.bytes, "brandfetch");
+        if (portableLogo) {
+          return {
+            companyName: typeof payload.name === "string" ? payload.name : undefined,
+            colors,
+            portableLogo
+          };
+        }
+      } catch {
+        // Try the next bounded Brandfetch format without logging its CDN URL.
+      }
+    }
+    return undefined;
+  } catch (error) {
+    logServerError(error, {
+      operation: "brandfetch_logo_lookup",
+      code: "brandfetch_lookup_failed",
+      details: { domain }
+    });
+    return undefined;
+  }
+}
+
+function profileWithBrandfetchLogo(
+  domain: string,
+  profile: BrandProfile | undefined,
+  result: BrandfetchLogoResult
+): BrandProfile {
+  const base = profile ?? fallbackBrand(domain);
+  const colors = profile
+    ? base.colors
+    : result.colors.length
+      ? result.colors
+      : base.colors;
+  return {
+    ...base,
+    companyName: profile?.companyName ?? result.companyName ?? base.companyName,
+    logoUrl: undefined,
+    logoSourceUrl: undefined,
+    portableLogo: result.portableLogo,
+    colors,
+    primaryColor: profile ? base.primaryColor : colors[0] ?? base.primaryColor,
+    accentColor: profile ? base.accentColor : colors[1] ?? base.accentColor,
+    source: "brand-harvester",
+    diagnostics: {
+      ...base.diagnostics,
+      logo: {
+        strategy: "brandfetch-portable",
+        imageCandidateCount: base.diagnostics?.logo.imageCandidateCount ?? 0,
+        rejectedImageCount: base.diagnostics?.logo.rejectedImageCount ?? 0,
+        inlineSvgCandidateCount: base.diagnostics?.logo.inlineSvgCandidateCount ?? 0
+      }
+    }
+  };
+}
+
 export async function harvestBrand(domain: string): Promise<BrandProfile> {
+  const cached = cachedBrandProfile(domain);
+  if (cached) return cached;
   const verified = verifiedBrandProfileFor(domain);
+  let candidate: BrandProfile | undefined;
   if (hasRemoteBrandHarvester && process.env.BRAND_HARVESTER_URL) {
     try {
       const response = await fetch(process.env.BRAND_HARVESTER_URL, {
@@ -832,12 +1047,14 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
       });
       if (response.ok) {
         const normalized = normalizeRemoteProfile(await response.json(), domain);
-        if (normalized) return mergeVerifiedDesign(normalized, verified);
-        logServerError(new Error("Remote Brand Harvester returned an invalid profile."), {
-          operation: "brand_harvest_remote",
-          code: "brand_harvest_invalid_profile",
-          details: { domain }
-        });
+        if (normalized) candidate = mergeVerifiedDesign(normalized, verified);
+        else {
+          logServerError(new Error("Remote Brand Harvester returned an invalid profile."), {
+            operation: "brand_harvest_remote",
+            code: "brand_harvest_invalid_profile",
+            details: { domain }
+          });
+        }
       } else {
         logServerError(new Error(`Remote Brand Harvester returned HTTP ${response.status}.`), {
           operation: "brand_harvest_remote",
@@ -857,36 +1074,58 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     }
   }
 
+  let publicFetchError: unknown;
   try {
-    const { text: html, finalUrl } = await fetchPublicText(
-      new URL(`https://${domain}`),
-      AbortSignal.timeout(8_500)
-    );
-    const styles = await Promise.allSettled(
-      stylesheetUrls(html, finalUrl).map(async (url) =>
-        (await fetchPublicText(new URL(url), AbortSignal.timeout(2_500))).text
-      )
-    );
-    const css = styles
-      .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled")
-      .map((result) => result.value)
-      .join("\n");
-    const extracted = extractFastBrandProfile({ domain, html, css, finalUrl });
-    extracted.diagnostics = {
-      ...extracted.diagnostics!,
-      stylesheetAttempted: styles.length,
-      stylesheetSucceeded: styles.filter((result) => result.status === "fulfilled").length
-    };
-    return mergeVerifiedDesign(extracted, verified);
+    if (!candidate?.logoUrl && !candidate?.portableLogo) {
+      const { text: html, finalUrl } = await fetchPublicText(
+        new URL(`https://${domain}`),
+        AbortSignal.timeout(8_500)
+      );
+      const styles = await Promise.allSettled(
+        stylesheetUrls(html, finalUrl).map(async (url) =>
+          (await fetchPublicText(new URL(url), AbortSignal.timeout(2_500))).text
+        )
+      );
+      const css = styles
+        .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled")
+        .map((result) => result.value)
+        .join("\n");
+      const extracted = extractFastBrandProfile({ domain, html, css, finalUrl });
+      extracted.diagnostics = {
+        ...extracted.diagnostics!,
+        stylesheetAttempted: styles.length,
+        stylesheetSucceeded: styles.filter((result) => result.status === "fulfilled").length
+      };
+      const mergedExtracted = mergeVerifiedDesign(extracted, verified);
+      candidate = candidate
+        ? {
+            ...candidate,
+            logoUrl: mergedExtracted.logoUrl,
+            logoSourceUrl: mergedExtracted.logoSourceUrl,
+            portableLogo: mergedExtracted.portableLogo,
+            diagnostics: mergedExtracted.diagnostics
+          }
+        : mergedExtracted;
+    }
   } catch (error) {
+    publicFetchError = error;
     logServerError(error, {
       operation: "brand_harvest_public_fallback",
       code: verified ? "brand_harvest_verified_fallback" : "brand_harvest_failed",
       details: { domain }
     });
-    if (verified) return verified;
-    throw error;
+    candidate ??= verified;
   }
+
+  if (!candidate?.logoUrl && !candidate?.portableLogo) {
+    const brandfetch = await fetchBrandfetchLogo(domain);
+    if (brandfetch) candidate = profileWithBrandfetchLogo(domain, candidate, brandfetch);
+  }
+
+  if (candidate) return cacheBrandProfile(domain, candidate);
+  throw publicFetchError instanceof Error
+    ? publicFetchError
+    : new Error("The public brand profile could not be resolved.");
 }
 
 export async function extractPublicContent(

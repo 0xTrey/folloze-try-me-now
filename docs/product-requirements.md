@@ -4,7 +4,7 @@ Status: Approved for V1 implementation
 
 Owner: Trey Harnden
 
-Last updated: 2026-07-30
+Last updated: 2026-08-04
 
 ## Source material
 
@@ -14,14 +14,15 @@ Last updated: 2026-07-30
 - Current Campaign Agent screenshot supplied with the project brief: `Screenshot 2026-07-30 at 4.32.59 PM.png`
 
 The June 1 brief is the historical product foundation. The decisions recorded in
-[`decision-log.md`](./decision-log.md) reflect the user's July 30 direction and
-override conflicts in that earlier artifact.
+[`decision-log.md`](./decision-log.md) reflect the user's July 30 and August 4
+direction and override conflicts in that earlier artifact.
 
 ## Product promise
 
 An anonymous B2B marketer or seller chooses an outcome, provides a company
 domain and two or three contextual answers, and receives a credible,
-brand-aware Folloze experience in 30 seconds or less.
+brand-aware Folloze experience within a 30–60 second quality window. The first
+useful build signal or provisional artifact appears within 10 seconds.
 
 The preview is ungated. A visitor enters a business email only to keep and share
 the result. While the result is being generated, the product explains what it
@@ -373,7 +374,10 @@ analytics payloads.
 Launch service-level objectives:
 
 - Temporary URL available within two seconds of session creation at p95.
-- Credible preview ready within 30 seconds at p90.
+- First useful build signal or provisional artifact available within 10 seconds
+  at p90.
+- Credible preview ready within the 30–60 second quality window and no slower
+  than 60 seconds at p90.
 - At least 95% generation success across the launch fixture set.
 - At least 99% claim and transactional-email operation success.
 - 100% of unclaimed expiration tests revoke access correctly.
@@ -420,7 +424,9 @@ The product is ready for launch only when:
 - every visible checklist transition maps to a real progress event;
 - the temporary URL correctly renders in-progress, ready, claimed, and expired
   states;
-- p90 generation meets the 30-second promise on production infrastructure;
+- p90 generation meets the 30–60 second quality-window promise on production
+  infrastructure, with a useful signal or provisional artifact within 10
+  seconds;
 - output passes brand, factuality, CTA, asset, and mobile checks;
 - business-email claim, persistence, and transactional email work end to end;
 - unclaimed content is inaccessible 30 minutes after the preview becomes ready;

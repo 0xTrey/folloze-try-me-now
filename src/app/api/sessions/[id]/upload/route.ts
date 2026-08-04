@@ -136,7 +136,7 @@ async function reserveSessionUpload(id: string, uploadId: string): Promise<boole
   const now = Date.now();
   const reservedAt = new Date(now).toISOString();
   const updated = await updateSession(id, (session) => {
-    if (session.useCase !== "content" || session.answers.sourceUrl) return session;
+    if (session.answers.sourceUrl) return session;
 
     const currentUploadId = session.answers.sourceUploadId;
     if (session.answers.sourceName && currentUploadId !== uploadId) return session;
@@ -332,7 +332,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           throw new HttpError(403, "editor_inactive", "This editor session is no longer active.");
         }
         const session = await getSession(id);
-        if (!session || session.useCase !== "content" || session.answers.sourceName || session.answers.sourceUrl) {
+        if (!session || session.answers.sourceName || session.answers.sourceUrl) {
           throw new HttpError(400, "invalid_upload_session", "This session does not accept PDF uploads.");
         }
         trace.setTraceId(traceIdForSession(session));

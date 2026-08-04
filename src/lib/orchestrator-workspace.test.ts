@@ -508,6 +508,51 @@ describe("session workspace foundation", () => {
     expect(stored?.experience?.artifactRevision).toBe(8);
   });
 
+  it.each([
+    { useCase: "abm" as const, requiredAnswers: { targetDomain: target.domain } },
+    { useCase: "campaign" as const, requiredAnswers: { campaignType: "demand" as const } },
+    { useCase: "content" as const, requiredAnswers: {} }
+  ])(
+    "attaches an approved public URL to $useCase without changing the selected path",
+    async ({ useCase, requiredAnswers }) => {
+      const id = `optional-url-${useCase}-${Date.now()}`;
+      ids.add(id);
+      const original = workspaceSession(id);
+      original.useCase = useCase;
+      original.answers = {
+        ...original.answers,
+        ...requiredAnswers,
+        promotedOffer: "Folloze Buyer Experience Platform"
+      };
+      await putSession(original);
+
+      const result = await patchSessionWorkspace(id, {
+        answers: {
+          sourceUrl: "https://example.org/approved-context",
+          sourceConfirmed: true
+        }
+      });
+      const stored = await getSession(id);
+
+      expect(result.shouldGenerate).toBe(true);
+      expect(stored).toMatchObject({
+        useCase,
+        companyDomain: seller.domain,
+        answers: {
+          ...requiredAnswers,
+          promotedOffer: "Folloze Buyer Experience Platform",
+          sourceUrl: "https://example.org/approved-context",
+          sourceConfirmed: true
+        },
+        sourceConfirmation: {
+          status: "confirmed",
+          sourceKind: "public-url",
+          provenance: "user-confirmed"
+        }
+      });
+    }
+  );
+
   it("records bounded preview interaction aggregates without exposing internal events", async () => {
     const id = `preview-${Date.now()}`;
     ids.add(id);

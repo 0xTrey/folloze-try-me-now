@@ -4,8 +4,11 @@ import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import {
   brandWithFirstPartyImages,
+  brandWithSessionLogoDelivery,
   imageDeliverySources
 } from "@/lib/image-delivery";
+import { portableBrandLogoFromSvg } from "@/lib/portable-brand-logo";
+import type { BrandProfile } from "@/lib/types";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 
 const draft: ExperienceDraft = {
@@ -113,6 +116,76 @@ describe("generated experience image delivery", () => {
     expect(html).toContain('class="wordmark target-wordmark" role="img" aria-label="Lilly"');
     expect(html).not.toContain(seller.logoUrl);
     expect(html).not.toContain(target.logoUrl);
+  });
+
+  it("preserves portable inline seller and target logos through stored profiles and generated HTML", () => {
+    const portableLogo = portableBrandLogoFromSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cisco logo"><title>Cisco</title><path fill="#1BA0D7" d="M1 1h98v50H1z"/></svg>'
+    );
+    expect(portableLogo).toBeDefined();
+    const profile = (domain: string, companyName: string): BrandProfile => ({
+      domain,
+      companyName,
+      publicTopics: [],
+      portableLogo,
+      imageUrls: [],
+      colors: ["#07182D", "#1BA0D7"],
+      primaryColor: "#07182D",
+      accentColor: "#1BA0D7",
+      surfaceColor: "#FFFFFF",
+      sourceUrl: `https://${domain}`,
+      source: "brand-harvester"
+    });
+    const storedSeller = brandWithSessionLogoDelivery(
+      "portable-session",
+      "seller",
+      profile("cisco.com", "Cisco")
+    );
+    const storedTarget = brandWithSessionLogoDelivery(
+      "portable-session",
+      "target",
+      profile("target.example", "Target")
+    );
+    const sources = imageDeliverySources({
+      answers: {},
+      brand: storedSeller,
+      targetBrand: storedTarget
+    });
+
+    expect(storedSeller.logoUrl).toBe("/api/sessions/portable-session/image/seller-logo");
+    expect(storedTarget.logoUrl).toBe("/api/sessions/portable-session/image/target-logo");
+    expect(sources.sellerLogo).toBe(storedSeller.logoUrl);
+    expect(sources.targetLogo).toBe(storedTarget.logoUrl);
+
+    const renderedSeller = brandWithFirstPartyImages(
+      "portable-session",
+      storedSeller,
+      sources,
+      11
+    );
+    const renderedTarget = brandWithFirstPartyImages(
+      "portable-session",
+      storedTarget,
+      sources,
+      11
+    );
+    const html = renderExperienceHtml({
+      draft: { ...draft, campaignRegister: "one-to-one-abm" },
+      brand: renderedSeller,
+      targetBrand: renderedTarget,
+      useCase: "abm",
+      answers: { targetDomain: "target.example" }
+    });
+
+    expect(renderedSeller.logoUrl).toBe(
+      "/api/sessions/portable-session/image/seller-logo?v=11"
+    );
+    expect(renderedTarget.logoUrl).toBe(
+      "/api/sessions/portable-session/image/target-logo?v=11"
+    );
+    expect(html).toContain(renderedSeller.logoUrl);
+    expect(html).toContain(renderedTarget.logoUrl);
+    expect(html).not.toContain(portableLogo!.bytesBase64);
   });
 
   it("does not accept arbitrary same-origin paths that resemble image delivery", () => {

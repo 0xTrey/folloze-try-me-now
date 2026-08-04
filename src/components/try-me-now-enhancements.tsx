@@ -580,7 +580,7 @@ export function ProgressiveArtifactStream({ artifacts, headline = "Your experien
           </div>
           <strong>{focus?.title ?? "Waiting for the build"}</strong>
           <p>{focusDetail}</p>
-          {finalAssembly && <small className={styles.buildExpectation}>Usually takes 10–30 seconds. Keep this page open.</small>}
+          {finalAssembly && <small className={styles.buildExpectation}>Usually takes 30–60 seconds. Keep this page open.</small>}
           <div className={styles.buildActivity}>
             <span className={styles.buildCadence} aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</span>
             <span>{cadenceLabel}</span>

@@ -21,6 +21,7 @@ import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import { HttpError, logServerError } from "@/lib/http";
 import {
   brandWithFirstPartyImages,
+  brandWithSessionLogoDelivery,
   imageDeliverySources
 } from "@/lib/image-delivery";
 import { harvestBrand, fallbackBrand } from "@/lib/integrations/brand-harvester";
@@ -683,11 +684,74 @@ export async function canEditSession(id: string, editorToken: string | undefined
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
+function brandProfileNeedsRefresh(
+  profile: BrandProfile | undefined,
+  expectedDomain: string,
+  hasExperience: boolean
+): boolean {
+  if (!profile) return true;
+  if (hasExperience) return false;
+  if (profile.source === "fallback") {
+    return Boolean(verifiedBrandProfileFor(expectedDomain));
+  }
+  return !profile.logoUrl &&
+    !profile.portableLogo &&
+    profile.diagnostics?.logo.resolutionComplete !== true;
+}
+
 function needsBrandRefresh(session: Pick<TryMeSession, "brand" | "companyDomain" | "experience">): boolean {
-  if (!session.brand) return true;
-  return !session.experience
-    && session.brand.source === "fallback"
-    && Boolean(verifiedBrandProfileFor(session.companyDomain));
+  return brandProfileNeedsRefresh(
+    session.brand,
+    session.companyDomain,
+    Boolean(session.experience)
+  );
+}
+
+function needsTargetBrandRefresh(
+  session: Pick<TryMeSession, "targetBrand" | "experience">,
+  expectedDomain: string
+): boolean {
+  if (session.targetBrand?.domain !== expectedDomain) return true;
+  return brandProfileNeedsRefresh(
+    session.targetBrand,
+    expectedDomain,
+    Boolean(session.experience)
+  );
+}
+
+function completedLogoResolution(profile: BrandProfile): BrandProfile {
+  return {
+    ...profile,
+    diagnostics: {
+      ...profile.diagnostics,
+      logo: {
+        strategy: profile.diagnostics?.logo.strategy ?? (profile.logoUrl ? "remote-profile" : "none"),
+        imageCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
+        rejectedImageCount: profile.diagnostics?.logo.rejectedImageCount ?? 0,
+        inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
+        selectedScore: profile.diagnostics?.logo.selectedScore,
+        resolutionComplete: true
+      }
+    }
+  };
+}
+
+async function resumeStoryAfterBrandStage(id: string): Promise<void> {
+  const current = await getSession(id);
+  // A brand/logo refresh must never turn a fail-closed source or generation
+  // error into an implicit retry. Explicit retry controls own that lifecycle.
+  if (
+    !current ||
+    current.status === "generation_failed" ||
+    current.stages.story.status === "failed"
+  ) return;
+  await runStoryStage(id);
+}
+
+function hasTerminalStoryFailure(
+  session: Pick<TryMeSession, "status" | "stages"> | null | undefined
+): boolean {
+  return session?.status === "generation_failed" || session?.stages.story.status === "failed";
 }
 
 export async function runBrandStage(id: string): Promise<void> {
@@ -710,11 +774,14 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
   await updateSession(id, (session) => {
     shouldHarvest = false;
     if (session.companyDomain !== expectedDomain || !needsBrandRefresh(session)) return session;
-    if (session.brand?.source === "fallback") {
-      appendEvent(session, "brand_harvest_verified_upgrade_started", {
-        priorSource: session.brand.source
-      });
-      delete session.brand;
+    if (session.brand) {
+      appendEvent(
+        session,
+        session.brand.source === "fallback"
+          ? "brand_harvest_verified_upgrade_started"
+          : "brand_logo_refresh_started",
+        { priorSource: session.brand.source }
+      );
     }
     if (
       session.stages.brand.attemptId &&
@@ -742,11 +809,10 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
   try {
     const harvested = await harvestBrand(expectedDomain);
     const trusted = trustedBrandProfile(harvested, expectedDomain);
-    const profile = trusted.profile;
+    const profile = brandWithSessionLogoDelivery(id, "seller", trusted.profile);
     await updateSession(id, (session) => {
       if (
         session.companyDomain !== expectedDomain ||
-        session.brand ||
         session.stages.brand.attemptId !== attemptId
       ) {
         return session;
@@ -798,12 +864,13 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
     await updateSession(id, (session) => {
       if (
         session.companyDomain !== expectedDomain ||
-        session.brand ||
         session.stages.brand.attemptId !== attemptId
       ) {
         return session;
       }
-      session.brand = withBrandIdentity(fallbackBrand(expectedDomain), expectedDomain);
+      session.brand = session.brand
+        ? completedLogoResolution(session.brand)
+        : withBrandIdentity(fallbackBrand(expectedDomain), expectedDomain);
       session.audienceSuggestions = audienceSuggestionsFor(session.brand, session.targetBrand);
       syncExperienceFoundation(session);
       session.stages.brand = {
@@ -823,23 +890,17 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
       return session;
     });
   }
-  await runStoryStage(id);
+  await resumeStoryAfterBrandStage(id);
 }
 
 export async function runTargetBrandStage(id: string): Promise<void> {
   assertProductionSessionStore();
   const current = await getSession(id);
   const expectedDomain = current?.answers.targetDomain;
-  const needsVerifiedUpgrade = Boolean(
-    expectedDomain &&
-    current?.targetBrand?.domain === expectedDomain &&
-    current.targetBrand.source === "fallback" &&
-    verifiedBrandProfileFor(expectedDomain)
-  );
   if (
     !current ||
     !expectedDomain ||
-    (current.targetBrand?.domain === expectedDomain && !needsVerifiedUpgrade)
+    !needsTargetBrandRefresh(current, expectedDomain)
   ) return;
 
   const lease = await acquireSessionLease(id, `target-brand:${expectedDomain}`, 30);
@@ -856,7 +917,10 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
   let shouldHarvest = false;
   await updateSession(id, (session) => {
     shouldHarvest = false;
-    if (session.answers.targetDomain !== expectedDomain) return session;
+    if (
+      session.answers.targetDomain !== expectedDomain ||
+      !needsTargetBrandRefresh(session, expectedDomain)
+    ) return session;
     const terminalNames = new Set(["target_harvest_completed", "target_harvest_failed"]);
     const latestTerminalIndex = session.events.findLastIndex(
       (event) => terminalNames.has(event.name) && event.meta?.domain === expectedDomain
@@ -891,7 +955,7 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
   try {
     const harvested = await harvestBrand(expectedDomain);
     const trusted = trustedBrandProfile(harvested, expectedDomain);
-    const profile = trusted.profile;
+    const profile = brandWithSessionLogoDelivery(id, "target", trusted.profile);
     await updateSession(id, (session) => {
       if (
         session.answers.targetDomain !== expectedDomain ||
@@ -958,7 +1022,9 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       ) {
         return session;
       }
-      session.targetBrand = withBrandIdentity(fallbackBrand(expectedDomain), expectedDomain);
+      session.targetBrand = session.targetBrand?.domain === expectedDomain
+        ? completedLogoResolution(session.targetBrand)
+        : withBrandIdentity(fallbackBrand(expectedDomain), expectedDomain);
       if (session.brand) {
         session.audienceSuggestions = audienceSuggestionsFor(session.brand, session.targetBrand);
       }
@@ -973,7 +1039,7 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       return session;
     });
   }
-  await runStoryStage(id);
+  await resumeStoryAfterBrandStage(id);
 }
 
 function sourceKindFor(session: TryMeSession): NonNullable<TryMeSession["sourceConfirmation"]>["sourceKind"] {
@@ -1434,6 +1500,13 @@ export async function duplicateSession(
           },
     events: []
   };
+  if (next.brand) {
+    next.brand = brandWithSessionLogoDelivery(nextId, "seller", next.brand);
+  }
+  if (next.targetBrand) {
+    next.targetBrand = brandWithSessionLogoDelivery(nextId, "target", next.targetBrand);
+  }
+  syncExperienceFoundation(next);
   appendEvent(next, input.mode === "version" ? "session_version_created" : "session_duplicated", {
     sourceSessionId: source.id,
     versionNumber: next.lineage?.versionNumber ?? 1
@@ -1455,7 +1528,6 @@ export async function finalizePdfSource(
   const updated = await updateSession(id, (session) => {
     const previousFingerprint = storyInputFingerprint(session);
     if (
-      session.useCase !== "content" ||
       session.answers.sourceUploadId !== input.uploadId ||
       session.answers.sourceUrl ||
       (session.answers.sourceName && session.answers.sourceName !== input.sourceName)
@@ -1463,7 +1535,7 @@ export async function finalizePdfSource(
       throw new HttpError(
         409,
         "upload_superseded",
-        "Another content source was selected before this PDF finished processing."
+        "Another context source was selected before this PDF finished processing."
       );
     }
     session.answers.sourceName = input.sourceName;
@@ -1496,16 +1568,20 @@ export async function runStoryStage(id: string): Promise<void> {
   if (preflight && needsBrandRefresh(preflight)) {
     await runBrandStage(id);
     preflight = await getSession(id);
-    if (!preflight?.brand) return;
+    if (!preflight?.brand || hasTerminalStoryFailure(preflight)) return;
   }
   if (
     preflight?.useCase === "abm" &&
     preflight.answers.targetDomain &&
-    preflight.targetBrand?.domain !== preflight.answers.targetDomain
+    needsTargetBrandRefresh(preflight, preflight.answers.targetDomain)
   ) {
     await runTargetBrandStage(id);
     const refreshed = await getSession(id);
-    if (refreshed?.targetBrand?.domain !== preflight.answers.targetDomain) return;
+    if (
+      !refreshed ||
+      hasTerminalStoryFailure(refreshed) ||
+      needsTargetBrandRefresh(refreshed, preflight.answers.targetDomain)
+    ) return;
   }
 
   const lease = await acquireSessionLease(id, "generation", 60);
@@ -1826,14 +1902,18 @@ export async function recoverSessionWork(id: string): Promise<void> {
       if (!session?.brand) return;
     }
 
+    const recoveryTargetDomain = session.answers.targetDomain;
     if (
       session.useCase === "abm" &&
-      session.answers.targetDomain &&
-      session.targetBrand?.domain !== session.answers.targetDomain
+      recoveryTargetDomain &&
+      needsTargetBrandRefresh(session, recoveryTargetDomain)
     ) {
       await runTargetBrandStage(id);
       session = await getSession(id);
-      if (!session || session.targetBrand?.domain !== session.answers.targetDomain) return;
+      if (
+        !session ||
+        needsTargetBrandRefresh(session, recoveryTargetDomain)
+      ) return;
     }
 
     const storyCanResume =

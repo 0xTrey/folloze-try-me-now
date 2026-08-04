@@ -68,7 +68,8 @@ describe("verified fallback brand recovery", () => {
     expect(integrationMocks.harvestBrand).toHaveBeenCalledWith("servicenow.com");
     expect(stored?.brand).toMatchObject({
       companyName: "ServiceNow",
-      logoUrl: expect.stringContaining("servicenow-header-logo"),
+      logoUrl: `/api/sessions/${id}/image/seller-logo`,
+      logoSourceUrl: expect.stringContaining("servicenow-header-logo"),
       colors: ["#032D42", "#63DF4E", "#FFFFFF", "#00718F", "#D7E0E6", "#E0F7DC"],
       primaryColor: "#032D42",
       accentColor: "#63DF4E",
@@ -94,5 +95,78 @@ describe("verified fallback brand recovery", () => {
     expect(integrationMocks.harvestBrand).not.toHaveBeenCalled();
     expect(stored?.brand?.source).toBe("fallback");
     expect(stored?.brand?.logoUrl).toBeUndefined();
+  });
+
+  it("refreshes a legacy fast-extractor profile that found colors but no deliverable logo", async () => {
+    const id = `brand-logo-refresh-${Date.now()}`;
+    const session = fallbackSession(id, "cisco.com");
+    session.brand = {
+      ...session.brand!,
+      companyName: "Cisco",
+      colors: ["#07182D", "#02C8FF", "#FFFFFF"],
+      primaryColor: "#07182D",
+      accentColor: "#02C8FF",
+      source: "fast-extractor",
+      diagnostics: {
+        logo: {
+          strategy: "inline-svg-unportable",
+          imageCandidateCount: 0,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 1
+        }
+      }
+    };
+    ids.add(id);
+    await putSession(session);
+    integrationMocks.harvestBrand.mockResolvedValue({
+      ...session.brand,
+      logoUrl: "https://www.cisco.com/cisco-logo.svg",
+      logoSourceUrl: "https://www.cisco.com/cisco-logo.svg",
+      diagnostics: {
+        logo: {
+          strategy: "semantic-image",
+          imageCandidateCount: 1,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 1,
+          resolutionComplete: true
+        }
+      }
+    });
+
+    await runBrandStage(id);
+
+    const stored = await getSession(id);
+    expect(integrationMocks.harvestBrand).toHaveBeenCalledWith("cisco.com");
+    expect(stored?.brand).toMatchObject({
+      logoUrl: `/api/sessions/${id}/image/seller-logo`,
+      logoSourceUrl: "https://www.cisco.com/cisco-logo.svg",
+      source: "fast-extractor"
+    });
+    expect(stored?.events.map(({ name }) => name)).toContain("brand_logo_refresh_started");
+  });
+
+  it("does not repeatedly refresh a no-logo profile after all configured resolvers completed", async () => {
+    const id = `brand-logo-complete-${Date.now()}`;
+    const session = fallbackSession(id, "no-logo-example.test");
+    session.brand = {
+      ...session.brand!,
+      source: "fast-extractor",
+      diagnostics: {
+        logo: {
+          strategy: "none",
+          imageCandidateCount: 0,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0,
+          resolutionComplete: true
+        }
+      }
+    };
+    ids.add(id);
+    await putSession(session);
+
+    await runBrandStage(id);
+
+    expect(integrationMocks.harvestBrand).not.toHaveBeenCalled();
+    expect((await getSession(id))?.brand?.source).toBe("fast-extractor");
   });
 });

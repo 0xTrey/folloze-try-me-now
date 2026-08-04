@@ -6,7 +6,13 @@ const intFromEnv = (value: string | undefined, fallback: number) => {
 const oneOf = <T extends string>(value: string | undefined, choices: readonly T[], fallback: T): T =>
   choices.includes(value as T) ? (value as T) : fallback;
 
-const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+const nonEmptyFromEnv = (value: string | undefined, fallback: string): string =>
+  value?.trim() || fallback;
+
+const vercelHost = nonEmptyFromEnv(
+  process.env.VERCEL_PROJECT_PRODUCTION_URL,
+  process.env.VERCEL_URL?.trim() ?? ""
+);
 const inferredAppUrl = vercelHost ? `https://${vercelHost}` : "http://localhost:3000";
 const follozeAllowedPublicHosts = (
   process.env.FOLLOZE_ALLOWED_PUBLIC_HOSTS ?? "engage.folloze.com,experience.folloze.com"
@@ -16,15 +22,15 @@ const follozeAllowedPublicHosts = (
   .filter(Boolean);
 
 export const config = {
-  appUrl: (process.env.NEXT_PUBLIC_APP_URL ?? inferredAppUrl).replace(/\/$/, ""),
+  appUrl: nonEmptyFromEnv(process.env.NEXT_PUBLIC_APP_URL, inferredAppUrl).replace(/\/$/, ""),
   generationMode: oneOf(process.env.GENERATION_MODE, ["fixture", "openai"] as const, "fixture"),
   brandMode: oneOf(process.env.BRAND_MODE, ["fast", "remote"] as const, "fast"),
   follozeMode: oneOf(process.env.FOLLOZE_MODE, ["disabled", "draft", "publish"] as const, "disabled"),
   emailMode: oneOf(process.env.EMAIL_MODE, ["console", "resend"] as const, "console"),
-  openAIModel: process.env.OPENAI_MODEL ?? "gpt-5.6-terra",
+  openAIModel: nonEmptyFromEnv(process.env.OPENAI_MODEL, "gpt-5.6-terra"),
   generationTimeoutMs: Math.min(
-    Math.max(intFromEnv(process.env.TRY_ME_GENERATION_TIMEOUT_MS, 28_000), 10_000),
-    28_000
+    Math.max(intFromEnv(process.env.TRY_ME_GENERATION_TIMEOUT_MS, 52_000), 10_000),
+    58_000
   ),
   sessionTtlSeconds: Math.min(
     Math.max(intFromEnv(process.env.TRY_ME_SESSION_TTL_SECONDS, 1800), 300),

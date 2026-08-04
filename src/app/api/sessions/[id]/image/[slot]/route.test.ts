@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchPinnedPublicBytes } from "@/lib/safe-fetch";
 import { getSession } from "@/lib/session-store";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
+import { portableBrandLogoFromSvg } from "@/lib/portable-brand-logo";
+import type { PortableBrandLogo } from "@/lib/types";
 
 vi.mock("@/lib/safe-fetch", () => ({ fetchPinnedPublicBytes: vi.fn() }));
 vi.mock("@/lib/session-store", () => ({ getSession: vi.fn() }));
@@ -28,6 +30,7 @@ function installSession(overrides: {
   sellerImages?: string[];
   targetLogo?: string;
   targetImages?: string[];
+  sellerPortableLogo?: PortableBrandLogo;
   artifactRevision?: number;
   experienceArtifactRevision?: number;
 } = {}) {
@@ -35,6 +38,7 @@ function installSession(overrides: {
     answers: {},
     brand: {
       logoUrl: overrides.sellerLogo ?? "https://cdn.example/seller/logo.svg",
+      portableLogo: overrides.sellerPortableLogo,
       imageUrls: overrides.sellerImages ?? ["https://cdn.example/seller/hero.jpg"]
     },
     targetBrand: {
@@ -99,6 +103,46 @@ describe("harvested image delivery route", () => {
         headers: expect.objectContaining({ Accept: expect.stringContaining("image/svg+xml") })
       })
     );
+  });
+
+  it("delivers a validated inline Cisco-style logo from the session without hotlinking", async () => {
+    const portable = portableBrandLogoFromSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cisco logo" viewBox="0 0 100 52"><title>Cisco</title><path fill="#1BA0D7" d="M1 1h98v50H1z"/></svg>'
+    );
+    expect(portable).toBeDefined();
+    installSession({
+      sellerLogo: "/api/sessions/image-session/image/seller-logo",
+      sellerPortableLogo: portable
+    });
+
+    const response = await GET(request, context());
+    const delivered = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/svg+xml; charset=utf-8");
+    expect(response.headers.get("cache-control")).toContain("s-maxage=86400");
+    expect(delivered).toContain("Cisco logo");
+    expect(fetchPinnedPublicBytes).not.toHaveBeenCalled();
+  });
+
+  it("rejects a tampered portable logo instead of serving unverified session bytes", async () => {
+    const portable = portableBrandLogoFromSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cisco logo"><title>Cisco</title><path fill="#1BA0D7" d="M1 1h98v50H1z"/></svg>'
+    );
+    expect(portable).toBeDefined();
+    installSession({
+      sellerLogo: "/api/sessions/image-session/image/seller-logo",
+      sellerPortableLogo: {
+        ...portable!,
+        sha256: "0".repeat(64)
+      }
+    });
+
+    const response = await GET(request, context());
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(fetchPinnedPublicBytes).not.toHaveBeenCalled();
   });
 
   it("serves a versioned image only when v matches the current quality receipt revision", async () => {

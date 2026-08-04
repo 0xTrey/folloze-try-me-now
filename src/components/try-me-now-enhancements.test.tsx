@@ -328,7 +328,7 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Stage 4 of 4");
     expect(screen.getByRole("status")).toHaveTextContent("Final assembly · live");
     expect(screen.getByRole("status")).toHaveTextContent("Shaping the story · arranging proof · polishing the page");
-    expect(screen.getByRole("status")).toHaveTextContent("Usually takes 10–30 seconds. Keep this page open.");
+    expect(screen.getByRole("status")).toHaveTextContent("Usually takes 30–60 seconds. Keep this page open.");
     expect(screen.getByText("Final assembly")).toBeInTheDocument();
     expect(screen.queryByText("75% assembled")).not.toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "75");

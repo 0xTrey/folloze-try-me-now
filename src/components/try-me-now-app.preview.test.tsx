@@ -7,7 +7,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicTryMeSession } from "@/lib/types";
 
-import { AssemblyPreview, PreviewUpdateNotice, SaveExperienceDialog } from "./try-me-now-app";
+import {
+  AssemblyPreview,
+  CampaignOverviewRail,
+  OptionalContextComposer,
+  PreviewUpdateNotice,
+  ProgressiveQuestions,
+  SaveExperienceDialog
+} from "./try-me-now-app";
 
 afterEach(() => cleanup());
 
@@ -151,5 +158,151 @@ describe("SaveExperienceDialog", () => {
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
     expect(onSave).not.toHaveBeenCalled();
+  });
+});
+
+describe("guided campaign workspace", () => {
+  it("renders a compact campaign overview from the canonical brief and live answers", () => {
+    render(
+      <CampaignOverviewRail
+        session={{
+          ...readySession,
+          status: "collecting",
+          experience: undefined,
+          answers: { campaignType: "product", audience: "Enterprise architects" },
+          stages: {
+            brand: { status: "complete" },
+            audience: { status: "complete" },
+            story: { status: "pending" }
+          },
+          campaignBrief: {
+            revision: 2,
+            fingerprint: "brief-fingerprint",
+            updatedAt: "2026-07-31T10:00:08.000Z",
+            fields: {
+              seller: {
+                key: "seller",
+                label: "Building as",
+                value: "Jitterbit",
+                provenance: "research",
+                citations: [],
+                userEdited: false,
+                locked: false,
+                required: true,
+                dependencies: ["seller-brand"]
+              },
+              audience: {
+                key: "audience",
+                label: "For",
+                value: "Enterprise architects",
+                provenance: "inferred",
+                citations: [],
+                userEdited: false,
+                locked: false,
+                required: true,
+                dependencies: ["audience-lens"]
+              }
+            }
+          }
+        }}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Campaign Overview" })).toBeInTheDocument();
+    expect(screen.getByLabelText("3 of 4 details collected")).toBeInTheDocument();
+    expect(screen.getByText("Jitterbit")).toBeInTheDocument();
+    expect(screen.getByText("Product campaign")).toBeInTheDocument();
+    expect(screen.getByText("Enterprise architects")).toBeInTheDocument();
+    expect(document.querySelector('[data-overview-field="target"]')).not.toBeInTheDocument();
+  });
+
+  it("accepts one optional URL or PDF source across paths without changing the path", () => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    const session = {
+      ...readySession,
+      useCase: "abm" as const,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {}
+    };
+    render(
+      <OptionalContextComposer
+        session={session}
+        answers={session.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onUpload={onUpload}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Message or helpful context"), {
+      target: { value: "Lead with the cost of disconnected buyer journeys." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add to brief" }));
+    expect(onPatch).toHaveBeenCalledWith({
+      messageBelief: "Lead with the cost of disconnected buyer journeys."
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "URL" }));
+    const urlInput = screen.getByLabelText("Public HTTPS URL");
+    expect(urlInput).toBeEnabled();
+    fireEvent.change(urlInput, { target: { value: "https://example.com/account-proof" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use this URL" }));
+    expect(onPatch).toHaveBeenLastCalledWith({ sourceUrl: "https://example.com/account-proof" });
+
+    fireEvent.click(screen.getByRole("tab", { name: "PDF" }));
+    expect(screen.getByText("Add a supporting PDF")).toBeInTheDocument();
+    const fileInput = document.querySelector('input[type="file"]');
+    expect(fileInput).toBeEnabled();
+    fireEvent.change(fileInput!, { target: { files: [new File(["proof"], "proof.pdf", { type: "application/pdf" })] } });
+    expect(onUpload).toHaveBeenCalledWith(expect.objectContaining({ name: "proof.pdf" }));
+
+    cleanup();
+    render(
+      <OptionalContextComposer
+        session={{ ...session, answers: { sourceUrl: "https://source-provided.invalid/" } }}
+        answers={{ sourceUrl: "https://source-provided.invalid/" }}
+        isSaving={false}
+        onPatch={onPatch}
+        onUpload={onUpload}
+      />
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "URL" }));
+    expect(screen.getByLabelText("Public HTTPS URL")).toBeDisabled();
+    expect(screen.getByText("One source is already attached to this brief.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "PDF" }));
+    expect(screen.getByText("One source is already attached")).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toBeDisabled();
+  });
+
+  it("shows the support reference when experience generation fails", () => {
+    const failed = {
+      ...readySession,
+      status: "generation_failed" as const,
+      experience: undefined,
+      answers: {
+        campaignType: "product" as const,
+        audience: "Enterprise architects",
+        objective: "Generate demand"
+      },
+      stages: {
+        brand: { status: "complete" as const },
+        audience: { status: "complete" as const },
+        story: { status: "failed" as const }
+      }
+    };
+    render(
+      <ProgressiveQuestions
+        session={failed}
+        answers={failed.answers}
+        isSaving={false}
+        onPatch={vi.fn().mockResolvedValue(undefined)}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Support reference: TMN-DESKTOPPREV");
   });
 });

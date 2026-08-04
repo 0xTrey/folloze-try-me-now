@@ -1,6 +1,6 @@
 # Folloze Try Me Now
 
-A repo-backed visual MVP for a top-of-funnel, product-led Folloze experience. A visitor chooses one of three paths, supplies a few signals, watches Folloze build in the background, and receives a tailored buyer experience in 30 seconds or less.
+A repo-backed visual MVP for a top-of-funnel, product-led Folloze experience. A visitor chooses one of three paths, supplies a few signals, watches Folloze build in the background, and receives a tailored buyer experience within a 30–60 second quality window. The first useful build signal or provisional artifact should appear within 10 seconds.
 
 [Open the deployed MVP](https://folloze-try-me-now.vercel.app)
 

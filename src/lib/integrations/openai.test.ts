@@ -1,4 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const parseResponse = vi.hoisted(() => vi.fn());
+
+vi.mock("openai", () => ({
+  default: class OpenAIMock {
+    responses = { parse: parseResponse };
+  }
+}));
+
+vi.mock("@/lib/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config")>();
+  return {
+    ...actual,
+    hasOpenAI: true,
+    config: {
+      ...actual.config,
+      openAIModel: "test-openai-model",
+      generationTimeoutMs: 52_000
+    }
+  };
+});
+
+vi.mock("@/lib/integrations/brand-harvester", () => ({
+  extractPublicContent: vi.fn()
+}));
 
 import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
 import {
@@ -6,10 +31,17 @@ import {
   compileCampaignContext
 } from "@/lib/generation/campaign-context";
 import {
+  experienceDraftSchema,
+  normalizeAudienceLabel
+} from "@/lib/generation/experience-schema";
+import {
   deterministicDraft,
   experienceQualityFailure,
+  generateExperienceDraft,
+  SourceFetchError,
   isNonBlockingStyleFailure
 } from "@/lib/integrations/openai";
+import { extractPublicContent } from "@/lib/integrations/brand-harvester";
 import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 
@@ -65,7 +97,178 @@ function draftFor(useCase: UseCase, answers: SessionAnswers, targetBrand?: Brand
   return { context, draft };
 }
 
+describe("supplemental public source ingestion", () => {
+  beforeEach(() => {
+    parseResponse.mockReset();
+    vi.mocked(extractPublicContent).mockReset();
+  });
+
+  it.each([
+    {
+      label: "ABM",
+      useCase: "abm" as const,
+      targetBrand: cisco,
+      expectedTarget: "Cisco",
+      answers: {
+        targetDomain: "cisco.com",
+        audience: "Infrastructure leaders",
+        objective: "Plan a working session",
+        promotedOffer: "Jitterbit Harmony",
+        sourceUrl: governedAutomationSource.sourceUrl
+      }
+    },
+    {
+      label: "campaign",
+      useCase: "campaign" as const,
+      targetBrand: undefined,
+      expectedTarget: null,
+      answers: {
+        campaignType: "demand" as const,
+        audience: "Automation leaders",
+        objective: "Generate qualified engagement",
+        promotedOffer: "Jitterbit Harmony",
+        sourceUrl: governedAutomationSource.sourceUrl
+      }
+    }
+  ])(
+    "includes the submitted source body as supplemental $label context without changing identity authority",
+    async ({ useCase, targetBrand, expectedTarget, answers }) => {
+      vi.mocked(extractPublicContent).mockResolvedValue(governedAutomationSource);
+      const context = compileCampaignContext({
+        brand: jitterbit,
+        targetBrand,
+        useCase,
+        answers,
+        sourceContent: governedAutomationSource
+      });
+      parseResponse.mockResolvedValue({
+        output_parsed: deterministicDraft({
+          brand: jitterbit,
+          targetBrand,
+          useCase,
+          answers,
+          sourceContent: governedAutomationSource,
+          context
+        })
+      });
+
+      const result = await generateExperienceDraft({
+        brand: jitterbit,
+        targetBrand,
+        useCase,
+        answers
+      });
+
+      expect(result.draft).toBeDefined();
+      expect(parseResponse).toHaveBeenCalled();
+      expect(extractPublicContent).toHaveBeenCalledWith(
+        governedAutomationSource.sourceUrl,
+        expect.any(AbortSignal)
+      );
+      const request = parseResponse.mock.calls[0]?.[0] as {
+        input: Array<{ content: Array<{ type: string; text?: string }> }>;
+      };
+      const brief = JSON.parse(request.input[0]?.content[0]?.text ?? "{}") as {
+        seller: { name: string };
+        target: { name: string } | null;
+        sourceContent: typeof governedAutomationSource;
+        sourceEvidencePhrases: string[];
+        campaignContext: {
+          brief: { seller: { name: string }; targetAccount: { name: string } | null };
+          designContext: { brandOwner: string; sourceDesignInputs: string[] };
+        };
+      };
+
+      expect(brief.sourceContent).toEqual(governedAutomationSource);
+      expect(brief.sourceEvidencePhrases).toEqual(
+        expect.arrayContaining([
+          "Approval checkpoints keep automated workflows accountable before high-impact actions run."
+        ])
+      );
+      expect(brief.seller.name).toBe("Jitterbit");
+      expect(brief.target?.name ?? null).toBe(expectedTarget);
+      expect(brief.campaignContext.brief.seller.name).toBe("Jitterbit");
+      expect(brief.campaignContext.brief.targetAccount?.name ?? null).toBe(expectedTarget);
+      expect(brief.campaignContext.designContext).toMatchObject({
+        brandOwner: "Jitterbit",
+        sourceDesignInputs: [jitterbit.sourceUrl]
+      });
+    }
+  );
+
+  it.each([
+    {
+      useCase: "abm" as const,
+      targetBrand: cisco,
+      answers: {
+        targetDomain: "cisco.com",
+        audience: "Infrastructure leaders",
+        objective: "Plan a working session",
+        sourceUrl: governedAutomationSource.sourceUrl
+      }
+    },
+    {
+      useCase: "campaign" as const,
+      targetBrand: undefined,
+      answers: {
+        campaignType: "demand" as const,
+        audience: "Automation leaders",
+        objective: "Generate qualified engagement",
+        sourceUrl: governedAutomationSource.sourceUrl
+      }
+    }
+  ])("fails closed when a $useCase context URL cannot be read", async ({ useCase, targetBrand, answers }) => {
+    vi.mocked(extractPublicContent).mockRejectedValue(new Error("unreadable public source"));
+
+    await expect(
+      generateExperienceDraft({ brand: jitterbit, targetBrand, useCase, answers })
+    ).rejects.toBeInstanceOf(SourceFetchError);
+    expect(parseResponse).not.toHaveBeenCalled();
+  });
+});
+
 describe("deterministic experience copy", () => {
+  it("keeps the full 103-character audience hypothesis while generating a schema-safe role label", () => {
+    const incidentAudience =
+      "Automation architects and platform owners designing resilient automation platforms and business systems";
+    const answers = {
+      targetDomain: "cisco.com",
+      audience: incidentAudience,
+      objective: "Book a meeting"
+    };
+    const context = compileCampaignContext({
+      brand: jitterbit,
+      targetBrand: cisco,
+      useCase: "abm",
+      answers
+    });
+    const draft = deterministicDraft({
+      brand: jitterbit,
+      targetBrand: cisco,
+      useCase: "abm",
+      answers,
+      context
+    });
+
+    expect(incidentAudience).toHaveLength(103);
+    expect(context.brief.audience).toBe(incidentAudience);
+    expect(normalizeAudienceLabel(incidentAudience)).toBe(
+      "Automation architects and platform owners"
+    );
+    expect(draft.audienceLabel).toBe("Automation architects and platform owners");
+    expect(experienceDraftSchema.safeParse(draft).success).toBe(true);
+    expect(
+      experienceQualityFailure({
+        draft,
+        brand: jitterbit,
+        targetBrand: cisco,
+        useCase: "abm",
+        answers,
+        context
+      })
+    ).toBeUndefined();
+  });
+
   it("keeps repaired content drafts when only token-distribution grounding is imperfect", () => {
     const contentContext = compileCampaignContext({
       brand: jitterbit,

@@ -1,6 +1,6 @@
 # Folloze Try Me Now Decision Log
 
-Last updated: 2026-07-30
+Last updated: 2026-08-04
 
 Product requirements: [`product-requirements.md`](./product-requirements.md)
 
@@ -8,16 +8,16 @@ Launch plan: [`launch-plan.md`](./launch-plan.md)
 
 ## Source hierarchy
 
-1. The user's July 30 instructions and accepted defaults are authoritative for
-   V1.
+1. The user's July 30 and August 4 instructions and accepted defaults are
+   authoritative for V1; the later instruction wins when they conflict.
 2. The June 1 guided-flow brief supplies the historical product model:
    `/Users/treyharnden/Projects/folloze-content-engine/docs/plans/2026-06-01-try-me-now-guided-flowcharts.md`.
 3. Supporting June 1 artifacts:
    - <https://docs.google.com/document/d/1XwlvYHj3dRugix8Imp67oewZFjfNPBB1FSpz_B_a86E>
    - <https://notes.granola.ai/t/52e70ab9-e920-482f-beb3-69f8821bff0d>
 
-When a July 30 decision conflicts with the June 1 artifact, the July 30
-decision wins.
+When a July 30 or August 4 decision conflicts with the June 1 artifact, the
+newer recorded decision wins.
 
 ## Accepted V1 decisions
 
@@ -36,7 +36,7 @@ decision wins.
 | D-011 | Progress is shown through three labels: Finding your brand, Understanding the audience, and Creating the story. | This is both status and a product narrative. The labels remain visible during progressive questions and generation. | Accepted |
 | D-012 | Checklist state must be honest. | Each visible transition comes from a real job event. Timers may rotate explanatory cards but never fake task completion or percentages. | Accepted |
 | D-013 | Loading cards explain what Folloze is doing and why it matters. | Loading time becomes a selling experience. Cards are relevant to the active task, dismissible, and reduced-motion safe. | Accepted |
-| D-014 | The target experience is a credible preview in 30 seconds or less. | Trey approved up to 30 seconds for materially stronger copy and visuals; generation uses a bounded request and deterministic fallback at the deadline. | Accepted; updated 2026-07-30 |
+| D-014 | The target experience is a credible preview in 30 seconds or less. | This was the original latency target. Trey later approved a longer bounded window for materially stronger copy and visuals. | Superseded by D-026 on 2026-08-04 |
 | D-015 | The ABM V1 personalizes for one target account. | A Default/Target preview demonstrates personalization without the latency and complexity of the June brief's three-account example. | Accepted default |
 | D-016 | Publish/share is an outcome, not a setup question. | The app automatically creates a 30-minute cache-only preview. It must not create or publish a Folloze board before a validated business-email claim. | Accepted; clarified 2026-07-30 |
 | D-017 | Advanced freeform instructions are hidden behind an optional post-preview control. | First-time visitors get a guided path; they do not face the current six broad Campaign Agent fields. | Accepted |
@@ -48,6 +48,10 @@ decision wins.
 | D-023 | Transactional delivery and marketing subscription are separate. | Sending the claimed URL does not silently subscribe the visitor to marketing; optional consent is explicit. | Accepted default |
 | D-024 | Output facts must be source-grounded. | The system must not invent customer claims, metrics, testimonials, speakers, dates, or target-account facts. | Accepted default |
 | D-025 | Every validated business-email claim is written to a durable lead ledger before publication begins. | The ledger is keyed idempotently by session and records qualification, experience URL, publication, and delivery outcomes without storing generated HTML or source content. Transactional delivery still does not create a marketing subscription. | Accepted 2026-07-30 |
+| D-026 | The target experience uses a 30–60 second quality window, with the first useful build signal or provisional artifact visible within 10 seconds. | Trey explicitly superseded D-014 so generation can spend more time on copy and visual quality. The OpenAI request defaults to a 52-second budget, is hard-capped below 60 seconds, and retains deterministic fallback at the deadline. | Accepted 2026-08-04; supersedes D-014 |
+
+On 2026-08-04, Trey explicitly superseded D-014. D-026 is the canonical
+latency and progressive-feedback decision.
 
 ## Superseded June 1 directions
 
@@ -55,7 +59,7 @@ decision wins.
 | --- | --- |
 | Event or Webinar Promotion as a top-level third card | Generalized Campaign is the card; event/webinar is a subtype. |
 | Base experience plus three personalized account versions | One target-account version plus a Default preview state. |
-| Optimize for launching a first campaign in 15 minutes | Deliver a credible Try Me Now preview in 30 seconds or less. |
+| Optimize for launching a first campaign in 15 minutes | Deliver a credible Try Me Now preview in a 30–60 second quality window, with useful build feedback within 10 seconds. |
 | Ask whether output should be publishable or shareable | Create a temporary URL automatically; claim controls persistence. |
 | Six visible Campaign Agent information categories | Three-to-four progressive questions and a three-step live checklist. |
 | Login-before-generation remained an open question | No login before generation; business email appears only at claim. |
@@ -100,4 +104,4 @@ Any change to an accepted decision should record:
 5. the approving owner and date.
 
 Do not silently change checklist semantics, email gating, TTL, source grounding,
-or the 30-second promise in implementation code.
+or the 30–60 second quality-window promise in implementation code.

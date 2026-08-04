@@ -63,6 +63,14 @@ describe("public session projection", () => {
         domain: "servicenow.com",
         companyName: "ServiceNow",
         logoUrl: "https://www.servicenow.com/content/dam/servicenow-assets/images/naas/servicenow-header-logo.svg",
+        logoSourceUrl: "https://private-cdn.example/source-logo.svg?token=private-logo-token",
+        portableLogo: {
+          mediaType: "image/svg+xml",
+          encoding: "base64",
+          bytesBase64: "cHJpdmF0ZS1sb2dvLWJ5dGVz",
+          sha256: "a".repeat(64),
+          source: "official-inline-svg"
+        },
         imageUrls: ["https://www.servicenow.com/content/dam/servicenow-assets/public/hero.jpg"],
         colors: ["#032D42", "#63DF4E", "#FFFFFF", "#00718F"],
         primaryColor: "#032D42",
@@ -123,6 +131,8 @@ describe("public session projection", () => {
     expect(JSON.stringify(projected)).not.toContain("private-request-id");
     expect(JSON.stringify(projected)).not.toContain("private-query-token");
     expect(JSON.stringify(projected)).not.toContain("Private customer event details");
+    expect(JSON.stringify(projected)).not.toContain("private-logo-token");
+    expect(JSON.stringify(projected)).not.toContain("cHJpdmF0ZS1sb2dvLWJ5dGVz");
     expect(projected).not.toHaveProperty("events");
     expect(projected.experience).toEqual({
       ready: true,
@@ -152,11 +162,15 @@ describe("public session projection", () => {
 });
 
 describe("PDF source finalization", () => {
-  function session(id: string, answers: TryMeSession["answers"]): TryMeSession {
+  function session(
+    id: string,
+    answers: TryMeSession["answers"],
+    useCase: TryMeSession["useCase"] = "content"
+  ): TryMeSession {
     return {
       id,
       editorTokenHash: "private-editor-hash",
-      useCase: "content",
+      useCase,
       companyDomain: "example.com",
       status: "collecting",
       createdAt: "2026-07-30T00:00:00.000Z",
@@ -204,6 +218,62 @@ describe("PDF source finalization", () => {
         status: "confirmed",
         sourceKind: "uploaded-pdf",
         provenance: "user-submitted"
+      });
+    } finally {
+      await deleteSession(id);
+    }
+  });
+
+  it.each([
+    {
+      useCase: "abm" as const,
+      answers: {
+        targetDomain: "buyer.example",
+        audience: "Platform leaders",
+        objective: "Start a working session",
+        promotedOffer: "Folloze Buyer Experience Platform"
+      }
+    },
+    {
+      useCase: "campaign" as const,
+      answers: {
+        audience: "Demand generation leaders",
+        objective: "Increase qualified engagement",
+        campaignType: "demand" as const,
+        promotedOffer: "Folloze Buyer Experience Platform"
+      }
+    }
+  ])("adds optional PDF context to $useCase without changing its identity", async ({ useCase, answers }) => {
+    const id = `finalize-pdf-${useCase}`;
+    const uploadId = "123e4567-e89b-42d3-a456-426614174000";
+    await putSession(session(id, { ...answers, sourceUploadId: uploadId }, useCase));
+
+    try {
+      const result = await finalizePdfSource(id, {
+        uploadId,
+        sourceName: "context.pdf",
+        sourceTitle: "Approved campaign context",
+        sourceOpenAIFileId: "file-private-context"
+      });
+      const stored = await getSession(id);
+
+      expect(result.shouldGenerate).toBe(true);
+      expect(stored).toMatchObject({
+        useCase,
+        companyDomain: "example.com",
+        answers: {
+          ...answers,
+          sourceName: "context.pdf",
+          sourceTitle: "Approved campaign context",
+          sourceOpenAIFileId: "file-private-context",
+          sourceUploadId: uploadId,
+          sourceConfirmed: true
+        },
+        sourceConfirmation: {
+          status: "confirmed",
+          sourceKind: "uploaded-pdf",
+          provenance: "user-submitted"
+        }
       });
     } finally {
       await deleteSession(id);

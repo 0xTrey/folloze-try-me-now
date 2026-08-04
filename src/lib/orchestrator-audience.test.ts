@@ -142,7 +142,8 @@ describe("target-aware ABM audience orchestration", () => {
       expect(integrationMocks.harvestBrand).toHaveBeenCalledWith("lilly.com");
       expect(upgraded?.targetBrand).toMatchObject({
         companyName: "Lilly",
-        logoUrl: expect.stringContaining("LillyLogo_RGB_Red_v3.svg"),
+        logoUrl: `/api/sessions/${id}/image/target-logo`,
+        logoSourceUrl: expect.stringContaining("LillyLogo_RGB_Red_v3.svg"),
         source: "brand-harvester"
       });
       expect(upgraded?.events.map(({ name }) => name)).toEqual(expect.arrayContaining([

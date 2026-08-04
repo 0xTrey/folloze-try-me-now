@@ -4,6 +4,7 @@ import {
   extractFastBrandProfile,
   extractReadableContent
 } from "@/lib/integrations/brand-harvester";
+import { decodePortableBrandLogo } from "@/lib/portable-brand-logo";
 
 const html = `<!doctype html><html><head>
   <title>AI-Powered Enterprise Automation & Integration | Jitterbit</title>
@@ -144,8 +145,9 @@ describe("fast brand extraction", () => {
   });
 
   // Regression: Cisco's primary header mark is an inline SVG rather than an
-  // externally addressable image. The trace must explain that distinction.
-  it("records an inline-only Cisco logo decision instead of reporting no evidence", () => {
+  // externally addressable image. Preserve validated bytes for first-party
+  // session delivery instead of reporting "Logo unavailable."
+  it("turns an inline-only Cisco logo into a safe portable server asset", () => {
     const target = extractFastBrandProfile({
       domain: "cisco.com",
       html: `<!doctype html><html><head>
@@ -162,9 +164,33 @@ describe("fast brand extraction", () => {
 
     expect(target.logoUrl).toBeUndefined();
     expect(target.diagnostics?.logo).toMatchObject({
-      strategy: "inline-svg-unportable",
+      strategy: "inline-svg-portable",
       inlineSvgCandidateCount: 1,
       imageCandidateCount: 0
+    });
+    expect(target.portableLogo).toMatchObject({
+      mediaType: "image/svg+xml",
+      source: "official-inline-svg",
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/)
+    });
+    const portable = decodePortableBrandLogo(target.portableLogo!);
+    expect(new TextDecoder().decode(portable)).toContain("Cisco.com Worldwide");
+  });
+
+  it("refuses to make an active inline SVG portable", () => {
+    const target = extractFastBrandProfile({
+      domain: "cisco.com",
+      html: `<!doctype html><html><head><title>Cisco</title></head><body><header>
+        <svg role="img" aria-label="Cisco logo"><script>alert(1)</script><path d="M0 0h10v10z"/></svg>
+      </header></body></html>`,
+      finalUrl: new URL("https://www.cisco.com/")
+    });
+
+    expect(target.logoUrl).toBeUndefined();
+    expect(target.portableLogo).toBeUndefined();
+    expect(target.diagnostics?.logo).toMatchObject({
+      strategy: "inline-svg-unportable",
+      inlineSvgCandidateCount: 1
     });
   });
 

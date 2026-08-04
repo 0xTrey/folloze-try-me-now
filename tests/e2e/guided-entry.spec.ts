@@ -12,7 +12,7 @@ test.describe("guided first-run experience", () => {
     await expect(page.getByRole("button", { name: "Launch a campaign" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Transform my content" })).toBeVisible();
     await expect(page.getByText("No blank canvas")).toBeVisible();
-    await expect(page.getByText("Usually 10–30 seconds")).toBeVisible();
+    await expect(page.getByText("Usually 30–60 seconds")).toBeVisible();
     await expect(page.locator('input[type="email"]')).toHaveCount(0);
 
     const examples = page.locator('a[target="_blank"][rel="noopener noreferrer"]');
@@ -30,7 +30,7 @@ test.describe("guided first-run experience", () => {
   test("asks for one company signal before exposing the three-decision flow", async ({ page }) => {
     await page.getByRole("button", { name: "Personalize for an account" }).click();
 
-    await expect(page.getByRole("heading", { name: "Which company are you representing?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What is your company domain?" })).toBeVisible();
     await expect(page.getByText("We confirm before we compose.")).toBeVisible();
     const domain = page.getByLabel("Company domain");
     const confirm = page.getByRole("button", { name: "Confirm this company" });

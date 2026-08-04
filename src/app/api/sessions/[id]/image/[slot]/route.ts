@@ -9,6 +9,10 @@ import {
   sourceImageUrlForSlot,
   type ImageSlot
 } from "@/lib/image-delivery";
+import {
+  decodePortableBrandLogo,
+  isSafeBrandSvg
+} from "@/lib/portable-brand-logo";
 import { fetchPinnedPublicBytes } from "@/lib/safe-fetch";
 import { getSession } from "@/lib/session-store";
 import type { TryMeSession } from "@/lib/types";
@@ -119,29 +123,7 @@ function ascii(bytes: Uint8Array, start: number, length: number): string {
 }
 
 function isSafeSvg(bytes: Uint8Array): boolean {
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    return false;
-  }
-  if (text.includes("\0")) return false;
-  const root = text
-    .replace(/^\uFEFF/, "")
-    .trimStart()
-    .replace(/^(?:<\?xml[^>]*>\s*)?/i, "")
-    .replace(/^(?:<!--[\s\S]*?-->\s*)*/i, "");
-  if (!/^<svg(?:\s|>)/i.test(root)) return false;
-
-  return ![
-    /<!\s*(?:doctype|entity)\b/i,
-    /<\s*(?:script|foreignObject|iframe|object|embed|audio|video|image)\b/i,
-    /\bon[a-z]+\s*=/i,
-    /(?:href|xlink:href)\s*=\s*["']\s*(?!#)[^"']+/i,
-    /\burl\s*\(\s*["']?\s*(?!#)[^)]+/i,
-    /@import\b/i,
-    /javascript\s*:/i
-  ].some((pattern) => pattern.test(text));
+  return isSafeBrandSvg(bytes);
 }
 
 function detectImageKind(bytes: Uint8Array): ImageKind | undefined {
@@ -183,6 +165,18 @@ function detectImageKind(bytes: Uint8Array): ImageKind | undefined {
   }
   if (bytes.byteLength >= 5 && isSafeSvg(bytes)) return "svg";
   return undefined;
+}
+
+function portableLogoForSlot(
+  session: TryMeSession | null,
+  slot: ImageSlot
+): OriginalImageFallback | undefined {
+  if (!session || !slot.endsWith("-logo")) return undefined;
+  const profile = slot.startsWith("seller-") ? session.brand : session.targetBrand;
+  if (!profile?.portableLogo) return undefined;
+  const bytes = decodePortableBrandLogo(profile.portableLogo);
+  const kind = bytes ? detectImageKind(bytes) : undefined;
+  return bytes && kind ? { bytes, kind } : undefined;
 }
 
 function contentTypeHint(value: string | string[] | undefined): ImageKind | "generic" | "invalid" {
@@ -360,6 +354,9 @@ export async function GET(request: Request, context: RouteContext) {
   ) {
     return imageError(404, "image_not_found", "This image asset is unavailable.");
   }
+
+  const portableLogo = portableLogoForSlot(session, slot);
+  if (portableLogo) return imageResponse(portableLogo.bytes, portableLogo.kind);
 
   if (!sourceUrl || !isExplicitHttpsUrl(sourceUrl)) {
     return imageError(404, "image_not_found", "This image asset is unavailable.");

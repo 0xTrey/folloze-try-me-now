@@ -16,9 +16,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Try Folloze | A live buyer experience in 30 seconds",
+  title: "Try Folloze | A live buyer experience in 30–60 seconds",
   description:
-    "Choose an outcome, add a domain and a few signals, then watch Folloze build a tailored buyer experience.",
+    "Choose an outcome, add a domain and a few signals, then watch Folloze build a tailored buyer experience with useful progress in seconds.",
   icons: { icon: "/brand/folloze-symbol.png" },
   robots: { index: false, follow: false }
 };

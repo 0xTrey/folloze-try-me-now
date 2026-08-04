@@ -124,6 +124,19 @@ export interface EntityIdentity {
   provenance: IntelligenceProvenance[];
 }
 
+/**
+ * A logo copied into the server-side session boundary after strict content
+ * validation. The browser never receives these bytes in the session payload;
+ * it receives a session-scoped first-party image route instead.
+ */
+export interface PortableBrandLogo {
+  mediaType: "image/avif" | "image/gif" | "image/jpeg" | "image/png" | "image/svg+xml" | "image/webp";
+  encoding: "base64";
+  bytesBase64: string;
+  sha256: string;
+  source: "official-inline-svg" | "brandfetch";
+}
+
 export interface BrandProfile {
   domain: string;
   companyName: string;
@@ -132,6 +145,10 @@ export interface BrandProfile {
   publicContext?: string;
   publicTopics: string[];
   logoUrl?: string;
+  /** Original HTTPS logo source retained only for the server-side image proxy. */
+  logoSourceUrl?: string;
+  /** Validated logo bytes retained only in the server-side session record. */
+  portableLogo?: PortableBrandLogo;
   imageUrls: string[];
   colors: string[];
   primaryColor: string;
@@ -150,7 +167,9 @@ export interface BrandProfile {
       strategy:
         | "semantic-image"
         | "favicon"
+        | "inline-svg-portable"
         | "inline-svg-unportable"
+        | "brandfetch-portable"
         | "remote-profile"
         | "verified-profile"
         | "none";
@@ -158,6 +177,8 @@ export interface BrandProfile {
       rejectedImageCount: number;
       inlineSvgCandidateCount: number;
       selectedScore?: number;
+      /** True after all configured logo-resolution layers have been exhausted. */
+      resolutionComplete?: boolean;
     };
     stylesheetAttempted?: number;
     stylesheetSucceeded?: number;

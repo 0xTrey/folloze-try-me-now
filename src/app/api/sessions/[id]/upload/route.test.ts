@@ -165,6 +165,45 @@ describe("PDF client upload route", () => {
     expect(JSON.stringify(functionBody).length).toBeLessThan(2_000);
   });
 
+  it.each(["abm", "campaign"] as const)(
+    "issues the same private PDF token for optional %s context",
+    async (useCase) => {
+      vi.mocked(getSession).mockResolvedValue({
+        id: sessionId,
+        traceId: uploadTraceId,
+        useCase,
+        answers: {},
+        events: []
+      } as never);
+      let issuedOptions: Record<string, unknown> | undefined;
+      vi.mocked(handleUpload).mockImplementation(async (options) => {
+        if (options.body.type !== "blob.generate-client-token") throw new Error("Unexpected event");
+        issuedOptions = await options.onBeforeGenerateToken(
+          options.body.payload.pathname,
+          options.body.payload.clientPayload,
+          false
+        );
+        return { type: "blob.generate-client-token", clientToken: "short-lived-token" };
+      });
+
+      const response = await POST(
+        requestFor({
+          type: "blob.generate-client-token",
+          payload: { pathname, clientPayload: payload, multipart: false }
+        }),
+        routeContext()
+      );
+
+      expect(response.status).toBe(200);
+      expect(issuedOptions).toMatchObject({
+        allowedContentTypes: ["application/pdf"],
+        maximumSizeInBytes: 10 * 1024 * 1024,
+        addRandomSuffix: false,
+        allowOverwrite: false
+      });
+    }
+  );
+
   it("refuses to issue an upload token when the editor cookie is invalid", async () => {
     vi.mocked(canEditSession).mockResolvedValue(false);
     vi.mocked(handleUpload).mockImplementation(async (options) => {

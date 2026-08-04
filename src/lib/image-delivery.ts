@@ -102,12 +102,22 @@ export function imageDeliverySources(
   const targetImages = selected
     .filter((asset) => asset.kind === "target-image")
     .map((asset) => asset.url);
+  const selectedSellerLogo = selected.find((asset) => asset.kind === "seller-logo")?.url;
+  const selectedTargetLogo = selected.find((asset) => asset.kind === "target-logo")?.url;
+  const logoSource = (profile: BrandProfile | undefined, selectedUrl: string | undefined) => {
+    if (!profile) return selectedUrl;
+    if (!selectedUrl || selectedUrl === profile.logoUrl || isImageDeliveryPath(selectedUrl)) {
+      return profile.logoSourceUrl ??
+        (isImageDeliveryPath(profile.logoUrl ?? "")
+          ? profile.portableLogo ? profile.logoUrl : undefined
+          : profile.logoUrl);
+    }
+    return selectedUrl;
+  };
 
   return {
-    sellerLogo:
-      selected.find((asset) => asset.kind === "seller-logo")?.url ?? seller?.logoUrl,
-    targetLogo:
-      selected.find((asset) => asset.kind === "target-logo")?.url ?? target?.logoUrl,
+    sellerLogo: logoSource(seller, selectedSellerLogo),
+    targetLogo: logoSource(target, selectedTargetLogo),
     sellerImages: uniqueBounded(
       sellerImages.length ? sellerImages : (seller?.imageUrls ?? []),
       6
@@ -116,6 +126,28 @@ export function imageDeliverySources(
       targetImages.length ? targetImages : (target?.imageUrls ?? []),
       6
     )
+  };
+}
+
+/**
+ * Bind every harvested logo to a session-scoped first-party route. The
+ * original URL remains server-only for the pinned proxy, while portable logo
+ * bytes remain server-only in the session record.
+ */
+export function brandWithSessionLogoDelivery(
+  sessionId: string,
+  role: "seller" | "target",
+  profile: BrandProfile
+): BrandProfile {
+  const originalSource = profile.logoSourceUrl ??
+    (isImageDeliveryPath(profile.logoUrl ?? "") ? undefined : profile.logoUrl);
+  const hasDeliverableLogo = Boolean(originalSource || profile.portableLogo);
+  return {
+    ...profile,
+    logoSourceUrl: originalSource,
+    logoUrl: hasDeliverableLogo
+      ? imageDeliveryPath(sessionId, `${role}-logo`)
+      : undefined
   };
 }
 
@@ -148,7 +180,7 @@ export function brandWithFirstPartyImages(
   sources: ImageDeliverySources,
   version?: number
 ): BrandProfile {
-  const logoSlot = slotForSourceUrl(profile.logoUrl, sources);
+  const logoSlot = slotForSourceUrl(profile.logoSourceUrl ?? profile.logoUrl, sources);
   const logoUrl = logoSlot ? imageDeliveryPath(sessionId, logoSlot, version) : undefined;
   const imageUrls = profile.imageUrls
     .map((value) => slotForSourceUrl(value, sources))
