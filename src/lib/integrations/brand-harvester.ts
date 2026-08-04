@@ -130,6 +130,74 @@ function numericAttr(tag: string, name: string): number {
   return Number.isFinite(value) ? value : 0;
 }
 
+function escapeSvgAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Some design systems publish one hidden SVG sprite containing every site icon.
+ * A logo symbol inside that sprite is official artwork, but the sprite itself is
+ * intentionally `display:none` and therefore renders as a blank image. Convert
+ * a company-matched logo symbol into a standalone SVG before making it portable.
+ */
+function renderableInlineLogoSvg(
+  svg: string,
+  companyName: string,
+  companyKeys: string[]
+): string | undefined {
+  const symbols = [...svg.matchAll(/<symbol\b([^>]*)>([\s\S]*?)<\/symbol>/gi)].map(
+    (match) => {
+      const openingTag = `<symbol${match[1] ?? ""}>`;
+      const descriptor = [
+        attr(openingTag, "id"),
+        attr(openingTag, "aria-label"),
+        match[2]?.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1],
+        match[2]?.match(/<desc\b[^>]*>([\s\S]*?)<\/desc>/i)?.[1]
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const descriptorKey = entityKey(stripTags(descriptor));
+      let score = 0;
+      if (companyKeys.some((key) => descriptorKey.includes(key))) score += 100;
+      if (/logo|wordmark|brand/i.test(descriptor)) score += 60;
+      if (/home/i.test(descriptor)) score += 10;
+      if (/menu|close|caret|search|cart|user|icon/i.test(descriptor)) score -= 80;
+      return {
+        body: match[2] ?? "",
+        openingTag,
+        score
+      };
+    }
+  );
+
+  if (!symbols.length) return svg;
+  const selected = symbols.sort((a, b) => b.score - a.score)[0];
+  if (!selected || selected.score < 100) {
+    const openingTag = svg.match(/^<svg\b[^>]*>/i)?.[0] ?? "";
+    const hiddenRoot =
+      /\bdisplay\s*:\s*none\b/i.test(openingTag) ||
+      /\baria-hidden\s*=\s*["']true["']/i.test(openingTag) ||
+      /\bclass\s*=\s*["'][^"']*\bhide\b/i.test(openingTag);
+    return hiddenRoot ? undefined : svg;
+  }
+
+  const viewBox = attr(selected.openingTag, "viewBox");
+  if (
+    !viewBox ||
+    !/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:[ ,]+-?(?:\d+(?:\.\d+)?|\.\d+)){3}$/.test(viewBox)
+  ) return undefined;
+
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${escapeSvgAttribute(companyName)} logo" viewBox="${viewBox}">`,
+    selected.body,
+    "</svg>"
+  ].join("");
+}
+
 function extractLogo(
   html: string,
   base: URL,
@@ -248,6 +316,8 @@ function extractLogo(
   // directly in the page. Preserve only self-contained, inert SVG; the
   // session image route serves the validated bytes from the first-party app.
   const portableLogo = inlineSvgCandidates
+    .map((svg) => renderableInlineLogoSvg(svg, companyName, companyKeys))
+    .filter((svg): svg is string => Boolean(svg))
     .map((svg) => portableBrandLogoFromSvg(svg))
     .find((candidate): candidate is NonNullable<BrandProfile["portableLogo"]> => Boolean(candidate));
   if (portableLogo) {

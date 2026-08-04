@@ -210,6 +210,39 @@ describe("fast brand extraction", () => {
     expect(new TextDecoder().decode(portable)).toContain("Cisco.com Worldwide");
   });
 
+  it("materializes a company logo symbol from a hidden design-system sprite", () => {
+    const target = extractFastBrandProfile({
+      domain: "nvidia.com",
+      html: `<!doctype html><html><head>
+        <title>NVIDIA</title>
+        <meta property="og:site_name" content="NVIDIA">
+      </head><body>
+        <svg xmlns="http://www.w3.org/2000/svg" class="hide" style="display: none;">
+          <symbol id="n24-nvidia-logo" viewBox="0 0 108.472 20">
+            <title>NVIDIA Home</title>
+            <path id="nvidia-logo-wordmark" d="M0 0h108v20H0z" />
+          </symbol>
+          <symbol id="n24-menu" viewBox="0 0 24 24">
+            <title>Menu</title>
+            <path d="M0 0h24v24H0z" />
+          </symbol>
+        </svg>
+      </body></html>`,
+      finalUrl: new URL("https://www.nvidia.com/")
+    });
+
+    expect(target.logoUrl).toBeUndefined();
+    expect(target.diagnostics?.logo).toMatchObject({
+      strategy: "inline-svg-portable",
+      inlineSvgCandidateCount: 1
+    });
+    const portable = decodePortableBrandLogo(target.portableLogo!);
+    const renderedSvg = new TextDecoder().decode(portable);
+    expect(renderedSvg).toContain('viewBox="0 0 108.472 20"');
+    expect(renderedSvg).toContain("nvidia-logo-wordmark");
+    expect(renderedSvg).not.toMatch(/display\s*:\s*none|<symbol\b/i);
+  });
+
   it("refuses to make an active inline SVG portable", () => {
     const target = extractFastBrandProfile({
       domain: "cisco.com",
