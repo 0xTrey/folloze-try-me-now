@@ -266,14 +266,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
     await enforceRateLimit(`upload-request:${anonymousClientKey(request)}`, 40, 60);
     const body = (await request.json()) as unknown;
     const bodyType = body && typeof body === "object" && "type" in body ? (body as { type?: unknown }).type : undefined;
+    const traceSession = await getSession(id);
+    if (traceSession) trace.setTraceId(traceIdForSession(traceSession));
 
     if (bodyType === "try-me.client-upload-error") {
       await enforceRateLimit(`upload-error:${anonymousClientKey(request)}`, 20, 3600);
       if (!(await canEditSession(id, readEditorToken(request, id)))) {
         throw new HttpError(403, "editor_inactive", "This editor session is no longer active.");
       }
-      const session = await getSession(id);
-      if (session) trace.setTraceId(traceIdForSession(session));
       const report = clientErrorSchema.parse(body);
       const requestId = logServerError(new Error("Client PDF upload failed."), {
         ...trace.errorContext(),

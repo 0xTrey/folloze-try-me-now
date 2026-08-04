@@ -699,6 +699,9 @@ export function experienceQualityFailure(input: {
   if (context.brief.campaignRegister === "content-magic" && sourceBoilerplate.test(visibleCopy)) {
     return "copy_quality_source_boilerplate";
   }
+  if (sourceTemplateMarkup.test(visibleCopy)) {
+    return "copy_quality_source_template_markup";
+  }
   if (!normalizedIncludes(heroCopy, brand.companyName)) return "copy_quality_missing_seller_hero";
   if (!heroCopy.includes(brand.companyName)) return "copy_quality_seller_name_casing";
   if (draft.audienceLabel !== expectedMetadata.audienceLabel) {

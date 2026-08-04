@@ -427,6 +427,42 @@ describe("deterministic experience copy", () => {
     expect(JSON.stringify(draft)).not.toMatch(/\|date=|\|publisher=|\[\[/i);
   });
 
+  it("fails the copy gate when source template markup reaches visible copy", () => {
+    const answers = {
+      sourceUrl: governedAutomationSource.sourceUrl,
+      sourceTitle: "Governed Automation Field Guide",
+      audience: "Enterprise architects and platform owners",
+      objective: "Educate buyers"
+    };
+    const context = compileCampaignContext({
+      brand: jitterbit,
+      useCase: "content",
+      answers,
+      sourceContent: governedAutomationSource
+    });
+    const draft = deterministicDraft({
+      brand: jitterbit,
+      useCase: "content",
+      answers,
+      sourceContent: governedAutomationSource,
+      context
+    });
+
+    expect(
+      experienceQualityFailure({
+        draft: {
+          ...draft,
+          headline: "Jitterbit report |date=2026-01-29 |publisher=[[U.S."
+        },
+        brand: jitterbit,
+        useCase: "content",
+        answers,
+        context,
+        sourceContent: governedAutomationSource
+      })
+    ).toBe("copy_quality_source_template_markup");
+  });
+
   it("never exposes a promotional or truncated deterministic content headline", () => {
     const sourceContent = {
       sourceUrl: "https://example.com/ai-ipaas",
