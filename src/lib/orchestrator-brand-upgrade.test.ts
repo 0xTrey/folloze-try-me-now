@@ -84,6 +84,43 @@ describe("verified fallback brand recovery", () => {
     ]));
   });
 
+  it("upgrades a completed Folloze no-logo fallback to the reviewed local wordmark", async () => {
+    const id = `folloze-brand-upgrade-${Date.now()}`;
+    const verified = verifiedBrandProfileFor("folloze.com");
+    expect(verified).toBeDefined();
+    const session = fallbackSession(id, "folloze.com");
+    session.brand = {
+      ...session.brand!,
+      companyName: "Folloze",
+      diagnostics: {
+        logo: {
+          strategy: "none",
+          imageCandidateCount: 0,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0,
+          resolutionComplete: true
+        }
+      }
+    };
+    ids.add(id);
+    await putSession(session);
+    integrationMocks.harvestBrand.mockResolvedValue(verified!);
+
+    await runBrandStage(id);
+
+    const stored = await getSession(id);
+    expect(integrationMocks.harvestBrand).toHaveBeenCalledWith("folloze.com");
+    expect(stored?.brand).toMatchObject({
+      companyName: "Folloze",
+      logoUrl: `/api/sessions/${id}/image/seller-logo`,
+      logoSourceUrl: expect.stringContaining("_folloze-logo.svg"),
+      primaryColor: "#1C293F",
+      accentColor: "#5B5BFF",
+      source: "brand-harvester"
+    });
+    expect(stored?.stages.brand.status).toBe("complete");
+  });
+
   it("does not relabel an unknown fallback profile as verified evidence", async () => {
     const id = `brand-fallback-${Date.now()}`;
     ids.add(id);

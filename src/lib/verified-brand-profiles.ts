@@ -1,3 +1,4 @@
+import follozeProfile from "../../research/brand-harvest/folloze/verified-runtime-profile.json" with { type: "json" };
 import lillyProfile from "../../research/brand-harvest/lilly-home-2026-07-31/verified-runtime-profile.json" with { type: "json" };
 import medidataProfile from "../../research/brand-harvest/medidata-logo-2026-07-31/verified-runtime-profile.json" with { type: "json" };
 import serviceNowProfile from "../../research/brand-harvest/servicenow-home-2026-07-31/verified-runtime-profile.json" with { type: "json" };
@@ -54,6 +55,7 @@ interface VerifiedRuntimeProfile {
 }
 
 const verifiedProfiles = [
+  follozeProfile,
   serviceNowProfile,
   medidataProfile,
   lillyProfile
@@ -64,7 +66,7 @@ function canonicalDomain(value: string): string {
 }
 
 const SAFE_LOGO_FALLBACK_PATH =
-  /^public\/verified-brands\/[a-z0-9-]+\/[a-z0-9._-]+\.(?:png|svg|webp)$/;
+  /^(?:public\/verified-brands\/[a-z0-9-]+\/[a-z0-9._-]+\.(?:png|svg|webp)|public\/brand\/folloze-logo\.svg)$/;
 
 export interface VerifiedBrandLogoFallback {
   path: string;

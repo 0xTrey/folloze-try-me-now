@@ -19,7 +19,7 @@
 
 - ESLint: pass.
 - TypeScript: pass.
-- Vitest: 49 files / 413 tests pass.
+- Vitest: 49 files / 416 tests pass.
 - Next.js Turbopack production build: pass.
 - Next.js webpack production build: pass.
 - Desktop Playwright suite: 16/16 pass.
@@ -42,6 +42,7 @@ The three generations completed in the intended quality window, passed the struc
 
 - The exact overlong audience incident is normalized before it reaches the bounded experience schema; its full rationale remains in the canonical brief.
 - Cisco's inline SVG wordmark is validated, copied into the private session, hash-checked, and served through a first-party session image route.
+- Folloze's reviewed first-party wordmark remains available when the public homepage rejects a server-side harvest.
 - Generated preview HTML retains portable seller and target logos.
 - Unreadable public sources fail before model invocation.
 - Brand recovery cannot retry a terminal source-generation failure.

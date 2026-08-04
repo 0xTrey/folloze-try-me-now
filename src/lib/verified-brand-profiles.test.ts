@@ -42,6 +42,23 @@ describe("verified browser-backed brand profiles", () => {
     expect(verifiedBrandProfileFor("unknown-example.test")).toBeUndefined();
   });
 
+  it("maps Folloze to the reviewed first-party navbar wordmark", () => {
+    const folloze = verifiedBrandProfileFor("https://www.folloze.com/");
+
+    expect(folloze).toMatchObject({
+      domain: "folloze.com",
+      companyName: "Folloze",
+      primaryColor: "#1C293F",
+      accentColor: "#5B5BFF",
+      logoUrl: expect.stringContaining("_folloze-logo.svg"),
+      source: "brand-harvester"
+    });
+    expect(verifiedBrandLogoFallbackFor(folloze!.domain, folloze!.logoUrl!)).toEqual({
+      path: "public/brand/folloze-logo.svg",
+      sourceUrl: folloze!.logoUrl
+    });
+  });
+
   it("provides exact reviewed Medidata and Lilly wordmarks", () => {
     const medidata = verifiedBrandProfileFor("https://www.medidata.com/en/logo/");
     const lilly = verifiedBrandProfileFor("www.lilly.com");
@@ -71,12 +88,19 @@ describe("verified browser-backed brand profiles", () => {
 
   it("does not map near-match domains or substituted URLs to local files", () => {
     const medidata = verifiedBrandProfileFor("medidata.com")!;
+    const folloze = verifiedBrandProfileFor("folloze.com")!;
 
     expect(
       verifiedBrandLogoFallbackFor("medidata.com.attacker.example", medidata.logoUrl!)
     ).toBeUndefined();
     expect(
       verifiedBrandLogoFallbackFor("medidata.com", "https://attacker.example/logo.svg")
+    ).toBeUndefined();
+    expect(
+      verifiedBrandLogoFallbackFor("folloze.com.attacker.example", folloze.logoUrl!)
+    ).toBeUndefined();
+    expect(
+      verifiedBrandLogoFallbackFor("folloze.com", "https://attacker.example/folloze-logo.svg")
     ).toBeUndefined();
   });
 });

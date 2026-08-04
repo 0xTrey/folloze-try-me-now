@@ -215,6 +215,13 @@ function canonicalDomain(value: string): string {
 
 async function readReviewedLogo(path: string): Promise<Uint8Array> {
   switch (path) {
+    case "public/brand/folloze-logo.svg":
+      return new Uint8Array(await readFile(join(
+        process.cwd(),
+        "public",
+        "brand",
+        "folloze-logo.svg"
+      )));
     case "public/verified-brands/servicenow/homepage-header-logo.png":
       return new Uint8Array(await readFile(join(
         process.cwd(),

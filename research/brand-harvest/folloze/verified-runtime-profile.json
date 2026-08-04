@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "domain": "folloze.com",
+  "companyName": "Folloze",
+  "sourceUrl": "https://www.folloze.com/",
+  "verifiedAt": "2026-07-31T01:02:09Z",
+  "source": "brand-harvester-browser",
+  "description": "Folloze is a B2B buyer experience platform for personalized campaigns, account engagement, and measurable buyer signals.",
+  "publicTopics": [
+    "Build personalized campaigns and microsites",
+    "Activate content around buyer behavior",
+    "Capture account engagement and buying signals"
+  ],
+  "logoUrl": "https://cdn.prod.website-files.com/6464087fdf877a12a8bd4cd6/6464087fdf877a12a8bd4d26_folloze-logo.svg",
+  "logoEvidence": {
+    "sourcePage": "https://www.folloze.com/",
+    "className": "navbar2_logo-link w-nav-brand",
+    "assetType": "first-party SVG"
+  },
+  "logoDeliveryFallback": {
+    "path": "public/brand/folloze-logo.svg",
+    "sha256": "0e17fce7982368c0791820f488dffc18693336e14f930a88cf436426afba4924",
+    "mimeType": "image/svg+xml",
+    "dimensions": { "width": 99, "height": 24 },
+    "sourcePage": "https://www.folloze.com/",
+    "reason": "The repository already contains the reviewed first-party Folloze navbar wordmark. Serving that immutable local asset avoids a public CDN dependency while preserving the exact official geometry and color."
+  },
+  "imageUrls": [],
+  "colors": [
+    "#1C293F",
+    "#5B5BFF",
+    "#FFFFFF",
+    "#2C3D59",
+    "#3B3BE0",
+    "#6B7E9D"
+  ],
+  "primaryColor": "#1C293F",
+  "accentColor": "#5B5BFF",
+  "surfaceColor": "#FFFFFF",
+  "displayFontFamily": "Instrument Sans",
+  "bodyFontFamily": "Inter"
+}

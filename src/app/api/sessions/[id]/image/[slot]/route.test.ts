@@ -254,6 +254,20 @@ describe("harvested image delivery route", () => {
     expect([...bytes.slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   });
 
+  it("serves the reviewed Folloze wordmark locally without touching its public CDN", async () => {
+    const folloze = verifiedBrandProfileFor("folloze.com")!;
+    vi.mocked(getSession).mockResolvedValue({ answers: {}, brand: folloze } as never);
+
+    const response = await GET(request, context("seller-logo"));
+    const logo = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/svg+xml; charset=utf-8");
+    expect(logo).toContain('viewBox="0 0 99 24"');
+    expect(logo).toContain('fill="#2C3D59"');
+    expect(fetchPinnedPublicBytes).not.toHaveBeenCalled();
+  });
+
   it("serves reviewed Medidata and Lilly logos from immutable local assets", async () => {
     const medidata = verifiedBrandProfileFor("medidata.com")!;
     vi.mocked(getSession).mockResolvedValue({ answers: {}, brand: medidata } as never);

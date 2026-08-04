@@ -691,12 +691,10 @@ function brandProfileNeedsRefresh(
 ): boolean {
   if (!profile) return true;
   if (hasExperience) return false;
-  if (profile.source === "fallback") {
-    return Boolean(verifiedBrandProfileFor(expectedDomain));
-  }
-  return !profile.logoUrl &&
-    !profile.portableLogo &&
-    profile.diagnostics?.logo.resolutionComplete !== true;
+  if (profile.logoUrl || profile.portableLogo) return false;
+  if (verifiedBrandProfileFor(expectedDomain)?.logoUrl) return true;
+  if (profile.source === "fallback") return false;
+  return profile.diagnostics?.logo.resolutionComplete !== true;
 }
 
 function needsBrandRefresh(session: Pick<TryMeSession, "brand" | "companyDomain" | "experience">): boolean {
