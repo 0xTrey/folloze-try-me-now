@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PublicBrandProfile, PublicTryMeSession, StageStatus, UseCase } from "@/lib/types";
 import {
-  ceremonyDuration,
+  buildMoments,
   ctaValueForSession,
   entryPathOptions,
   getAssemblyPreviewKey,
@@ -203,6 +203,28 @@ describe("Try Me Now experience copy", () => {
     expect(needsObjective.headline).toBe("The buyer is set. Give the experience one job.");
   });
 
+  it("never presents incomplete brand evidence as ready", () => {
+    const incomplete = session("campaign", {
+      brand: {
+        ...brand("jitterbit.com", "Jitterbit"),
+        readiness: {
+          status: "incomplete",
+          identityReady: true,
+          logoReady: false,
+          paletteReady: false,
+          sourceEvidenceReady: true,
+          reasons: ["No verified logo was captured.", "The palette is still provisional."]
+        }
+      }
+    }, { brand: "fallback" });
+
+    const brandMoment = buildMoments(incomplete)[0];
+    expect(brandMoment.title).toBe("Brand evidence needs review");
+    expect(brandMoment.detail).toContain("No verified logo was captured.");
+    expect(brandMoment.artifact).toBe("Jitterbit · logo, palette needs review");
+    expect(brandMoment.title).not.toMatch(/ready/i);
+  });
+
   it("asks account- and source-specific guided questions", () => {
     const abm = getGuidedQuestionCopy(session("abm", {
       answers: { targetDomain: "cisco.com" },
@@ -216,11 +238,6 @@ describe("Try Me Now experience copy", () => {
     }));
     expect(content.audienceTitle).toContain("API Transformation Playbook");
     expect(content.objectiveTitle).toContain("API Transformation Playbook");
-  });
-
-  it("bypasses the ceremony when reduced motion is requested", () => {
-    expect(ceremonyDuration(true)).toBe(0);
-    expect(ceremonyDuration(false)).toBe(4_800);
   });
 
   // Regression: QA ISSUE-001. Analytics writes increment the session revision,

@@ -802,7 +802,7 @@ describe("deterministic experience copy", () => {
     ).toBe("copy_quality_target_name_casing");
   });
 
-  it("keeps canonical page geometry while varying register, labels, CTA, and copy", () => {
+  it("keeps a shared spec while selecting register-specific templates, labels, CTA, and copy", () => {
     const variants = [
       draftFor(
         "abm",
@@ -833,12 +833,8 @@ describe("deterministic experience copy", () => {
     ];
 
     expect(new Set(variants.map((draft) => draft.campaignRegister)).size).toBe(5);
-    expect(new Set(variants.map((draft) => draft.wireframeName))).toEqual(
-      new Set([CANONICAL_EXPERIENCE_STRUCTURE.wireframeName])
-    );
-    expect(new Set(variants.map((draft) => draft.experienceShape))).toEqual(
-      new Set([CANONICAL_EXPERIENCE_STRUCTURE.experienceShape])
-    );
+    expect(new Set(variants.map((draft) => draft.wireframeName)).size).toBe(5);
+    expect(new Set(variants.map((draft) => draft.experienceShape)).size).toBe(4);
     expect(new Set(variants.map((draft) => draft.sectionSequence.join("|")))).toEqual(
       new Set([CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence.join("|")])
     );
@@ -849,7 +845,7 @@ describe("deterministic experience copy", () => {
     expect(new Set(variants.map((draft) => JSON.stringify(draft.sections))).size).toBe(5);
   });
 
-  it("rejects LLM output that mutates any canonical structural field", () => {
+  it("rejects LLM output that mutates the selected template contract", () => {
     const answers = {
       campaignType: "product" as const,
       promotedOffer: "Governed AI automation",
@@ -860,7 +856,7 @@ describe("deterministic experience copy", () => {
     const mutations: Array<[string, typeof draft]> = [
       [
         "structure_wireframe_mismatch",
-        { ...draft, wireframeName: "product-launch-landing-page" }
+        { ...draft, wireframeName: "canonical-desktop-experience" }
       ],
       [
         "structure_shape_mismatch",

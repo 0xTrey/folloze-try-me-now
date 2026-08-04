@@ -31,6 +31,7 @@ function installSession(overrides: {
   targetLogo?: string;
   targetImages?: string[];
   sellerPortableLogo?: PortableBrandLogo;
+  targetPortableLogo?: PortableBrandLogo;
   artifactRevision?: number;
   experienceArtifactRevision?: number;
 } = {}) {
@@ -43,6 +44,7 @@ function installSession(overrides: {
     },
     targetBrand: {
       logoUrl: overrides.targetLogo ?? "https://cdn.example/target/logo.svg",
+      portableLogo: overrides.targetPortableLogo,
       imageUrls: overrides.targetImages ?? ["https://cdn.example/target/hero.jpg"]
     },
     qualityReceipt: overrides.artifactRevision
@@ -211,6 +213,23 @@ describe("harvested image delivery route", () => {
       "https://cdn.example/target/logo.svg",
       expect.any(Object)
     );
+  });
+
+  it("delivers copied target wordmarks without a target CDN hotlink", async () => {
+    const portable = portableBrandLogoFromSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TechTarget logo" viewBox="0 0 100 20"><title>TechTarget</title><path fill="#008080" d="M0 0h100v20H0z"/></svg>',
+      "official-remote-asset"
+    );
+    installSession({
+      targetLogo: "/api/sessions/image-session/image/target-logo",
+      targetPortableLogo: portable
+    });
+
+    const response = await GET(request, context("target-logo"));
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("TechTarget logo");
+    expect(fetchPinnedPublicBytes).not.toHaveBeenCalled();
   });
 
   it("returns the reviewed ServiceNow homepage logo crop when the exact verified CDN asset is forbidden", async () => {

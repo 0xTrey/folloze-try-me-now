@@ -594,37 +594,38 @@ function wireframeFor(input: {
   register: CampaignRegister;
   objective: string;
 }): CampaignGenerationContext["wireframe"] {
-  const canonicalStructure = {
-    name: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
-    experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
-    heroMode: CANONICAL_EXPERIENCE_STRUCTURE.heroMode,
-    sectionSequence: [
-      ...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
-    ] as CampaignGenerationContext["wireframe"]["sectionSequence"]
-  };
+  const sharedSections = [
+    ...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
+  ] as CampaignGenerationContext["wireframe"]["sectionSequence"];
 
   if (input.register === "one-to-one-abm") {
     return {
-      ...canonicalStructure,
+      name: "abm-account-microsite",
+      experienceShape: "narrative-workflow",
+      heroMode: "account-thesis",
+      sectionSequence: sharedSections,
       signatureMoment: "Role-level decision lenses translate the seller mechanism into questions the named account can validate.",
       finalCtaPattern: "A focused working session around the first validation question.",
       labels: {
         thesis: "The account-level case",
         lenses: "Choose the decision lens",
-        journey: "Questions for the next conversation",
+        journey: "Explore the supporting story",
         close: "Put the first question on the table"
       }
     };
   }
   if (input.register === "campaign-product") {
     return {
-      ...canonicalStructure,
+      name: "product-launch-landing-page",
+      experienceShape: "offer-landing-page",
+      heroMode: "launch-led",
+      sectionSequence: sharedSections,
       signatureMoment: "An interactive capability path lets each role start with the operating change it owns.",
       finalCtaPattern: "Move from the launch story to one practical use case.",
       labels: {
         thesis: "The operating shift",
         lenses: "Explore what changes",
-        journey: "Questions for the first use case",
+        journey: "Proof and launch resources",
         close: "Choose the first use case"
       }
     };
@@ -632,7 +633,10 @@ function wireframeFor(input: {
   if (input.register === "campaign-event") {
     const registration = /registr|attend|rsvp/.test(input.objective.toLowerCase());
     return {
-      ...canonicalStructure,
+      name: "event-awareness-follow-up",
+      experienceShape: "event-cohort",
+      heroMode: "event-led",
+      sectionSequence: sharedSections,
       signatureMoment: registration
         ? "A choose-your-reason module connects the event promise to the questions each role wants answered."
         : "A choose-your-path module turns the event theme into a useful role-specific next step.",
@@ -640,36 +644,42 @@ function wireframeFor(input: {
         ? "Move from the event promise to one clear registration action."
         : "Continue the event conversation around the most relevant path.",
       labels: registration
-        ? {
+          ? {
             thesis: "Why this session matters",
             lenses: "Choose your reason to attend",
-            journey: "Questions the session will take on",
+            journey: "What the session will cover",
             close: "Save your place"
           }
-        : {
+          : {
             thesis: "What to carry forward",
             lenses: "Choose the most useful path",
-            journey: "Questions worth continuing",
+            journey: "Keep exploring the story",
             close: "Continue the conversation"
           }
     };
   }
   if (input.register === "campaign-demand") {
     return {
-      ...canonicalStructure,
+      name: "demand-generation-landing-page",
+      experienceShape: "offer-landing-page",
+      heroMode: "offer-led",
+      sectionSequence: sharedSections,
       signatureMoment: "An audience-led selector makes the offer relevant without pretending to know the individual visitor.",
       finalCtaPattern: "Route interest into one benefit-led next action.",
       labels: {
         thesis: "The case for action",
         lenses: "Start with what matters",
-        journey: "From interest to a useful next step",
+        journey: "Proof and useful resources",
         close: "Take the next step"
       }
     };
   }
   const assessment = /meeting|qualified|capture|evaluate|decision/i.test(input.objective);
   return {
-    ...canonicalStructure,
+    name: assessment ? "content-assessment-workbench" : "content-resource-companion",
+    experienceShape: assessment ? "assessment-workbench" : "resource-companion",
+    heroMode: "source-led",
+    sectionSequence: sharedSections,
     signatureMoment: assessment
       ? "A practical decision-lens workbench helps the buyer apply the source material to its own next question."
       : "A guided explorer turns the source into a few useful paths instead of reproducing it page by page.",
@@ -679,7 +689,7 @@ function wireframeFor(input: {
     labels: {
       thesis: "The idea worth carrying forward",
       lenses: assessment ? "Apply the framework" : "Choose your reading path",
-      journey: "Questions raised by the source",
+      journey: assessment ? "Work through the source" : "Explore the source",
       close: assessment ? "Put the framework to work" : "Keep exploring"
     }
   };

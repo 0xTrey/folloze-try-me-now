@@ -4,7 +4,6 @@ import {
   experienceDraftSchema,
   type ExperienceDraft
 } from "@/lib/generation/experience-schema";
-import { CANONICAL_EXPERIENCE_STRUCTURE } from "@/lib/generation/campaign-context";
 import {
   PREVIEW_INTERACTION_TYPES,
   type AudienceLensArtifact,
@@ -348,10 +347,9 @@ export function draftFromExperienceSpec(spec: ExperienceSpecV1): ExperienceDraft
 }
 
 export function canonicalizeExperienceDraft(draft: ExperienceDraft): ExperienceDraft {
-  return {
-    ...structuredClone(draft),
-    wireframeName: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
-    experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
-    sectionSequence: [...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence]
-  };
+  // "Canonical" means one validated, versioned ExperienceSpec. It does not
+  // mean forcing every campaign register through one generic page geometry.
+  // The selected wireframe/shape is part of the approved spec and must survive
+  // the web and future Folloze renderers unchanged.
+  return experienceDraftSchema.parse(structuredClone(draft));
 }

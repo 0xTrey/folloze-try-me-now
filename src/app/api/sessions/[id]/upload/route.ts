@@ -491,7 +491,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           }
 
           const sourceTitle =
-            (await extractPdfDocumentTitle(bytes, payload.originalName)) ?? pdfTitleFallback();
+            (await extractPdfDocumentTitle(bytes, payload.originalName)) ?? pdfTitleFallback(payload.originalName);
 
           let sourceOpenAIFileId = hasOpenAI ? processingStatus.openAIFileId : undefined;
           if (hasOpenAI && !sourceOpenAIFileId) {

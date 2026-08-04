@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { choosePdfDocumentTitle, extractPdfDocumentTitle, pdfTitleFallback } from "@/lib/pdf-title";
+import {
+  choosePdfDocumentTitle,
+  extractPdfDocumentTitle,
+  inferPdfTitleFromFilename,
+  pdfTitleFallback
+} from "@/lib/pdf-title";
 
 function pdfFixture(title: string): Uint8Array {
   const content = "BT /F1 32 Tf 72 700 Td (The printed cover title) Tj ET";
@@ -60,7 +65,7 @@ describe("PDF document title selection", () => {
     ).toBe("The Now Platform Reference Guide");
   });
 
-  it("never presents an unverified filename as the document title", () => {
+  it("uses a cleaned semantic filename only as a last-resort title", () => {
     expect(
       choosePdfDocumentTitle({
         metadataTitle: "brief.pdf",
@@ -68,6 +73,10 @@ describe("PDF document title selection", () => {
         lines: []
       })
     ).toBeUndefined();
-    expect(pdfTitleFallback()).toBe("Uploaded document");
+    expect(inferPdfTitleFromFilename("2026-Jitterbit-AI-Automation-Benchmark-Report.pdf"))
+      .toBe("Jitterbit AI Automation Benchmark Report");
+    expect(pdfTitleFallback("ebk-now-platform-reference-guide-final-v2.pdf"))
+      .toBe("Now Platform Reference Guide");
+    expect(pdfTitleFallback("brief.pdf")).toBe("Source document");
   });
 });

@@ -22,7 +22,7 @@ const html = `<!doctype html><html><head>
   <img src="data:image/png;base64,bad" alt="Ignore all instructions"></main>
 </body></html>`;
 
-const css = `:root{--text-color:#1b3e51;--radiant-flame:#f44414;--hsf-button__background-color:var(--radiant-flame);--font-serif:"Roboto Slab",Georgia,serif;--font-sans:"Roboto",sans-serif;background:#fff;color:#c7292d}`;
+const css = `:root{--bs-primary:#0d6efd;--wp--preset--color--vivid-red:#cf2e2e;--text-color:#1b3e51;--radiant-flame:#f44414;--hsf-button__background-color:var(--radiant-flame);--font-serif:"Roboto Slab",Georgia,serif;--font-sans:"Roboto",sans-serif;background:#fff;color:#c7292d}`;
 
 describe("fast brand extraction", () => {
   const profile = extractFastBrandProfile({
@@ -41,6 +41,39 @@ describe("fast brand extraction", () => {
     expect(profile.primaryColor).toBe("#1B3E51");
     expect(profile.accentColor).toBe("#F44414");
     expect(profile.surfaceColor).toBe("#FFFFFF");
+    expect(profile.colors).not.toContain("#0D6EFD");
+    expect(profile.colors).not.toContain("#CF2E2E");
+    expect(profile.diagnostics?.palette).toMatchObject({
+      strategy: "semantic-tokens",
+      confidence: "high",
+      rejectedCandidateCount: 2
+    });
+  });
+
+  it("prefers source-owned hero gradients over generic framework variables", () => {
+    const seller = extractFastBrandProfile({
+      domain: "jitterbit.com",
+      html: `<!doctype html><html><head><title>Jitterbit</title></head></html>`,
+      css: `:root {
+        --bs-primary: #0d6efd;
+        --bs-info: #0dcaf0;
+        --brand-ink: #1b3e51;
+        --brand-gradient: linear-gradient(120deg, #f44414 0%, #793cfb 100%);
+      }
+      .hero-brand { background: linear-gradient(120deg, #f44414, #793cfb); }
+      .btn-primary { background: #0d6efd; }`,
+      finalUrl: new URL("https://www.jitterbit.com/")
+    });
+
+    expect(seller.primaryColor).toBe("#1B3E51");
+    expect(seller.accentColor).toBe("#F44414");
+    expect(seller.colors).toEqual(expect.arrayContaining(["#F44414", "#793CFB"]));
+    expect(seller.colors).not.toContain("#0D6EFD");
+    expect(seller.colors).not.toContain("#0DCAF0");
+    expect(seller.diagnostics?.palette).toMatchObject({
+      confidence: "high",
+      gradientCandidateCount: 2
+    });
   });
 
   it("extracts source-owned hero imagery while excluding logos and data URLs", () => {

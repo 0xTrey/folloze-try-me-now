@@ -78,7 +78,15 @@ describe("public session projection", () => {
         surfaceColor: "#FFFFFF",
         publicTopics: ["Enterprise workflows"],
         sourceUrl: "https://www.servicenow.com/",
-        source: "brand-harvester"
+        source: "brand-harvester",
+        readiness: {
+          status: "ready",
+          identityReady: true,
+          logoReady: true,
+          paletteReady: true,
+          sourceEvidenceReady: true,
+          reasons: []
+        }
       },
       claim: {
         email: "private@example.com",
@@ -153,7 +161,15 @@ describe("public session projection", () => {
       primaryColor: "#032D42",
       accentColor: "#63DF4E",
       surfaceColor: "#FFFFFF",
-      source: "brand-harvester"
+      source: "brand-harvester",
+      readiness: {
+        status: "ready",
+        identityReady: true,
+        logoReady: true,
+        paletteReady: true,
+        sourceEvidenceReady: true,
+        reasons: []
+      }
     });
     expect(projected.brand).not.toHaveProperty("sourceUrl");
     expect(projected.brand).not.toHaveProperty("imageUrls");

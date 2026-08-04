@@ -35,13 +35,13 @@ const brand: BrandProfile = {
 const draft: ExperienceDraft = {
   campaignRegister: "campaign-product",
   designRegister: "source-brand-editorial",
-  wireframeName: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
-  experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
+  wireframeName: "product-launch-landing-page",
+  experienceShape: "offer-landing-page",
   sectionSequence: [...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence],
   sectionLabels: {
     thesis: "The operating shift",
     lenses: "Explore what changes",
-    journey: "Questions for the first use case",
+    journey: "Proof for the first use case",
     close: "Choose the first use case"
   },
   title: "Jitterbit | Integration and automation",
@@ -265,10 +265,10 @@ describe("renderExperienceHtml", () => {
     );
   });
 
-  it("includes three functional decision lenses, three compact question cards, and analytics hooks", () => {
+  it("includes three functional decision lenses, three source-backed resource cards, and analytics hooks", () => {
     expect(html.match(/<button[^>]*role="tab"/g)).toHaveLength(3);
     expect(html.match(/class="lens-panel"/g)).toHaveLength(3);
-    expect(html.match(/<article class="journey-card/g)).toHaveLength(3);
+    expect(html.match(/<article class="journey-card resource-card/g)).toHaveLength(3);
     expect(html).toContain("flzAnalytic('cta_click'");
     expect(html).toContain("flzAnalytic('anchor_click'");
     expect(html).toContain("flzAnalytic('topic_select'");
@@ -294,7 +294,7 @@ describe("renderExperienceHtml", () => {
     expect(html.match(/data-flz-editable="true"/g)?.length).toBeGreaterThan(20);
     expect(html).toContain('data-flz-block-id="hero.headline" data-flz-block-kind="headline"');
     expect(html).toContain('data-flz-block-id="lens.0.body" data-flz-block-kind="body"');
-    expect(html).toContain('data-flz-block-id="question.2.prompt" data-flz-block-kind="question"');
+    expect(html).toContain('data-flz-block-id="resource.2.headline" data-flz-block-kind="proof-point"');
     expect(html).toContain('data-flz-block-id="close.primaryCta" data-flz-block-kind="cta"');
     expect(html).toContain("editable_block_select:true");
   });
@@ -342,6 +342,17 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("@media(forced-colors:active)");
   });
 
+  it("offers standalone buyers a timed or halfway engagement-intelligence reveal", () => {
+    expect(html).toContain('data-folloze-invite aria-label="Folloze engagement insight" hidden');
+    expect(html).toContain("See what Folloze knows");
+    expect(html).toContain("window.setTimeout(showFollozeInvite,18000)");
+    expect(html).toContain("if(progress>=.5)showFollozeInvite()");
+    expect(html).toContain("if(inviteShown||window.parent!==window||!invite)return");
+    expect(html).toContain("ctaId:'see-what-folloze-knows'");
+    expect(html).toContain("Which paths and topics earn attention");
+    expect(html).toContain("How long buyers engage with each section");
+  });
+
   it("uses content provenance without turning the preview into a live source CTA", () => {
     const content = renderExperienceHtml({
       draft: {
@@ -358,8 +369,10 @@ describe("renderExperienceHtml", () => {
       }
     });
 
-    expect(content).toContain('data-source-confirmed="true"');
-    expect(content).toContain("Original source confirmed");
+    expect(content).toContain('data-template-family="content-source"');
+    expect(content).toContain('data-source-reference="Automation guide"');
+    expect(content).toContain("Built from Automation guide.");
+    expect(content.match(/<article class="journey-card resource-card/g)).toHaveLength(2);
     expect(content).not.toContain('href="https://example.com/guides/automation"');
     expect(content.match(/class="actions"/g)).toHaveLength(1);
     expect(content.match(/class="primary" data-demo-cta/g)).toHaveLength(2);
@@ -391,18 +404,19 @@ describe("renderExperienceHtml", () => {
     expect(prioritized).not.toMatch(/g2-implementation|roadshow-event/i);
   });
 
-  it("uses the campaign register for messaging while keeping the canonical page shape", () => {
-    expect(html).toContain('class="register-campaign-product design-source-brand-editorial variant-standard style-standard cta-solid brand-hero-light"');
-    expect(html).toContain('data-wireframe="canonical-desktop-experience"');
-    expect(html).toContain('data-experience-shape="guided-buyer-experience"');
+  it("uses the campaign register to select a campaign composition and preserves its wireframe metadata", () => {
+    expect(html).toContain('class="register-campaign-product design-source-brand-editorial template-campaign-launch variant-standard style-standard cta-solid brand-hero-light"');
+    expect(html).toContain('data-wireframe="product-launch-landing-page"');
+    expect(html).toContain('data-experience-shape="offer-landing-page"');
+    expect(html).toContain('data-template-fingerprint="v3-campaign-routes-proof-thesis"');
     expect(html).toContain('data-layout-variant="standard"');
     expect(html).toContain('data-style-variant="standard"');
-    expect(html.indexOf('id="campaign-thesis"')).toBeLessThan(html.indexOf('id="decision-path"'));
-    expect(html.indexOf('id="decision-path"')).toBeLessThan(html.indexOf('id="guided-questions"'));
+    expect(html.indexOf('id="decision-path"')).toBeLessThan(html.indexOf('id="supporting-resources"'));
+    expect(html.indexOf('id="supporting-resources"')).toBeLessThan(html.indexOf('id="experience-thesis"'));
     expect(html).toContain("Explore what changes");
   });
 
-  it("ignores legacy layout selections while preserving style and an escaped quality receipt", () => {
+  it("ignores legacy layout selections, preserves style, and keeps workspace receipts out of buyer chrome", () => {
     const enhancedAnswers = Object.assign(
       { sourceUrl: "https://example.com/report?token=remove#private" },
       {
@@ -424,14 +438,13 @@ describe("renderExperienceHtml", () => {
       answers: enhancedAnswers
     });
 
-    expect(enhanced).toContain('class="register-content-magic design-source-brand-editorial variant-standard style-editorial cta-solid brand-hero-light"');
+    expect(enhanced).toContain('class="register-content-magic design-source-brand-editorial template-content-source variant-standard style-editorial cta-solid brand-hero-light"');
     expect(enhanced).toContain('data-layout-variant="standard"');
     expect(enhanced).toContain('data-style-variant="editorial"');
-    expect(enhanced).toContain('data-quality-receipt="true"');
-    expect(enhanced).toContain("Grounded &amp; reviewed");
-    expect(enhanced).toContain("&lt;script&gt;alert(&quot;receipt&quot;)&lt;/script&gt;");
-    expect(enhanced).toContain("<strong>100</strong>/100 quality");
-    expect(enhanced).toContain('data-source-confirmed="true"');
+    expect(enhanced).not.toContain('data-quality-receipt="true"');
+    expect(enhanced).not.toContain("Grounded &amp; reviewed");
+    expect(enhanced).not.toContain("alert(&quot;receipt&quot;)");
+    expect(enhanced).not.toContain("/100 quality");
     expect(enhanced).not.toContain('href="https://example.com/report"');
     expect(enhanced).not.toContain("token=remove");
     expect(enhanced).not.toContain("Ignored");
@@ -463,7 +476,7 @@ describe("renderExperienceHtml", () => {
     expect(rejected).not.toContain("</style><script>");
   });
 
-  it("renders the workspace quality receipt shape when supplied", () => {
+  it("does not leak the workspace quality receipt into the generated buyer page", () => {
     const checked = renderExperienceHtml({
       draft,
       brand,
@@ -481,11 +494,10 @@ describe("renderExperienceHtml", () => {
       }
     });
 
-    expect(checked).toContain("Quality checks passed");
-    expect(checked).toContain("2 of 2 applicable experience checks passed.");
-    expect(checked).toContain("<strong>100</strong>/100 quality");
-    expect(checked).toContain("Copy quality");
-    expect(checked).toContain("CTA path");
+    expect(checked).not.toContain("Experience receipt");
+    expect(checked).not.toContain("Quality checks passed");
+    expect(checked).not.toContain("Copy quality");
+    expect(checked).not.toContain("CTA path");
   });
 
   it("renders CTA visual treatment from intent-only preview input", () => {
@@ -518,7 +530,7 @@ describe("renderExperienceHtml", () => {
     expect(fallback).not.toContain("<script>alert(1)</script>");
   });
 
-  it("keeps one structural fingerprint across product, ABM, and content while tailoring the story", () => {
+  it("shares primitives across product, ABM, and content while selecting distinct template fingerprints", () => {
     const target: BrandProfile = {
       ...brand,
       domain: "cisco.com",
@@ -575,41 +587,65 @@ describe("renderExperienceHtml", () => {
     const fingerprint = (output: string) => ({
       wireframe: output.match(/data-wireframe="([^"]+)"/)?.[1],
       shape: output.match(/data-experience-shape="([^"]+)"/)?.[1],
+      family: output.match(/data-template-family="([^"]+)"/)?.[1],
+      template: output.match(/data-template-fingerprint="([^"]+)"/)?.[1],
+      sharedPrimitives: output.match(/data-shared-primitives="([^"]+)"/)?.[1],
       layout: output.match(/data-layout-variant="([^"]+)"/)?.[1],
-      signatureClass: output.match(/<section class="([^"]+)" aria-label="Guided decision paths">/)?.[1],
       signatureButtons: output.match(/data-signature-lens-index=/g)?.length,
       heroActions: output.match(/<div class="actions">([\s\S]*?)<\/div>/)?.[1].match(/<(?:button|a)\b/g)?.length,
       liveHeroLinks: output.match(/<div class="actions">([\s\S]*?)<\/div>/)?.[1].match(/<a\b/g)?.length ?? 0,
       lensTabs: output.match(/<button[^>]*role="tab"/g)?.length,
       lensPanels: output.match(/class="lens-panel"/g)?.length,
-      questionCards: output.match(/<article class="journey-card/g)?.length,
+      resourceCards: output.match(/<article class="journey-card resource-card/g)?.length,
       sectionOrder: [...output.matchAll(/<section class="(?:thesis|lens-lab|journey) experience-region" id="([^"]+)"/g)].map((match) => match[1])
     });
 
-    expect(fingerprint(abm)).toEqual(fingerprint(html));
-    expect(fingerprint(content)).toEqual(fingerprint(html));
-    expect(fingerprint(html)).toEqual({
-      wireframe: "canonical-desktop-experience",
-      shape: "guided-buyer-experience",
-      layout: "standard",
-      signatureClass: "signature signature-canonical",
-      signatureButtons: 3,
-      heroActions: 1,
-      liveHeroLinks: 0,
-      lensTabs: 3,
-      lensPanels: 3,
-      questionCards: 3,
-      sectionOrder: ["campaign-thesis", "decision-path", "guided-questions"]
+    const productFingerprint = fingerprint(html);
+    const abmFingerprint = fingerprint(abm);
+    const contentFingerprint = fingerprint(content);
+    expect(new Set([productFingerprint.sharedPrimitives, abmFingerprint.sharedPrimitives, contentFingerprint.sharedPrimitives])).toEqual(
+      new Set(["brand-lockup,hero,signature-paths,thesis,lenses,resources,close,analytics"])
+    );
+    expect(new Set([productFingerprint.template, abmFingerprint.template, contentFingerprint.template]).size).toBe(3);
+    for (const candidate of [productFingerprint, abmFingerprint, contentFingerprint]) {
+      expect(candidate.layout).toBe("standard");
+      expect(candidate.signatureButtons).toBe(3);
+      expect(candidate.heroActions).toBe(1);
+      expect(candidate.liveHeroLinks).toBe(0);
+      expect(candidate.lensTabs).toBe(3);
+      expect(candidate.lensPanels).toBe(3);
+      expect(candidate.resourceCards).toBe(candidate.family === "content-source" ? 2 : 3);
+    }
+    expect(productFingerprint).toMatchObject({
+      wireframe: "product-launch-landing-page",
+      shape: "offer-landing-page",
+      family: "campaign-launch",
+      template: "v3-campaign-routes-proof-thesis",
+      sectionOrder: ["decision-path", "supporting-resources", "experience-thesis"]
+    });
+    expect(abmFingerprint).toMatchObject({
+      wireframe: "abm-account-microsite",
+      shape: "narrative-workflow",
+      family: "account-abm",
+      template: "v3-account-thesis-paths-proof",
+      sectionOrder: ["experience-thesis", "decision-path", "supporting-resources"]
+    });
+    expect(contentFingerprint).toMatchObject({
+      wireframe: "content-resource-companion",
+      shape: "resource-companion",
+      family: "content-source",
+      template: "v3-content-source-findings-paths",
+      sectionOrder: ["supporting-resources", "experience-thesis", "decision-path"]
     });
     expect(abm).toContain("Jitterbit × Cisco");
     expect(abm).toContain("Decision paths for Cisco");
-    expect(html).toContain("Three ways into the launch");
-    expect(content).toContain("Ways into the idea");
+    expect(html).toContain("Three ways in for Enterprise architects and platform owners");
+    expect(content).toContain("Choose how to explore the source");
     expect(content).toContain("How should buyers explore the enterprise automation guide?");
     expect(html).not.toContain("How should buyers explore the enterprise automation guide?");
   });
 
-  it("renders all five generated campaign registers through one geometry and one preview-only CTA structure", () => {
+  it("renders all five registers through three compositions with shared primitives and preview-only CTAs", () => {
     const target: BrandProfile = {
       ...brand,
       domain: "cisco.com",
@@ -680,32 +716,45 @@ describe("renderExperienceHtml", () => {
     const geometryFingerprint = (output: string) => ({
       wireframe: output.match(/data-wireframe="([^"]+)"/)?.[1],
       shape: output.match(/data-experience-shape="([^"]+)"/)?.[1],
+      family: output.match(/data-template-family="([^"]+)"/)?.[1],
+      template: output.match(/data-template-fingerprint="([^"]+)"/)?.[1],
+      sharedPrimitives: output.match(/data-shared-primitives="([^"]+)"/)?.[1],
       layout: output.match(/data-layout-variant="([^"]+)"/)?.[1],
       sectionOrder: [...output.matchAll(/<section class="(?:thesis|lens-lab|journey) experience-region" id="([^"]+)"/g)].map((match) => match[1]),
       signatureButtons: output.match(/data-signature-lens-index=/g)?.length,
       lensPanels: output.match(/class="lens-panel"/g)?.length,
-      questionCards: output.match(/<article class="journey-card/g)?.length,
+      resourceCards: output.match(/<article class="journey-card resource-card/g)?.length,
       heroActions: output.match(/<div class="actions">([\s\S]*?)<\/div>/)?.[1].match(/<(?:button|a)\b/g)?.length
     });
 
-    expect(new Set(outputs.map((output) => JSON.stringify(geometryFingerprint(output)))).size).toBe(1);
+    const fingerprints = outputs.map(geometryFingerprint);
+    expect(new Set(fingerprints.map(({ family }) => family))).toEqual(
+      new Set(["account-abm", "campaign-launch", "content-source"])
+    );
+    expect(new Set(fingerprints.map(({ template }) => template)).size).toBe(3);
+    expect(new Set(fingerprints.map(({ sharedPrimitives }) => sharedPrimitives))).toEqual(
+      new Set(["brand-lockup,hero,signature-paths,thesis,lenses,resources,close,analytics"])
+    );
     expect(new Set(outputs.map((output) => output.match(/<h1[^>]*>([^<]+)<\/h1>/)?.[1])).size).toBe(5);
     expect(new Set(outputs.map((output) => output.match(/<style>([\s\S]*?)<\/style>/)?.[1])).size).toBe(1);
-    for (const output of outputs) {
+    for (const [index, output] of outputs.entries()) {
+      const fingerprint = fingerprints[index];
       expect(output).not.toContain("body.register-");
       expect(output).toContain('class="signature signature-canonical"');
       expect(output).not.toContain('class="secondary"');
-      expect(geometryFingerprint(output)).toEqual({
-        wireframe: "canonical-desktop-experience",
-        shape: "guided-buyer-experience",
-        layout: "standard",
-        sectionOrder: ["campaign-thesis", "decision-path", "guided-questions"],
-        signatureButtons: 3,
-        lensPanels: 3,
-        questionCards: 3,
-        heroActions: 1
-      });
+      expect(fingerprint.layout).toBe("standard");
+      expect(fingerprint.signatureButtons).toBe(3);
+      expect(fingerprint.lensPanels).toBe(3);
+      expect(fingerprint.resourceCards).toBe(fingerprint.family === "content-source" ? 2 : 3);
+      expect(fingerprint.heroActions).toBe(1);
+      expect(output).not.toContain("Experience receipt");
+      expect(output).not.toContain('id="guided-questions"');
     }
+    expect(fingerprints[0]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
+    expect(fingerprints[1]?.sectionOrder).toEqual(["decision-path", "supporting-resources", "experience-thesis"]);
+    expect(fingerprints[2]?.sectionOrder).toEqual(["decision-path", "supporting-resources", "experience-thesis"]);
+    expect(fingerprints[3]?.sectionOrder).toEqual(["decision-path", "supporting-resources", "experience-thesis"]);
+    expect(fingerprints[4]?.sectionOrder).toEqual(["supporting-resources", "experience-thesis", "decision-path"]);
   });
 
   it("makes external links safe and avoids raw fragment links", () => {
@@ -748,7 +797,9 @@ describe("renderExperienceHtml", () => {
 
   it("keeps internal build mechanics out of buyer-facing chrome", () => {
     expect(html).not.toMatch(/Prepared for|>Source:|Continue the evaluation|guided content/i);
-    expect(html).toContain("Questions for the first use case");
+    expect(html).toContain("Proof for the first use case");
+    expect(html).not.toContain("Experience receipt");
+    expect(html).not.toContain('id="guided-questions"');
     expect(html).toContain(`>${draft.primaryCta}</button>`);
   });
 

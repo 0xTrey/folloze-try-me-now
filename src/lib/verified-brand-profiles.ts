@@ -127,6 +127,24 @@ export function verifiedBrandProfileFor(domain: string): PresentedBrandProfile |
     bodyFontUrl: profile.bodyFontUrl,
     sourceUrl: profile.sourceUrl,
     source: "brand-harvester",
+    diagnostics: {
+      logo: {
+        strategy: profile.logoUrl ? "verified-profile" : "none",
+        imageCandidateCount: 0,
+        rejectedImageCount: 0,
+        inlineSvgCandidateCount: 0,
+        resolutionComplete: true
+      },
+      palette: {
+        strategy: "verified-profile",
+        confidence: "high",
+        candidateCount: profile.colors.length,
+        semanticCandidateCount: profile.colors.length,
+        rejectedCandidateCount: 0,
+        gradientCandidateCount: 0,
+        resolutionComplete: true
+      }
+    },
     ...(profile.presentation ? { presentation: { ...profile.presentation } } : {})
   };
 }

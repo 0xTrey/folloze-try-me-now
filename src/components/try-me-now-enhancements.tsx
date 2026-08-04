@@ -121,6 +121,13 @@ export interface BrandLockProfile {
   source?: "brand-harvester" | "fast-extractor" | "fallback";
   positioning?: string;
   confidenceLabel?: string;
+  readiness?: {
+    status: "ready" | "incomplete";
+    logoReady: boolean;
+    paletteReady: boolean;
+    sourceEvidenceReady: boolean;
+    reasons: string[];
+  };
 }
 
 export interface InstantBrandLockStripProps {
@@ -176,27 +183,29 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
   const hasLogo = Boolean(brand?.logoUrl) && failedLogoUrl !== brand?.logoUrl;
   const isCaptured = status === "locked";
   const isPreliminary = isCaptured && brand?.source === "fast-extractor";
+  const needsReview = status === "fallback" || brand?.readiness?.status === "incomplete";
   const paletteKind = status === "scanning"
     ? "Detecting palette"
-    : status === "fallback"
-      ? "Neutral preview palette"
+    : needsReview
+      ? palette.colors.length ? "Palette evidence" : "Neutral preview palette"
       : "Harvested palette";
   const stateTitle = status === "scanning"
     ? "Scanning public brand"
-    : status === "fallback"
-      ? "Brand scan incomplete"
+    : needsReview
+      ? "Brand evidence needs review"
       : isPreliminary
         ? "Identity matched · brand scan continuing"
         : "Identity and brand matched";
-  const stateDetail = brand?.positioning || (status === "scanning"
+  const readinessReason = brand?.readiness?.reasons.filter(Boolean).slice(0, 2).join(" ");
+  const stateDetail = status === "scanning"
     ? "Checking logo, palette, typography, and source."
-    : status === "fallback"
-      ? `Using neutral preview styling — not ${companyName} colors.`
-      : `Logo + ${palette.colors.length} colors from ${brand?.domain ?? "the public site"}.`);
-  const statusLabel = brand?.confidenceLabel || (status === "scanning"
-    ? "Scanning"
-    : status === "fallback"
-      ? "Needs verification"
+    : needsReview
+      ? readinessReason || `The ${companyName} logo, palette, or source evidence still needs verification.`
+      : brand?.positioning || `Logo + ${palette.colors.length} colors from ${brand?.domain ?? "the public site"}.`;
+  const statusLabel = needsReview
+    ? "Needs review"
+    : brand?.confidenceLabel || (status === "scanning"
+      ? "Scanning"
       : isPreliminary
         ? "Preliminary"
         : "Captured");
@@ -212,7 +221,7 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
       className={classes(styles.brandStrip, styles[`brand${status}`])}
       style={stripStyle}
       aria-busy={status === "scanning"}
-      data-brand-evidence={status === "fallback" ? "neutral-fallback" : isPreliminary ? "extracted" : isCaptured ? "reviewed" : "scanning"}
+      data-brand-evidence={needsReview ? "needs-review" : isPreliminary ? "extracted" : isCaptured ? "reviewed" : "scanning"}
     >
       <span className={styles.brandMark}>
         {status === "scanning" ? (
@@ -246,11 +255,11 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
       </span>
       <div
         className={styles.brandPalette}
-        aria-label={status === "scanning" ? "Brand palette is being detected" : status === "fallback" ? "Temporary neutral preview palette" : `Harvested ${companyName} brand palette`}
+        aria-label={status === "scanning" ? "Brand palette is being detected" : needsReview ? `${companyName} brand palette evidence needs review` : `Harvested ${companyName} brand palette`}
       >
         <div className={styles.brandPaletteHeader}>
           <span>{paletteKind}</span>
-          <small>{status === "scanning" ? "Reading CSS + imagery" : status === "fallback" ? "Temporary only" : `${palette.colors.length} colors captured`}</small>
+          <small>{status === "scanning" ? "Reading CSS + imagery" : needsReview ? "Verification needed" : `${palette.colors.length} colors captured`}</small>
         </div>
         {status === "scanning" ? (
           <span className={styles.brandPaletteSkeleton} aria-hidden="true"><i /><i /><i /><i /></span>
@@ -439,13 +448,6 @@ export interface CtaStyleControlProps {
   onChange: (value: CtaValue) => void;
 }
 
-const CTA_TYPES: Array<{ id: CtaType; label: string }> = [
-  { id: "meeting", label: "Book a meeting" },
-  { id: "registration", label: "Register" },
-  { id: "content", label: "Open content" },
-  { id: "custom", label: "Custom action" }
-];
-
 const CTA_STYLES: Array<{ id: CtaStyle; label: string; detail: string }> = [
   { id: "solid", label: "Solid", detail: "High-emphasis action" },
   { id: "outline", label: "Outline", detail: "Measured invitation" },
@@ -457,10 +459,7 @@ export function CtaStyleControl({ value, onChange }: CtaStyleControlProps) {
     <fieldset className={styles.controlCard}>
       <legend className={styles.fieldLegend}>CTA treatment</legend>
       <div className={styles.controlHeader}><div><span>Conversion moment</span><h3>Shape the next step</h3></div><Target size={20} /></div>
-      <p className={styles.controlIntro}>Choose the action, words, and visual emphasis. No link is needed to build the preview.</p>
-      <div className={styles.segmentedControl}>
-        {CTA_TYPES.map((type) => <button key={type.id} type="button" aria-pressed={value.type === type.id} onClick={() => onChange({ ...value, type: type.id })}>{type.label}</button>)}
-      </div>
+      <p className={styles.controlIntro}>Choose the button words and visual emphasis. No link is needed to build the preview.</p>
       <div className={styles.ctaComposer}>
         <label className={styles.ctaLabelField}><span>Button label</span><input value={value.label} onChange={(event) => onChange({ ...value, label: event.target.value })} /></label>
         <fieldset className={styles.ctaStyleFieldset}>
@@ -526,7 +525,7 @@ export function ProgressiveArtifactStream({ artifacts, headline = "Your experien
         ? "Working now"
         : "Up next";
   const focusDetail = complete
-    ? `All ${artifacts.length} build stages are complete. Your preview is ready for the reveal.`
+    ? `All ${artifacts.length} build stages are complete. Your preview is ready to explore.`
     : focus?.detail ?? "Waiting for the first build signal.";
   const cadenceLabel = failed
     ? "Build paused — the rest of your work is safe."

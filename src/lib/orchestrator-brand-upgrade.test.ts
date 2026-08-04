@@ -99,6 +99,15 @@ describe("verified fallback brand recovery", () => {
           rejectedImageCount: 0,
           inlineSvgCandidateCount: 0,
           resolutionComplete: true
+        },
+        palette: {
+          strategy: "frequency",
+          confidence: "low",
+          candidateCount: 3,
+          semanticCandidateCount: 0,
+          rejectedCandidateCount: 0,
+          gradientCandidateCount: 0,
+          resolutionComplete: true
         }
       }
     };
@@ -182,6 +191,90 @@ describe("verified fallback brand recovery", () => {
     expect(stored?.events.map(({ name }) => name)).toContain("brand_logo_refresh_started");
   });
 
+  it("keeps the brand stage in review when a logo resolves but semantic palette evidence does not", async () => {
+    const id = `brand-evidence-incomplete-${Date.now()}`;
+    const session = fallbackSession(id, "jitterbit.com");
+    session.brand = {
+      ...session.brand!,
+      companyName: "Jitterbit",
+      source: "fast-extractor",
+      diagnostics: {
+        logo: {
+          strategy: "none",
+          imageCandidateCount: 0,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0
+        }
+      }
+    };
+    ids.add(id);
+    await putSession(session);
+    integrationMocks.harvestBrand.mockResolvedValue({
+      ...session.brand,
+      logoUrl: "https://www.jitterbit.com/Jitterbit-logo-2.svg",
+      logoSourceUrl: "https://www.jitterbit.com/Jitterbit-logo-2.svg",
+      diagnostics: {
+        logo: {
+          strategy: "semantic-image",
+          imageCandidateCount: 1,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0,
+          resolutionComplete: true
+        },
+        palette: {
+          strategy: "frequency",
+          confidence: "low",
+          candidateCount: 20,
+          semanticCandidateCount: 0,
+          rejectedCandidateCount: 12,
+          gradientCandidateCount: 0,
+          resolutionComplete: true
+        }
+      }
+    });
+
+    await runBrandStage(id);
+
+    const stored = await getSession(id);
+    expect(stored?.stages.brand).toMatchObject({
+      status: "fallback",
+      artifact: "Jitterbit · review brand evidence"
+    });
+    expect(stored?.stages.brand.detail).toContain("semantic colors are incomplete");
+    expect(stored?.brand?.readiness).toMatchObject({
+      status: "incomplete",
+      logoReady: true,
+      paletteReady: false
+    });
+  });
+
+  it("uses the same verified logo, palette, and readiness contract for content experiences", async () => {
+    const id = `content-brand-upgrade-${Date.now()}`;
+    const session = fallbackSession(id, "servicenow.com");
+    session.useCase = "content";
+    const verified = verifiedBrandProfileFor("servicenow.com")!;
+    ids.add(id);
+    await putSession(session);
+    integrationMocks.harvestBrand.mockResolvedValue(verified);
+
+    await runBrandStage(id);
+
+    const stored = await getSession(id);
+    expect(stored?.brand).toMatchObject({
+      logoUrl: `/api/sessions/${id}/image/seller-logo`,
+      primaryColor: "#032D42",
+      accentColor: "#63DF4E",
+      readiness: {
+        status: "ready",
+        identityReady: true,
+        logoReady: true,
+        paletteReady: true,
+        sourceEvidenceReady: true
+      }
+    });
+    expect(stored?.stages.brand.status).toBe("complete");
+  });
+
   it("does not repeatedly refresh a no-logo profile after all configured resolvers completed", async () => {
     const id = `brand-logo-complete-${Date.now()}`;
     const session = fallbackSession(id, "no-logo-example.test");
@@ -194,6 +287,15 @@ describe("verified fallback brand recovery", () => {
           imageCandidateCount: 0,
           rejectedImageCount: 0,
           inlineSvgCandidateCount: 0,
+          resolutionComplete: true
+        },
+        palette: {
+          strategy: "frequency",
+          confidence: "low",
+          candidateCount: 3,
+          semanticCandidateCount: 0,
+          rejectedCandidateCount: 0,
+          gradientCandidateCount: 0,
           resolutionComplete: true
         }
       }

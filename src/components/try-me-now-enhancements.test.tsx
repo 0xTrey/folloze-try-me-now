@@ -134,15 +134,22 @@ describe("Try Me Now prospect enhancement components", () => {
           primaryColor: "#1C293F",
           accentColor: "#5B5BFF",
           surfaceColor: "#FFFFFF",
-          source: "fallback"
+          source: "fallback",
+          readiness: {
+            status: "incomplete",
+            logoReady: false,
+            paletteReady: false,
+            sourceEvidenceReady: true,
+            reasons: ["No verified logo was captured.", "The palette is still provisional."]
+          }
         }}
       />
     );
 
-    expect(screen.getByText("Brand scan incomplete")).toBeInTheDocument();
-    expect(screen.getByText("Using neutral preview styling — not ServiceNow colors.")).toBeInTheDocument();
-    expect(screen.getByText("Needs verification")).toBeInTheDocument();
-    expect(screen.getByLabelText("Temporary neutral preview palette")).toBeInTheDocument();
+    expect(screen.getByText("Brand evidence needs review")).toBeInTheDocument();
+    expect(screen.getByText("No verified logo was captured. The palette is still provisional.")).toBeInTheDocument();
+    expect(screen.getByText("Needs review")).toBeInTheDocument();
+    expect(screen.getByLabelText("ServiceNow brand palette evidence needs review")).toBeInTheDocument();
     expect(screen.queryByText("Identity and brand matched")).not.toBeInTheDocument();
   });
 
@@ -218,7 +225,7 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.queryByRole("button", { name: "Exclude" })).not.toBeInTheDocument();
   });
 
-  it("keeps CTA intent, label, and style controlled without asking for a URL", () => {
+  it("keeps CTA tuning to label and style without asking for a type or URL", () => {
     const onMessage = vi.fn();
     const onCta = vi.fn();
     render(
@@ -229,13 +236,12 @@ describe("Try Me Now prospect enhancement components", () => {
     );
 
     fireEvent.change(screen.getByLabelText("What should the buyer believe?"), { target: { value: "Governed connections create leverage." } });
-    fireEvent.click(screen.getByRole("button", { name: "Register" }));
     fireEvent.change(screen.getByLabelText("Button label"), { target: { value: "Reserve my seat" } });
     fireEvent.click(screen.getByRole("button", { name: "Outline: Measured invitation" }));
     expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ belief: "Governed connections create leverage." }));
-    expect(onCta).toHaveBeenCalledWith(expect.objectContaining({ type: "registration" }));
-    expect(onCta).toHaveBeenCalledWith(expect.objectContaining({ label: "Reserve my seat" }));
-    expect(onCta).toHaveBeenCalledWith(expect.objectContaining({ style: "outline" }));
+    expect(onCta).toHaveBeenCalledWith(expect.objectContaining({ type: "meeting", label: "Reserve my seat" }));
+    expect(onCta).toHaveBeenCalledWith(expect.objectContaining({ type: "meeting", style: "outline" }));
+    expect(screen.queryByRole("button", { name: "Register" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Destination URL/i)).not.toBeInTheDocument();
     expect(onCta.mock.calls.some(([next]) => "destination" in next)).toBe(false);
   });
@@ -293,7 +299,7 @@ describe("Try Me Now prospect enhancement components", () => {
       <ProgressiveArtifactStream artifacts={queued.map((artifact) => ({ ...artifact, status: "ready" as const }))} />
     );
     expect(screen.getByText("Build complete")).toBeInTheDocument();
-    expect(screen.getByText("All 3 build stages are complete. Your preview is ready for the reveal.")).toBeInTheDocument();
+    expect(screen.getByText("All 3 build stages are complete. Your preview is ready to explore.")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
     expect(screen.getByLabelText("Your experience is assembling live")).toHaveAttribute("aria-busy", "false");
   });

@@ -1,5 +1,9 @@
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
-import { CANONICAL_EXPERIENCE_STRUCTURE } from "@/lib/generation/campaign-context";
+import {
+  experienceTemplateFor,
+  SHARED_EXPERIENCE_PRIMITIVES,
+  type ExperiencePrimitive
+} from "@/lib/generation/experience-renderers";
 import { isImageDeliveryPath } from "@/lib/image-delivery";
 import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
 import { brandPresentationFor } from "@/lib/verified-brand-profiles";
@@ -148,14 +152,6 @@ function imageFigure(url: string | undefined, alt: string, className: string, ea
 type RenderStyleVariant = "standard" | "brand-led" | "editorial" | "technical" | "minimal";
 type RenderCtaStyle = "solid" | "outline" | "text";
 
-interface ExperienceReceipt {
-  title: string;
-  detail: string;
-  href?: string;
-  score?: number;
-  signals: string[];
-}
-
 function compactText(value: unknown, maxLength: number): string | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -176,101 +172,6 @@ function ctaStyle(answers: SessionAnswers): RenderCtaStyle {
   const requested = compactText(answers.ctaStyle, 16)?.toLowerCase();
   if (requested === "outline" || requested === "text") return requested;
   return "solid";
-}
-
-function receiptFromInput(input: {
-  answers: SessionAnswers;
-  brand: BrandProfile;
-  targetBrand?: BrandProfile;
-  useCase: UseCase;
-  sourceUrl?: string;
-  qualityReceipt?: unknown;
-}): ExperienceReceipt | undefined {
-  const runtimeAnswers = input.answers as SessionAnswers & Record<string, unknown>;
-  const rawReceipt = input.qualityReceipt ?? runtimeAnswers.qualityReceipt ?? runtimeAnswers.provenanceReceipt;
-
-  if (rawReceipt && typeof rawReceipt === "object" && !Array.isArray(rawReceipt)) {
-    const receipt = rawReceipt as Record<string, unknown>;
-    const checks = Array.isArray(receipt.checks)
-      ? receipt.checks
-          .map((check) => {
-            if (!check || typeof check !== "object" || Array.isArray(check)) return undefined;
-            const candidate = check as Record<string, unknown>;
-            const label = compactText(candidate.label, 56);
-            const status = compactText(candidate.status, 32);
-            return label && ["passed", "warning", "not-applicable"].includes(status ?? "")
-              ? { label, status }
-              : undefined;
-          })
-          .filter((check): check is { label: string; status: string } => Boolean(check))
-      : [];
-    if (checks.length) {
-      const applicable = checks.filter((check) => check.status !== "not-applicable");
-      const passed = applicable.filter((check) => check.status === "passed");
-      const score = applicable.length ? Math.round((passed.length / applicable.length) * 100) : undefined;
-      return {
-        title: receipt.status === "passed" ? "Quality checks passed" : "Quality review available",
-        detail: `${passed.length} of ${applicable.length} applicable experience checks passed.`,
-        score,
-        signals: checks.slice(0, 3).map((check) => check.label)
-      };
-    }
-    const title = compactText(receipt.title ?? receipt.label, 96);
-    const detail = compactText(receipt.detail ?? receipt.sourceName, 180);
-    const href = safePublicLinkUrl(compactText(receipt.sourceUrl, 2048));
-    const score =
-      typeof receipt.score === "number" && Number.isFinite(receipt.score)
-        ? Math.max(0, Math.min(100, Math.round(receipt.score)))
-        : undefined;
-    const signals = Array.isArray(receipt.signals)
-      ? receipt.signals
-          .map((signal) => compactText(signal, 56))
-          .filter((signal): signal is string => Boolean(signal))
-          .slice(0, 3)
-      : [];
-
-    if (title || detail || href || score !== undefined || signals.length) {
-      return {
-        title: title ?? "Experience quality receipt",
-        detail: detail ?? "Grounded inputs and presentation signals are available for review.",
-        href,
-        score,
-        signals
-      };
-    }
-  }
-
-  if (input.useCase === "content" && (input.sourceUrl || input.answers.sourceName)) {
-    let sourceHost: string | undefined;
-    try {
-      sourceHost = input.sourceUrl ? new URL(input.sourceUrl).hostname.replace(/^www\./, "") : undefined;
-    } catch {
-      sourceHost = undefined;
-    }
-    return {
-      title: "Built from the original",
-      detail:
-        compactText(input.answers.sourceTitle, 140) ??
-        sourceHost ??
-        "The supplied source material",
-      href: input.sourceUrl,
-      signals: ["Original linked", "Brand-matched presentation"]
-    };
-  }
-
-  if (
-    input.targetBrand &&
-    input.brand.source !== "fallback" &&
-    input.targetBrand.source !== "fallback"
-  ) {
-    return {
-      title: "Account context applied",
-      detail: `${input.brand.companyName} × ${input.targetBrand.companyName}`,
-      signals: ["Seller brand profile", "Account brand profile"]
-    };
-  }
-
-  return undefined;
 }
 
 function editableBlock(blockId: string, kind: string): string {
@@ -334,31 +235,46 @@ export function renderExperienceHtml(input: {
   const heroImage = images[0];
   const supportingImages = images.filter((image) => image !== heroImage);
   const vendorUrl = safePublicLinkUrl(`https://${brand.domain}`) ?? "https://www.folloze.com";
-  const sourceUrl =
-    input.useCase === "content"
-      ? safePublicLinkUrl(input.answers.sourceUrl)
-      : draft.campaignRegister === "campaign-event"
-        ? safePublicLinkUrl(input.answers.eventSource)
-        : undefined;
+  const template = experienceTemplateFor(draft);
+  const sourceTitle =
+    compactText(input.answers.sourceTitle, 140) ??
+    compactText(input.answers.sourceName, 140) ??
+    compactText(input.answers.offerSourceTitle, 140);
+  const offerTitle =
+    compactText(input.answers.promotedOffer, 120) ??
+    compactText(input.answers.offerSourceTitle, 120);
+  const sourceReference =
+    template.family === "content-source"
+      ? sourceTitle ?? "The supplied source material"
+      : template.family === "account-abm" && targetBrand
+        ? `${brand.companyName} for ${targetBrand.companyName}`
+        : offerTitle ?? brand.companyName;
+  const heroEyebrow =
+    template.family === "content-source" && sourceTitle
+      ? sourceTitle
+      : template.family === "campaign-launch" && offerTitle
+        ? `${brand.companyName} | ${offerTitle}`
+        : draft.eyebrow;
+  const resourcesHeading = /\bquestions?\b/i.test(draft.sectionLabels.journey)
+    ? template.navigation.resources
+    : draft.sectionLabels.journey;
   const themeLink = input.themeUrl
     ? `<link rel="stylesheet" href="${escapeHtml(input.themeUrl)}">`
     : "";
   const contextLabel = targetBrand
     ? `${brand.companyName} for ${targetBrand.companyName}`
     : brand.companyName;
-  const sectionIds: Record<ExperienceDraft["sectionSequence"][number], string> = {
-    thesis: "campaign-thesis",
-    "decision-lenses": "decision-path",
-    "guided-questions": "guided-questions"
-  };
-  const journeyLabels: Record<ExperienceDraft["sectionSequence"][number], string> = {
-    thesis: "Why it matters",
-    "decision-lenses": draft.campaignRegister === "content-magic" ? "Reading paths" : "Decision paths",
-    "guided-questions": "Questions"
+  const sectionIds: Record<ExperiencePrimitive, string> = {
+    thesis: "experience-thesis",
+    lenses: "decision-path",
+    resources: "supporting-resources"
   };
   const journeyNavItems = [
     { id: "experience-overview", label: "Overview" },
-    ...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence.map((section) => ({ id: sectionIds[section], label: journeyLabels[section] })),
+    ...template.regionOrder.map((region) => ({
+      id: sectionIds[region],
+      label: template.navigation[region]
+    })),
     { id: "next-step", label: "Next step" }
   ];
   const journeyNavButtons = journeyNavItems
@@ -368,30 +284,6 @@ export function renderExperienceHtml(input: {
       </button>`
     )
     .join("");
-  const receipt = receiptFromInput({
-    answers: input.answers,
-    brand,
-    targetBrand,
-    useCase: input.useCase,
-    sourceUrl,
-    qualityReceipt: input.qualityReceipt
-  });
-  const receiptHtml = receipt
-    ? `<aside class="quality-receipt" aria-label="Experience quality details" data-quality-receipt="true">
-        <div class="receipt-mark" aria-hidden="true"><span>✓</span></div>
-        <div class="receipt-copy">
-          <p class="eyebrow">Experience receipt</p>
-          <h2>${escapeHtml(receipt.title)}</h2>
-          <p>${escapeHtml(receipt.detail)}</p>
-        </div>
-        <div class="receipt-signals" aria-label="Quality signals">
-          ${receipt.score !== undefined ? `<span><strong>${receipt.score}</strong>/100 quality</span>` : ""}
-          ${receipt.signals.map((signal) => `<span>${escapeHtml(signal)}</span>`).join("")}
-          ${receipt.href ? '<span data-source-confirmed="true">Original source confirmed</span>' : ""}
-        </div>
-      </aside>`
-    : "";
-
   const lensButtons = draft.signalLabels
     .map(
       (label, index) => `<button type="button" role="tab" id="lens-tab-${index}" aria-controls="lens-panel-${index}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" data-lens-index="${index}" ${editableBlock(`lens.${index}.label`, "tab-label")}>${escapeHtml(label)}</button>`
@@ -408,33 +300,39 @@ export function renderExperienceHtml(input: {
     )
     .join("");
 
-  const journeyCards = draft.sections
+  // Content companions should feel edited, not like a second copy of every
+  // decision lens. Two source-backed highlights keep the source experience
+  // focused while campaign and account experiences retain three proof paths.
+  const resourceSections = template.family === "content-source"
+    ? draft.sections.slice(0, 2)
+    : draft.sections;
+  const resourceCards = resourceSections
     .map(
-      (section, index) => `<article class="journey-card">
+      (section, index) => `<article class="journey-card resource-card" data-source-reference="${escapeHtml(sourceReference)}">
         <div class="journey-index" aria-hidden="true">0${index + 1}</div>
-        <div class="journey-copy"><p class="eyebrow" ${editableBlock(`question.${index}.eyebrow`, "eyebrow")}>${escapeHtml(section.eyebrow)}</p><h3 ${editableBlock(`question.${index}.prompt`, "question")}>${escapeHtml(section.proof)}</h3></div>
-        <button type="button" class="journey-action" data-journey-lens-index="${index}" data-flz-cta-id="question-${index}">Explore this lens <span aria-hidden="true">→</span></button>
+        <div class="journey-copy"><p class="eyebrow" ${editableBlock(`resource.${index}.eyebrow`, "eyebrow")}>${escapeHtml(section.eyebrow)}</p><h3 ${editableBlock(`resource.${index}.headline`, "proof-point")}>${escapeHtml(section.proof)}</h3><p ${editableBlock(`resource.${index}.body`, "body")}>${escapeHtml(section.body)}</p></div>
+        <button type="button" class="journey-action" data-resource-lens-index="${index}" data-flz-cta-id="resource-${index}">${escapeHtml(template.resourceAction)} <span aria-hidden="true">→</span></button>
       </article>`
     )
     .join("");
 
-  const regions: Record<ExperienceDraft["sectionSequence"][number], string> = {
-    thesis: `<section class="thesis experience-region" id="campaign-thesis" data-journey-section="campaign-thesis" aria-labelledby="campaign-thesis-heading">
+  const regions: Record<ExperiencePrimitive, string> = {
+    thesis: `<section class="thesis experience-region" id="experience-thesis" data-journey-section="experience-thesis" data-template-primitive="thesis" aria-labelledby="experience-thesis-heading">
       <p class="eyebrow" ${editableBlock("thesis.label", "section-label")}>${escapeHtml(draft.sectionLabels.thesis)}</p>
-      <h2 id="campaign-thesis-heading" ${editableBlock("thesis.headline", "headline")}>${escapeHtml(draft.thesisHeadline)}</h2>
+      <h2 id="experience-thesis-heading" ${editableBlock("thesis.headline", "headline")}>${escapeHtml(draft.thesisHeadline)}</h2>
       <p ${editableBlock("thesis.body", "body")}>${escapeHtml(draft.thesisBody)}</p>
     </section>`,
-    "decision-lenses": `<section class="lens-lab experience-region" id="decision-path" data-journey-section="decision-path" aria-labelledby="decision-path-heading">
+    lenses: `<section class="lens-lab experience-region" id="decision-path" data-journey-section="decision-path" data-template-primitive="lenses" aria-labelledby="decision-path-heading">
       <header class="region-heading"><h2 id="decision-path-heading" ${editableBlock("lenses.heading", "section-heading")}>${escapeHtml(draft.sectionLabels.lenses)}</h2></header>
       <div class="lens-tabs" role="tablist" aria-orientation="horizontal" aria-label="${escapeHtml(draft.sectionLabels.lenses)}">${lensButtons}</div>
       ${lensPanels}
     </section>`,
-    "guided-questions": `<section class="journey experience-region" id="guided-questions" data-journey-section="guided-questions" aria-labelledby="guided-questions-heading">
-      <header class="journey-header"><p class="eyebrow">Meeting-ready</p><h2 id="guided-questions-heading" ${editableBlock("questions.heading", "section-heading")}>${escapeHtml(draft.sectionLabels.journey)}</h2></header>
-      <div class="journey-grid">${journeyCards}</div>
+    resources: `<section class="journey experience-region" id="supporting-resources" data-journey-section="supporting-resources" data-template-primitive="resources" aria-labelledby="supporting-resources-heading">
+      <header class="journey-header"><p class="eyebrow">${escapeHtml(template.resourcesEyebrow)}</p><h2 id="supporting-resources-heading" ${editableBlock("resources.heading", "section-heading")}>${escapeHtml(resourcesHeading)}</h2><p class="source-basis">Built from ${escapeHtml(sourceReference)}.</p></header>
+      <div class="journey-grid">${resourceCards}</div>
     </section>`
   };
-  const experienceFlow = CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence.map((section) => regions[section]).join("");
+  const experienceFlow = template.regionOrder.map((region) => regions[region]).join("");
   const signatureButtons = draft.sections
     .map(
       (section, index) => `<button type="button" data-signature-lens-index="${index}" data-flz-cta-id="signature-${index}">
@@ -446,18 +344,8 @@ export function renderExperienceHtml(input: {
   const signatureContext = targetBrand
     ? `${brand.companyName} × ${targetBrand.companyName}`
     : `For ${draft.audienceLabel}`;
-  const signatureEyebrow =
-    draft.campaignRegister === "one-to-one-abm"
-      ? `Decision paths for ${targetBrand?.companyName ?? draft.audienceLabel}`
-      : draft.campaignRegister === "content-magic"
-        ? "Ways into the idea"
-        : draft.campaignRegister === "campaign-event"
-          ? "Carry one question forward"
-          : draft.campaignRegister === "campaign-product"
-            ? "Three ways into the launch"
-            : "Find your starting point";
-  const signatureMoment = `<section class="signature signature-canonical" aria-label="Guided decision paths">
-      <div class="signature-intro"><p class="eyebrow">${escapeHtml(signatureEyebrow)}</p><h2>${escapeHtml(draft.narrativeArc)}</h2><p>${escapeHtml(signatureContext)}</p></div>
+  const signatureMoment = `<section class="signature signature-canonical" data-template-primitive="signature-paths" aria-label="${escapeHtml(template.signatureAriaLabel)}">
+      <div class="signature-intro"><p class="eyebrow">${escapeHtml(template.signatureEyebrow(draft.audienceLabel, targetBrand?.companyName))}</p><h2>${escapeHtml(draft.narrativeArc)}</h2><p>${escapeHtml(signatureContext)}</p></div>
       <div class="signature-items">${signatureButtons}</div>
     </section>`;
 
@@ -487,26 +375,28 @@ export function renderExperienceHtml(input: {
     .signature{padding:clamp(58px,7vw,104px) clamp(24px,7vw,112px)}.signature-intro h2{max-width:1060px;margin:0;font-family:var(--display);font-size:clamp(38px,4.4vw,66px);line-height:1.03;letter-spacing:-.035em}.signature-intro>p:last-child{margin:22px 0 0;color:var(--muted);font-weight:700}.signature-items button{appearance:none;width:100%;border:0;text-align:left;color:inherit;font:inherit;cursor:pointer}.signature-index{padding-top:5px;font:800 13px/1 var(--body);letter-spacing:.12em}.signature-item-copy{display:grid;gap:8px}.signature-item-copy strong{font-size:13px;letter-spacing:.1em;text-transform:uppercase}.signature-item-copy>span{font-family:var(--display);font-size:clamp(18px,1.7vw,25px);line-height:1.18}.signature-canonical{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(420px,1.08fr);gap:clamp(44px,7vw,110px);align-items:start;background:var(--soft);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.signature-canonical .signature-items{display:grid;border-top:1px solid color-mix(in srgb,var(--brand-ink) 20%,transparent)}.signature-canonical button{display:grid;grid-template-columns:52px 1fr;gap:18px;padding:28px 0;background:transparent;border-bottom:1px solid color-mix(in srgb,var(--brand-ink) 20%,transparent)}.signature-canonical button:hover,.signature-canonical button:focus-visible{color:var(--brand-accent-on-light)}
     .thesis{padding:clamp(72px,8vw,126px) clamp(24px,7vw,112px);background:var(--brand-ink);color:#fff}.thesis h2{max-width:1120px;margin:0;font-family:var(--display);font-size:clamp(42px,5.4vw,78px);font-weight:700;line-height:1.02;letter-spacing:-.04em;overflow-wrap:anywhere}.thesis p{max-width:760px;margin:26px 0 0;color:color-mix(in srgb,#fff 74%,var(--brand-ink));font-size:19px;line-height:1.55}
     .lens-lab{padding:clamp(70px,8vw,118px) clamp(24px,7vw,112px) clamp(76px,8vw,126px);background:var(--soft)}.region-heading{max-width:1060px;margin:0 0 50px}.region-heading h2{margin:0;font-family:var(--display);font-size:clamp(40px,4.8vw,70px);line-height:1.03;letter-spacing:-.04em}.lens-tabs{display:flex;gap:8px;padding:0 0 28px;overflow-x:auto;scrollbar-width:thin}.lens-tabs button{flex:0 0 auto;min-height:46px;padding:10px 16px;border:1px solid color-mix(in srgb,var(--brand-ink) 28%,transparent);background:transparent;color:var(--brand-ink);font-weight:750;cursor:pointer}.lens-tabs button[aria-selected="true"]{border-color:var(--brand-ink);background:var(--brand-ink);color:#fff}.lens-tabs button:focus-visible{outline:3px solid color-mix(in srgb,var(--brand-accent) 45%,transparent);outline-offset:3px}.lens-panel{display:grid;grid-template-columns:120px minmax(0,.94fr) minmax(320px,.78fr);gap:clamp(34px,5vw,76px);align-items:center;min-height:520px}.lens-panel[hidden]{display:none}.lens-number{align-self:start;padding-top:10px;color:color-mix(in srgb,var(--brand-ink) 18%,transparent);font:700 clamp(82px,10vw,150px)/.82 var(--display)}.lens-copy h2{margin:0;font-family:var(--display);font-size:clamp(38px,4.5vw,66px);line-height:1.04;letter-spacing:-.035em}.lens-copy>p:not(.eyebrow){max-width:650px;margin:24px 0;color:var(--text);font-size:19px}.lens-media{min-height:390px;background:var(--brand-surface)}
-    .journey{padding:clamp(68px,7vw,104px) clamp(24px,7vw,112px);background:var(--brand-surface)}.journey-header{max-width:980px;margin-bottom:44px}.journey-header h2{margin:0;font-family:var(--display);font-size:clamp(42px,5vw,68px);line-height:1.03;letter-spacing:-.04em}.journey-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.journey-card{min-height:330px;padding:28px;display:flex;flex-direction:column;border:1px solid var(--line);background:var(--soft);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}.journey-card:hover{transform:translateY(-5px);border-color:var(--brand-accent);box-shadow:0 22px 56px color-mix(in srgb,var(--brand-ink) 12%,transparent)}.journey-index{color:var(--brand-accent);font:800 14px/1 var(--body);letter-spacing:.13em}.journey-copy{margin-top:46px}.journey-copy .eyebrow{margin-bottom:12px}.journey-copy h3{margin:0;font-family:var(--display);font-size:clamp(25px,2.2vw,34px);line-height:1.08;letter-spacing:-.025em}.journey-action{min-height:44px;margin-top:auto;padding:20px 0 0;display:flex;align-items:center;justify-content:space-between;border:0;border-top:1px solid color-mix(in srgb,var(--brand-ink) 16%,transparent);background:transparent;color:var(--brand-ink);font-weight:750;cursor:pointer}.journey-action:hover,.journey-action:focus-visible{color:var(--brand-accent)}
-    .close{margin:0 clamp(14px,3vw,46px) clamp(14px,3vw,46px);padding:clamp(66px,8vw,116px);display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:54px;align-items:end;background:radial-gradient(circle at 90% 10%,color-mix(in srgb,var(--brand-accent) 58%,transparent),transparent 30%),var(--brand-ink);color:#fff}.close h2{max-width:980px;margin:0;font-family:var(--display);font-size:clamp(42px,5.2vw,76px);line-height:1.01;letter-spacing:-.04em}.close p{max-width:720px;margin:24px 0 0;color:color-mix(in srgb,#fff 76%,var(--brand-ink));font-size:18px}.close .primary{width:100%;white-space:nowrap}body.cta-outline .primary{background:transparent;color:var(--brand-accent)}body.cta-outline .close .primary{background:transparent;border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.cta-text .primary{min-height:44px;padding:8px 0;border:0;border-bottom:2px solid currentColor;border-radius:0;background:transparent;color:var(--brand-accent)}body.cta-text .close .primary{color:#fff}.quality-receipt{margin:0 clamp(24px,6vw,96px);padding:26px 0;display:grid;grid-template-columns:auto minmax(220px,1fr) minmax(280px,auto);gap:22px;align-items:center;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.receipt-mark{width:44px;height:44px;display:grid;place-items:center;border:1px solid color-mix(in srgb,var(--brand-accent) 42%,transparent);border-radius:50%;background:color-mix(in srgb,var(--brand-accent) 9%,var(--brand-surface));color:var(--brand-accent);font-weight:900}.receipt-copy .eyebrow{margin:0 0 4px;font-size:10px}.receipt-copy h2{margin:0;font-family:var(--display);font-size:19px;letter-spacing:-.01em}.receipt-copy>p:last-child{margin:3px 0 0;color:var(--muted);font-size:13px}.receipt-signals{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.receipt-signals>span,.receipt-signals>a{display:inline-flex;align-items:center;min-height:34px;padding:6px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:11px;font-weight:750;text-decoration:none;white-space:nowrap}.receipt-signals strong{color:var(--brand-ink);font-size:13px}.receipt-signals>a{color:var(--brand-ink)}.receipt-signals>a:hover,.receipt-signals>a:focus-visible{border-color:var(--brand-accent);color:var(--brand-accent)}.footer{padding:26px clamp(24px,6vw,96px);display:flex;justify-content:space-between;gap:24px;color:var(--muted);font-size:12px}.footer a{color:inherit;text-decoration:none}.footer a:hover,.footer a:focus-visible{color:var(--brand-accent)}.experience-region,.close,#next-step,.hero{scroll-margin-top:70px}
+    .journey{padding:clamp(68px,7vw,104px) clamp(24px,7vw,112px);background:var(--brand-surface)}.journey-header{max-width:980px;margin-bottom:44px}.journey-header h2{margin:0;font-family:var(--display);font-size:clamp(42px,5vw,68px);line-height:1.03;letter-spacing:-.04em}.source-basis{max-width:680px;margin:18px 0 0;color:var(--muted);font-size:14px}.journey-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.journey-card{min-height:360px;padding:28px;display:flex;flex-direction:column;border:1px solid var(--line);background:var(--soft);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}.journey-card:hover{transform:translateY(-5px);border-color:var(--brand-accent);box-shadow:0 22px 56px color-mix(in srgb,var(--brand-ink) 12%,transparent)}.journey-index{color:var(--brand-accent);font:800 14px/1 var(--body);letter-spacing:.13em}.journey-copy{margin-top:38px}.journey-copy .eyebrow{margin-bottom:12px}.journey-copy h3{margin:0;font-family:var(--display);font-size:clamp(25px,2.2vw,34px);line-height:1.08;letter-spacing:-.025em}.journey-copy>p:not(.eyebrow){margin:18px 0 0;color:var(--text);font-size:15px;line-height:1.55}.journey-action{min-height:44px;margin-top:auto;padding:20px 0 0;display:flex;align-items:center;justify-content:space-between;border:0;border-top:1px solid color-mix(in srgb,var(--brand-ink) 16%,transparent);background:transparent;color:var(--brand-ink);font-weight:750;cursor:pointer}.journey-action:hover,.journey-action:focus-visible{color:var(--brand-accent)}
+    .close{margin:0 clamp(14px,3vw,46px) clamp(14px,3vw,46px);padding:clamp(66px,8vw,116px);display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:54px;align-items:end;background:radial-gradient(circle at 90% 10%,color-mix(in srgb,var(--brand-accent) 58%,transparent),transparent 30%),var(--brand-ink);color:#fff}.close h2{max-width:980px;margin:0;font-family:var(--display);font-size:clamp(42px,5.2vw,76px);line-height:1.01;letter-spacing:-.04em}.close p{max-width:720px;margin:24px 0 0;color:color-mix(in srgb,#fff 76%,var(--brand-ink));font-size:18px}.close .primary{width:100%;white-space:nowrap}body.cta-outline .primary{background:transparent;color:var(--brand-accent)}body.cta-outline .close .primary{background:transparent;border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.cta-text .primary{min-height:44px;padding:8px 0;border:0;border-bottom:2px solid currentColor;border-radius:0;background:transparent;color:var(--brand-accent)}body.cta-text .close .primary{color:#fff}.footer{padding:26px clamp(24px,6vw,96px);display:flex;justify-content:space-between;gap:24px;color:var(--muted);font-size:12px}.footer a{color:inherit;text-decoration:none}.footer a:hover,.footer a:focus-visible{color:var(--brand-accent)}.experience-region,.close,#next-step,.hero{scroll-margin-top:70px}
     .signal-toast{position:fixed;left:50%;bottom:max(24px,env(safe-area-inset-bottom));z-index:90;width:min(calc(100vw - 32px),430px);padding:14px 17px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;border:1px solid color-mix(in srgb,var(--brand-accent) 36%,var(--line));border-radius:14px;background:color-mix(in srgb,var(--brand-ink) 94%,#000);box-shadow:0 22px 80px color-mix(in srgb,var(--brand-ink) 30%,transparent);color:#fff;transform:translate(-50%,18px);opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease}.signal-toast.is-visible{transform:translate(-50%,0);opacity:1}.signal-toast-mark{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--brand-accent) 22%,transparent)}.signal-toast-mark>span{width:9px;height:9px;border-radius:50%;background:var(--brand-accent);box-shadow:0 0 0 7px color-mix(in srgb,var(--brand-accent) 18%,transparent)}.signal-toast>span:last-child{display:grid;gap:2px}.signal-toast strong{font-size:12px;letter-spacing:.08em;text-transform:uppercase}.signal-toast [data-signal-copy]{color:color-mix(in srgb,#fff 74%,transparent);font-size:12px}
+    .folloze-invite{position:fixed;right:24px;bottom:max(24px,env(safe-area-inset-bottom));z-index:80;width:min(calc(100vw - 32px),350px);padding:18px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;border:1px solid color-mix(in srgb,var(--brand-accent) 42%,var(--line));border-radius:18px;background:var(--brand-dark);box-shadow:0 24px 80px color-mix(in srgb,var(--brand-ink) 30%,transparent);color:#fff}.folloze-invite strong{display:block;font-family:var(--display);font-size:20px;line-height:1.1}.folloze-invite span{display:block;margin-top:5px;color:color-mix(in srgb,#fff 72%,transparent);font-size:12px}.folloze-invite-action{grid-column:1/-1;min-height:44px;padding:10px 16px;border:1px solid var(--brand-accent);border-radius:var(--button-radius);background:var(--brand-accent);color:var(--brand-on-accent);cursor:pointer;font-weight:800}.folloze-invite-dismiss{align-self:start;width:34px;height:34px;border:0;background:transparent;color:#fff;cursor:pointer;font-size:22px}.folloze-insight{position:fixed;right:24px;bottom:max(24px,env(safe-area-inset-bottom));z-index:85;width:min(calc(100vw - 32px),410px);padding:24px;border:1px solid color-mix(in srgb,var(--brand-accent) 42%,var(--line));border-radius:20px;background:var(--brand-dark);box-shadow:0 28px 90px color-mix(in srgb,var(--brand-ink) 34%,transparent);color:#fff}.folloze-insight .eyebrow{margin-bottom:10px}.folloze-insight h2{margin:0;font-family:var(--display);font-size:28px;line-height:1.08}.folloze-insight>p{margin:14px 0;color:color-mix(in srgb,#fff 76%,transparent);font-size:14px}.folloze-insight ul{margin:18px 0 0;padding:0;display:grid;gap:10px;list-style:none}.folloze-insight li{padding-top:10px;border-top:1px solid color-mix(in srgb,#fff 18%,transparent);font-size:13px}.folloze-insight-close{position:absolute;right:14px;top:14px;width:34px;height:34px;border:0;background:transparent;color:#fff;cursor:pointer;font-size:22px}
     html:fullscreen,html:fullscreen body,html:fullscreen .shell{width:100%;max-width:none;min-height:100%;background:var(--brand-surface)}body.is-fullscreen .shell{max-width:none}body.is-fullscreen .journey-nav{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}body.is-fullscreen .hero{min-height:calc(100dvh - 58px)}
-    body.style-editorial .hero h1,body.style-editorial .signature-intro h2,body.style-editorial .thesis h2,body.style-editorial .region-heading h2,body.style-editorial .journey-header h2{letter-spacing:-.025em}body.style-editorial .eyebrow{letter-spacing:.18em}body.style-technical .fullscreen-control,body.style-technical .receipt-signals>span,body.style-technical .receipt-signals>a{border-radius:4px}body.style-technical .hero{background-image:linear-gradient(color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px);background-size:42px 42px}body.style-minimal .hero{background:var(--brand-surface)}body.style-minimal .hero-media{box-shadow:none}body.style-minimal .signature,body.style-minimal .lens-lab,body.style-minimal .journey{background:var(--brand-surface)}body.style-minimal .journey-card{background:transparent}
+    body.style-editorial .hero h1,body.style-editorial .signature-intro h2,body.style-editorial .thesis h2,body.style-editorial .region-heading h2,body.style-editorial .journey-header h2{letter-spacing:-.025em}body.style-editorial .eyebrow{letter-spacing:.18em}body.style-technical .fullscreen-control{border-radius:4px}body.style-technical .hero{background-image:linear-gradient(color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px);background-size:42px 42px}body.style-minimal .hero{background:var(--brand-surface)}body.style-minimal .hero-media{box-shadow:none}body.style-minimal .signature,body.style-minimal .lens-lab,body.style-minimal .journey{background:var(--brand-surface)}body.style-minimal .journey-card{background:transparent}
     body[data-edit-mode="true"] [data-flz-editable]{cursor:text;outline:1px dashed color-mix(in srgb,var(--brand-accent) 62%,transparent);outline-offset:5px}
     body.design-source-brand-technical .lens-tabs button{border-radius:6px}body.design-source-brand-editorial .hero h1,body.design-source-brand-editorial .thesis h2,body.design-source-brand-editorial .region-heading h2{letter-spacing:-.028em}body.design-neutral-fallback .hero-media{box-shadow:none}
     body.brand-hero-dark .nav{border-color:color-mix(in srgb,#fff 15%,transparent);background:var(--brand-dark)}body.brand-hero-dark .wordmark,body.brand-hero-dark .nav-action{color:#fff}body.brand-hero-dark .lockup-divider{color:color-mix(in srgb,#fff 64%,transparent)}body.brand-hero-dark .journey-nav{border-color:color-mix(in srgb,#fff 14%,transparent);background:color-mix(in srgb,var(--brand-dark) 94%,transparent);box-shadow:0 12px 34px color-mix(in srgb,#000 24%,transparent)}body.brand-hero-dark .journey-nav-title,body.brand-hero-dark .journey-links button,body.brand-hero-dark .fullscreen-control{color:color-mix(in srgb,#fff 72%,transparent)}body.brand-hero-dark .journey-links button:hover,body.brand-hero-dark .journey-links button:focus-visible,body.brand-hero-dark .journey-links button[aria-current="location"]{color:#fff}body.brand-hero-dark .fullscreen-control{border-color:color-mix(in srgb,#fff 30%,transparent);background:transparent}body.brand-hero-dark .hero{background:radial-gradient(ellipse 80% 48% at 3% 100%,color-mix(in srgb,var(--brand-accent) 48%,transparent) 0,transparent 72%),radial-gradient(ellipse 72% 60% at 100% 0,color-mix(in srgb,var(--brand-support) 46%,transparent) 0,transparent 72%),var(--brand-dark);color:#fff}body.brand-hero-dark .hero h1{background:none;-webkit-text-fill-color:currentColor;color:#fff}body.brand-hero-dark .hero h1::first-line{-webkit-text-fill-color:var(--brand-accent);color:var(--brand-accent)}body.brand-hero-dark .hero .subhead{color:color-mix(in srgb,#fff 84%,transparent)}body.brand-hero-dark .hero .eyebrow{color:var(--brand-accent)}body.brand-hero-dark .hero .context-note{border-color:color-mix(in srgb,#fff 30%,transparent);color:color-mix(in srgb,#fff 78%,transparent)}body.brand-hero-dark .hero-media{border-color:color-mix(in srgb,#fff 20%,transparent);background:color-mix(in srgb,#fff 7%,transparent);box-shadow:0 36px 110px color-mix(in srgb,#000 34%,transparent)}body.brand-hero-dark .media.media .media-fallback{background:linear-gradient(145deg,color-mix(in srgb,var(--brand-accent) 22%,var(--brand-dark)),var(--brand-dark) 58%,color-mix(in srgb,var(--brand-support) 22%,var(--brand-dark)));color:#fff}body.brand-hero-dark .close{background:radial-gradient(circle at 90% 10%,color-mix(in srgb,var(--brand-support) 44%,transparent),transparent 32%),var(--brand-dark)}body.brand-hero-dark.cta-outline .hero .primary{border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.brand-hero-dark.cta-text .hero .primary{color:var(--brand-accent)}
     button:focus-visible,a:focus-visible{outline:3px solid color-mix(in srgb,var(--brand-focus) 68%,transparent);outline-offset:4px}
-    @media(max-width:980px){.hero{grid-template-columns:1fr;min-height:auto}.hero-media{height:clamp(380px,58vw,540px)}.signature-canonical{grid-template-columns:1fr}.lens-panel{grid-template-columns:90px 1fr}.lens-media{grid-column:2}.journey-grid{grid-template-columns:1fr}.journey-card{min-height:230px}.journey-copy{margin-top:30px}.close{grid-template-columns:1fr;align-items:start}.journey-nav-inner{grid-template-columns:minmax(0,1fr) auto;gap:12px}.journey-nav-title{display:none}.journey-links{justify-content:flex-start}.quality-receipt{grid-template-columns:auto 1fr}.receipt-signals{grid-column:2;justify-content:flex-start}}
-    @media(max-width:620px){.nav{height:68px;padding:0 20px}.brand-lockup{gap:10px}.seller-wordmark{max-width:116px}.seller-wordmark img{height:27px;max-width:116px}.target-wordmark,.lockup-divider{display:none}.nav-action{font-size:13px}.hero{padding:50px 22px 42px;background:var(--brand-surface)}.hero h1{font-size:clamp(38px,10.5vw,46px);line-height:1.02}.hero .subhead{font-size:17px}.actions{align-items:stretch;flex-direction:column}.actions>*{width:100%}.hero-media{height:auto;min-height:280px;margin-top:12px;box-shadow:0 18px 48px color-mix(in srgb,var(--brand-ink) 14%,transparent)}.context-note{border-radius:14px;align-items:flex-start}.signature{padding:54px 22px}.signature-intro h2{font-size:36px}.signature-canonical button{grid-template-columns:40px 1fr}.thesis{padding:58px 22px}.thesis h2{font-size:clamp(34px,9.6vw,46px)}.thesis p{font-size:17px}.lens-lab{padding:54px 22px 64px}.lens-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;overflow:visible}.lens-tabs button{min-width:0;padding:9px 7px;white-space:normal;font-size:12px;line-height:1.2}.lens-panel{grid-template-columns:1fr;min-height:0;gap:28px}.lens-number{font-size:68px}.lens-media{grid-column:1;min-height:270px}.lens-copy h2{font-size:37px}.lens-copy>p:not(.eyebrow){font-size:17px}.journey{padding:58px 22px}.journey-header{margin-bottom:34px}.journey-card{min-height:260px;padding:24px}.journey-copy h3{font-size:28px}.close{margin:0 10px 10px;padding:56px 24px;gap:32px}.close h2{font-size:40px}.close .primary{width:100%}.footer{padding:26px 22px;flex-direction:column;gap:8px}html{scroll-padding-top:58px}.journey-nav,.journey-nav-inner{min-height:54px}.journey-nav-inner{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}.journey-links{gap:2px;scroll-snap-type:x proximity}.journey-links button{min-height:50px;padding:0 8px;scroll-snap-align:start;font-size:11px}.journey-links button:after{left:8px;right:8px}.fullscreen-control{width:40px;height:40px;padding:0}.fullscreen-control [data-fullscreen-label]{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.quality-receipt{margin:0 22px;padding:24px 0;grid-template-columns:auto 1fr;gap:14px}.receipt-signals{grid-column:1/-1;justify-content:flex-start}.receipt-signals>span,.receipt-signals>a{white-space:normal}.signal-toast{bottom:max(14px,env(safe-area-inset-bottom));border-radius:12px}body.is-fullscreen .nav{display:none}body.is-fullscreen .hero{min-height:auto}.experience-region,.close,#next-step,.hero{scroll-margin-top:62px}}
+    .template-content-source .journey-grid{max-width:1080px;grid-template-columns:repeat(2,minmax(0,1fr))}
+    @media(max-width:980px){.hero{grid-template-columns:1fr;min-height:auto}.hero-media{height:clamp(380px,58vw,540px)}.signature-canonical{grid-template-columns:1fr}.lens-panel{grid-template-columns:90px 1fr}.lens-media{grid-column:2}.journey-grid,.template-content-source .journey-grid{grid-template-columns:1fr}.journey-card{min-height:230px}.journey-copy{margin-top:30px}.close{grid-template-columns:1fr;align-items:start}.journey-nav-inner{grid-template-columns:minmax(0,1fr) auto;gap:12px}.journey-nav-title{display:none}.journey-links{justify-content:flex-start}}
+    @media(max-width:620px){.nav{height:68px;padding:0 20px}.brand-lockup{gap:10px}.seller-wordmark{max-width:116px}.seller-wordmark img{height:27px;max-width:116px}.target-wordmark,.lockup-divider{display:none}.nav-action{font-size:13px}.hero{padding:50px 22px 42px;background:var(--brand-surface)}.hero h1{font-size:clamp(38px,10.5vw,46px);line-height:1.02}.hero .subhead{font-size:17px}.actions{align-items:stretch;flex-direction:column}.actions>*{width:100%}.hero-media{height:auto;min-height:280px;margin-top:12px;box-shadow:0 18px 48px color-mix(in srgb,var(--brand-ink) 14%,transparent)}.context-note{border-radius:14px;align-items:flex-start}.signature{padding:54px 22px}.signature-intro h2{font-size:36px}.signature-canonical button{grid-template-columns:40px 1fr}.thesis{padding:58px 22px}.thesis h2{font-size:clamp(34px,9.6vw,46px)}.thesis p{font-size:17px}.lens-lab{padding:54px 22px 64px}.lens-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;overflow:visible}.lens-tabs button{min-width:0;padding:9px 7px;white-space:normal;font-size:12px;line-height:1.2}.lens-panel{grid-template-columns:1fr;min-height:0;gap:28px}.lens-number{font-size:68px}.lens-media{grid-column:1;min-height:270px}.lens-copy h2{font-size:37px}.lens-copy>p:not(.eyebrow){font-size:17px}.journey{padding:58px 22px}.journey-header{margin-bottom:34px}.journey-card{min-height:260px;padding:24px}.journey-copy h3{font-size:28px}.close{margin:0 10px 10px;padding:56px 24px;gap:32px}.close h2{font-size:40px}.close .primary{width:100%}.footer{padding:26px 22px;flex-direction:column;gap:8px}html{scroll-padding-top:58px}.journey-nav,.journey-nav-inner{min-height:54px}.journey-nav-inner{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}.journey-links{gap:2px;scroll-snap-type:x proximity}.journey-links button{min-height:50px;padding:0 8px;scroll-snap-align:start;font-size:11px}.journey-links button:after{left:8px;right:8px}.fullscreen-control{width:40px;height:40px;padding:0}.fullscreen-control [data-fullscreen-label]{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.signal-toast{bottom:max(14px,env(safe-area-inset-bottom));border-radius:12px}.folloze-invite,.folloze-insight{right:16px;bottom:max(16px,env(safe-area-inset-bottom))}body.is-fullscreen .nav{display:none}body.is-fullscreen .hero{min-height:auto}.experience-region,.close,#next-step,.hero{scroll-margin-top:62px}}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.skip-link,.primary,.secondary,.journey-links button>span,.journey-links button:after,.journey-card,.media img,.signal-toast{transition:none!important;animation:none!important}.signal-toast{transform:translate(-50%,0)}.journey-links{scroll-behavior:auto}}
-    @media(forced-colors:active){body.brand-hero-dark .hero h1{-webkit-text-fill-color:currentColor;background:none;color:CanvasText}.journey-links button[aria-current="location"]{outline:2px solid currentColor}.signal-toast,.receipt-mark{border:2px solid currentColor}.signal-toast-mark>span{box-shadow:none}}
+    @media(forced-colors:active){body.brand-hero-dark .hero h1{-webkit-text-fill-color:currentColor;background:none;color:CanvasText}.journey-links button[aria-current="location"]{outline:2px solid currentColor}.signal-toast,.folloze-invite,.folloze-insight{border:2px solid currentColor}.signal-toast-mark>span{box-shadow:none}}
     .eyebrow,.journey-index{color:var(--brand-accent-on-light)}
-    .nav-action:hover,.nav-action:focus-visible,.fullscreen-control:hover,.fullscreen-control:focus-visible,.fullscreen-control[aria-pressed="true"],.signature-canonical button:hover,.signature-canonical button:focus-visible,.journey-action:hover,.journey-action:focus-visible,.receipt-signals>a:hover,.receipt-signals>a:focus-visible,.footer a:hover,.footer a:focus-visible{color:var(--brand-accent-on-light)}
-    body.cta-outline .primary,body.cta-text .primary,.receipt-mark{color:var(--brand-accent-on-light)}
+    .nav-action:hover,.nav-action:focus-visible,.fullscreen-control:hover,.fullscreen-control:focus-visible,.fullscreen-control[aria-pressed="true"],.signature-canonical button:hover,.signature-canonical button:focus-visible,.journey-action:hover,.journey-action:focus-visible,.footer a:hover,.footer a:focus-visible{color:var(--brand-accent-on-light)}
+    body.cta-outline .primary,body.cta-text .primary{color:var(--brand-accent-on-light)}
     body.brand-hero-dark .hero .eyebrow,.close .eyebrow{color:var(--brand-accent)}
   </style>
 </head>
-<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}" data-wireframe="${CANONICAL_EXPERIENCE_STRUCTURE.wireframeName}" data-experience-shape="${CANONICAL_EXPERIENCE_STRUCTURE.experienceShape}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}">
+<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${template.fingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}">
 <button class="skip-link" type="button" data-scroll-target="main-content">Skip to experience</button>
 <div class="shell">
   <header class="nav">
@@ -518,7 +408,7 @@ export function renderExperienceHtml(input: {
   </header>
   <nav class="journey-nav" aria-label="Experience journey" data-flz-journey-nav>
     <div class="journey-nav-inner">
-      <span class="journey-nav-title" aria-hidden="true"><strong>Explore</strong><small>${escapeHtml(contextLabel)}</small></span>
+      <span class="journey-nav-title" aria-hidden="true"><strong>${escapeHtml(template.heroLabel)}</strong><small>${escapeHtml(contextLabel)}</small></span>
       <div class="journey-links">${journeyNavButtons}</div>
       <button type="button" class="fullscreen-control" data-fullscreen-toggle aria-pressed="false" aria-label="Enter full screen" hidden>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 7V3.5H7M13 3.5h3.5V7M16.5 13v3.5H13M7 16.5H3.5V13"/></svg>
@@ -527,9 +417,9 @@ export function renderExperienceHtml(input: {
     </div>
   </nav>
   <main id="main-content" tabindex="-1">
-    <section class="hero" id="experience-overview" data-journey-section="experience-overview" aria-labelledby="experience-headline">
+    <section class="hero" id="experience-overview" data-journey-section="experience-overview" data-template-primitive="hero" aria-labelledby="experience-headline">
       <div class="hero-copy">
-        <p class="eyebrow" ${editableBlock("hero.eyebrow", "eyebrow")}>${escapeHtml(draft.eyebrow)}</p>
+        <p class="eyebrow" ${editableBlock("hero.eyebrow", "eyebrow")}>${escapeHtml(heroEyebrow)}</p>
         <h1 id="experience-headline" ${editableBlock("hero.headline", "headline")}>${escapeHtml(draft.headline)}</h1>
         <p class="subhead" ${editableBlock("hero.subhead", "subhead")}>${escapeHtml(draft.subhead)}</p>
         <div class="actions">
@@ -546,9 +436,20 @@ export function renderExperienceHtml(input: {
       <button type="button" class="primary" data-demo-cta="true" data-flz-cta-id="close-primary" ${editableBlock("close.primaryCta", "cta")}>${escapeHtml(draft.primaryCta)}</button>
     </section>
   </main>
-  ${receiptHtml}
   <footer class="footer"><span>${escapeHtml(contextLabel)}</span><a href="${escapeHtml(vendorUrl)}" target="_blank" rel="noopener">${escapeHtml(brand.domain)}</a></footer>
 </div>
+<aside class="folloze-invite" data-folloze-invite aria-label="Folloze engagement insight" hidden>
+  <span><strong>See what Folloze knows</strong><span>Reveal the engagement signals behind this experience.</span></span>
+  <button type="button" class="folloze-invite-dismiss" data-folloze-invite-dismiss aria-label="Dismiss">×</button>
+  <button type="button" class="folloze-invite-action" data-folloze-invite-open>See the signals</button>
+</aside>
+<aside class="folloze-insight" data-folloze-insight aria-label="Engagement signals captured by Folloze" hidden>
+  <button type="button" class="folloze-insight-close" data-folloze-insight-close aria-label="Close">×</button>
+  <p class="eyebrow">Engagement intelligence</p>
+  <h2>Every interaction becomes a useful signal.</h2>
+  <p>Folloze can show teams how buyers explore the story without interrupting the experience.</p>
+  <ul><li>Which paths and topics earn attention</li><li>How long buyers engage with each section</li><li>Which next step creates intent</li></ul>
+</aside>
 <div class="signal-toast" data-signal-toast role="status" aria-live="polite" aria-atomic="true" hidden>
   <span class="signal-toast-mark" aria-hidden="true"><span></span></span>
   <span><strong>Signal captured</strong><span data-signal-copy>Your path is now in focus.</span></span>
@@ -677,11 +578,11 @@ export function renderExperienceHtml(input: {
 
     document.querySelectorAll('a[target="_blank"]').forEach(function(link){
       link.addEventListener('click',function(){
-        var area=this.closest('.close')?'close':this.closest('.footer')?'footer':this.closest('.quality-receipt')?'receipt':'hero';
+        var area=this.closest('.close')?'close':this.closest('.footer')?'footer':'hero';
         var hrefHost;
         try{hrefHost=new URL(this.href).hostname}catch(_urlError){}
         window.flzAnalytic('cta_click',{area:area,ctaId:this.getAttribute('data-flz-cta-id')||'external-link',hrefHost:hrefHost});
-        showSignal(area==='receipt'?'Original source opened for review.':'Next step opened in a new tab.');
+        showSignal('Next step opened in a new tab.');
       });
     });
     document.querySelectorAll('[data-demo-cta]').forEach(function(control){
@@ -704,18 +605,45 @@ export function renderExperienceHtml(input: {
       tab.addEventListener('click',function(){selectLens(tab,false,true)});
       tab.addEventListener('keydown',function(event){var next=index;if(event.key==='ArrowRight'||event.key==='ArrowDown')next=(index+1)%tabs.length;else if(event.key==='ArrowLeft'||event.key==='ArrowUp')next=(index-1+tabs.length)%tabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;event.preventDefault();selectLens(tabs[next],true,true)});
     });
-    document.querySelectorAll('[data-signature-lens-index],[data-journey-lens-index]').forEach(function(control){
+    document.querySelectorAll('[data-signature-lens-index],[data-resource-lens-index]').forEach(function(control){
       control.addEventListener('click',function(){
-        var attribute=this.hasAttribute('data-journey-lens-index')?'data-journey-lens-index':'data-signature-lens-index';
+        var attribute=this.hasAttribute('data-resource-lens-index')?'data-resource-lens-index':'data-signature-lens-index';
         var index=Number(this.getAttribute(attribute));
         var tab=tabs[index];
         var path=document.getElementById('decision-path');
         if(tab)selectLens(tab,false,false);
-        window.flzAnalytic(attribute==='data-journey-lens-index'?'question_select':'signature_select',{area:attribute==='data-journey-lens-index'?'questions':'signature',lensIndex:index,lensId:'lens-'+index,ctaId:this.getAttribute('data-flz-cta-id')||undefined});
+        window.flzAnalytic(attribute==='data-resource-lens-index'?'topic_select':'signature_select',{area:attribute==='data-resource-lens-index'?'resources':'signature',lensIndex:index,lensId:'lens-'+index,ctaId:this.getAttribute('data-flz-cta-id')||undefined});
         showSignal('Your path now favors '+shortLabel(tab||this)+'.');
         if(path){path.scrollIntoView({behavior:reducedMotion?'auto':'smooth',block:'start'});setActiveSection('decision-path')}
       });
     });
+
+    var invite=document.querySelector('[data-folloze-invite]');
+    var insight=document.querySelector('[data-folloze-insight]');
+    var inviteTimer;
+    var inviteShown=false;
+    function showFollozeInvite(){
+      if(inviteShown||window.parent!==window||!invite)return;
+      inviteShown=true;
+      invite.hidden=false;
+      window.removeEventListener('scroll',checkInviteDepth);
+    }
+    function checkInviteDepth(){
+      var root=document.scrollingElement||document.documentElement;
+      var progress=(root.scrollTop+window.innerHeight)/Math.max(root.scrollHeight,1);
+      if(progress>=.5)showFollozeInvite();
+    }
+    if(window.parent===window&&invite){
+      inviteTimer=window.setTimeout(showFollozeInvite,18000);
+      window.addEventListener('scroll',checkInviteDepth,{passive:true});
+      checkInviteDepth();
+      var inviteOpen=invite.querySelector('[data-folloze-invite-open]');
+      var inviteDismiss=invite.querySelector('[data-folloze-invite-dismiss]');
+      var insightClose=insight&&insight.querySelector('[data-folloze-insight-close]');
+      if(inviteOpen)inviteOpen.addEventListener('click',function(){invite.hidden=true;if(insight)insight.hidden=false;window.flzAnalytic('cta_click',{area:'analytics-invite',ctaId:'see-what-folloze-knows'});showSignal('Engagement intelligence is now in view.')});
+      if(inviteDismiss)inviteDismiss.addEventListener('click',function(){invite.hidden=true;window.flzAnalytic('cta_click',{area:'analytics-invite',ctaId:'dismiss-insight-invite'})});
+      if(insightClose)insightClose.addEventListener('click',function(){if(insight)insight.hidden=true});
+    }
 
     document.querySelectorAll('[data-flz-editable]').forEach(function(block){
       block.addEventListener('click',function(){
@@ -808,7 +736,7 @@ export function renderExperienceHtml(input: {
       document.addEventListener('fullscreenchange',syncFullscreen);
       document.addEventListener('fullscreenerror',function(){window.flzAnalytic('fullscreen_change',{state:'unavailable'})});
     }
-    window.addEventListener('pagehide',function(){if(toastTimer)window.clearTimeout(toastTimer);window.removeEventListener('wheel',handOffPreviewWheel);engagementCleanup()},{once:true});
+    window.addEventListener('pagehide',function(){if(toastTimer)window.clearTimeout(toastTimer);if(inviteTimer)window.clearTimeout(inviteTimer);window.removeEventListener('scroll',checkInviteDepth);window.removeEventListener('wheel',handOffPreviewWheel);engagementCleanup()},{once:true});
   })();
 </script>
 </body>

@@ -332,8 +332,8 @@ describe("session workspace foundation", () => {
       draft: {
         campaignRegister: "one-to-one-abm",
         designRegister: "source-brand-technical",
-        wireframeName: "canonical-desktop-experience",
-        experienceShape: "guided-buyer-experience",
+        wireframeName: "abm-account-microsite",
+        experienceShape: "narrative-workflow",
         sectionSequence: ["thesis", "decision-lenses", "guided-questions"],
         sectionLabels: {
           thesis: "Why now",
@@ -396,9 +396,9 @@ describe("session workspace foundation", () => {
       thesisHeadline: "A controlled operating thesis.",
       narrativeArc: "Use these questions to align platform and architecture owners."
     });
-    expect(stored?.experience?.html).toContain('id="campaign-thesis"');
+    expect(stored?.experience?.html).toContain('id="experience-thesis"');
     expect(stored?.experience?.html).toContain('id="decision-path"');
-    expect(stored?.experience?.html).toContain('id="guided-questions"');
+    expect(stored?.experience?.html).toContain('id="supporting-resources"');
   });
 
   it("leaves revision N intact when replacement generation fails", async () => {

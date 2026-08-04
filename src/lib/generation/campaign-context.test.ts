@@ -103,9 +103,9 @@ describe("compileCampaignContext", () => {
       colorSystem: { primary: "#1B3E51", accent: "#F44414", surface: "#FFFFFF" }
     });
     expect(context.wireframe).toMatchObject({
-      name: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
-      experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
-      heroMode: CANONICAL_EXPERIENCE_STRUCTURE.heroMode,
+      name: "abm-account-microsite",
+      experienceShape: "narrative-workflow",
+      heroMode: "account-thesis",
       sectionSequence: CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
     });
   });
@@ -139,7 +139,7 @@ describe("compileCampaignContext", () => {
     expect(evidence).not.toMatch(/Products and Services|Featured Resources/i);
   });
 
-  it("keeps one canonical geometry while preserving distinct register, label, and CTA framing", () => {
+  it("keeps one shared block contract while selecting a deliberate template for every register", () => {
     const abm = compileCampaignContext({
       brand: seller,
       targetBrand: target,
@@ -180,20 +180,19 @@ describe("compileCampaignContext", () => {
       }
     });
     const contexts = [abm, demand, product, event, content];
-    const expectedStructure = {
-      name: CANONICAL_EXPERIENCE_STRUCTURE.wireframeName,
-      experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
-      heroMode: CANONICAL_EXPERIENCE_STRUCTURE.heroMode,
-      sectionSequence: [...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence]
-    };
-
-    expect(contexts.map(({ wireframe }) => ({
-      name: wireframe.name,
-      experienceShape: wireframe.experienceShape,
-      heroMode: wireframe.heroMode,
-      sectionSequence: wireframe.sectionSequence
-    }))).toEqual(contexts.map(() => expectedStructure));
     expect(new Set(contexts.map(({ brief }) => brief.campaignRegister)).size).toBe(5);
+    expect(contexts.map(({ wireframe }) => wireframe.name)).toEqual([
+      "abm-account-microsite",
+      "demand-generation-landing-page",
+      "product-launch-landing-page",
+      "event-awareness-follow-up",
+      "content-resource-companion"
+    ]);
+    expect(new Set(contexts.map(({ wireframe }) => wireframe.experienceShape)).size).toBe(4);
+    expect(new Set(contexts.map(({ wireframe }) => wireframe.heroMode)).size).toBe(5);
+    expect(new Set(contexts.map(({ wireframe }) => wireframe.sectionSequence.join("|")))).toEqual(
+      new Set([CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence.join("|")])
+    );
     expect(new Set(contexts.map(({ wireframe }) => JSON.stringify(wireframe.labels))).size).toBe(5);
     expect(new Set(contexts.map(({ wireframe }) => wireframe.signatureMoment)).size).toBe(5);
     expect(new Set(contexts.map(({ wireframe }) => wireframe.finalCtaPattern)).size).toBe(5);
@@ -276,16 +275,16 @@ describe("compileCampaignContext", () => {
     });
     expect(resource.brief.authority.content).toContain("The governed automation field guide");
     expect(resource.brief.authority.design).toContain(seller.sourceUrl);
-    expect(resource.wireframe.name).toBe(CANONICAL_EXPERIENCE_STRUCTURE.wireframeName);
-    expect(assessment.wireframe.name).toBe(CANONICAL_EXPERIENCE_STRUCTURE.wireframeName);
+    expect(resource.wireframe.name).toBe("content-resource-companion");
+    expect(assessment.wireframe.name).toBe("content-assessment-workbench");
     expect(resource.wireframe).toMatchObject({
-      experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
-      heroMode: CANONICAL_EXPERIENCE_STRUCTURE.heroMode,
+      experienceShape: "resource-companion",
+      heroMode: "source-led",
       sectionSequence: CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
     });
     expect(assessment.wireframe).toMatchObject({
-      experienceShape: CANONICAL_EXPERIENCE_STRUCTURE.experienceShape,
-      heroMode: CANONICAL_EXPERIENCE_STRUCTURE.heroMode,
+      experienceShape: "assessment-workbench",
+      heroMode: "source-led",
       sectionSequence: CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
     });
     expect(resource.wireframe.labels).not.toEqual(assessment.wireframe.labels);

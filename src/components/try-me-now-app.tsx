@@ -44,18 +44,12 @@ import {
 import {
   AnalyticsSignalPanel,
   AnalyticsSignalToast,
-  AssetPicker,
   AudienceEvidenceTray,
   CtaStyleControl,
-  EditBriefDrawer,
   EntryPathMicroDemo,
   ExpirySaveValuePanel,
-  ExperienceBlockControl as ExperienceBlockControlPanel,
-  FollozeValueReceipt,
   InstantBrandLockStrip,
-  PersonalizationQualityReceipt,
   ProgressiveArtifactStream,
-  SavedExperienceCockpit,
   ToneChips,
   type AnalyticsSignal,
   type CtaValue,
@@ -254,7 +248,6 @@ export function ctaValueForSession(session: PublicTryMeSession): CtaValue {
 }
 
 const likelyDomain = /^(?:https?:\/\/)?(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\/?$/i;
-const CEREMONY_DURATION_MS = 4_800;
 
 type BuildPanelCopy = {
   kicker: string;
@@ -345,10 +338,6 @@ function sourceNameFor(session: PublicTryMeSession): string {
   return `${brandName} content`;
 }
 
-export function ceremonyDuration(prefersReducedMotion: boolean): number {
-  return prefersReducedMotion ? 0 : CEREMONY_DURATION_MS;
-}
-
 export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
   const pending: StageState["status"] = "pending";
   const brandName = session?.brand?.companyName || displayNameFromDomain(session?.companyDomain);
@@ -357,6 +346,15 @@ export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
   const objective = session?.answers.objective;
   const buyerContext = session?.useCase === "abm" ? targetName : brandName;
   const brandState = session?.stages.brand.status ?? pending;
+  const brandReadiness = session?.brand?.readiness;
+  const brandNeedsReview = brandState === "fallback" || brandReadiness?.status === "incomplete";
+  const missingBrandEvidence = brandReadiness
+    ? [
+        !brandReadiness.logoReady ? "logo" : undefined,
+        !brandReadiness.paletteReady ? "palette" : undefined,
+        !brandReadiness.sourceEvidenceReady ? "source evidence" : undefined
+      ].filter((value): value is string => Boolean(value))
+    : [];
   const audienceState = session?.stages.audience.status ?? pending;
   const experienceState = session?.experience ? "complete" : session?.stages.story.status ?? pending;
 
@@ -365,13 +363,17 @@ export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
       key: "brand",
       phase: "Your brand",
       title: ["complete", "fallback"].includes(brandState)
-        ? brandState === "fallback" ? "Brand style ready" : "Logo and colors ready"
+        ? brandNeedsReview ? "Brand evidence needs review" : "Logo and colors ready"
         : brandState === "running" ? `Finding ${brandName}'s look and feel` : "Brand check waiting",
-      detail: `Finding the logo, colors, and visual cues buyers already recognize from ${brandName}.`,
+      detail: brandNeedsReview
+        ? brandReadiness?.reasons.filter(Boolean).slice(0, 2).join(" ") || `The ${brandName} logo, palette, or public source evidence still needs verification.`
+        : `Finding the logo, colors, and visual cues buyers already recognize from ${brandName}.`,
       artifact: ["complete", "fallback"].includes(brandState)
-        ? `${brandName} · ${session?.brand?.colors.length || 1} brand colors`
+        ? brandNeedsReview
+          ? `${brandName} · ${missingBrandEvidence.length ? `${missingBrandEvidence.join(", ")} needs review` : "verification needed"}`
+          : `${brandName} · ${session?.brand?.colors.length || 1} brand colors`
         : undefined,
-      status: brandState,
+      status: brandNeedsReview ? "fallback" : brandState,
       icon: Globe2
     },
     {
@@ -1197,16 +1199,47 @@ function ChipGroup({
 
 type ContextMode = "text" | "url" | "pdf";
 
+export type PdfUploadFeedback = {
+  status: "idle" | "uploading" | "processing" | "accepted" | "error";
+  fileName?: string;
+  message?: string;
+};
+
+const idlePdfUpload: PdfUploadFeedback = { status: "idle" };
+
+function PdfUploadProgress({ feedback }: { feedback: PdfUploadFeedback }) {
+  if (feedback.status === "idle") return null;
+  const active = feedback.status === "uploading" || feedback.status === "processing";
+  return (
+    <span
+      className={`pdfUploadProgress is-${feedback.status}`}
+      role={feedback.status === "error" ? "alert" : "status"}
+      aria-live={feedback.status === "error" ? "assertive" : "polite"}
+    >
+      <span className="pdfUploadProgressIcon" aria-hidden="true">
+        {active ? <LoaderCircle className="spin" size={16} /> : feedback.status === "accepted" ? <Check size={16} /> : <X size={16} />}
+      </span>
+      <span>
+        <strong>{feedback.status === "uploading" ? "Uploading securely" : feedback.status === "processing" ? "Reading your document" : feedback.status === "accepted" ? "PDF accepted" : "Upload needs attention"}</strong>
+        <small>{feedback.message || feedback.fileName}</small>
+      </span>
+      {active && <i className="pdfUploadProgressTrack"><i /></i>}
+    </span>
+  );
+}
+
 export function OptionalContextComposer({
   session,
   answers,
   isSaving,
+  pdfUpload = idlePdfUpload,
   onPatch,
   onUpload
 }: {
   session: PublicTryMeSession;
   answers: SessionAnswers;
   isSaving: boolean;
+  pdfUpload?: PdfUploadFeedback;
   onPatch: (patch: SessionAnswers) => Promise<void>;
   onUpload: (file: File) => Promise<void>;
 }) {
@@ -1223,13 +1256,13 @@ export function OptionalContextComposer({
     <section className="contextComposer" aria-labelledby="context-composer-title">
       <div className="contextComposerHeader">
         <div>
-          <span className="sectionKicker">Optional context</span>
-          <h2 id="context-composer-title">Add only what changes the result.</h2>
+          <span className="sectionKicker">Additional guidance or context</span>
+          <h2 id="context-composer-title">Add anything that should shape the result.</h2>
         </div>
         {savedText && <span className="contextSaved"><Check size={13} />Added to brief</span>}
       </div>
       <p>Share one useful note, public URL, or PDF. You can skip this and keep moving.</p>
-      <div className="contextModeRail" role="tablist" aria-label="Optional context type">
+      <div className="contextModeRail" role="tablist" aria-label="Additional guidance or context type">
         <button id="context-tab-text" type="button" role="tab" aria-controls="context-panel-text" aria-selected={mode === "text"} className={mode === "text" ? "isActive" : ""} onClick={() => setMode("text")}><MessageSquareText size={16} />Text</button>
         <button id="context-tab-url" type="button" role="tab" aria-controls="context-panel-url" aria-selected={mode === "url"} className={mode === "url" ? "isActive" : ""} onClick={() => setMode("url")}><ExternalLink size={16} />URL</button>
         <button id="context-tab-pdf" type="button" role="tab" aria-controls="context-panel-pdf" aria-selected={mode === "pdf"} className={mode === "pdf" ? "isActive" : ""} onClick={() => setMode("pdf")}><FileText size={16} />PDF</button>
@@ -1265,22 +1298,25 @@ export function OptionalContextComposer({
         </div>
       )}
       {mode === "pdf" && (
-        <div className={`contextPanel contextPdfPanel ${sourceOpen ? "" : "isUnavailable"}`} role="tabpanel" id="context-panel-pdf" aria-labelledby="context-tab-pdf">
-          <FileText size={21} />
-          <div><strong>{sourceOpen ? session.useCase === "content" ? "Add a PDF source" : "Add a supporting PDF" : "One source is already attached"}</strong><span>{sourceOpen ? session.useCase === "content" ? "Up to 10 MB. Used only to build this experience." : "Adds optional evidence or context. Seller, target, and offer stay separate." : "A brief accepts one public URL or PDF at a time."}</span></div>
-          <label className={`contextUploadButton ${sourceOpen ? "" : "isDisabled"}`}>
-            Choose PDF
-            <input
-              type="file"
-              accept="application/pdf,.pdf"
-              disabled={!sourceOpen || isSaving}
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
-                event.currentTarget.value = "";
-                if (file) void onUpload(file);
-              }}
-            />
-          </label>
+        <div className={`contextPanel contextPdfPanel ${sourceOpen ? "" : "isUnavailable"} is-${pdfUpload.status}`} role="tabpanel" id="context-panel-pdf" aria-labelledby="context-tab-pdf" aria-busy={pdfUpload.status === "uploading" || pdfUpload.status === "processing" || undefined}>
+          {pdfUpload.status === "accepted" ? <CircleCheck size={21} /> : pdfUpload.status === "error" ? <X size={21} /> : <FileText size={21} />}
+          <div><strong>{pdfUpload.status === "accepted" ? "PDF accepted and added" : pdfUpload.status === "error" ? "That PDF was not added" : sourceOpen ? session.useCase === "content" ? "Add a PDF source" : "Add a supporting PDF" : "One source is already attached"}</strong><span>{pdfUpload.status === "accepted" ? pdfUpload.message || pdfUpload.fileName : pdfUpload.status === "error" ? pdfUpload.message : sourceOpen ? session.useCase === "content" ? "Up to 10 MB. Used only to build this experience." : "Adds optional evidence or context. Seller, target, and offer stay separate." : "A brief accepts one public URL or PDF at a time."}</span></div>
+          {(sourceOpen || pdfUpload.status === "error") && pdfUpload.status !== "accepted" && (
+            <label className={`contextUploadButton ${sourceOpen ? "" : "isDisabled"}`}>
+              {pdfUpload.status === "error" ? "Choose another PDF" : "Choose PDF"}
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                disabled={!sourceOpen || isSaving}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = "";
+                  if (file) void onUpload(file);
+                }}
+              />
+            </label>
+          )}
+          <PdfUploadProgress feedback={pdfUpload} />
         </div>
       )}
     </section>
@@ -1291,6 +1327,7 @@ export function ProgressiveQuestions({
   session,
   answers,
   isSaving,
+  pdfUpload = idlePdfUpload,
   onPatch,
   onWorkspacePatch,
   onUpload
@@ -1298,6 +1335,7 @@ export function ProgressiveQuestions({
   session: PublicTryMeSession;
   answers: SessionAnswers;
   isSaving: boolean;
+  pdfUpload?: PdfUploadFeedback;
   onPatch: (patch: SessionAnswers) => Promise<void>;
   onWorkspacePatch: (patch: WorkspacePatch) => Promise<void>;
   onUpload: (file: File) => Promise<void>;
@@ -1388,10 +1426,11 @@ export function ProgressiveQuestions({
             <button className="buttonPrimary" disabled={!/^https:\/\//i.test(textValue.trim()) || isSaving}>Use this content<ArrowRight size={17} /></button>
           </form>
         ) : (
-          <label className="uploadBox" role="tabpanel" id="source-panel-pdf" aria-labelledby="source-tab-pdf" aria-busy={isSaving || undefined}>
-            <FileText size={24} />
-            <strong>Drop in a PDF</strong>
-            <span>{isSaving ? "Uploading securely…" : "Up to 10 MB. The file is used only to build this experience."}</span>
+          <label className={`uploadBox is-${pdfUpload.status}`} role="tabpanel" id="source-panel-pdf" aria-labelledby="source-tab-pdf" aria-busy={pdfUpload.status === "uploading" || pdfUpload.status === "processing" || undefined}>
+            {pdfUpload.status === "accepted" ? <CircleCheck size={24} /> : pdfUpload.status === "error" ? <X size={24} /> : <FileText size={24} />}
+            <strong>{pdfUpload.status === "uploading" ? `Uploading ${pdfUpload.fileName || "your PDF"}` : pdfUpload.status === "processing" ? `Reading ${pdfUpload.fileName || "your PDF"}` : pdfUpload.status === "accepted" ? "PDF accepted" : pdfUpload.status === "error" ? "That upload did not work" : "Drop in a PDF"}</strong>
+            <span>{pdfUpload.message || (isSaving ? "Uploading securely…" : "Up to 10 MB. The file is used only to build this experience.")}</span>
+            <PdfUploadProgress feedback={pdfUpload} />
             <input
               type="file"
               accept="application/pdf,.pdf"
@@ -1578,25 +1617,6 @@ function WhyItMatters({ session }: { session: PublicTryMeSession }) {
   );
 }
 
-function RevealBrandToken({
-  name,
-  logoUrl,
-  accent = false
-}: {
-  name: string;
-  logoUrl?: string;
-  accent?: boolean;
-}) {
-  return (
-    <div className={`revealBrandToken ${accent ? "isAccent" : ""}`}>
-      <span>
-        {logoUrl ? <Image src={logoUrl} alt="" width={84} height={28} style={{ width: "auto", height: "auto" }} unoptimized /> : name.slice(0, 1)}
-      </span>
-      <strong>{name}</strong>
-    </div>
-  );
-}
-
 function previewLogoUrl(
   session: PublicTryMeSession,
   owner: "seller" | "target" = "seller"
@@ -1607,53 +1627,6 @@ function previewLogoUrl(
     session.id,
     `${owner}-logo`,
     session.experience?.artifactRevision
-  );
-}
-
-function RevealCeremony({ session, onDismiss }: { session: PublicTryMeSession; onDismiss: () => void }) {
-  const brandName = brandNameFor(session);
-  const copy = getRevealCopy(session);
-  const { dialogRef, onKeyDown } = useDialogBehavior(onDismiss);
-  return (
-    <section
-      ref={dialogRef}
-      className="revealCeremony"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="reveal-ceremony-title"
-      aria-describedby="reveal-ceremony-summary"
-      onKeyDown={onKeyDown}
-    >
-      <div className="ceremonyGrid" aria-hidden="true" />
-      <div className="ceremonyTopline">
-        <span><i className="liveDot" />Private preview assembled</span>
-        <span>{copy.kicker}</span>
-      </div>
-      <div className="ceremonyCore">
-        <div className="ceremonyLockup" aria-label={`${brandName} experience · ${copy.counterpart}`}>
-          <RevealBrandToken name={brandName} logoUrl={previewLogoUrl(session)} />
-          <span className="ceremonyConnector" aria-hidden="true"><i /><ArrowRight size={17} /><i /></span>
-          <RevealBrandToken
-            name={copy.counterpart}
-            logoUrl={session.useCase === "abm" ? previewLogoUrl(session, "target") : undefined}
-            accent
-          />
-        </div>
-        <span className="ceremonyKicker">{copy.kicker}</span>
-        <h2 id="reveal-ceremony-title">{copy.headline}</h2>
-        <p id="reveal-ceremony-summary">{copy.summary}</p>
-        <div className="ceremonyReceipts" aria-label="Completed build layers">
-          {copy.receipts.map(({ number, label }, index) => (
-            <span key={number} style={{ "--receipt-index": index } as CSSProperties}>
-              <i>{number}</i><strong>{label}</strong><Check size={14} />
-            </span>
-          ))}
-        </div>
-        <button type="button" className="ceremonySkip" onClick={onDismiss}>Explore the experience<ArrowRight size={17} /></button>
-        <span className="ceremonyFootnote">Private until you save it</span>
-      </div>
-      <span className="ceremonyTimer" aria-hidden="true"><i /></span>
-    </section>
   );
 }
 
@@ -1893,22 +1866,19 @@ export function TryMeNowApp() {
   const [connectionError, setConnectionError] = useState("");
   const [showSignals, setShowSignals] = useState(false);
   const [showProcess, setShowProcess] = useState(false);
-  const [showRevealCeremony, setShowRevealCeremony] = useState(false);
-  const [showEditBrief, setShowEditBrief] = useState(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showAnalyticsPanel, setShowAnalyticsPanel] = useState(false);
   const [showAnalyticsToast, setShowAnalyticsToast] = useState(false);
+  const [pdfUpload, setPdfUpload] = useState<PdfUploadFeedback>(idlePdfUpload);
   const [ctaValue, setCtaValue] = useState<CtaValue>({ type: "meeting", label: "Book a meeting", style: "solid" });
   const [claimEmail, setClaimEmail] = useState("");
   const [claimStatus, setClaimStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [claimError, setClaimError] = useState("");
-  const [briefDraft, setBriefDraft] = useState<Record<string, string>>({});
-  const [editingBlockId, setEditingBlockId] = useState<SessionExperienceBlockControl["id"]>();
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([]);
   const [revealedAt, setRevealedAt] = useState<number>();
   const startedDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
-  const ceremonySession = useRef<string | undefined>(undefined);
+  const analyticsPromptedSession = useRef<string | undefined>(undefined);
   const ctaSessionSignature = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const patchRequestRef = useRef(0);
@@ -1923,20 +1893,17 @@ export function TryMeNowApp() {
     setConnectionError("");
     setClientEvents([]);
     setRevealedAt(undefined);
-    setShowRevealCeremony(false);
-    setShowEditBrief(false);
     setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
     setShowAnalyticsToast(false);
+    setPdfUpload(idlePdfUpload);
     setCtaValue({ type: "meeting", label: "Book a meeting", style: "solid" });
     setClaimEmail("");
     setClaimStatus("idle");
     setClaimError("");
-    setBriefDraft({});
-    setEditingBlockId(undefined);
     startedDomain.current = undefined;
     revealTracked.current = false;
-    ceremonySession.current = undefined;
+    analyticsPromptedSession.current = undefined;
     ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
     track("use_case_selected", { useCase: selected });
@@ -1951,29 +1918,21 @@ export function TryMeNowApp() {
     setConnectionError("");
     setShowSignals(false);
     setShowProcess(false);
-    setShowRevealCeremony(false);
-    setShowEditBrief(false);
     setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
     setShowAnalyticsToast(false);
+    setPdfUpload(idlePdfUpload);
     setCtaValue({ type: "meeting", label: "Book a meeting", style: "solid" });
     setClaimEmail("");
     setClaimStatus("idle");
     setClaimError("");
-    setBriefDraft({});
-    setEditingBlockId(undefined);
     setClientEvents([]);
     setRevealedAt(undefined);
     startedDomain.current = undefined;
     revealTracked.current = false;
-    ceremonySession.current = undefined;
+    analyticsPromptedSession.current = undefined;
     ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
-  }, []);
-
-  const closeEditBrief = useCallback(() => {
-    setShowEditBrief(false);
-    setEditingBlockId(undefined);
   }, []);
 
   const closeAnalyticsPanel = useCallback(() => setShowAnalyticsPanel(false), []);
@@ -2064,20 +2023,16 @@ export function TryMeNowApp() {
     void recordPreviewSignal(session.id, "preview-opened", "experience-preview").catch(() => undefined);
   }, [session]);
 
-  const hasExperience = Boolean(session?.experience);
-  const ceremonySessionId = session?.id;
   useEffect(() => {
-    if (!hasExperience || !ceremonySessionId || ceremonySession.current === ceremonySessionId) return;
-    ceremonySession.current = ceremonySessionId;
-    const holdTime = ceremonyDuration(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    if (holdTime === 0) return;
-    const openTimer = window.setTimeout(() => setShowRevealCeremony(true), 0);
-    const closeTimer = window.setTimeout(() => setShowRevealCeremony(false), holdTime);
-    return () => {
-      window.clearTimeout(openTimer);
-      window.clearTimeout(closeTimer);
-    };
-  }, [ceremonySessionId, hasExperience]);
+    if (!session?.experience || analyticsPromptedSession.current === session.id) return;
+    const timer = window.setTimeout(() => {
+      if (analyticsPromptedSession.current === session.id) return;
+      analyticsPromptedSession.current = session.id;
+      setShowAnalyticsToast(true);
+      track("analytics_prompt_shown", { useCase: session.useCase, timing: "mid-preview" });
+    }, 18_000);
+    return () => window.clearTimeout(timer);
+  }, [session?.experience, session?.id, session?.useCase]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -2099,8 +2054,7 @@ export function TryMeNowApp() {
         "signature_select",
         "question_select",
         "section_view",
-        "fullscreen_change",
-        "editable_block_select"
+        "fullscreen_change"
       ]);
       if (typeof event.data.action !== "string" || !allowedActions.has(event.data.action)) return;
       const payload = event.data.payload && typeof event.data.payload === "object"
@@ -2115,15 +2069,17 @@ export function TryMeNowApp() {
         signature_select: "You selected a starting point",
         question_select: "You explored a meeting question",
         section_view: "You reached a new section",
-        fullscreen_change: "You changed the preview view",
-        editable_block_select: "You selected an editable block"
+        fullscreen_change: "You changed the preview view"
       };
       const label = labels[event.data.action] || "You explored the experience";
       const next = { action: event.data.action, label, at: Date.now() };
       setClientEvents((current) => {
         const last = current[current.length - 1];
         if (last && last.action === next.action && last.label === next.label && next.at - last.at < 500) return current;
-        if (event.data.action !== "section_view") setShowAnalyticsToast(true);
+        if (event.data.action !== "section_view") {
+          analyticsPromptedSession.current = session.id;
+          setShowAnalyticsToast(true);
+        }
         return [...current.slice(-11), next];
       });
       const elementId = [payload.blockId, payload.ctaId, payload.sectionId, payload.targetId, payload.lensId]
@@ -2143,31 +2099,10 @@ export function TryMeNowApp() {
         if (event.data.action === "section_view") persistedSectionSignals.current.add(sectionSignalKey);
         void recordPreviewSignal(session.id, serverEvent, elementId).catch(() => undefined);
       }
-
-      if (event.data.action === "editable_block_select" && typeof payload.blockId === "string") {
-        const rawBlockId = payload.blockId;
-        const broadBlockId: SessionExperienceBlockControl["id"] = rawBlockId.startsWith("hero")
-          ? "hero"
-          : rawBlockId.startsWith("thesis")
-            ? "thesis"
-            : rawBlockId.startsWith("lens")
-              ? "decision-lenses"
-              : rawBlockId.startsWith("question")
-                ? "guided-questions"
-                : "closing";
-        const existing = session.blockControls?.find((control) => control.id === broadBlockId);
-        setEditingBlockId(broadBlockId);
-        setBriefDraft({
-          headline: existing?.headline || "",
-          body: existing?.body || "",
-          ctaLabel: existing?.ctaLabel || (broadBlockId === "closing" ? ctaValue.label : "")
-        });
-        setShowEditBrief(true);
-      }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [ctaValue.label, session]);
+  }, [session]);
 
   const patchAnswers = async (patch: SessionAnswers) => {
     if (!session) return;
@@ -2225,87 +2160,16 @@ export function TryMeNowApp() {
     });
   };
 
-  const openBlockEditor = (blockId: SessionExperienceBlockControl["id"]) => {
-    const existing = session?.blockControls?.find((control) => control.id === blockId);
-    setEditingBlockId(blockId);
-    setBriefDraft({
-      headline: existing?.headline || "",
-      body: existing?.body || "",
-      ctaLabel: existing?.ctaLabel || (blockId === "closing" ? ctaValue.label : "")
-    });
-    setShowEditBrief(true);
-  };
-
-  const saveBriefEdit = async () => {
-    if (!session) return;
-    if (editingBlockId) {
-      const existing = session.blockControls?.find((control) => control.id === editingBlockId);
-      const headline = briefDraft.headline?.trim();
-      const body = briefDraft.body?.trim();
-      const ctaLabel = briefDraft.ctaLabel?.trim();
-      await patchWorkspace({
-        blockControls: [{
-          id: editingBlockId,
-          visible: existing?.visible ?? true,
-          locked: existing?.locked ?? false,
-          headline: headline && headline.length >= 4 ? headline : undefined,
-          body: body && body.length >= 8 ? body : undefined,
-          ctaLabel: ctaLabel && ctaLabel.length >= 2 ? ctaLabel : undefined
-        }]
-      });
-    } else {
-      await patchWorkspace({
-        answers: {
-          audience: briefDraft.audience?.trim() || session.answers.audience,
-          customAudience: undefined,
-          objective: briefDraft.objective?.trim() || session.answers.objective,
-          messageBelief: briefDraft.belief?.trim() || undefined,
-          messageAction: briefDraft.action?.trim() || undefined
-        }
-      });
-    }
-    setShowEditBrief(false);
-    setEditingBlockId(undefined);
-  };
-
-  const createVariation = async (mode: "duplicate" | "version" = "version", openEditor = false) => {
-    if (!session) return;
-    setIsSaving(true);
-    setError("");
-    try {
-      const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}`, {
-        method: "POST",
-        body: JSON.stringify({ operation: "duplicate", mode, label: mode === "version" ? "Next version" : "Variation" })
-      });
-      setSession(result.session);
-      setAnswers(result.session.answers);
-      setClientEvents([]);
-      setRevealedAt(undefined);
-      revealTracked.current = false;
-      ceremonySession.current = undefined;
-      ctaSessionSignature.current = undefined;
-      if (openEditor) {
-        setBriefDraft({
-          audience: result.session.answers.customAudience || result.session.answers.audience || "",
-          objective: result.session.answers.objective || "",
-          belief: result.session.answers.messageBelief || "",
-          action: result.session.answers.messageAction || ""
-        });
-        setShowEditBrief(true);
-      }
-      track("experience_variation_created", { useCase: result.session.useCase, mode });
-    } catch (variationError) {
-      setError(variationError instanceof Error ? variationError.message : "We could not create that variation.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const uploadPdf = async (file: File) => {
     if (!session) return;
     const activeSession = session;
     setIsSaving(true);
     setError("");
+    setPdfUpload({
+      status: "uploading",
+      fileName: file.name,
+      message: "Checking the file, then uploading it securely."
+    });
     try {
       await validatePdfFile(file);
       const uploadId = crypto.randomUUID();
@@ -2324,6 +2188,12 @@ export function TryMeNowApp() {
           uploadId,
           originalName: file.name
         })
+      });
+
+      setPdfUpload({
+        status: "processing",
+        fileName: file.name,
+        message: "Upload complete. Extracting the document title and factual anchors now."
       });
 
       let processedSession: PublicTryMeSession | undefined;
@@ -2355,6 +2225,11 @@ export function TryMeNowApp() {
       const nextSession = await confirmHighConfidenceSource(processedSession);
       setSession(nextSession);
       setAnswers(nextSession.answers);
+      setPdfUpload({
+        status: "accepted",
+        fileName: file.name,
+        message: `${nextSession.answers.sourceTitle?.trim() || file.name} is ready and shaping the experience.`
+      });
       track("pdf_upload_completed", {
         useCase: activeSession.useCase,
         sizeBucket: uploadSizeBucket(file.size)
@@ -2363,6 +2238,11 @@ export function TryMeNowApp() {
       const requestId = await reportClientUploadFailure(activeSession.id, file, uploadError);
       const message = friendlyUploadError(uploadError);
       setError(requestId ? `${message} Reference: ${requestId.slice(0, 8)}.` : message);
+      setPdfUpload({
+        status: "error",
+        fileName: file.name,
+        message: requestId ? `${message} Reference: ${requestId.slice(0, 8)}.` : message
+      });
       track("pdf_upload_failed", {
         useCase: activeSession.useCase,
         code: uploadErrorCode(uploadError),
@@ -2407,12 +2287,8 @@ export function TryMeNowApp() {
     atLabel: new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(event.at),
     type: event.action === "cta_click" ? "cta" : event.action === "preview_viewed" ? "view" : "choice"
   }));
-  const latestAnalyticsSignal = [...analyticsSignals].reverse().find((signal) => signal.type !== "view");
-  const qualityChecks = session?.qualityReceipt?.checks ?? [];
-  const scoredQualityChecks = qualityChecks.filter((check) => check.status !== "not-applicable");
-  const personalizationScore = scoredQualityChecks.length
-    ? Math.round((scoredQualityChecks.reduce((score, check) => score + (check.status === "passed" ? 1 : check.status === "warning" ? 0.5 : 0), 0) / scoredQualityChecks.length) * 100)
-    : 86;
+  const latestAnalyticsSignal = [...analyticsSignals].reverse().find((signal) => signal.type !== "view")
+    ?? analyticsSignals.at(-1);
   const expiresLabel = session?.expiresAt
     ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(session.expiresAt))
     : "in 30 minutes";
@@ -2424,8 +2300,8 @@ export function TryMeNowApp() {
     <>
     <main
       className={`appShell ${isReveal ? "revealMode" : ""}`}
-      aria-hidden={showSignals || showProcess || showRevealCeremony || showEditBrief || showSavePrompt || showAnalyticsPanel ? true : undefined}
-      inert={showSignals || showProcess || showRevealCeremony || showEditBrief || showSavePrompt || showAnalyticsPanel ? true : undefined}
+      aria-hidden={showSignals || showProcess || showSavePrompt || showAnalyticsPanel ? true : undefined}
+      inert={showSignals || showProcess || showSavePrompt || showAnalyticsPanel ? true : undefined}
     >
       <header className="siteHeader">
         <Link href="/" aria-label="Folloze Try Me Now home"><Image src="/brand/folloze-logo.svg" width={101} height={25} alt="Folloze" priority /><span>Try Me Now</span></Link>
@@ -2469,7 +2345,7 @@ export function TryMeNowApp() {
             <div className="guidedWorkspaceInner">
               <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
               <InstantBrandLockStrip
-                status={!session.brand ? "scanning" : session.brand.source === "fallback" ? "fallback" : "locked"}
+                status={!session.brand ? "scanning" : session.stages.brand.status === "fallback" || session.brand.readiness?.status === "incomplete" ? "fallback" : "locked"}
                 brand={session.brand ? {
                   companyName: session.brand.companyName,
                   domain: session.brand.domain,
@@ -2478,15 +2354,22 @@ export function TryMeNowApp() {
                   primaryColor: session.brand.primaryColor,
                   accentColor: session.brand.accentColor,
                   surfaceColor: session.brand.surfaceColor,
-                  source: session.brand.source
+                  source: session.brand.source,
+                  readiness: session.brand.readiness
                 } : { companyName: displayNameFromDomain(session.companyDomain), domain: session.companyDomain }}
                 onInspect={() => setShowProcess(true)}
               />
               <ConversationThread session={session} onRestart={resetExperience} />
+              {pdfUpload.status !== "idle" && (
+                <div className="pdfUploadGlobalStatus">
+                  <PdfUploadProgress feedback={pdfUpload} />
+                </div>
+              )}
               <ProgressiveQuestions
                 session={session}
                 answers={answers}
                 isSaving={isSaving}
+                pdfUpload={pdfUpload}
                 onPatch={patchAnswers}
                 onWorkspacePatch={patchWorkspace}
                 onUpload={uploadPdf}
@@ -2495,6 +2378,7 @@ export function TryMeNowApp() {
                 session={session}
                 answers={answers}
                 isSaving={isSaving}
+                pdfUpload={pdfUpload}
                 onPatch={patchAnswers}
                 onUpload={uploadPdf}
               />
@@ -2560,8 +2444,20 @@ export function TryMeNowApp() {
               <div className="previewControlBar">
                 <div className="desktopPreviewLabel">
                   <Globe2 size={16} aria-hidden="true" />
-                  <span><strong>Interactive desktop preview</strong><small>Scroll inside the page to explore the full experience.</small></span>
+                  <span><strong>Interactive desktop preview</strong><small>One continuous preview. Scroll inside to explore the buyer journey.</small></span>
                 </div>
+                <button
+                  className="previewAnalyticsButton"
+                  type="button"
+                  onClick={() => {
+                    analyticsPromptedSession.current = session.id;
+                    setShowAnalyticsToast(false);
+                    setShowAnalyticsPanel(true);
+                    track("analytics_panel_opened", { useCase: session.useCase, source: "preview-toolbar" });
+                  }}
+                >
+                  <Gauge size={16} />See live engagement<span>{Math.max(analyticsSignals.length, 1)}</span>
+                </button>
               </div>
               <div className="desktopPreviewShell">
                 <AssemblyPreview session={session} iframeRef={previewFrameRef} />
@@ -2577,7 +2473,7 @@ export function TryMeNowApp() {
               />
               {session.status !== "claimed" && (
                 <details className="experienceControlDeck">
-                  <summary><span><Sparkles size={17} />Tune this experience</span><small>Copy, CTA, assets, and sections</small><ChevronDown size={16} /></summary>
+                  <summary><span><Sparkles size={17} />Tune this experience</span><small>Tone, visual direction, and CTA treatment</small><ChevronDown size={16} /></summary>
                   <div className="experienceControlBody">
                     <ToneChips
                       label="Rewrite the message"
@@ -2619,57 +2515,8 @@ export function TryMeNowApp() {
                       onClick={() => void saveCreativeDirection()}
                     >
                       {isSaving ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}
-                      Apply CTA treatment
+                      Apply creative direction
                     </button>
-                    {Boolean(session.availableAssets?.length) && (
-                      <AssetPicker
-                        assets={(session.availableAssets ?? []).map((asset) => ({
-                          id: asset.id,
-                          name: asset.label,
-                          type: asset.kind.includes("logo") ? "logo" : "image",
-                          thumbnailUrl: asset.url,
-                          detail: asset.source === "target" ? "Account signal" : "Seller brand"
-                        }))}
-                        selectedIds={answers.selectedAssetIds ?? []}
-                        onToggle={(id, selected) => {
-                          const current = new Set(answers.selectedAssetIds ?? []);
-                          if (selected) current.add(id); else current.delete(id);
-                          void patchWorkspace({ answers: { selectedAssetIds: [...current] } });
-                        }}
-                      />
-                    )}
-                    <div className="blockControlStack">
-                      {([
-                        ["hero", "Hero", "Opening promise, supporting line, and primary action."],
-                        ["thesis", "Campaign thesis", "The reason this audience should care now."],
-                        ["decision-lenses", "Decision paths", "The interactive routes buyers can choose."],
-                        ["guided-questions", "Guided questions", "Prompts that turn content into a conversation."],
-                        ["closing", "Next step", "The closing case and conversion path."]
-                      ] as const).map(([id, label, description]) => {
-                        const control = session.blockControls?.find((candidate) => candidate.id === id);
-                        return (
-                          <ExperienceBlockControlPanel
-                            key={id}
-                            blockId={id}
-                            label={label}
-                            description={description}
-                            locked={control?.locked}
-                            onEdit={() => openBlockEditor(id)}
-                            onLockChange={(_, locked) => void patchWorkspace({
-                              blockControls: [{
-                                id,
-                                visible: control?.visible ?? true,
-                                locked,
-                                eyebrow: control?.eyebrow,
-                                headline: control?.headline,
-                                body: control?.body,
-                                ctaLabel: control?.ctaLabel
-                              }]
-                            })}
-                          />
-                        );
-                      })}
-                    </div>
                   </div>
                 </details>
               )}
@@ -2682,63 +2529,6 @@ export function TryMeNowApp() {
                 Explore the full experience<ArrowRight size={16} />
               </a>
             </div>
-            <aside className="revealRail">
-              {session.status === "claimed" ? (
-                <SavedExperienceCockpit
-                  title={session.useCase === "abm"
-                    ? `${brandNameFor(session)} for ${targetNameFor(session)} is live.`
-                    : session.useCase === "campaign"
-                      ? `${brandNameFor(session)} campaign is live.`
-                      : `${brandNameFor(session)} content experience is live.`}
-                  url={session.liveUrl || session.temporaryUrl}
-                  updatedLabel={`Saved ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(session.cockpit?.savedAt || session.claimedAt || session.updatedAt))}`}
-                  metrics={[
-                    { label: "Quality", value: personalizationScore, detail: "Personalization score" },
-                    { label: "Signals", value: session.cockpit?.previewInteractions ?? session.previewAnalytics?.totalInteractions ?? clientEvents.length, detail: "Preview interactions" },
-                    { label: "Version", value: `v${session.cockpit?.versionNumber ?? session.lineage?.versionNumber ?? 1}`, detail: `Revision ${session.cockpit?.artifactRevision ?? session.experience?.artifactRevision ?? 1}` }
-                  ]}
-                  onOpen={() => window.open(session.liveUrl || session.temporaryUrl, "_blank", "noopener,noreferrer")}
-                  onCopy={() => void navigator.clipboard.writeText(session.liveUrl || session.temporaryUrl)}
-                  onEdit={() => void createVariation("version", true)}
-                />
-              ) : null}
-              <FollozeValueReceipt
-                companyName={session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session)}
-                audienceLabel={audienceFor(session)}
-                objectiveLabel={session.answers.objective || "one clear next step"}
-                interactionCount={Math.max(clientEvents.length - 1, 0)}
-                onOpenSignals={() => {
-                  setShowAnalyticsPanel(true);
-                  track("value_receipt_signals_opened", { useCase: session.useCase });
-                }}
-              />
-              <PersonalizationQualityReceipt
-                score={personalizationScore}
-                companyName={session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session)}
-                layers={qualityChecks.length ? qualityChecks.map((check) => ({
-                  id: check.id,
-                  label: check.label,
-                  detail: check.detail,
-                  status: check.status === "passed"
-                    ? "strong"
-                    : check.status === "warning"
-                      ? "partial"
-                      : check.status === "not-applicable"
-                        ? "not-applicable"
-                        : "missing"
-                })) : revealCopy.receipts.slice(0, 4).map((receipt) => ({
-                  id: receipt.number,
-                  label: receipt.label,
-                  detail: "Applied to this generated experience.",
-                  status: "strong" as const
-                }))}
-              />
-              <div className="signalTeaser"><Gauge size={22} /><h3>Now watch buyer intent become visible.</h3><p>Choose a path or CTA in the preview. Folloze will turn that interaction into a live engagement signal.</p><button type="button" onClick={() => { setShowAnalyticsPanel(true); track("signal_preview_opened"); }}>Open engagement signals<ArrowRight size={16} /></button></div>
-              <div className="revealReceipt revealMiniReceipt">
-                <span className="sectionKicker">Built from real signals</span>
-                <div>{revealCopy.receipts.map(({ number, label }) => <span key={number}><i>{number}</i>{label}<Check size={13} /></span>)}</div>
-              </div>
-            </aside>
           </div>
           <div className="revealFooter"><span>{session.status === "claimed" ? "Saved URL" : "Temporary URL"}</span><code>{session.liveUrl || session.temporaryUrl}</code><span>{session.status === "claimed" ? "Saved" : "Expires 30 minutes after generation"}</span></div>
         </section>
@@ -2747,24 +2537,6 @@ export function TryMeNowApp() {
       {showProcess && session && <MobileProcessDialog session={session} onClose={() => setShowProcess(false)} />}
       {showSignals && revealedAt && <SignalDrawer events={clientEvents} revealedAt={revealedAt} onClose={() => setShowSignals(false)} />}
     </main>
-    <EditBriefDrawer
-      open={showEditBrief}
-      title={editingBlockId ? `Edit the ${editingBlockId.replaceAll("-", " ")} block` : "Edit the live brief"}
-      fields={editingBlockId ? [
-        { id: "headline", label: "Headline override", value: briefDraft.headline || "", hint: "Leave blank to let Folloze regenerate this block." },
-        { id: "body", label: "Supporting copy override", value: briefDraft.body || "", hint: "Use at least eight characters for an override." },
-        ...(editingBlockId === "closing" ? [{ id: "ctaLabel", label: "CTA label", value: briefDraft.ctaLabel || "" }] : [])
-      ] : [
-        { id: "audience", label: "Audience", value: briefDraft.audience || "" },
-        { id: "objective", label: "Objective", value: briefDraft.objective || "" },
-        { id: "belief", label: "What should they believe?", value: briefDraft.belief || "" },
-        { id: "action", label: "What should they do next?", value: briefDraft.action || "" }
-      ]}
-      saving={isSaving}
-      onFieldChange={(id, value) => setBriefDraft((current) => ({ ...current, [id]: value }))}
-      onSave={() => void saveBriefEdit()}
-      onClose={closeEditBrief}
-    />
     {showSavePrompt && session && session.status !== "claimed" && (
       <SaveExperienceDialog
         open
@@ -2785,7 +2557,6 @@ export function TryMeNowApp() {
       audienceLabel={answers.customAudience || answers.audience}
       onClose={closeAnalyticsPanel}
     />
-    {showRevealCeremony && session?.experience && <RevealCeremony session={session} onDismiss={() => setShowRevealCeremony(false)} />}
     </>
   );
 }

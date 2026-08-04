@@ -227,7 +227,7 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(stored?.experience?.html).toContain('data-cta-style="outline"');
   });
 
-  it("renders selected assets, block overrides, the quality receipt, and canonical geometry into the regenerated preview", async () => {
+  it("renders selected assets and block overrides inside the selected campaign template without buyer-facing QA chrome", async () => {
     const pending = session({ id: "workspace-render-controls" });
     pending.answers = {
       ...pending.answers,
@@ -271,9 +271,9 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(stored?.experience?.html).not.toContain(
       "https://jitterbit.com/selected-platform-visual.jpg"
     );
-    expect(stored?.experience?.html).toContain("data-quality-receipt");
+    expect(stored?.experience?.html).not.toContain("data-quality-receipt");
     expect(stored?.experience?.html).toContain('data-layout-variant="standard"');
-    expect(stored?.experience?.html).toContain('data-wireframe="canonical-desktop-experience"');
+    expect(stored?.experience?.html).toContain('data-wireframe="product-launch-landing-page"');
     expect(stored?.qualityReceipt?.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "cta", status: "passed" })])
     );

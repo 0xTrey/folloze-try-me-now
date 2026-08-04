@@ -13,6 +13,19 @@ type PdfTitleSignals = {
 
 const genericMetadataTitle = /^(?:untitled|document|microsoft word|powerpoint presentation|adobe indesign|uploaded (?:pdf|document))$/i;
 const nonTitleLine = /^(?:page\s+\d+|\d+|https?:\/\/|www\.|prepared(?:\s+for)?\s*:|copyright\b|all rights reserved\b)/i;
+const genericFilenameTitle = /^(?:brief|document|download|file|pdf|report|scan|source)(?:\s+\d+)?$/i;
+const filenameAcronyms = new Map([
+  ["ai", "AI"],
+  ["api", "API"],
+  ["apis", "APIs"],
+  ["b2b", "B2B"],
+  ["crm", "CRM"],
+  ["erp", "ERP"],
+  ["it", "IT"],
+  ["mcp", "MCP"],
+  ["roi", "ROI"],
+  ["saas", "SaaS"]
+]);
 
 function cleanCandidate(value: string): string {
   return value
@@ -146,6 +159,46 @@ export async function extractPdfDocumentTitle(
   }
 }
 
-export function pdfTitleFallback(): string {
-  return "Uploaded document";
+/**
+ * Last-resort label for image-only or metadata-poor PDFs. This never exposes
+ * the raw filename. It removes transport/version noise and turns the remaining
+ * semantic words into a readable title so the buyer never sees "Uploaded
+ * document" as if it were the asset's name.
+ */
+export function inferPdfTitleFromFilename(originalName: string): string | undefined {
+  let decoded = originalName;
+  try {
+    decoded = decodeURIComponent(originalName);
+  } catch {
+    decoded = originalName;
+  }
+  const stem = decoded
+    .split(/[\\/]/)
+    .at(-1)
+    ?.replace(/\.(?:pdf|docx?|pptx?)$/i, "")
+    .replace(/^\s*(?:19|20)\d{2}[\s._-]+/, "")
+    .replace(/^\s*(?:download|document|ebook|e-book|ebk|whitepaper|wp)[\s._-]+/i, "")
+    .replace(/[._-]+/g, " ")
+    .replace(/\b(?:final|copy|draft|rev(?:ision)?\s*\d+|v\d+(?:\.\d+)*)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!stem || genericFilenameTitle.test(stem) || !/[\p{L}\p{N}]/u.test(stem)) return undefined;
+
+  const title = stem
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => {
+      const normalized = word.toLocaleLowerCase();
+      return filenameAcronyms.get(normalized)
+        ?? `${normalized.charAt(0).toLocaleUpperCase()}${normalized.slice(1)}`;
+    })
+    .join(" ")
+    .slice(0, 140)
+    .trim();
+
+  return title.length >= 4 && !genericFilenameTitle.test(title) ? title : undefined;
+}
+
+export function pdfTitleFallback(originalName: string): string {
+  return inferPdfTitleFromFilename(originalName) ?? "Source document";
 }

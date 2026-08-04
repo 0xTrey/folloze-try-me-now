@@ -6,6 +6,7 @@ import {
   narrativeProfileFor,
   withBrandIdentity
 } from "@/lib/brand-intelligence";
+import { assessBrandReadiness } from "@/lib/brand-readiness";
 import { config } from "@/lib/config";
 import {
   buildExperienceSpec,
@@ -61,6 +62,12 @@ import type {
 } from "@/lib/types";
 import { assertBusinessEmail, maskEmail, normalizeDomain } from "@/lib/validation";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
+
+// The model may use nearly the full configured 58-second deadline. Keep the
+// lease and stale-at threshold comfortably beyond that work so a slow, valid
+// generation cannot be duplicated by recovery polling.
+const STORY_GENERATION_LEASE_SECONDS = 90;
+const STORY_GENERATION_STALE_MS = STORY_GENERATION_LEASE_SECONDS * 1_000;
 
 function opaqueId(): string {
   return randomBytes(24).toString("base64url");
@@ -729,7 +736,18 @@ function completedLogoResolution(profile: BrandProfile): BrandProfile {
         inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
         selectedScore: profile.diagnostics?.logo.selectedScore,
         resolutionComplete: true
-      }
+      },
+      palette: profile.diagnostics?.palette
+        ? { ...profile.diagnostics.palette, resolutionComplete: true }
+        : {
+            strategy: "fallback",
+            confidence: "low",
+            candidateCount: profile.colors.length,
+            semanticCandidateCount: 0,
+            rejectedCandidateCount: 0,
+            gradientCandidateCount: 0,
+            resolutionComplete: true
+          }
     }
   };
 }
@@ -808,6 +826,7 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
     const harvested = await harvestBrand(expectedDomain);
     const trusted = trustedBrandProfile(harvested, expectedDomain);
     const profile = brandWithSessionLogoDelivery(id, "seller", trusted.profile);
+    const readiness = profile.readiness ?? assessBrandReadiness(profile);
     await updateSession(id, (session) => {
       if (
         session.companyDomain !== expectedDomain ||
@@ -819,13 +838,17 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
       session.audienceSuggestions = audienceSuggestionsFor(profile, session.targetBrand);
       syncExperienceFoundation(session);
       session.stages.brand = {
-        status: trusted.usedFallback ? "fallback" : "complete",
+        status: trusted.usedFallback || readiness.status !== "ready" ? "fallback" : "complete",
         startedAt: session.stages.brand.startedAt,
         completedAt: new Date().toISOString(),
         detail: trusted.usedFallback
           ? "The harvested identity did not match the submitted domain. Confirm the safe fallback before sharing."
-          : "Brand found.",
-        artifact: `${profile.companyName} · ${profile.colors.slice(0, 4).join(" · ") || "brand fallback"}`
+          : readiness.status === "ready"
+            ? "Official identity, logo, and semantic palette found."
+            : `Brand evidence is incomplete: ${readiness.reasons.join(" ")}`,
+        artifact: readiness.status === "ready"
+          ? `${profile.companyName} · official logo · ${profile.colors.slice(0, 4).join(" · ")}`
+          : `${profile.companyName} · review brand evidence`
       };
       appendEvent(session, "brand_harvest_completed", {
         attemptId,
@@ -834,12 +857,14 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
         identityFallback: trusted.usedFallback,
         durationMs: durationSince(session.stages.brand.startedAt),
         logoStrategy: profile.diagnostics?.logo.strategy ?? (profile.logoUrl ? "remote-profile" : "none"),
-        logoAvailable: Boolean(profile.logoUrl),
+        logoAvailable: Boolean(profile.logoUrl || profile.portableLogo),
         logoCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
         inlineLogoCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
         stylesheetAttempted: profile.diagnostics?.stylesheetAttempted ?? 0,
         stylesheetSucceeded: profile.diagnostics?.stylesheetSucceeded ?? 0,
-        colorCount: profile.colors.length
+        colorCount: profile.colors.length,
+        brandReadiness: readiness.status,
+        paletteConfidence: profile.diagnostics?.palette?.confidence ?? "unknown"
       });
       if (trusted.usedFallback) {
         appendEvent(session, "brand_identity_rejected", { domain: expectedDomain });
@@ -954,6 +979,7 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
     const harvested = await harvestBrand(expectedDomain);
     const trusted = trustedBrandProfile(harvested, expectedDomain);
     const profile = brandWithSessionLogoDelivery(id, "target", trusted.profile);
+    const readiness = profile.readiness ?? assessBrandReadiness(profile);
     await updateSession(id, (session) => {
       if (
         session.answers.targetDomain !== expectedDomain ||
@@ -972,11 +998,17 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
         startedAt: session.stages.audience.startedAt,
         completedAt: session.answers.audience ? new Date().toISOString() : undefined,
         detail: session.answers.audience
-          ? "Audience and account context aligned."
-          : `Account context found for ${profile.companyName}.`,
+          ? readiness.status === "ready"
+            ? "Audience and account context aligned."
+            : "Audience selected; brand evidence still needs review."
+          : readiness.status === "ready"
+            ? `Account context found for ${profile.companyName}.`
+            : `Account context found for ${profile.companyName}; brand evidence is incomplete.`,
         artifact: session.answers.audience
           ? `${session.answers.customAudience || session.answers.audience} · ${profile.companyName}`
-          : `${profile.companyName} · public account context ready`
+          : readiness.status === "ready"
+            ? `${profile.companyName} · public account context ready`
+            : `${profile.companyName} · public account context captured · brand review needed`
       };
       appendEvent(session, "target_harvest_completed", {
         domain: expectedDomain,
@@ -986,12 +1018,14 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
         identityFallback: trusted.usedFallback,
         durationMs: durationSince(session.stages.audience.startedAt),
         logoStrategy: profile.diagnostics?.logo.strategy ?? (profile.logoUrl ? "remote-profile" : "none"),
-        logoAvailable: Boolean(profile.logoUrl),
+        logoAvailable: Boolean(profile.logoUrl || profile.portableLogo),
         logoCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
         inlineLogoCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
         stylesheetAttempted: profile.diagnostics?.stylesheetAttempted ?? 0,
         stylesheetSucceeded: profile.diagnostics?.stylesheetSucceeded ?? 0,
-        colorCount: profile.colors.length
+        colorCount: profile.colors.length,
+        brandReadiness: readiness.status,
+        paletteConfidence: profile.diagnostics?.palette?.confidence ?? "unknown"
       });
       if (trusted.usedFallback) {
         appendEvent(session, "target_identity_rejected", { domain: expectedDomain });
@@ -1582,7 +1616,7 @@ export async function runStoryStage(id: string): Promise<void> {
     ) return;
   }
 
-  const lease = await acquireSessionLease(id, "generation", 60);
+  const lease = await acquireSessionLease(id, "generation", STORY_GENERATION_LEASE_SECONDS);
   if (!lease) return;
   let shouldRetry = false;
   try {
@@ -1613,7 +1647,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     }
     if (
       session.stages.story.status === "running" &&
-      !isStale(session.stages.story.startedAt, 60_000)
+      !isStale(session.stages.story.startedAt, STORY_GENERATION_STALE_MS)
     ) {
       return session;
     }

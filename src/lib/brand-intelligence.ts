@@ -3,6 +3,7 @@ import type {
   EntityIdentity,
   IntelligenceConfidence
 } from "@/lib/types";
+import { withBrandReadiness } from "@/lib/brand-readiness";
 
 export type BrandCategory =
   | "buyer-experience"
@@ -178,10 +179,10 @@ export function withBrandIdentity(
   expectedDomain = profile.domain,
   userConfirmed = false
 ): BrandProfile {
-  return {
+  return withBrandReadiness({
     ...profile,
     identity: assessBrandIdentity(profile, expectedDomain, userConfirmed)
-  };
+  });
 }
 
 const profiles: Record<BrandCategory, CategoryProfile> = {

@@ -23,7 +23,7 @@ vi.mock("@/lib/orchestrator", () => ({
 
 vi.mock("@/lib/pdf-title", () => ({
   extractPdfDocumentTitle: vi.fn(),
-  pdfTitleFallback: vi.fn(() => "Uploaded document")
+  pdfTitleFallback: vi.fn(() => "Source document")
 }));
 
 vi.mock("@/lib/rate-limit", async (importOriginal) => {

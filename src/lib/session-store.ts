@@ -297,7 +297,15 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
           primaryColor: brand.primaryColor,
           accentColor: brand.accentColor,
           surfaceColor: brand.surfaceColor,
-          source: brand.source
+          source: brand.source,
+          ...(brand.readiness
+            ? {
+                readiness: {
+                  ...brand.readiness,
+                  reasons: [...brand.readiness.reasons]
+                }
+              }
+            : {})
         }
       : undefined;
   const publicStage = (stage: TryMeSession["stages"][keyof TryMeSession["stages"]]) => ({

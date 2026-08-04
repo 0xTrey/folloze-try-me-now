@@ -1,4 +1,5 @@
 import { hasRemoteBrandHarvester } from "@/lib/config";
+import { withBrandReadiness } from "@/lib/brand-readiness";
 import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
 import { logServerError } from "@/lib/http";
 import {
@@ -373,6 +374,7 @@ function extractPalette(html: string, css: string): {
   primaryColor: string;
   accentColor: string;
   surfaceColor: string;
+  diagnostics: NonNullable<NonNullable<BrandProfile["diagnostics"]>["palette"]>;
 } {
   const source = css.trim() || html;
   const counts = new Map<string, number>();
@@ -406,6 +408,10 @@ function extractPalette(html: string, css: string): {
 
   const stateToken = /(^|[-_])(success|danger|error|warning|info|disabled|visited)([-_]|$)/;
   const componentToken = /(^|[-_])(swiper|slick|owl|recaptcha)([-_]|$)/;
+  const frameworkToken =
+    /(^|[-_])(bs|bootstrap|wp|wordpress|tw|tailwind|mdc|material|fa|fontawesome|hubspot|hsf)([-_]|$)/;
+  const genericSelector =
+    /(?:^|[\s>+~,])(?:\.btn(?:[-_:]|\b)|\.alert(?:[-_:]|\b)|\.form-control\b|\.modal(?:[-_:]|\b)|\.dropdown(?:[-_:]|\b)|\.tooltip(?:[-_:]|\b)|\.popover(?:[-_:]|\b)|\.swiper(?:[-_:]|\b)|\.slick(?:[-_:]|\b)|\.owl(?:[-_:]|\b)|\.wp-(?:block|element|site)|\.hs-(?:form|button)|\.fa(?:[-_:]|\b)|\.g-recaptcha\b)/i;
   const stateOnlyColors = new Set(
     variables
       .filter(
@@ -420,13 +426,66 @@ function extractPalette(html: string, css: string): {
       )
       .map(({ color }) => color)
   );
+  const frameworkOnlyColors = new Set(
+    variables
+      .filter(
+        ({ name, color }) =>
+          frameworkToken.test(name) &&
+          !variables.some(
+            (candidate) => candidate.color === color && !frameworkToken.test(candidate.name)
+          )
+      )
+      .map(({ color }) => color)
+  );
+
+  const ruleCandidates = [...css.matchAll(/([^{}]{1,260})\{([^{}]{0,2400})\}/g)]
+    .flatMap((match) => {
+      const selector = match[1].trim();
+      const body = match[2];
+      if (
+        !selector ||
+        selector.startsWith("@") ||
+        genericSelector.test(selector) ||
+        /(?:^|[-_])(swiper|slick|owl|recaptcha|bootstrap|fontawesome)(?:$|[-_])/i.test(selector)
+      ) return [];
+      const declarationBody = body.replace(/--[a-z0-9_-]+\s*:\s*[^;}{]+;?/gi, "");
+      const heroOrBrand = /hero|masthead|site[-_ ]?header|brand|identity|headline|heading|navigation|navbar|primary[-_ ]?button|cta/i.test(selector);
+      const bodyOrText = /(?:^|[\s>,])(?:html|body|h[1-3]|p)(?:$|[\s.:#\[])/i.test(selector) ||
+        /shell|headline|heading|title|copy|text/i.test(selector);
+      const gradient = /(?:linear|radial|conic)-gradient\s*\(/i.test(declarationBody);
+      return [...declarationBody.matchAll(/#[0-9a-f]{3,6}\b/gi)]
+        .map((colorMatch) => normalizeHex(colorMatch[0]))
+        .filter((color): color is string => Boolean(color))
+        .map((color) => ({ color, heroOrBrand, bodyOrText, gradient, selector }));
+    });
+  const ruleColorSet = new Set(ruleCandidates.map(({ color }) => color));
+  const sourceOwnedVariables = variables.filter(
+    ({ name }) =>
+      !stateToken.test(name) &&
+      !componentToken.test(name) &&
+      !frameworkToken.test(name)
+  );
+  const gradientVariableColors = [...rawVariables.entries()]
+    .filter(
+      ([name, value]) =>
+        !frameworkToken.test(name) &&
+        !componentToken.test(name) &&
+        /gradient|brand|hero|radiant|flame|electric|energy/i.test(name) &&
+        /(?:linear|radial|conic)-gradient\s*\(/i.test(value)
+    )
+    .flatMap(([, value]) =>
+      [...value.matchAll(/#[0-9a-f]{3,6}\b/gi)]
+        .map((match) => normalizeHex(match[0]))
+        .filter((color): color is string => Boolean(color))
+    );
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([color]) => color);
   const meaningful = ranked.filter(
     (color) =>
       !["#000000", "#FFFFFF", "#F5F5F5", "#333333"].includes(color) &&
-      !stateOnlyColors.has(color)
+      !stateOnlyColors.has(color) &&
+      (!frameworkOnlyColors.has(color) || ruleColorSet.has(color))
   );
-  const semanticPrimary = variables
+  const semanticPrimary = sourceOwnedVariables
     .filter(
       ({ name, color }) =>
         !stateToken.test(name) &&
@@ -467,10 +526,11 @@ function extractPalette(html: string, css: string): {
     if (/cta|button.*background/.test(name)) return 145;
     if (/(^|[-_])primary([-_]|$)/.test(name)) return 130;
     if (/highlight/.test(name)) return 120;
+    if (/radiant|flame|electric|energy|vivid/.test(name)) return 115;
     if (/^palette[-_]/.test(name)) return 90 + Math.min(usage, 12) * 5;
     return 0;
   };
-  const semanticAccentEntry = variables
+  const semanticAccentEntry = sourceOwnedVariables
     .filter(
       ({ name, color, usage }) =>
         !stateToken.test(name) &&
@@ -483,7 +543,38 @@ function extractPalette(html: string, css: string): {
     )
     .sort((a, b) => accentScore(b.name, b.usage) - accentScore(a.name, a.usage))[0];
 
-  const provisionalPrimary = semanticPrimary ?? "#1C293F";
+  const rulePrimary = ruleCandidates
+    .filter(
+      ({ color, bodyOrText }) =>
+        bodyOrText &&
+        luminance(color) < 0.32 &&
+        saturation(color) > 0.08 &&
+        !stateOnlyColors.has(color) &&
+        !frameworkOnlyColors.has(color)
+    )
+    .sort((a, b) => Number(b.heroOrBrand) - Number(a.heroOrBrand))[0]?.color;
+  const ruleAccent = ruleCandidates
+    .filter(
+      ({ color, heroOrBrand, gradient, selector }) =>
+        (heroOrBrand || gradient || /button|link/i.test(selector)) &&
+        saturation(color) > 0.34 &&
+        luminance(color) > 0.04 &&
+        luminance(color) < 0.8 &&
+        !stateOnlyColors.has(color) &&
+        !frameworkOnlyColors.has(color)
+    )
+    .sort((a, b) =>
+      Number(b.gradient) * 30 + Number(b.heroOrBrand) * 20 -
+      Number(a.gradient) * 30 - Number(a.heroOrBrand) * 20
+    )[0]?.color;
+  const gradientAccent = gradientVariableColors.find(
+    (color) =>
+      saturation(color) > 0.34 &&
+      luminance(color) > 0.04 &&
+      luminance(color) < 0.8
+  );
+
+  const provisionalPrimary = semanticPrimary ?? rulePrimary ?? "#1C293F";
   const vividCandidates = meaningful.filter(
     (color) =>
       color !== provisionalPrimary &&
@@ -502,6 +593,8 @@ function extractPalette(html: string, css: string): {
   const accentColor = (semanticAccentStrength >= 170 ? semanticAccent : undefined) ??
     metadataAccent ??
     semanticAccent ??
+    gradientAccent ??
+    ruleAccent ??
     (css.trim() ? vividCandidates[0] : metadataAccent ?? vividCandidates[0]) ??
     meaningful.find((color) => color !== provisionalPrimary) ??
     "#5B5BFF";
@@ -509,13 +602,57 @@ function extractPalette(html: string, css: string): {
     (color) => color !== accentColor && luminance(color) < 0.28 && saturation(color) > 0.08
   );
   const primaryColor = semanticPrimary ??
+    rulePrimary ??
     (css.trim() && variables.length === 0 ? darkCandidates[0] : undefined) ??
     "#1C293F";
   const surfaceColor = ranked.find((color) => luminance(color) > 0.88) ?? "#FFFFFF";
   const colors = [primaryColor, accentColor, surfaceColor, ...meaningful]
     .filter((color, index, values) => values.indexOf(color) === index)
     .slice(0, 8);
-  return { colors, primaryColor, accentColor, surfaceColor };
+  const semanticColors = new Set([
+    ...sourceOwnedVariables.map(({ color }) => color),
+    ...gradientVariableColors,
+    ...ruleColorSet,
+    ...(metadataAccent ? [metadataAccent] : [])
+  ]);
+  const semanticCandidateCount = semanticColors.size;
+  const rejectedCandidateCount = new Set([...stateOnlyColors, ...frameworkOnlyColors]).size;
+  const gradientCandidateCount = new Set([
+    ...gradientVariableColors,
+    ...ruleCandidates.filter(({ gradient }) => gradient).map(({ color }) => color)
+  ]).size;
+  const hasSemanticRoles = Boolean(
+    semanticPrimary || semanticAccent || gradientAccent || rulePrimary || ruleAccent
+  );
+  const hasUsefulMetadata = Boolean(metadataAccent);
+  const confidence = hasSemanticRoles && semanticCandidateCount >= 2
+    ? "high"
+    : hasSemanticRoles
+      ? "medium"
+      : "low";
+  const strategy = semanticPrimary || semanticAccent || gradientAccent
+    ? "semantic-tokens"
+    : rulePrimary || ruleAccent
+      ? "source-rules"
+      : hasUsefulMetadata
+        ? "metadata"
+        : meaningful.length
+          ? "frequency"
+          : "fallback";
+  return {
+    colors,
+    primaryColor,
+    accentColor,
+    surfaceColor,
+    diagnostics: {
+      strategy,
+      confidence,
+      candidateCount: counts.size,
+      semanticCandidateCount,
+      rejectedCandidateCount,
+      gradientCandidateCount
+    }
+  };
 }
 
 const navigationOnlyPublicTopic = /^(?:(?:explore|view|see|browse)\s+)?(?:(?:all|our|featured|latest)\s+)?(?:products?(?:\s+(?:and|&)\s+services?)?|services?|solutions?|resources?|support|partners?|customers?|customer stories|company|about(?:\s+us)?|contact(?:\s+us)?|news|events?|careers?|industries|use cases?|why\s+[\p{L}\p{N}.&'-]+|take your next steps?|quick links?|resources and legal)$/iu;
@@ -698,6 +835,12 @@ function stylesheetUrls(html: string, base: URL): string[] {
     .map((tag) => absoluteHttpsUrl(attr(tag, "href"), base))
     .filter((url): url is string => Boolean(url))
     .filter((url, index, values) => values.indexOf(url) === index)
+    .filter(
+      (url) =>
+        !/(?:\/plugins?\/|\/vendor\/|bootstrap|fontawesome|translatepress|recaptcha|swiper|slick|owl[-_.]|cookie|gravityforms|hubspot)/i.test(
+          new URL(url).pathname
+        )
+    )
     .sort((a, b) => {
       const score = (url: string) =>
         (/app|main|global|base|theme|home|clientlib-react(?:[.-]|$)/i.test(url) ? 50 : 0) -
@@ -745,7 +888,10 @@ export function extractFastBrandProfile(input: {
   const topics = extractPublicTopics(input.html);
   const cleanDescription = description ? stripTags(description).slice(0, 500) : undefined;
   const publicContext = [cleanDescription, ...topics].filter(Boolean).join(" ").slice(0, 2400) || undefined;
-  const palette = extractPalette(input.html, input.css ?? "");
+  const { diagnostics: paletteDiagnostics, ...palette } = extractPalette(
+    input.html,
+    input.css ?? ""
+  );
   const fonts = extractFontProfile(input.html, input.css ?? "");
   const fontBase = finalUrl;
   return {
@@ -765,7 +911,10 @@ export function extractFastBrandProfile(input: {
     bodyFontUrl: absoluteHttpsUrl(fonts.bodyFontUrl, fontBase),
     sourceUrl: finalUrl.toString(),
     source: "fast-extractor",
-    diagnostics: { logo: logoDecision.receipt }
+    diagnostics: {
+      logo: logoDecision.receipt,
+      palette: paletteDiagnostics
+    }
   };
 }
 
@@ -781,6 +930,12 @@ function normalizeRemoteProfile(value: unknown, domain: string): BrandProfile | 
   const profile = (record.profile && typeof record.profile === "object" ? record.profile : record) as Record<string, unknown>;
   const colors = strings(profile.colors, 8).map(normalizeHex).filter((color): color is string => Boolean(color));
   const logoUrl = typeof profile.logoUrl === "string" ? profile.logoUrl : undefined;
+  const hasDistinctRemotePalette = colors.length >= 3 &&
+    !(
+      colors[0] === "#1C293F" &&
+      colors[1] === "#5B5BFF" &&
+      colors[2] === "#FFFFFF"
+    );
   return {
     domain,
     companyName: typeof profile.companyName === "string" ? profile.companyName : titleCaseDomain(domain),
@@ -807,6 +962,14 @@ function normalizeRemoteProfile(value: unknown, domain: string): BrandProfile | 
         imageCandidateCount: 0,
         rejectedImageCount: 0,
         inlineSvgCandidateCount: 0
+      },
+      palette: {
+        strategy: "remote-profile",
+        confidence: hasDistinctRemotePalette ? "medium" : "low",
+        candidateCount: colors.length,
+        semanticCandidateCount: hasDistinctRemotePalette ? colors.length : 0,
+        rejectedCandidateCount: 0,
+        gradientCandidateCount: 0
       }
     }
   };
@@ -836,17 +999,31 @@ function mergeVerifiedDesign(
     bodyFontUrl: verified.bodyFontUrl ?? profile.bodyFontUrl,
     sourceUrl: profile.sourceUrl || verified.sourceUrl,
     source: "brand-harvester",
-    diagnostics: verified.logoUrl
-      ? {
-          ...profile.diagnostics,
-          logo: {
+    diagnostics: {
+      ...profile.diagnostics,
+      logo: verified.logoUrl
+        ? {
             strategy: "verified-profile",
             imageCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
             rejectedImageCount: profile.diagnostics?.logo.rejectedImageCount ?? 0,
             inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0
           }
-        }
-      : profile.diagnostics,
+        : profile.diagnostics?.logo ?? {
+            strategy: "none",
+            imageCandidateCount: 0,
+            rejectedImageCount: 0,
+            inlineSvgCandidateCount: 0
+          },
+      palette: {
+        strategy: "verified-profile",
+        confidence: "high",
+        candidateCount: verified.colors.length,
+        semanticCandidateCount: verified.colors.length,
+        rejectedCandidateCount: 0,
+        gradientCandidateCount: 0,
+        resolutionComplete: true
+      }
+    },
     ...(presentation ? { presentation: { ...presentation } } : {})
   } as PresentedBrandProfile;
 }
@@ -866,7 +1043,7 @@ function cachedBrandProfile(domain: string): BrandProfile | undefined {
 }
 
 function cacheBrandProfile(domain: string, profile: BrandProfile): BrandProfile {
-  const completed: BrandProfile = {
+  const completed = withBrandReadiness({
     ...profile,
     logoSourceUrl: profile.logoSourceUrl ?? profile.logoUrl,
     diagnostics: {
@@ -878,9 +1055,20 @@ function cacheBrandProfile(domain: string, profile: BrandProfile): BrandProfile 
         inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
         selectedScore: profile.diagnostics?.logo.selectedScore,
         resolutionComplete: true
-      }
+      },
+      palette: profile.diagnostics?.palette
+        ? { ...profile.diagnostics.palette, resolutionComplete: true }
+        : {
+            strategy: "fallback",
+            confidence: "low",
+            candidateCount: profile.colors.length,
+            semanticCandidateCount: 0,
+            rejectedCandidateCount: 0,
+            gradientCandidateCount: 0,
+            resolutionComplete: true
+          }
     }
-  };
+  });
   if (process.env.NODE_ENV !== "test") {
     if (brandProfileCache.size >= BRAND_PROFILE_CACHE_MAX) {
       const oldest = brandProfileCache.keys().next().value as string | undefined;
@@ -1024,15 +1212,165 @@ function profileWithBrandfetchLogo(
         imageCandidateCount: base.diagnostics?.logo.imageCandidateCount ?? 0,
         rejectedImageCount: base.diagnostics?.logo.rejectedImageCount ?? 0,
         inlineSvgCandidateCount: base.diagnostics?.logo.inlineSvgCandidateCount ?? 0
+      },
+      palette: profile?.diagnostics?.palette ?? {
+        strategy: "brandfetch",
+        confidence: result.colors.length >= 3 ? "high" : result.colors.length >= 2 ? "medium" : "low",
+        candidateCount: result.colors.length,
+        semanticCandidateCount: result.colors.length,
+        rejectedCandidateCount: 0,
+        gradientCandidateCount: 0
       }
     }
   };
+}
+
+function evidenceConfidenceScore(value: "high" | "medium" | "low" | undefined): number {
+  return value === "high" ? 3 : value === "medium" ? 2 : value === "low" ? 1 : 0;
+}
+
+function logoEvidenceScore(profile: BrandProfile): number {
+  if (profile.portableLogo) return 6;
+  switch (profile.diagnostics?.logo.strategy) {
+    case "verified-profile":
+      return 5;
+    case "semantic-image":
+      return 4;
+    case "remote-profile":
+      return 3;
+    case "favicon":
+      return 1;
+    default:
+      return profile.logoUrl ? 2 : 0;
+  }
+}
+
+function mergePublicBrandEvidence(
+  candidate: BrandProfile,
+  extracted: BrandProfile,
+  verified: PresentedBrandProfile | undefined
+): BrandProfile {
+  const useExtractedLogo = logoEvidenceScore(extracted) > logoEvidenceScore(candidate);
+  const useExtractedPalette =
+    evidenceConfidenceScore(extracted.diagnostics?.palette?.confidence) >=
+      evidenceConfidenceScore(candidate.diagnostics?.palette?.confidence) &&
+    extracted.diagnostics?.palette?.strategy !== "fallback";
+  const merged = {
+    ...candidate,
+    companyName: extracted.companyName || candidate.companyName,
+    title: extracted.title ?? candidate.title,
+    description: extracted.description ?? candidate.description,
+    publicContext: extracted.publicContext ?? candidate.publicContext,
+    publicTopics: extracted.publicTopics.length
+      ? extracted.publicTopics
+      : candidate.publicTopics,
+    logoUrl: useExtractedLogo ? extracted.logoUrl : candidate.logoUrl,
+    logoSourceUrl: useExtractedLogo
+      ? extracted.logoSourceUrl
+      : candidate.logoSourceUrl,
+    portableLogo: useExtractedLogo
+      ? extracted.portableLogo
+      : candidate.portableLogo,
+    imageUrls: [...new Set([...extracted.imageUrls, ...candidate.imageUrls])].slice(0, 6),
+    colors: useExtractedPalette ? extracted.colors : candidate.colors,
+    primaryColor: useExtractedPalette ? extracted.primaryColor : candidate.primaryColor,
+    accentColor: useExtractedPalette ? extracted.accentColor : candidate.accentColor,
+    surfaceColor: useExtractedPalette ? extracted.surfaceColor : candidate.surfaceColor,
+    displayFontFamily: extracted.displayFontFamily ?? candidate.displayFontFamily,
+    bodyFontFamily: extracted.bodyFontFamily ?? candidate.bodyFontFamily,
+    displayFontUrl: extracted.displayFontUrl ?? candidate.displayFontUrl,
+    bodyFontUrl: extracted.bodyFontUrl ?? candidate.bodyFontUrl,
+    sourceUrl: extracted.sourceUrl,
+    diagnostics: {
+      ...candidate.diagnostics,
+      logo: useExtractedLogo
+        ? extracted.diagnostics!.logo
+        : candidate.diagnostics!.logo,
+      palette: useExtractedPalette
+        ? extracted.diagnostics?.palette
+        : candidate.diagnostics?.palette,
+      stylesheetAttempted: extracted.diagnostics?.stylesheetAttempted,
+      stylesheetSucceeded: extracted.diagnostics?.stylesheetSucceeded
+    }
+  } satisfies BrandProfile;
+  return mergeVerifiedDesign(merged, verified);
+}
+
+async function copyOfficialRemoteLogo(profile: BrandProfile): Promise<BrandProfile> {
+  if (
+    profile.portableLogo ||
+    !profile.logoUrl ||
+    profile.diagnostics?.logo.strategy === "favicon"
+  ) return profile;
+  try {
+    const asset = await fetchPinnedPublicBytes(profile.logoUrl, {
+      timeoutMs: 5_000,
+      maxBytes: 350_000,
+      maxRedirects: 2,
+      headers: {
+        Accept: "image/svg+xml,image/png,image/webp,image/jpeg,image/avif,image/gif;q=0.8,*/*;q=0.1"
+      }
+    });
+    if (asset.status !== 200 || asset.truncated) return profile;
+    const portableLogo = portableBrandLogoFromBytes(asset.bytes, "official-remote-asset");
+    if (!portableLogo) return profile;
+    return {
+      ...profile,
+      logoSourceUrl: profile.logoSourceUrl ?? profile.logoUrl,
+      portableLogo,
+      diagnostics: {
+        ...profile.diagnostics,
+        logo: {
+          strategy: "official-remote-portable",
+          imageCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
+          rejectedImageCount: profile.diagnostics?.logo.rejectedImageCount ?? 0,
+          inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
+          selectedScore: profile.diagnostics?.logo.selectedScore
+        }
+      }
+    };
+  } catch {
+    // The session image route can still proxy the bounded official URL. Do not
+    // log or expose the upstream asset URL because it may contain transient CDN data.
+    return profile;
+  }
 }
 
 export async function harvestBrand(domain: string): Promise<BrandProfile> {
   const cached = cachedBrandProfile(domain);
   if (cached) return cached;
   const verified = verifiedBrandProfileFor(domain);
+  // Run the deterministic public-page pass alongside an optional browser
+  // harvester. This keeps richer semantic color evidence inside the existing
+  // experience-generation window instead of stacking two network budgets.
+  const publicEvidencePromise = (async (): Promise<
+    { profile: BrandProfile } | { error: unknown }
+  > => {
+    try {
+      const { text: html, finalUrl } = await fetchPublicText(
+        new URL(`https://${domain}`),
+        AbortSignal.timeout(8_500)
+      );
+      const styles = await Promise.allSettled(
+        stylesheetUrls(html, finalUrl).map(async (url) =>
+          (await fetchPublicText(new URL(url), AbortSignal.timeout(2_500))).text
+        )
+      );
+      const css = styles
+        .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled")
+        .map((result) => result.value)
+        .join("\n");
+      const profile = extractFastBrandProfile({ domain, html, css, finalUrl });
+      profile.diagnostics = {
+        ...profile.diagnostics!,
+        stylesheetAttempted: styles.length,
+        stylesheetSucceeded: styles.filter((result) => result.status === "fulfilled").length
+      };
+      return { profile };
+    } catch (error) {
+      return { error };
+    }
+  })();
   let candidate: BrandProfile | undefined;
   if (hasRemoteBrandHarvester && process.env.BRAND_HARVESTER_URL) {
     try {
@@ -1075,41 +1413,18 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
   }
 
   let publicFetchError: unknown;
-  try {
-    if (!candidate?.logoUrl && !candidate?.portableLogo) {
-      const { text: html, finalUrl } = await fetchPublicText(
-        new URL(`https://${domain}`),
-        AbortSignal.timeout(8_500)
-      );
-      const styles = await Promise.allSettled(
-        stylesheetUrls(html, finalUrl).map(async (url) =>
-          (await fetchPublicText(new URL(url), AbortSignal.timeout(2_500))).text
-        )
-      );
-      const css = styles
-        .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled")
-        .map((result) => result.value)
-        .join("\n");
-      const extracted = extractFastBrandProfile({ domain, html, css, finalUrl });
-      extracted.diagnostics = {
-        ...extracted.diagnostics!,
-        stylesheetAttempted: styles.length,
-        stylesheetSucceeded: styles.filter((result) => result.status === "fulfilled").length
-      };
-      const mergedExtracted = mergeVerifiedDesign(extracted, verified);
-      candidate = candidate
-        ? {
-            ...candidate,
-            logoUrl: mergedExtracted.logoUrl,
-            logoSourceUrl: mergedExtracted.logoSourceUrl,
-            portableLogo: mergedExtracted.portableLogo,
-            diagnostics: mergedExtracted.diagnostics
-          }
-        : mergedExtracted;
-    }
-  } catch (error) {
-    publicFetchError = error;
-    logServerError(error, {
+  const publicEvidence = await publicEvidencePromise;
+  if ("profile" in publicEvidence) {
+    // Public HTML/CSS is useful even when a remote profile already supplied a
+    // logo. It supplies source-owned semantic colors and prevents a generic
+    // remote palette from overriding the same evidence used by ABM flows.
+    const extracted = publicEvidence.profile;
+    candidate = candidate
+      ? mergePublicBrandEvidence(candidate, extracted, verified)
+      : mergeVerifiedDesign(extracted, verified);
+  } else {
+    publicFetchError = publicEvidence.error;
+    logServerError(publicEvidence.error, {
       operation: "brand_harvest_public_fallback",
       code: verified ? "brand_harvest_verified_fallback" : "brand_harvest_failed",
       details: { domain }
@@ -1122,7 +1437,10 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     if (brandfetch) candidate = profileWithBrandfetchLogo(domain, candidate, brandfetch);
   }
 
-  if (candidate) return cacheBrandProfile(domain, candidate);
+  if (candidate) {
+    candidate = await copyOfficialRemoteLogo(candidate);
+    return cacheBrandProfile(domain, candidate);
+  }
   throw publicFetchError instanceof Error
     ? publicFetchError
     : new Error("The public brand profile could not be resolved.");
@@ -1157,6 +1475,15 @@ export function fallbackBrand(domain: string): BrandProfile {
           imageCandidateCount: 0,
           rejectedImageCount: 0,
           inlineSvgCandidateCount: 0
+        },
+        palette: {
+          strategy: "verified-profile",
+          confidence: "high",
+          candidateCount: verified.colors.length,
+          semanticCandidateCount: verified.colors.length,
+          rejectedCandidateCount: 0,
+          gradientCandidateCount: 0,
+          resolutionComplete: true
         }
       }
     };
@@ -1180,6 +1507,15 @@ export function fallbackBrand(domain: string): BrandProfile {
         imageCandidateCount: 0,
         rejectedImageCount: 0,
         inlineSvgCandidateCount: 0
+      },
+      palette: {
+        strategy: "fallback",
+        confidence: "low",
+        candidateCount: 0,
+        semanticCandidateCount: 0,
+        rejectedCandidateCount: 0,
+        gradientCandidateCount: 0,
+        resolutionComplete: true
       }
     }
   };

@@ -134,7 +134,22 @@ export interface PortableBrandLogo {
   encoding: "base64";
   bytesBase64: string;
   sha256: string;
-  source: "official-inline-svg" | "brandfetch";
+  source: "official-inline-svg" | "official-remote-asset" | "brandfetch";
+}
+
+export type BrandReadinessStatus = "ready" | "incomplete";
+
+/**
+ * A small, public-safe summary of the evidence behind a reconstructed brand.
+ * Raw asset URLs, copied logo bytes, and extraction diagnostics stay server-side.
+ */
+export interface BrandReadiness {
+  status: BrandReadinessStatus;
+  identityReady: boolean;
+  logoReady: boolean;
+  paletteReady: boolean;
+  sourceEvidenceReady: boolean;
+  reasons: string[];
 }
 
 export interface BrandProfile {
@@ -161,6 +176,7 @@ export interface BrandProfile {
   sourceUrl: string;
   source: "brand-harvester" | "fast-extractor" | "fallback";
   identity?: EntityIdentity;
+  readiness?: BrandReadiness;
   /** Server-only receipt explaining bounded brand and logo extraction decisions. */
   diagnostics?: {
     logo: {
@@ -169,6 +185,7 @@ export interface BrandProfile {
         | "favicon"
         | "inline-svg-portable"
         | "inline-svg-unportable"
+        | "official-remote-portable"
         | "brandfetch-portable"
         | "remote-profile"
         | "verified-profile"
@@ -178,6 +195,24 @@ export interface BrandProfile {
       inlineSvgCandidateCount: number;
       selectedScore?: number;
       /** True after all configured logo-resolution layers have been exhausted. */
+      resolutionComplete?: boolean;
+    };
+    palette?: {
+      strategy:
+        | "verified-profile"
+        | "semantic-tokens"
+        | "source-rules"
+        | "metadata"
+        | "frequency"
+        | "brandfetch"
+        | "remote-profile"
+        | "fallback";
+      confidence: IntelligenceConfidence;
+      candidateCount: number;
+      semanticCandidateCount: number;
+      rejectedCandidateCount: number;
+      gradientCandidateCount: number;
+      /** True after all configured palette-resolution layers have been exhausted. */
       resolutionComplete?: boolean;
     };
     stylesheetAttempted?: number;
@@ -242,7 +277,7 @@ export type PublicBrandProfile = Pick<
   | "accentColor"
   | "surfaceColor"
   | "source"
-  | "identity"
+  | "readiness"
 >;
 
 export interface ExperienceSection {

@@ -236,6 +236,9 @@ describe("guided campaign workspace", () => {
       />
     );
 
+    expect(screen.getByRole("heading", { name: "Add anything that should shape the result." })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Additional guidance or context type" })).toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText("Message or helpful context"), {
       target: { value: "Lead with the cost of disconnected buyer journeys." }
     });
@@ -273,7 +276,61 @@ describe("guided campaign workspace", () => {
     expect(screen.getByText("One source is already attached to this brief.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "PDF" }));
     expect(screen.getByText("One source is already attached")).toBeInTheDocument();
-    expect(document.querySelector('input[type="file"]')).toBeDisabled();
+    expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
+  });
+
+  it("makes PDF upload progress, acceptance, and errors unmistakable in the guided shell", () => {
+    const contentSession = {
+      ...readySession,
+      useCase: "content" as const,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {}
+    };
+    const props = {
+      session: contentSession,
+      answers: contentSession.answers,
+      isSaving: true,
+      onPatch: vi.fn().mockResolvedValue(undefined),
+      onWorkspacePatch: vi.fn().mockResolvedValue(undefined),
+      onUpload: vi.fn().mockResolvedValue(undefined)
+    };
+    const { rerender } = render(
+      <ProgressiveQuestions
+        {...props}
+        pdfUpload={{ status: "uploading", fileName: "platform-guide.pdf", message: "Checking the file, then uploading it securely." }}
+      />
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "PDF upload" }));
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Uploading securely");
+    expect(screen.getByText("Uploading platform-guide.pdf")).toBeInTheDocument();
+
+    rerender(
+      <ProgressiveQuestions
+        {...props}
+        isSaving={false}
+        pdfUpload={{ status: "error", fileName: "platform-guide.pdf", message: "Choose a PDF under 10 MB." }}
+      />
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Upload needs attention");
+    expect(screen.getAllByText("Choose a PDF under 10 MB.").length).toBeGreaterThan(0);
+
+    cleanup();
+    render(
+      <OptionalContextComposer
+        session={{ ...contentSession, answers: { sourceName: "platform-guide.pdf", sourceTitle: "Platform Guide" } }}
+        answers={{ sourceName: "platform-guide.pdf", sourceTitle: "Platform Guide" }}
+        isSaving={false}
+        pdfUpload={{ status: "accepted", fileName: "platform-guide.pdf", message: "Platform Guide is ready and shaping the experience." }}
+        onPatch={props.onPatch}
+        onUpload={props.onUpload}
+      />
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "PDF" }));
+    expect(screen.getByText("PDF accepted and added")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("PDF accepted");
+    expect(screen.queryByText("Choose PDF")).not.toBeInTheDocument();
   });
 
   it("shows the support reference when experience generation fails", () => {
