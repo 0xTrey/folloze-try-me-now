@@ -2013,6 +2013,11 @@ export function TryMeNowApp() {
   useEffect(() => {
     if (!session || session.status !== "preview_ready_unclaimed" || revealTracked.current) return;
     revealTracked.current = true;
+    // The guided form can be several viewports tall. When it is replaced by
+    // the preview, preserving that document offset drops the visitor into the
+    // middle or bottom of a brand-new experience and can look like a blank
+    // result. Start every first reveal at its headline.
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     const revealTime = Date.now();
     setRevealedAt(revealTime);
     track("experience_revealed", { useCase: session.useCase });
