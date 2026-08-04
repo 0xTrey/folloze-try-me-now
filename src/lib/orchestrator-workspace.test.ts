@@ -494,7 +494,7 @@ describe("session workspace foundation", () => {
       audience: "Operations leaders"
     });
     expect(stored?.answers.sourceName).toBeUndefined();
-    expect(stored?.answers.sourceTitle).toBeUndefined();
+    expect(stored?.answers.sourceTitle).toBe("New Report");
     expect(stored?.answers.sourceUploadId).toBeUndefined();
     expect(stored?.answers.sourceOpenAIFileId).toBeUndefined();
     expect(stored?.answers.sourceConfirmed).toBe(true);
