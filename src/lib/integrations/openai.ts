@@ -61,6 +61,8 @@ const sourceBoilerplate =
   /\b(skip to|cookie|privacy policy|terms of use|all rights reserved|sign in|log in|contact (?:us|support)|customer support|select language|request a demo|read more|main menu|navigation|subscribe|newsletter|accept all|manage preferences|ignore (?:all|any|previous)|system prompt|jailbreak)\b/i;
 const sourceMetaCopy =
   /\b(this (?:guide|ebook|report|article)|in this (?:guide|ebook|report|article)|learn how|discover how|download (?:the|this)|read (?:the|this)|explore how|see what|what (?:gartner|analysts?|experts?) (?:say|are saying))\b/i;
+const sourceTemplateMarkup =
+  /\{\{|\}\}|\[\[|\]\]|\|[a-z][a-z0-9_-]*\s*=|<\/?ref\b/i;
 
 function exactSourcePhrase(value: string, maxChars = 116): string | null {
   const normalized = value
@@ -71,6 +73,7 @@ function exactSourcePhrase(value: string, maxChars = 116): string | null {
     normalized.length < 28 ||
     sourceBoilerplate.test(normalized) ||
     sourceMetaCopy.test(normalized) ||
+    sourceTemplateMarkup.test(normalized) ||
     bannedCopy.test(normalized)
   ) {
     return null;

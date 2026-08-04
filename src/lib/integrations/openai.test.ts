@@ -402,6 +402,31 @@ describe("deterministic experience copy", () => {
     );
   });
 
+  it("rejects encyclopedia template markup before writing the content hero", () => {
+    const sourceContent = {
+      sourceUrl: "https://en.wikipedia.org/wiki/ServiceNow",
+      title: "ServiceNow",
+      description: undefined,
+      excerpt:
+        "2025 Annual Report (Form 10-K) |date=2026-01-29 |publisher=[[U.S. Securities and Exchange Commission]]. ServiceNow connects digital workflows across enterprise teams. Platform owners use governed workflows to coordinate work across systems."
+    };
+    const answers = {
+      sourceUrl: sourceContent.sourceUrl,
+      sourceTitle: "ServiceNow",
+      audience: "Data and AI platform leaders",
+      objective: "Increase content engagement"
+    };
+    const draft = deterministicDraft({
+      brand: jitterbit,
+      useCase: "content",
+      answers,
+      sourceContent
+    });
+
+    expect(draft.headline).toContain("Platform owners use governed workflows");
+    expect(JSON.stringify(draft)).not.toMatch(/\|date=|\|publisher=|\[\[/i);
+  });
+
   it("never exposes a promotional or truncated deterministic content headline", () => {
     const sourceContent = {
       sourceUrl: "https://example.com/ai-ipaas",
