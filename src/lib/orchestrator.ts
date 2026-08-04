@@ -128,15 +128,21 @@ function sourceFingerprintForAnswers(answers: SessionAnswers): string | undefine
 }
 
 function evidenceItemsFor(
+  useCase: UseCase,
+  sellerBrand: BrandProfile | undefined,
   targetBrand: BrandProfile | undefined,
   existing: SessionEvidenceItem[] = []
 ): SessionEvidenceItem[] {
+  const evidenceBrand = useCase === "abm" ? targetBrand : sellerBrand;
+  const entityRole: NonNullable<SessionEvidenceItem["entityRole"]> =
+    useCase === "abm" ? "target" : "seller";
   const priorDisposition = new Map(existing.map((item) => [item.id, item.disposition]));
-  return targetAccountEvidenceFor(targetBrand).map((item) => {
-    const id = stableId("evidence", targetBrand?.domain, item.type, item.text);
+  return targetAccountEvidenceFor(evidenceBrand).map((item) => {
+    const id = stableId("evidence", evidenceBrand?.domain, item.type, item.text);
     return {
       ...item,
       id,
+      entityRole,
       disposition: priorDisposition.get(id) ?? "available"
     };
   });
@@ -148,12 +154,20 @@ function audienceRecommendationsFor(
   target: BrandProfile | undefined,
   evidenceItems: SessionEvidenceItem[]
 ) {
-  const targetDomain = target?.domain.toLocaleLowerCase().replace(/^www\./, "");
+  const evidenceBrand = target ?? seller;
+  const evidenceDomain = evidenceBrand?.domain.toLocaleLowerCase().replace(/^www\./, "");
+  const expectedEntityRole: NonNullable<SessionEvidenceItem["entityRole"]> = target
+    ? "target"
+    : "seller";
   const usableEvidence = evidenceItems.filter((item) => {
-    if (item.disposition === "excluded" || !targetDomain) return false;
+    if (
+      item.disposition === "excluded" ||
+      item.entityRole !== expectedEntityRole ||
+      !evidenceDomain
+    ) return false;
     try {
       const host = new URL(item.sourceUrl).hostname.toLocaleLowerCase().replace(/^www\./, "");
-      return host === targetDomain || host.endsWith(`.${targetDomain}`);
+      return host === evidenceDomain || host.endsWith(`.${evidenceDomain}`);
     } catch {
       return false;
     }
@@ -161,6 +175,9 @@ function audienceRecommendationsFor(
   const sellerProfile = seller ? narrativeProfileFor(seller) : null;
   const targetIdentity = target
     ? target.identity ?? assessBrandIdentity(target, target.domain)
+    : undefined;
+  const sellerIdentity = seller
+    ? seller.identity ?? assessBrandIdentity(seller, seller.domain)
     : undefined;
   return suggestions.map((label, index) => {
     const evidence = usableEvidence[index % Math.max(usableEvidence.length, 1)];
@@ -176,19 +193,34 @@ function audienceRecommendationsFor(
         targetIdentity?.confirmationStatus === "confirmed" &&
         usableEvidence.length
     );
+    const sellerSpecific = Boolean(
+      seller &&
+        !target &&
+        seller.source !== "fallback" &&
+        sellerIdentity?.confirmationStatus === "confirmed" &&
+        usableEvidence.length
+    );
     const sellerMechanism = sellerProfile?.offerLabel.toLocaleLowerCase() ?? "offering";
     return {
       id: stableId("audience", seller?.domain, target?.domain, label),
       label,
       rationale: companySpecific
         ? `${target!.companyName}'s public focus: ${evidenceFocus}. That ${evidenceSignal || "operating context"} evidence makes this group relevant to evaluating ${seller!.companyName}'s ${sellerMechanism}.`
+        : sellerSpecific
+          ? `${seller!.companyName}'s public evidence: ${evidenceFocus}. That ${evidenceSignal || "operating context"} signal makes this group relevant to the ${sellerMechanism}.`
         : target
           ? `A role hypothesis for ${target.companyName}; confirm the account identity and public evidence before using it in the story.`
           : `A seller-category starting point until a target account and its public evidence are available.`,
       evidenceItemIds: evidence ? [evidence.id] : [],
-      confidence: companySpecific ? (usableEvidence.length >= 2 ? "high" : "medium") : "hypothesis",
-      source: companySpecific ? "seller-target-synthesis" : "seller-category-fallback",
-      confirmationStatus: companySpecific ? "confirmed" : "needs-confirmation",
+      confidence: companySpecific || sellerSpecific
+        ? (usableEvidence.length >= 2 ? "high" : "medium")
+        : "hypothesis",
+      source: companySpecific
+        ? "seller-target-synthesis"
+        : sellerSpecific
+          ? "seller-public-evidence"
+          : "seller-category-fallback",
+      confirmationStatus: companySpecific || sellerSpecific ? "confirmed" : "needs-confirmation",
       ...(target ? { targetName: target.companyName } : {}),
       ...(evidenceFocus ? { evidenceSummary: evidenceFocus } : {})
     } as const;
@@ -221,7 +253,12 @@ function assetsFor(brand: BrandProfile | undefined, target: BrandProfile | undef
 }
 
 function syncExperienceFoundation(session: TryMeSession): void {
-  session.evidenceItems = evidenceItemsFor(session.targetBrand, session.evidenceItems);
+  session.evidenceItems = evidenceItemsFor(
+    session.useCase,
+    session.brand,
+    session.targetBrand,
+    session.evidenceItems
+  );
   session.audienceRecommendations = audienceRecommendationsFor(
     session.audienceSuggestions,
     session.brand,
@@ -1081,6 +1118,35 @@ function sourceKindFor(session: TryMeSession): NonNullable<TryMeSession["sourceC
   return "public-account";
 }
 
+export function inferPublicSourceTitle(sourceUrl: string): string | undefined {
+  try {
+    const url = new URL(sourceUrl);
+    const segment = url.pathname.split("/").filter(Boolean).at(-1);
+    if (!segment) return undefined;
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      decoded = segment;
+    }
+    const cleaned = decoded
+      .replace(/\.[a-z0-9]{1,8}$/i, "")
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!cleaned || /^(?:index|home|default)$/i.test(cleaned)) return undefined;
+    return cleaned
+      .split(" ")
+      .map((word) => /^(?:ai|api|abm|roi|pdf)$/i.test(word)
+        ? word.toLocaleUpperCase()
+        : `${word.charAt(0).toLocaleUpperCase()}${word.slice(1)}`)
+      .join(" ")
+      .slice(0, 120);
+  } catch {
+    return undefined;
+  }
+}
+
 function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const patch = { ...input };
   const targetWasSupplied = Object.hasOwn(patch, "targetDomain");
@@ -1098,7 +1164,12 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const offerSourceUrlWasSupplied = Object.hasOwn(patch, "offerSourceUrl");
   const previousSourceFingerprint = sourceFingerprintForAnswers(session.answers);
   if (patch.targetDomain) patch.targetDomain = normalizeDomain(patch.targetDomain);
-  if (patch.sourceUrl) patch.sourceUrl = new URL(patch.sourceUrl).toString();
+  if (patch.sourceUrl) {
+    patch.sourceUrl = new URL(patch.sourceUrl).toString();
+    if (!sourceTitleWasSupplied) {
+      patch.sourceTitle = inferPublicSourceTitle(patch.sourceUrl);
+    }
+  }
   if (patch.offerSourceUrl) patch.offerSourceUrl = new URL(patch.offerSourceUrl).toString();
   if (
     patch.offerSourceConfirmed &&

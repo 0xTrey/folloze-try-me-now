@@ -313,8 +313,8 @@ describe("guided campaign workspace", () => {
         pdfUpload={{ status: "error", fileName: "platform-guide.pdf", message: "Choose a PDF under 10 MB." }}
       />
     );
-    expect(screen.getByRole("alert")).toHaveTextContent("Upload needs attention");
-    expect(screen.getAllByText("Choose a PDF under 10 MB.").length).toBeGreaterThan(0);
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose a PDF under 10 MB.");
+    expect(screen.getAllByText("Choose a PDF under 10 MB.")).toHaveLength(1);
 
     cleanup();
     render(
@@ -331,6 +331,40 @@ describe("guided campaign workspace", () => {
     expect(screen.getByText("PDF accepted and added")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("PDF accepted");
     expect(screen.queryByText("Choose PDF")).not.toBeInTheDocument();
+  });
+
+  it("keeps a failed PDF filename out of the public URL field", () => {
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    const contentSession = {
+      ...readySession,
+      useCase: "content" as const,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {}
+    };
+    render(
+      <ProgressiveQuestions
+        session={contentSession}
+        answers={contentSession.answers}
+        isSaving={false}
+        pdfUpload={{ status: "error", fileName: "campaign-builder-video-handoff.pdf", message: "Upload unavailable." }}
+        onPatch={vi.fn().mockResolvedValue(undefined)}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={onUpload}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "PDF upload" }));
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput!, {
+      target: {
+        files: [new File(["%PDF-test"], "campaign-builder-video-handoff.pdf", { type: "application/pdf" })]
+      }
+    });
+    expect(onUpload).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Public URL" }));
+    expect(screen.getByLabelText("Content URL")).toHaveValue("");
   });
 
   it("shows the support reference when experience generation fails", () => {

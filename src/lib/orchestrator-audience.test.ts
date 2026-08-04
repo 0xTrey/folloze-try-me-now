@@ -10,7 +10,7 @@ vi.mock("@/lib/integrations/brand-harvester", async (importOriginal) => {
 });
 
 import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
-import { patchSessionAnswers, runTargetBrandStage } from "@/lib/orchestrator";
+import { patchSessionAnswers, runBrandStage, runTargetBrandStage } from "@/lib/orchestrator";
 import { deleteSession, getSession, putSession } from "@/lib/session-store";
 import type { BrandProfile, TryMeSession } from "@/lib/types";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
@@ -86,6 +86,16 @@ describe("target-aware ABM audience orchestration", () => {
       expect(harvested?.audienceSuggestions.join(" ")).toMatch(
         /network|security|cloud|data center|resilien/i
       );
+      expect(harvested?.evidenceItems?.length).toBeGreaterThan(0);
+      expect(harvested?.evidenceItems?.every(({ entityRole }) => entityRole === "target")).toBe(
+        true
+      );
+      expect(
+        harvested?.audienceRecommendations?.every(
+          ({ source, evidenceItemIds }) =>
+            source === "seller-target-synthesis" && evidenceItemIds.length > 0
+        )
+      ).toBe(true);
       expect(harvested?.audienceRecommendations?.[0]?.rationale).toContain(
         "Cisco's public focus:"
       );
@@ -154,4 +164,79 @@ describe("target-aware ABM audience orchestration", () => {
       await deleteSession(id);
     }
   });
+});
+
+describe("seller-evidence audience orchestration", () => {
+  it.each(["campaign", "content"] as const)(
+    "grounds %s audiences in seller public evidence without inventing a target",
+    async (useCase) => {
+      const id = `seller-evidence-${useCase}`;
+      const seller = profile({
+        domain: "jitterbit.com",
+        companyName: "Jitterbit",
+        description:
+          "An integration, automation, API management, EDI, and application development platform.",
+        publicContext:
+          "Jitterbit helps organizations connect applications and automate business workflows.",
+        publicTopics: ["Application integration", "Workflow automation", "API management"]
+      });
+      const now = new Date().toISOString();
+      await putSession({
+        id,
+        editorTokenHash: "private-editor-hash",
+        useCase,
+        companyDomain: seller.domain,
+        status: "collecting",
+        createdAt: now,
+        updatedAt: now,
+        temporaryUrl: `https://example.com/e/${id}`,
+        revision: 1,
+        stages: {
+          brand: { status: "running", startedAt: now },
+          audience: { status: "running", startedAt: now },
+          story: { status: "pending" }
+        },
+        answers: {},
+        audienceSuggestions: [],
+        events: []
+      });
+      integrationMocks.harvestBrand.mockResolvedValueOnce(seller);
+
+      try {
+        await runBrandStage(id);
+        const harvested = await getSession(id);
+        const evidenceIds = new Set(harvested?.evidenceItems?.map(({ id }) => id));
+
+        expect(harvested?.targetBrand).toBeUndefined();
+        expect(harvested?.evidenceItems?.length).toBeGreaterThan(0);
+        expect(
+          harvested?.evidenceItems?.every(({ entityRole }) => entityRole === "seller")
+        ).toBe(true);
+        expect(
+          harvested?.evidenceItems?.every(
+            ({ sourceUrl }) => new URL(sourceUrl).hostname === seller.domain
+          )
+        ).toBe(true);
+        expect(harvested?.audienceRecommendations).toHaveLength(4);
+        expect(
+          harvested?.audienceRecommendations?.every(
+            ({ source }) => source === "seller-public-evidence"
+          )
+        ).toBe(true);
+        expect(
+          harvested?.audienceRecommendations?.every(
+            ({ evidenceItemIds }) =>
+              evidenceItemIds.length > 0 &&
+              evidenceItemIds.every((evidenceId) => evidenceIds.has(evidenceId))
+          )
+        ).toBe(true);
+        expect(harvested?.audienceRecommendations?.[0]?.rationale).toContain(
+          "Jitterbit's public evidence:"
+        );
+        expect(harvested?.audienceRecommendations?.[0]?.targetName).toBeUndefined();
+      } finally {
+        await deleteSession(id);
+      }
+    }
+  );
 });

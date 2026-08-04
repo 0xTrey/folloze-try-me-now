@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { finalizePdfSource, isGenerationReady } from "@/lib/orchestrator";
+import { finalizePdfSource, inferPublicSourceTitle, isGenerationReady } from "@/lib/orchestrator";
 import { deleteSession, getSession, putSession, toPublicSession } from "@/lib/session-store";
 import type { TryMeSession } from "@/lib/types";
 
@@ -31,6 +31,21 @@ describe("isGenerationReady", () => {
     expect(isGenerationReady("content", common)).toBe(false);
     expect(isGenerationReady("content", { ...common, sourceUrl: "https://example.com/report" })).toBe(true);
     expect(isGenerationReady("content", { ...common, sourceName: "report.pdf" })).toBe(true);
+  });
+});
+
+describe("inferPublicSourceTitle", () => {
+  it("turns a public page slug into a buyer-friendly source title", () => {
+    expect(
+      inferPublicSourceTitle("https://www.servicenow.com/products/now-platform.html")
+    ).toBe("Now Platform");
+    expect(inferPublicSourceTitle("https://example.com/reports/enterprise-ai-guide.pdf"))
+      .toBe("Enterprise AI Guide");
+  });
+
+  it("does not pretend a home page has a document title", () => {
+    expect(inferPublicSourceTitle("https://example.com/")).toBeUndefined();
+    expect(inferPublicSourceTitle("https://example.com/index.html")).toBeUndefined();
   });
 });
 

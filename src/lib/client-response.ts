@@ -110,6 +110,12 @@ export function friendlyUploadError(error: unknown): string {
   if (error instanceof ApiResponseError && error.code === "upload_processing_timeout") {
     return error.message;
   }
+  if (
+    error instanceof ApiResponseError &&
+    ["pdf_upload_unavailable", "pdf_upload_store_unsupported"].includes(error.code)
+  ) {
+    return error.message;
+  }
   return "We could not upload that PDF. Try again or choose another file.";
 }
 

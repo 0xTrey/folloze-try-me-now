@@ -325,7 +325,10 @@ export interface AudienceRecommendation {
   rationale: string;
   evidenceItemIds: string[];
   confidence: "high" | "medium" | "hypothesis";
-  source: "seller-category-fallback" | "seller-target-synthesis";
+  source:
+    | "seller-category-fallback"
+    | "seller-public-evidence"
+    | "seller-target-synthesis";
   confirmationStatus?: IntelligenceConfirmationStatus;
   targetName?: string;
   evidenceSummary?: string;
@@ -339,7 +342,7 @@ export interface SessionEvidenceItem {
   sourceUrl: string;
   signals: string[];
   disposition: "available" | "pinned" | "excluded";
-  entityRole?: "target";
+  entityRole?: "seller" | "target";
   confidence?: IntelligenceConfidence;
 }
 

@@ -153,6 +153,40 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.queryByText("Identity and brand matched")).not.toBeInTheDocument();
   });
 
+  it("does not call a completed fast-extractor brand preliminary or still scanning", () => {
+    render(
+      <InstantBrandLockStrip
+        status="locked"
+        brand={{
+          companyName: "Jitterbit",
+          domain: "jitterbit.com",
+          logoUrl: "/api/sessions/jitterbit/image/seller-logo",
+          colors: ["#1B3E51", "#F44414", "#FEFEFE"],
+          primaryColor: "#1B3E51",
+          accentColor: "#F44414",
+          surfaceColor: "#FEFEFE",
+          source: "fast-extractor",
+          readiness: {
+            status: "ready",
+            logoReady: true,
+            paletteReady: true,
+            sourceEvidenceReady: true,
+            reasons: []
+          }
+        }}
+      />
+    );
+
+    expect(screen.getByText("Identity and brand matched")).toBeInTheDocument();
+    expect(screen.getByText("Captured")).toBeInTheDocument();
+    expect(screen.getByText("Identity and brand matched").closest("section")).toHaveAttribute(
+      "data-brand-evidence",
+      "reviewed"
+    );
+    expect(screen.queryByText(/brand scan continuing/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Preliminary")).not.toBeInTheDocument();
+  });
+
   it("confirms source facts", () => {
     const confirm = vi.fn();
     const replace = vi.fn();

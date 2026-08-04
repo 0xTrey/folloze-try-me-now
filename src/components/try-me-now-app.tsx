@@ -1355,8 +1355,11 @@ export function ProgressiveQuestions({
   const [customAudience, setCustomAudience] = useState(answers.customAudience ?? "");
   const [selectedObjective, setSelectedObjective] = useState<string>();
   const textValue = fieldValues[questionKey] ?? "";
+  const sourceUrlValue = fieldValues["content-source-url"] ?? "";
   const setTextValue = (value: string) =>
     setFieldValues((current) => ({ ...current, [questionKey]: value }));
+  const setSourceUrlValue = (value: string) =>
+    setFieldValues((current) => ({ ...current, "content-source-url": value }));
   const questionCopy = getGuidedQuestionCopy(session);
 
   if (session.useCase === "abm" && !answers.targetDomain) {
@@ -1421,16 +1424,16 @@ export function ProgressiveQuestions({
           <button type="button" role="tab" id="source-tab-pdf" aria-controls="source-panel-pdf" aria-selected={sourceMode === "pdf"} className={sourceMode === "pdf" ? "isActive" : ""} onClick={() => setSourceMode("pdf")}>PDF upload</button>
         </div>
         {sourceMode === "url" ? (
-          <form className="sourceForm" role="tabpanel" id="source-panel-url" aria-labelledby="source-tab-url" onSubmit={(event) => { event.preventDefault(); void onPatch({ sourceUrl: textValue }); }}>
-            <label className="lineInput"><span>Content URL</span><div><ExternalLink size={19} /><input value={textValue} onChange={(event) => setTextValue(event.target.value)} placeholder="https://yourcompany.com/report" /></div></label>
-            <button className="buttonPrimary" disabled={!/^https:\/\//i.test(textValue.trim()) || isSaving}>Use this content<ArrowRight size={17} /></button>
+          <form className="sourceForm" role="tabpanel" id="source-panel-url" aria-labelledby="source-tab-url" onSubmit={(event) => { event.preventDefault(); void onPatch({ sourceUrl: sourceUrlValue.trim() }); }}>
+            <label className="lineInput"><span>Content URL</span><div><ExternalLink size={19} /><input value={sourceUrlValue} onChange={(event) => setSourceUrlValue(event.target.value)} placeholder="https://yourcompany.com/report" /></div></label>
+            <button className="buttonPrimary" disabled={!/^https:\/\//i.test(sourceUrlValue.trim()) || isSaving}>Use this content<ArrowRight size={17} /></button>
           </form>
         ) : (
           <label className={`uploadBox is-${pdfUpload.status}`} role="tabpanel" id="source-panel-pdf" aria-labelledby="source-tab-pdf" aria-busy={pdfUpload.status === "uploading" || pdfUpload.status === "processing" || undefined}>
             {pdfUpload.status === "accepted" ? <CircleCheck size={24} /> : pdfUpload.status === "error" ? <X size={24} /> : <FileText size={24} />}
             <strong>{pdfUpload.status === "uploading" ? `Uploading ${pdfUpload.fileName || "your PDF"}` : pdfUpload.status === "processing" ? `Reading ${pdfUpload.fileName || "your PDF"}` : pdfUpload.status === "accepted" ? "PDF accepted" : pdfUpload.status === "error" ? "That upload did not work" : "Drop in a PDF"}</strong>
-            <span>{pdfUpload.message || (isSaving ? "Uploading securely…" : "Up to 10 MB. The file is used only to build this experience.")}</span>
-            <PdfUploadProgress feedback={pdfUpload} />
+            <span role={pdfUpload.status === "error" ? "alert" : undefined}>{pdfUpload.message || (isSaving ? "Uploading securely…" : "Up to 10 MB. The file is used only to build this experience.")}</span>
+            {pdfUpload.status !== "error" && <PdfUploadProgress feedback={pdfUpload} />}
             <input
               type="file"
               accept="application/pdf,.pdf"
@@ -1439,7 +1442,6 @@ export function ProgressiveQuestions({
                 const file = event.currentTarget.files?.[0];
                 event.currentTarget.value = "";
                 if (file) {
-                  setFieldValues((current) => ({ ...current, "content-source": file.name }));
                   void onUpload(file);
                 }
               }}
@@ -2240,13 +2242,14 @@ export function TryMeNowApp() {
         sizeBucket: uploadSizeBucket(file.size)
       });
     } catch (uploadError) {
-      const requestId = await reportClientUploadFailure(activeSession.id, file, uploadError);
+      await reportClientUploadFailure(activeSession.id, file, uploadError);
       const message = friendlyUploadError(uploadError);
-      setError(requestId ? `${message} Reference: ${requestId.slice(0, 8)}.` : message);
       setPdfUpload({
         status: "error",
         fileName: file.name,
-        message: requestId ? `${message} Reference: ${requestId.slice(0, 8)}.` : message
+        message: activeSession.supportRef
+          ? `${message} Support reference: ${activeSession.supportRef}.`
+          : message
       });
       track("pdf_upload_failed", {
         useCase: activeSession.useCase,
@@ -2365,11 +2368,6 @@ export function TryMeNowApp() {
                 onInspect={() => setShowProcess(true)}
               />
               <ConversationThread session={session} onRestart={resetExperience} />
-              {pdfUpload.status !== "idle" && (
-                <div className="pdfUploadGlobalStatus">
-                  <PdfUploadProgress feedback={pdfUpload} />
-                </div>
-              )}
               <ProgressiveQuestions
                 session={session}
                 answers={answers}

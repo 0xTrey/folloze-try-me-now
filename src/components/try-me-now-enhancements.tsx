@@ -182,7 +182,6 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
   const palette = brandPaletteTokens(brand);
   const hasLogo = Boolean(brand?.logoUrl) && failedLogoUrl !== brand?.logoUrl;
   const isCaptured = status === "locked";
-  const isPreliminary = isCaptured && brand?.source === "fast-extractor";
   const needsReview = status === "fallback" || brand?.readiness?.status === "incomplete";
   const paletteKind = status === "scanning"
     ? "Detecting palette"
@@ -193,9 +192,7 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
     ? "Scanning public brand"
     : needsReview
       ? "Brand evidence needs review"
-      : isPreliminary
-        ? "Identity matched · brand scan continuing"
-        : "Identity and brand matched";
+      : "Identity and brand matched";
   const readinessReason = brand?.readiness?.reasons.filter(Boolean).slice(0, 2).join(" ");
   const stateDetail = status === "scanning"
     ? "Checking logo, palette, typography, and source."
@@ -206,9 +203,7 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
     ? "Needs review"
     : brand?.confidenceLabel || (status === "scanning"
       ? "Scanning"
-      : isPreliminary
-        ? "Preliminary"
-        : "Captured");
+      : "Captured");
   const stripStyle = {
     "--harvest-primary": palette.primary ?? "#1C293F",
     "--harvest-accent": palette.accent ?? "#D7DAE4",
@@ -221,7 +216,7 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
       className={classes(styles.brandStrip, styles[`brand${status}`])}
       style={stripStyle}
       aria-busy={status === "scanning"}
-      data-brand-evidence={needsReview ? "needs-review" : isPreliminary ? "extracted" : isCaptured ? "reviewed" : "scanning"}
+      data-brand-evidence={needsReview ? "needs-review" : isCaptured ? "reviewed" : "scanning"}
     >
       <span className={styles.brandMark}>
         {status === "scanning" ? (

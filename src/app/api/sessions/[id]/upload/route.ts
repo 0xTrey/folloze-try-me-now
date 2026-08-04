@@ -6,7 +6,7 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { config, hasOpenAI } from "@/lib/config";
+import { config, hasBlob, hasOpenAI } from "@/lib/config";
 import {
   apiError,
   type ErrorContext,
@@ -312,9 +312,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const response = await handleUpload({
-      request,
-      body: body as HandleUploadBody,
+    let response;
+    try {
+      response = await handleUpload({
+        request,
+        body: body as HandleUploadBody,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         await enforceRateLimit(`upload:${anonymousClientKey(request)}`, 8, 3600);
         if (sessionStoreMode === "upstash-redis") {
@@ -600,8 +602,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
             throw new HttpError(503, "blob_cleanup_pending", "Upload cleanup is still in progress.");
           }
         }
+        }
+      });
+    } catch (error) {
+      if (!hasBlob && !(error instanceof HttpError)) {
+        throw new HttpError(
+          503,
+          "pdf_upload_unavailable",
+          "PDF upload is temporarily unavailable. Use a public URL or try again later."
+        );
       }
-    });
+      throw error;
+    }
 
     return NextResponse.json(response, {
       headers: { ...noStoreHeaders, ...trace.complete(200) }
