@@ -113,7 +113,10 @@ const safeDetailKeys = new Set([
   "slot",
   "mode",
   "upstreamStatus",
-  "contentTypeHint"
+  "contentTypeHint",
+  "detectedKind",
+  "colorSpan",
+  "contrastPermille"
 ]);
 
 function isPrivateKey(key: string): boolean {

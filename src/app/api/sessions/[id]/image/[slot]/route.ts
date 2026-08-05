@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 
 import { logServerError } from "@/lib/http";
 import {
@@ -61,6 +62,12 @@ const mimeByKind: Record<ImageKind, string> = {
 interface OriginalImageFallback {
   bytes: Uint8Array;
   kind: ImageKind;
+}
+
+interface ImageVisualQuality {
+  colorSpan: number;
+  contrastPermille: number;
+  meaningful: boolean;
 }
 
 type RequestedArtifactRevision =
@@ -211,6 +218,80 @@ function isExplicitHttpsUrl(value: string): boolean {
 
 function canonicalDomain(value: string): string {
   return value.trim().toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
+}
+
+function mediaBackgroundForSlot(session: TryMeSession | null, slot: ImageSlot) {
+  const profile = slot.startsWith("seller-") ? session?.brand : session?.targetBrand;
+  const match = profile?.surfaceColor?.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  return match
+    ? {
+        r: Number.parseInt(match[1], 16),
+        g: Number.parseInt(match[2], 16),
+        b: Number.parseInt(match[3], 16)
+      }
+    : { r: 255, g: 255, b: 255 };
+}
+
+/**
+ * File signatures prove that bytes are an image, not that the image contains
+ * anything a buyer can see. Render a tiny bounded sample over the experience
+ * surface and reject transparent, monochrome, or effectively empty media.
+ */
+async function assessImageVisualQuality(
+  bytes: Uint8Array,
+  background: { r: number; g: number; b: number }
+): Promise<ImageVisualQuality> {
+  const width = 48;
+  const height = 48;
+  const pixels = await sharp(Buffer.from(bytes), {
+    failOn: "warning",
+    limitInputPixels: 16_000_000,
+    pages: 1
+  })
+    .rotate()
+    .resize(width, height, {
+      fit: "contain",
+      position: "centre",
+      background: { ...background, alpha: 1 }
+    })
+    .flatten({ background })
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+
+  let contrastPixels = 0;
+  const minimum = [255, 255, 255];
+  const maximum = [0, 0, 0];
+  for (let offset = 0; offset < pixels.length; offset += 3) {
+    const red = pixels[offset] ?? background.r;
+    const green = pixels[offset + 1] ?? background.g;
+    const blue = pixels[offset + 2] ?? background.b;
+    const channels = [red, green, blue];
+    channels.forEach((channel, index) => {
+      minimum[index] = Math.min(minimum[index] ?? 255, channel);
+      maximum[index] = Math.max(maximum[index] ?? 0, channel);
+    });
+    if (
+      Math.max(
+        Math.abs(red - background.r),
+        Math.abs(green - background.g),
+        Math.abs(blue - background.b)
+      ) >= 12
+    ) {
+      contrastPixels += 1;
+    }
+  }
+
+  const pixelCount = width * height;
+  const colorSpan = Math.max(
+    ...maximum.map((value, index) => value - (minimum[index] ?? value))
+  );
+  const contrastPermille = Math.round((contrastPixels / pixelCount) * 1_000);
+  return {
+    colorSpan,
+    contrastPermille,
+    meaningful: contrastPixels >= 12 && colorSpan >= 12
+  };
 }
 
 async function readReviewedLogo(path: string): Promise<Uint8Array> {
@@ -409,6 +490,46 @@ export async function GET(request: Request, context: RouteContext) {
           extensionHint: pathHint ?? null
         }
       });
+    }
+
+    if (slot.includes("-image-")) {
+      let visualQuality: ImageVisualQuality;
+      try {
+        visualQuality = await assessImageVisualQuality(
+          result.bytes,
+          mediaBackgroundForSlot(session, slot)
+        );
+      } catch {
+        return loggedImageError({
+          status: 415,
+          code: "invalid_image",
+          message: "The source did not return a renderable image.",
+          logMessage: "Image upstream response could not be decoded for visual validation.",
+          logCode: "image_proxy_decode_failed",
+          sessionId: id,
+          operation: "image_proxy_visual_validation",
+          details: { slot, detectedKind: detected }
+        });
+      }
+      if (!visualQuality.meaningful) {
+        const originalFallback = await verifiedServiceNowHeroFallback(session, slot, sourceUrl);
+        if (originalFallback) return imageResponse(originalFallback.bytes, originalFallback.kind);
+        return loggedImageError({
+          status: 415,
+          code: "image_visually_empty",
+          message: "The source image did not contain a usable visual.",
+          logMessage: "Image upstream response was visually empty or low-information.",
+          logCode: "image_proxy_low_information",
+          sessionId: id,
+          operation: "image_proxy_visual_validation",
+          details: {
+            slot,
+            detectedKind: detected,
+            colorSpan: visualQuality.colorSpan,
+            contrastPermille: visualQuality.contrastPermille
+          }
+        });
+      }
     }
 
     return imageResponse(result.bytes, detected);

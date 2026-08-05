@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import sharp from "sharp";
 
 import { fetchPinnedPublicBytes } from "@/lib/safe-fetch";
 import { getSession } from "@/lib/session-store";
@@ -185,8 +186,20 @@ describe("harvested image delivery route", () => {
   });
 
   it("delivers the ServiceNow-style hero as an exact JPEG response instead of an ORB-prone upstream load", async () => {
+    const informativeJpeg = new Uint8Array(await sharp({
+      create: {
+        width: 320,
+        height: 180,
+        channels: 3,
+        background: { r: 248, g: 250, b: 252 }
+      }
+    }).composite([{
+      input: Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect x="32" y="28" width="110" height="124" rx="18" fill="#52B8FF"/><rect x="162" y="48" width="126" height="24" rx="12" fill="#001E2B"/><rect x="162" y="92" width="92" height="18" rx="9" fill="#62D84E"/></svg>'
+      )
+    }]).jpeg().toBuffer());
     installImage({
-      bytes: jpeg,
+      bytes: informativeJpeg,
       contentType: "image/jpeg",
       finalUrl: "https://cdn.example/seller/hero.jpg"
     });
@@ -195,12 +208,39 @@ describe("harvested image delivery route", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/jpeg");
-    expect(response.headers.get("content-length")).toBe(String(jpeg.byteLength));
-    expect(new Uint8Array(await response.arrayBuffer())).toEqual(jpeg);
+    expect(response.headers.get("content-length")).toBe(String(informativeJpeg.byteLength));
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(informativeJpeg);
     expect(fetchPinnedPublicBytes).toHaveBeenCalledWith(
       "https://cdn.example/seller/hero.jpg",
       expect.any(Object)
     );
+  });
+
+  it("rejects a visually empty hero image so the generated fallback remains visible", async () => {
+    const blankPng = new Uint8Array(await sharp({
+      create: {
+        width: 1200,
+        height: 800,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 0 }
+      }
+    }).png().toBuffer());
+    installImage({
+      bytes: blankPng,
+      contentType: "image/png",
+      finalUrl: "https://cdn.example/seller/blank-hero.png"
+    });
+
+    const response = await GET(request, context("seller-image-0"));
+    const body = (await response.json()) as { code: string; requestId: string };
+    const logged = String(vi.mocked(console.error).mock.calls[0]?.[0]);
+
+    expect(response.status).toBe(415);
+    expect(body.code).toBe("image_visually_empty");
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(logged).toContain("image_proxy_low_information");
+    expect(logged).toContain('"contrastPermille":0');
+    expect(logged).not.toContain("cdn.example");
   });
 
   it("selects target assets only through the requested target slot", async () => {
