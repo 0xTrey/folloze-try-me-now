@@ -105,6 +105,17 @@ describe("session-bound image delivery slots", () => {
     expect(rendered.logoUrlOnDark).toBe(logoUrlOnDark);
   });
 
+  it("keeps Brand API CDN assets in the browser and out of the server proxy", () => {
+    const logoUrl = "https://cdn.brandfetch.io/idj3Bp2d82/theme/dark/logo.svg?c=asset_client_12345";
+    const harvested = { ...seller, domain: "gm.com", logoUrl, logoUrlOnDark: logoUrl };
+    const stored = brandWithSessionLogoDelivery("session_123", "seller", harvested);
+    const sources = imageDeliverySources({ answers: {}, brand: stored });
+
+    expect(stored.logoUrl).toBe(logoUrl);
+    expect(sources.sellerLogo).toBeUndefined();
+    expect(sourceImageUrlForSlot({ answers: {}, brand: stored }, "seller-logo")).toBeUndefined();
+  });
+
   it("accepts only bounded revision queries, not generic paths, queries, fragments, or extra slots", () => {
     const accepted = "/api/sessions/session_123/image/seller-image-0";
     expect(isImageDeliveryPath(accepted)).toBe(true);

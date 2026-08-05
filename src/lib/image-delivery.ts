@@ -1,5 +1,5 @@
 import type { BrandProfile, ExperienceAsset, TryMeSession } from "@/lib/types";
-import { isBrandfetchLogoApiUrl } from "@/lib/brandfetch-logo";
+import { isBrandfetchHostedLogoUrl } from "@/lib/brandfetch-logo";
 
 const SAFE_SESSION_ID = /^[a-z0-9_-]{1,128}$/i;
 const IMAGE_SLOT = /^(seller|target)-(logo|image-([0-5]))$/;
@@ -108,8 +108,8 @@ export function imageDeliverySources(
   const logoSource = (profile: BrandProfile | undefined, selectedUrl: string | undefined) => {
     if (!profile) return selectedUrl;
     if (
-      isBrandfetchLogoApiUrl(selectedUrl, profile.domain) ||
-      isBrandfetchLogoApiUrl(profile.logoUrl, profile.domain)
+      isBrandfetchHostedLogoUrl(selectedUrl, profile.domain) ||
+      isBrandfetchHostedLogoUrl(profile.logoUrl, profile.domain)
     ) {
       // Logo API terms require browser hotlinking. Never send this URL through
       // the server-side image proxy.
@@ -148,7 +148,7 @@ export function brandWithSessionLogoDelivery(
   role: "seller" | "target",
   profile: BrandProfile
 ): BrandProfile {
-  if (isBrandfetchLogoApiUrl(profile.logoUrl, profile.domain)) {
+  if (isBrandfetchHostedLogoUrl(profile.logoUrl, profile.domain)) {
     return { ...profile, logoSourceUrl: undefined };
   }
   const originalSource = profile.logoSourceUrl ??
@@ -192,7 +192,7 @@ export function brandWithFirstPartyImages(
   sources: ImageDeliverySources,
   version?: number
 ): BrandProfile {
-  const directBrandfetchLogo = isBrandfetchLogoApiUrl(profile.logoUrl, profile.domain)
+  const directBrandfetchLogo = isBrandfetchHostedLogoUrl(profile.logoUrl, profile.domain)
     ? profile.logoUrl
     : undefined;
   const logoSlot = directBrandfetchLogo

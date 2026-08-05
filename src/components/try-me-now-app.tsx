@@ -76,7 +76,7 @@ import {
 import { primaryActionFor } from "@/lib/cta-presentation";
 import {
   brandfetchLogoRecoveryUrls,
-  isBrandfetchLogoApiUrl
+  isBrandfetchHostedLogoUrl
 } from "@/lib/brandfetch-logo";
 import { fallbackCompanyName } from "@/lib/company-name";
 import { imageDeliveryPath } from "@/lib/image-delivery";
@@ -2210,7 +2210,7 @@ function previewLogoUrl(
   const profile = owner === "seller" ? session.brand : session.targetBrand;
   if (!profile?.logoUrl) return undefined;
   const candidate = surface === "dark" ? profile.logoUrlOnDark ?? profile.logoUrl : profile.logoUrl;
-  if (isBrandfetchLogoApiUrl(candidate, profile.canonicalDomain ?? profile.domain)) return candidate;
+  if (isBrandfetchHostedLogoUrl(candidate, profile.canonicalDomain ?? profile.domain)) return candidate;
   return imageDeliveryPath(
     session.id,
     `${owner}-logo`,

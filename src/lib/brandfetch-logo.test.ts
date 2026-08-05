@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   brandfetchLogoApiUrl,
   brandfetchLogoRecoveryUrls,
+  isBrandfetchHostedLogoUrl,
   isBrandfetchLogoApiUrl
 } from "@/lib/brandfetch-logo";
 
@@ -24,6 +25,13 @@ describe("Brandfetch Logo API URLs", () => {
       expect.stringContaining("/type/symbol?"),
       expect.stringContaining("/type/icon?")
     ]);
+  });
+
+  it("accepts a bounded Brand API CDN asset for direct browser rendering", () => {
+    const asset = "https://cdn.brandfetch.io/idj3Bp2d82/theme/dark/logo.svg?c=asset_client_12345";
+    expect(isBrandfetchHostedLogoUrl(asset)).toBe(true);
+    expect(brandfetchLogoRecoveryUrls(asset, "gm.com")).toEqual([asset]);
+    expect(isBrandfetchHostedLogoUrl("https://cdn.brandfetch.io/idj3Bp2d82/theme/dark/logo.svg?c=x")).toBe(false);
   });
 
   it.each([

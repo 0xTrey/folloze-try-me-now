@@ -195,6 +195,7 @@ export interface BrandProfile {
         | "inline-svg-unportable"
         | "official-remote-portable"
         | "brandfetch-portable"
+        | "brandfetch-brand-api"
         | "brandfetch-logo-api"
         | "remote-profile"
         | "verified-profile"

@@ -5,7 +5,11 @@ import {
   hasRemoteBrandHarvester
 } from "@/lib/config";
 import sharp from "sharp";
-import { brandfetchLogoApiUrl, isBrandfetchLogoApiUrl } from "@/lib/brandfetch-logo";
+import {
+  brandfetchLogoApiUrl,
+  isBrandfetchHostedLogoUrl,
+  isBrandfetchLogoApiUrl
+} from "@/lib/brandfetch-logo";
 import { withBrandReadiness } from "@/lib/brand-readiness";
 import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
 import {
@@ -1389,6 +1393,8 @@ interface BrandfetchResult {
   publicContext?: string;
   publicTopics: string[];
   colors: BrandfetchColor[];
+  logoUrl?: string;
+  logoUrlOnDark?: string;
   displayFontFamily?: string;
   bodyFontFamily?: string;
   imageUrls: string[];
@@ -1457,7 +1463,11 @@ function brandfetchHttpsUrl(value: unknown): string | undefined {
   }
 }
 
-function brandfetchLogoFormats(payload: Record<string, unknown>): string[] {
+function brandfetchLogoFormats(payload: Record<string, unknown>): Array<{
+  src: string;
+  theme: string;
+  score: number;
+}> {
   const logos = Array.isArray(payload.logos) ? payload.logos : [];
   return logos
     .filter((logo): logo is Record<string, unknown> => Boolean(logo && typeof logo === "object"))
@@ -1470,6 +1480,7 @@ function brandfetchLogoFormats(payload: Record<string, unknown>): string[] {
         .filter((format): format is Record<string, unknown> => Boolean(format && typeof format === "object"))
         .map((format) => ({
           src: brandfetchHttpsUrl(format.src) ?? "",
+          theme,
           score:
             typeScore +
             (format.format === "svg" ? 40 : format.format === "webp" ? 30 : format.format === "png" ? 25 : 10) +
@@ -1481,8 +1492,7 @@ function brandfetchLogoFormats(payload: Record<string, unknown>): string[] {
     })
     .filter(({ src }) => Boolean(src))
     .sort((a, b) => b.score - a.score)
-    .map(({ src }) => src)
-    .filter((src, index, values) => values.indexOf(src) === index)
+    .filter((candidate, index, values) => values.findIndex(({ src }) => src === candidate.src) === index)
     .slice(0, 6);
 }
 
@@ -1648,6 +1658,10 @@ async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchLookup> {
       .filter((color, index, values) => values.findIndex((candidate) => candidate.hex === color.hex) === index)
       .slice(0, 8);
     const logoFormats = brandfetchLogoFormats(payload);
+    const lightSurfaceLogo = logoFormats.find((format) => format.theme === "dark")?.src
+      ?? logoFormats[0]?.src;
+    const darkSurfaceLogo = logoFormats.find((format) => format.theme === "light")?.src
+      ?? lightSurfaceLogo;
     const company = payload.company && typeof payload.company === "object"
       ? payload.company as Record<string, unknown>
       : undefined;
@@ -1682,6 +1696,8 @@ async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchLookup> {
         publicContext: contextParts.join(" ").slice(0, 1600) || undefined,
         publicTopics: industries,
         colors,
+        logoUrl: lightSurfaceLogo,
+        logoUrlOnDark: darkSurfaceLogo,
         displayFontFamily: fonts.displayFontFamily,
         bodyFontFamily: fonts.bodyFontFamily,
         imageUrls: brandfetchImageUrls(payload),
@@ -1830,6 +1846,12 @@ function profileWithBrandfetchEnrichment(
         .filter((color, index, values) => values.indexOf(color) === index)
         .slice(0, 8)
     : base.colors;
+  const currentLogoStrategy = base.diagnostics?.logo.strategy ?? "none";
+  const useBrandfetchLogo = Boolean(
+    result.logoUrl
+      && !base.portableLogo
+      && ["none", "favicon", "inline-svg-unportable"].includes(currentLogoStrategy)
+  );
   return {
     ...base,
     canonicalDomain: result.canonicalDomain,
@@ -1843,6 +1865,9 @@ function profileWithBrandfetchEnrichment(
     description: profile?.description ?? result.description ?? base.description,
     publicContext: profile?.publicContext ?? result.publicContext ?? base.publicContext,
     publicTopics: [...new Set([...base.publicTopics, ...result.publicTopics])].slice(0, 12),
+    logoUrl: useBrandfetchLogo ? result.logoUrl : base.logoUrl,
+    logoUrlOnDark: useBrandfetchLogo ? result.logoUrlOnDark : base.logoUrlOnDark,
+    logoSourceUrl: useBrandfetchLogo ? undefined : base.logoSourceUrl,
     imageUrls: [...new Set([...base.imageUrls, ...result.imageUrls])].slice(0, 6),
     colors,
     primaryColor: useBrandfetchPalette ? brandfetchPrimary ?? colors[0] ?? base.primaryColor : base.primaryColor,
@@ -1853,12 +1878,24 @@ function profileWithBrandfetchEnrichment(
     source: "brand-harvester",
     diagnostics: {
       ...base.diagnostics,
-      logo: base.diagnostics?.logo ?? {
-            strategy: "none",
-            imageCandidateCount: 0,
+      logo: useBrandfetchLogo
+        ? {
+            strategy: "brandfetch-brand-api",
+            imageCandidateCount: result.logoCandidateCount,
             rejectedImageCount: 0,
-            inlineSvgCandidateCount: 0
-          },
+            inlineSvgCandidateCount: 0,
+            selectedScore: 100,
+            selectedSource: "brandfetch",
+            validationAttempted: 0,
+            validationRejected: 0,
+            resolutionComplete: true
+          }
+        : base.diagnostics?.logo ?? {
+          strategy: "none",
+          imageCandidateCount: 0,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0
+        },
       palette: useBrandfetchPalette
         ? {
             strategy: "brandfetch",
@@ -1892,6 +1929,7 @@ function profileWithBrandfetchEnrichment(
 }
 
 function profileWithBrandfetchLogoApi(domain: string, profile: BrandProfile): BrandProfile {
+  if (profile.portableLogo || isBrandfetchHostedLogoUrl(profile.logoUrl)) return profile;
   const logoDomain = profile.canonicalDomain ?? domain;
   const logoUrl = brandfetchLogoApiUrl(logoDomain, process.env.BRANDFETCH_CLIENT_ID, "dark");
   const logoUrlOnDark = brandfetchLogoApiUrl(logoDomain, process.env.BRANDFETCH_CLIENT_ID, "light");
@@ -2014,6 +2052,7 @@ async function copyOfficialRemoteLogo(
       }
     };
   }
+  if (isBrandfetchHostedLogoUrl(profile.logoUrl)) return profile;
   if (!profile.logoUrl || receipt?.strategy === "favicon") return profile;
   // Reviewed profiles have a compile-time, exact-domain delivery fallback.
   // Keep that emergency cache available even when the public origin blocks

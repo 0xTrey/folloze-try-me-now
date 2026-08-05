@@ -33,6 +33,7 @@ const validWordmarkPng = new Uint8Array(readFileSync(join(
   "servicenow",
   "homepage-header-logo.png"
 )));
+const ciscoBrandAsset = "https://cdn.brandfetch.io/idCisco/theme/dark/logo.svg?c=asset_client_12345";
 
 describe("Brandfetch Logo API and Brand API enrichment", () => {
   beforeEach(() => {
@@ -45,7 +46,7 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
       status: 200,
       headers: { "content-type": "image/svg+xml" },
       bytes: ciscoSvg,
-      finalUrl: new URL("https://cdn.brandfetch.io/cisco/logo.svg"),
+      finalUrl: new URL(ciscoBrandAsset),
       truncated: false
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
@@ -54,7 +55,8 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
       colors: [{ hex: "#07182D" }, { hex: "#1BA0D7" }],
       logos: [{
         type: "logo",
-        formats: [{ src: "https://cdn.brandfetch.io/cisco/logo.svg", format: "svg" }]
+        theme: "dark",
+        formats: [{ src: ciscoBrandAsset, format: "svg" }]
       }]
     }), { status: 200, headers: { "content-type": "application/json" } })));
   });
@@ -67,7 +69,7 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
     safeFetchMocks.fetchPinnedPublicText.mockReset();
   });
 
-  it("hotlinks the Logo API in the browser while keeping the Brand API key server-only", async () => {
+  it("hotlinks the Brand API asset in the browser while keeping the Brand API key server-only", async () => {
     const profile = await harvestBrand("cisco.com");
 
     expect(fetch).toHaveBeenCalledWith(
@@ -83,12 +85,12 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
     expect(safeFetchMocks.fetchPinnedPublicBytes).not.toHaveBeenCalled();
     expect(profile).toMatchObject({
       companyName: "Cisco",
-      logoUrl: expect.stringContaining("cdn.brandfetch.io/domain/cisco.com"),
-      logoUrlOnDark: expect.stringContaining("theme/light"),
+      logoUrl: ciscoBrandAsset,
+      logoUrlOnDark: ciscoBrandAsset,
       source: "brand-harvester",
       diagnostics: {
         logo: {
-          strategy: "brandfetch-logo-api",
+          strategy: "brandfetch-brand-api",
           resolutionComplete: true
         },
         providers: {
@@ -98,10 +100,10 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
       }
     });
     expect(JSON.stringify(profile)).not.toContain("server-only-test-key-that-is-long-enough");
-    expect(profile.logoUrl).toContain("type/logo?c=testClient_12345");
+    expect(profile.logoUrl).toBe(ciscoBrandAsset);
   });
 
-  it("uses the Logo API wordmark and retains validated first-party bytes as fallback evidence", async () => {
+  it("keeps validated first-party bytes ahead of the Logo API fallback", async () => {
     safeFetchMocks.fetchPinnedPublicText.mockResolvedValue({
       status: 200,
       headers: { "content-type": "text/html" },
@@ -136,11 +138,11 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
 
     expect(profile).toMatchObject({
       companyName: "Samsung",
-      logoUrl: expect.stringContaining("/domain/samsung.com/"),
+      logoUrl: "https://www.samsung.com/assets/samsung-logo-icon.svg",
       portableLogo: { source: "official-remote-asset" },
-      diagnostics: { logo: { strategy: "brandfetch-logo-api" } }
+      diagnostics: { logo: { strategy: "official-remote-portable" } }
     });
-    expect(profile.logoSourceUrl).toBeUndefined();
+    expect(profile.logoSourceUrl).toBe("https://www.samsung.com/assets/samsung-logo-icon.svg");
   });
 
   it("uses a validated Brandfetch palette when Ford's public page yields only low-confidence colors", async () => {
@@ -181,7 +183,7 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
       surfaceColor: "#FFFFFF",
       colors: ["#00095B", "#066FEF", "#FFFFFF"],
       diagnostics: {
-        logo: { strategy: "brandfetch-logo-api" },
+        logo: { strategy: "official-remote-portable" },
         palette: { strategy: "brandfetch", confidence: "high" }
       }
     });

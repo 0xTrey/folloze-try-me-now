@@ -105,3 +105,36 @@ export function isBrandfetchLogoApiUrl(
     return false;
   }
 }
+
+/**
+ * Brand API responses include versioned CDN asset URLs that are intended to
+ * be rendered directly. Keep them on the same browser-hotlink path as Logo
+ * API URLs instead of sending them through the first-party image proxy.
+ */
+export function isBrandfetchHostedLogoUrl(
+  value: string | undefined,
+  expectedDomain?: string
+): boolean {
+  if (isBrandfetchLogoApiUrl(value, expectedDomain)) return true;
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== "https:"
+      || url.hostname !== BRANDFETCH_LOGO_HOST
+      || url.port
+      || url.username
+      || url.password
+      || url.hash
+      || url.searchParams.size !== 1
+    ) return false;
+    const clientId = url.searchParams.get("c");
+    return Boolean(
+      clientId
+        && BRANDFETCH_CLIENT_ID.test(clientId)
+        && /^\/[A-Za-z0-9_-]{4,80}(?:\/[A-Za-z0-9._-]{1,80}){2,12}$/.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
