@@ -121,6 +121,7 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("function settleImage(image,readyClass)");
     expect(html).toContain("settleImage(image,'has-image')");
     expect(html).toContain("settleImage(image,'has-asset')");
+    expect(html).toContain("object-fit:cover");
   });
 
   it("uses an intentional experience blueprint when approved imagery is unavailable", () => {
