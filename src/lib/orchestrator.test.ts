@@ -15,6 +15,28 @@ describe("isGenerationReady", () => {
     expect(isGenerationReady("abm", { ...common, targetDomain: "target.com" })).toBe(true);
   });
 
+  it("requires product context before building an ABM product introduction", () => {
+    const productBrief = {
+      audience: "Platform leaders",
+      objective: "Introduce a product",
+      targetDomain: "target.com"
+    };
+
+    expect(isGenerationReady("abm", productBrief)).toBe(false);
+    expect(isGenerationReady("abm", {
+      ...productBrief,
+      sourceUrl: "https://example.com/products/platform"
+    })).toBe(true);
+    expect(isGenerationReady("abm", {
+      ...productBrief,
+      sourceName: "platform-overview.pdf"
+    })).toBe(true);
+    expect(isGenerationReady("abm", {
+      ...productBrief,
+      messageBelief: "A governed platform that connects product signals to seller action."
+    })).toBe(true);
+  });
+
   it("requires a named campaign offer and keeps events inside the campaign path", () => {
     expect(isGenerationReady("campaign", { ...common, campaignType: "product" })).toBe(false);
     expect(

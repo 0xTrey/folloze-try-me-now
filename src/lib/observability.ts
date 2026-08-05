@@ -56,6 +56,7 @@ const safeDetailKeys = new Set([
   "requestId",
   "useCase",
   "source",
+  "sourceKind",
   "priorSource",
   "identityConfidence",
   "identityFallback",

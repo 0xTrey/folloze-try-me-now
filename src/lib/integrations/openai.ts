@@ -344,6 +344,11 @@ export function deterministicDraft(input: {
 
   if (context.brief.campaignRegister === "one-to-one-abm") {
     const account = target || "the priority account";
+    const introducedProduct = answers.objective === "Introduce a product";
+    const abmOffer = introducedProduct ? sourceTitle || profile.offerLabel : profile.offerLabel;
+    const visitorProductContext = introducedProduct && answers.messageBelief?.trim()
+      ? trimSentence(answers.messageBelief, 220)
+      : undefined;
     const targetProfile = input.targetBrand ? narrativeProfileFor(input.targetBrand) : profile;
     const [narrativeSignal, sectionSignal] = conciseAccountSignals(
       input.targetBrand,
@@ -356,14 +361,16 @@ export function deterministicDraft(input: {
     ] as ExperienceDraft["signalLabels"];
     return validateDeterministicDraft({
       ...common,
-      title: trimSentence(`${brand.companyName} for ${account} | ${profile.offerLabel}`, 90),
+      title: trimSentence(`${brand.companyName} for ${account} | ${abmOffer}`, 90),
       eyebrow: trimSentence(`${brand.companyName} for ${account}`, 52),
       headline: trimSentence(
-        `Connect ${profile.offerLabel.toLowerCase()} to ${account}'s ${narrativeSignal}.`,
+        `Connect ${abmOffer.toLowerCase()} to ${account}'s ${narrativeSignal}.`,
         120
       ),
       subhead: trimSentence(
-        `${brand.companyName} gives ${sentenceCasePhrase(roleAudience)} one focused way to evaluate the systems, workflows, and controls behind ${account}'s priorities.`,
+        visitorProductContext
+          ? `${visitorProductContext} ${brand.companyName} gives ${sentenceCasePhrase(roleAudience)} one focused way to evaluate that product against ${account}'s priorities.`
+          : `${brand.companyName} gives ${sentenceCasePhrase(roleAudience)} one focused way to evaluate the systems, workflows, and controls behind ${account}'s priorities.`,
         280
       ),
       thesisHeadline: trimSentence(

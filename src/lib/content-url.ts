@@ -368,7 +368,7 @@ export async function fetchPublicUrlSourceArtifact(
     }
     return normalizePublicHtmlSource({
       html: response.text,
-      sourceUrl: response.finalUrl.toString(),
+      sourceUrl: sanitizedUrl ?? sourceUrl,
       finalUrl: response.finalUrl.toString(),
       truncated: response.truncated,
       createdAt: options.createdAt
@@ -385,4 +385,3 @@ export async function fetchPublicUrlSourceArtifact(
     });
   }
 }
-

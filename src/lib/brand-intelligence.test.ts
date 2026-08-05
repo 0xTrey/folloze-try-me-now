@@ -202,6 +202,23 @@ describe("company-specific audience intelligence", () => {
     });
   });
 
+  it("recognizes an exact-domain company whose public name expands the domain acronym", () => {
+    const generalMotors = brand({
+      domain: "gm.com",
+      canonicalDomain: "gm.com",
+      companyName: "General Motors",
+      sourceUrl: "https://gm.com",
+      logoUrl: "https://cdn.brandfetch.io/gm.com/logo.svg"
+    });
+
+    expect(assessBrandIdentity(generalMotors, "gm.com")).toMatchObject({
+      canonicalName: "General Motors",
+      confidence: "high",
+      confirmationStatus: "confirmed",
+      confirmedBy: "system"
+    });
+  });
+
   it("confirms a parent-domain brand for a regional subdomain", () => {
     const philips = brand({
       domain: "usa.philips.com",

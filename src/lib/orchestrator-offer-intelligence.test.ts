@@ -43,6 +43,18 @@ function campaignSession(id: string): TryMeSession {
   };
 }
 
+function abmSession(id: string): TryMeSession {
+  return {
+    ...campaignSession(id),
+    useCase: "abm",
+    companyDomain: "folloze.com",
+    answers: {
+      targetDomain: "nvidia.com",
+      audience: "AI platform leaders"
+    }
+  };
+}
+
 function artifact(sourceUrl: string, title: string) {
   return normalizePublicHtmlSource({
     sourceUrl,
@@ -158,5 +170,32 @@ describe("campaign offer source intelligence", () => {
     expect(stored?.answers.promotedOffer).toBe("New Offer Platform");
     expect(stored?.sourceArtifact?.source.sourceUrl).toBe(secondUrl);
     expect(stored?.campaignOfferSource?.intelligenceStatus).toBe("ready");
+  });
+
+  it("extracts an ABM product page before the product objective is committed", async () => {
+    const id = `abm-product-intelligence-${Date.now()}`;
+    const sourceUrl = "https://example.com/products/governed-platform";
+    ids.add(id);
+    await putSession(abmSession(id));
+    await patchSessionAnswers(id, { sourceUrl });
+    sourceMocks.fetchPublicUrlSourceArtifact.mockResolvedValue(
+      artifact(sourceUrl, "Governed Platform")
+    );
+
+    await runSourceIntelligenceStage(id);
+
+    const stored = await getSession(id);
+    expect(stored?.sourceArtifact?.content.title).toBe("Governed Platform");
+    expect(stored?.answers.sourceTitle).toBe("Governed Platform");
+    expect(stored?.sourceConfirmation).toMatchObject({
+      status: "confirmed",
+      sourceKind: "public-url",
+      provenance: "system-extracted"
+    });
+    expect(stored?.events.map(({ name }) => name)).toEqual(expect.arrayContaining([
+      "source_intelligence_started",
+      "source_intelligence_completed"
+    ]));
+    expect(stored?.stages.story.status).toBe("pending");
   });
 });

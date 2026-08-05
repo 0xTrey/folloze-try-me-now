@@ -75,6 +75,29 @@ function identityKey(value: string): string {
   return value.toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+const companyNameInitialismStopWords = new Set([
+  "and",
+  "company",
+  "corporation",
+  "inc",
+  "incorporated",
+  "limited",
+  "llc",
+  "ltd",
+  "of",
+  "plc",
+  "the"
+]);
+
+function companyNameInitialism(value: string): string {
+  return value
+    .toLocaleLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word && !companyNameInitialismStopWords.has(word))
+    .map((word) => word[0])
+    .join("");
+}
+
 function domainIdentityKey(domain: string): string {
   return identityKey(companyDomainStem(canonicalDomain(domain)));
 }
@@ -143,10 +166,15 @@ export function assessBrandIdentity(
   const domainKey = domainIdentityKey(expected);
   const nameKey = identityKey(profile.companyName);
   const relaxedDomainKey = withoutDomainPrefix(domainKey);
+  const nameInitialism = companyNameInitialism(profile.companyName);
   const nameMatches = Boolean(
     nameKey &&
       (nameKey === domainKey ||
         nameKey === relaxedDomainKey ||
+        (domainKey.length >= 2 && domainKey.length <= 6 && nameInitialism === domainKey) ||
+        (relaxedDomainKey.length >= 2 &&
+          relaxedDomainKey.length <= 6 &&
+          nameInitialism === relaxedDomainKey) ||
         (Math.min(nameKey.length, domainKey.length) >= 4 &&
           (nameKey.includes(domainKey) || domainKey.includes(nameKey))) ||
         (Math.min(nameKey.length, relaxedDomainKey.length) >= 4 &&

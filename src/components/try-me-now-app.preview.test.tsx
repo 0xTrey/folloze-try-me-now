@@ -2,14 +2,16 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicTryMeSession } from "@/lib/types";
 
 import {
   AssemblyPreview,
+  buildMoments,
   CampaignOverviewRail,
+  getBuildPanelCopy,
   OptionalContextComposer,
   PreviewUpdateNotice,
   ProgressiveQuestions,
@@ -55,6 +57,25 @@ const readySession: PublicTryMeSession = {
     generationSource: "openai",
     artifactRevision: 1
   }
+};
+
+const readyProductInsight: NonNullable<PublicTryMeSession["sourceInsight"]> = {
+  status: "ready",
+  confidence: "high",
+  title: "Folloze Buyer Experience Platform",
+  premise: "Folloze turns product and account context into guided buyer experiences.",
+  topics: ["buyer experience"],
+  claims: [],
+  extraction: {
+    method: "html-static",
+    status: "complete",
+    ocrStatus: "not-required",
+    warnings: []
+  },
+  experiencePattern: "guided-brief",
+  moduleKinds: ["hero"],
+  assetCount: 0,
+  citationCount: 1
 };
 
 describe("AssemblyPreview", () => {
@@ -129,6 +150,70 @@ describe("SourceUnderstandingSummary", () => {
     expect(screen.getByText("Enterprise Automation Guide")).toBeInTheDocument();
     expect(screen.getByText("Page 4")).toBeInTheDocument();
     expect(screen.getByText("12 cited source blocks")).toBeInTheDocument();
+  });
+});
+
+describe("guided build state", () => {
+  it("does not present a blocked brand pass as failed final assembly before the brief is complete", () => {
+    const blocked = {
+      ...readySession,
+      useCase: "abm" as const,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {},
+      brand: {
+        ...readySession.brand!,
+        companyName: "GM",
+        domain: "gm.com",
+        readiness: {
+          status: "incomplete" as const,
+          identityReady: false,
+          logoReady: false,
+          paletteReady: false,
+          sourceEvidenceReady: false,
+          reasons: ["Company identity still needs confirmation."]
+        }
+      },
+      stages: {
+        brand: { status: "fallback" as const },
+        audience: { status: "running" as const },
+        story: { status: "failed" as const, errorCode: "brand_palette_unavailable" }
+      }
+    };
+
+    expect(buildMoments(blocked).at(-1)).toMatchObject({
+      title: "Page build waiting",
+      status: "pending"
+    });
+    expect(getBuildPanelCopy(blocked).headline).toBe(
+      "We found GM, but the brand system is not ready yet."
+    );
+  });
+
+  it("keeps a failed product source in the input stage instead of calling it final assembly", () => {
+    const blocked = {
+      ...readySession,
+      useCase: "abm" as const,
+      status: "generation_failed" as const,
+      experience: undefined,
+      answers: {
+        targetDomain: "nvidia.com",
+        audience: "AI platform leaders",
+        objective: "Introduce a product",
+        sourceUrl: "https://example.com/unreadable"
+      },
+      sourceInsight: { ...readyProductInsight, status: "failed" as const },
+      stages: {
+        brand: { status: "complete" as const },
+        audience: { status: "complete" as const },
+        story: { status: "failed" as const, errorCode: "source_unreadable" }
+      }
+    };
+
+    expect(buildMoments(blocked).at(-1)).toMatchObject({
+      title: "Page build waiting",
+      status: "pending"
+    });
   });
 });
 
@@ -405,6 +490,228 @@ describe("guided campaign workspace", () => {
       campaignType: "product",
       offerSourceUrl: "https://6sense.com/platform/revvyai/",
       offerSourceConfirmed: false
+    });
+  });
+
+  it("asks for URL, PDF, or product context when ABM is introducing a product", async () => {
+    vi.useFakeTimers();
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const onBackgroundPatch = vi.fn().mockResolvedValue(undefined);
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    const abmSession = {
+      ...readySession,
+      useCase: "abm" as const,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {
+        targetDomain: "nvidia.com",
+        audience: "AI platform leaders"
+      }
+    };
+    const { rerender } = render(
+      <ProgressiveQuestions
+        session={abmSession}
+        answers={abmSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onBackgroundPatch={onBackgroundPatch}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={onUpload}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Introduce a product/i }));
+    expect(screen.getByRole("heading", { name: "Tell us about the product." })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Product page" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Product PDF" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Tell us" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Existing product page"), {
+      target: { value: "https://www.folloze.com/platform" }
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(650);
+    });
+    expect(onBackgroundPatch).toHaveBeenCalledWith({
+      sourceUrl: "https://www.folloze.com/platform"
+    });
+    const researchedSession = {
+      ...abmSession,
+      answers: {
+        ...abmSession.answers,
+        sourceUrl: "https://www.folloze.com/platform"
+      },
+      sourceInsight: readyProductInsight
+    };
+    rerender(
+      <ProgressiveQuestions
+        session={researchedSession}
+        answers={researchedSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onBackgroundPatch={onBackgroundPatch}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={onUpload}
+      />
+    );
+    expect(screen.getByText(/Product page understood/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Build my experience/i }));
+    expect(onPatch).toHaveBeenCalledWith({
+      objective: "Introduce a product",
+      messageBelief: undefined,
+      sourceUrl: "https://www.folloze.com/platform"
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "Product PDF" }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onPatch).toHaveBeenCalledWith({ sourceUrl: "" });
+    const fileInput = document.querySelector('.productContextQuestion input[type="file"]');
+    fireEvent.change(fileInput!, {
+      target: { files: [new File(["product"], "product.pdf", { type: "application/pdf" })] }
+    });
+    expect(onUpload).toHaveBeenCalledWith(expect.objectContaining({ name: "product.pdf" }));
+  });
+
+  it("lets a resumed product objective replace a failed URL", async () => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const failedSession = {
+      ...readySession,
+      useCase: "abm" as const,
+      status: "generation_failed" as const,
+      experience: undefined,
+      answers: {
+        targetDomain: "nvidia.com",
+        audience: "AI platform leaders",
+        objective: "Introduce a product",
+        sourceUrl: "https://example.com/unreadable"
+      },
+      sourceInsight: { ...readyProductInsight, status: "failed" as const }
+    };
+    render(
+      <ProgressiveQuestions
+        session={failedSession}
+        answers={failedSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Tell us about the product." })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("We could not read that page");
+    expect(screen.getByRole("button", { name: /Build my experience/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Tell us" }));
+    await waitFor(() => expect(onPatch).toHaveBeenCalledWith({ sourceUrl: "" }));
+    fireEvent.change(screen.getByLabelText("What should buyers understand about the product?"), {
+      target: { value: "A governed product story that gives every buyer a useful next step." }
+    });
+    expect(screen.getByRole("button", { name: /Build my experience/i })).toBeEnabled();
+  });
+
+  it("restarts background research when a resumed product URL is replaced", async () => {
+    vi.useFakeTimers();
+    const onBackgroundPatch = vi.fn().mockResolvedValue(undefined);
+    const failedSession = {
+      ...readySession,
+      useCase: "abm" as const,
+      status: "generation_failed" as const,
+      experience: undefined,
+      answers: {
+        targetDomain: "nvidia.com",
+        audience: "AI platform leaders",
+        objective: "Introduce a product",
+        sourceUrl: "https://example.com/unreadable"
+      },
+      sourceInsight: { ...readyProductInsight, status: "failed" as const }
+    };
+    render(
+      <ProgressiveQuestions
+        session={failedSession}
+        answers={failedSession.answers}
+        isSaving={false}
+        onPatch={vi.fn().mockResolvedValue(undefined)}
+        onBackgroundPatch={onBackgroundPatch}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Existing product page"), {
+      target: { value: "https://www.folloze.com/platform" }
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(650);
+    });
+    expect(onBackgroundPatch).toHaveBeenCalledWith({
+      sourceUrl: "https://www.folloze.com/platform"
+    });
+  });
+
+  it("asks the product question when a resumed objective has no product context", () => {
+    const resumedSession = {
+      ...readySession,
+      useCase: "abm" as const,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {
+        targetDomain: "nvidia.com",
+        audience: "AI platform leaders",
+        objective: "Introduce a product"
+      }
+    };
+    render(
+      <ProgressiveQuestions
+        session={resumedSession}
+        answers={resumedSession.answers}
+        isSaving={false}
+        onPatch={vi.fn().mockResolvedValue(undefined)}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Tell us about the product." })).toBeInTheDocument();
+    expect(screen.queryByText("Brief complete")).not.toBeInTheDocument();
+  });
+
+  it("uses a short product description as messaging context", () => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const abmSession = {
+      ...readySession,
+      useCase: "abm" as const,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {
+        targetDomain: "nvidia.com",
+        audience: "AI platform leaders"
+      }
+    };
+    render(
+      <ProgressiveQuestions
+        session={abmSession}
+        answers={abmSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Introduce a product/i }));
+    fireEvent.click(screen.getByRole("tab", { name: "Tell us" }));
+    fireEvent.change(screen.getByLabelText("What should buyers understand about the product?"), {
+      target: { value: "A governed buyer experience platform that turns account signals into seller action." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Build my experience/i }));
+
+    expect(onPatch).toHaveBeenCalledWith({
+      objective: "Introduce a product",
+      messageBelief: "A governed buyer experience platform that turns account signals into seller action."
     });
   });
 

@@ -244,6 +244,8 @@ const objectives: Record<UseCase, string[]> = {
   content: ["Educate buyers", "Increase content engagement", "Capture qualified interest", "Book a meeting"]
 };
 
+const introduceProductObjective = "Introduce a product";
+
 export function recommendedObjectiveFor(session: Pick<PublicTryMeSession, "useCase" | "answers">): string {
   if (session.useCase === "abm") return "Accelerate an opportunity";
   if (session.useCase === "content") return "Increase content engagement";
@@ -543,6 +545,46 @@ function sourceNameFor(session: PublicTryMeSession): string {
   return `${brandName} content`;
 }
 
+function sourceInsightIsUsable(session: PublicTryMeSession): boolean {
+  return Boolean(
+    session.sourceInsight
+      && ["ready", "needs-review"].includes(session.sourceInsight.status)
+  );
+}
+
+function productContextIsUsable(session: PublicTryMeSession): boolean {
+  if (session.answers.sourceName || session.answers.messageBelief?.trim()) return true;
+  return Boolean(session.answers.sourceUrl && sourceInsightIsUsable(session));
+}
+
+function productContextNeedsAttention(session: PublicTryMeSession): boolean {
+  return session.useCase === "abm"
+    && session.answers.objective === introduceProductObjective
+    && !productContextIsUsable(session);
+}
+
+function generationInputsReady(session: PublicTryMeSession): boolean {
+  const answers = session.answers;
+  if (!answers.audience || !answers.objective) return false;
+  if (session.useCase === "abm") {
+    return Boolean(
+      answers.targetDomain
+        && (answers.objective !== introduceProductObjective || productContextIsUsable(session))
+    );
+  }
+  if (session.useCase === "campaign") {
+    return Boolean(
+      answers.campaignType
+        && answers.promotedOffer?.trim()
+        && (answers.campaignType !== "event" || answers.eventSource)
+    );
+  }
+  return Boolean(
+    answers.sourceName
+      || (answers.sourceUrl && sourceInsightIsUsable(session))
+  );
+}
+
 export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
   const pending: StageState["status"] = "pending";
   const brandName = session?.brand?.companyName || displayNameFromDomain(session?.companyDomain);
@@ -561,7 +603,12 @@ export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
       ].filter((value): value is string => Boolean(value))
     : [];
   const audienceState = session?.stages.audience.status ?? pending;
-  const experienceState = session?.experience ? "complete" : session?.stages.story.status ?? pending;
+  const guidedInputsReady = session ? generationInputsReady(session) : false;
+  const experienceState = session?.experience
+    ? "complete"
+    : guidedInputsReady
+      ? session?.stages.story.status ?? pending
+      : pending;
 
   return [
     {
@@ -635,12 +682,21 @@ export function getBuildPanelCopy(session: PublicTryMeSession): BuildPanelCopy {
     mobileStep: `${Math.min(currentIndex + 1, moments.length)} of ${moments.length}`
   };
 
-  if (!["complete", "fallback"].includes(session.stages.brand.status)) {
+  if (
+    !["complete", "fallback"].includes(session.stages.brand.status)
+    || session.brand?.readiness?.status === "incomplete"
+  ) {
+    const needsReview = session.stages.brand.status !== "running"
+      && session.brand?.readiness?.status === "incomplete";
     return {
       ...common,
-      kicker: "Brand harvest · live",
-      headline: `Reading ${brandName} while you keep moving.`,
-      supporting: "Identity, palette, and public positioning are being assembled in the background."
+      kicker: needsReview ? "Brand evidence · needs review" : "Brand harvest · live",
+      headline: needsReview
+        ? `We found ${brandName}, but the brand system is not ready yet.`
+        : `Reading ${brandName} while you keep moving.`,
+      supporting: needsReview
+        ? "The logo, palette, or company identity needs another enrichment pass before the page can be composed safely."
+        : "Identity, palette, and public positioning are being assembled in the background."
     };
   }
 
@@ -1659,11 +1715,19 @@ export function ProgressiveQuestions({
   );
   const [customAudience, setCustomAudience] = useState(answers.customAudience ?? "");
   const [selectedObjective, setSelectedObjective] = useState<string>();
+  const [productMode, setProductMode] = useState<ContextMode>(
+    answers.sourceName ? "pdf" : answers.sourceUrl ? "url" : answers.messageBelief ? "text" : "url"
+  );
+  const [productDescription, setProductDescription] = useState(answers.messageBelief ?? "");
+  const [isChangingProductSource, setIsChangingProductSource] = useState(false);
   const backgroundPatchRef = useRef(onBackgroundPatch ?? onPatch);
   const lastOfferResearchRef = useRef<string | undefined>(undefined);
+  const lastProductResearchRef = useRef<string | undefined>(undefined);
+  const pendingProductResearchRef = useRef<Promise<void> | undefined>(undefined);
   const textValue = fieldValues[questionKey] ?? "";
   const sourceUrlValue = fieldValues["content-source-url"] ?? "";
   const campaignOfferSourceValue = fieldValues["campaign-offer-source"] ?? "";
+  const productSourceUrlValue = fieldValues["abm-product-source"] ?? answers.sourceUrl ?? "";
   const activeCampaignChoice = campaignChoice ?? answers.campaignType;
   const setTextValue = (value: string) =>
     setFieldValues((current) => ({ ...current, [questionKey]: value }));
@@ -1698,6 +1762,30 @@ export function ProgressiveQuestions({
     }, 650);
     return () => window.clearTimeout(timer);
   }, [activeCampaignChoice, campaignOfferSourceValue, session.id, session.useCase]);
+
+  useEffect(() => {
+    if (
+      session.useCase !== "abm"
+      || (selectedObjective ?? answers.objective) !== introduceProductObjective
+      || productMode !== "url"
+      || !isCampaignOfferSourceUrl(productSourceUrlValue)
+    ) return;
+    const normalizedUrl = new URL(productSourceUrlValue.trim()).toString();
+    const signature = `${session.id}:abm-product:${normalizedUrl}`;
+    if (lastProductResearchRef.current === signature) return;
+    const timer = window.setTimeout(() => {
+      lastProductResearchRef.current = signature;
+      const pending = backgroundPatchRef.current({ sourceUrl: normalizedUrl });
+      pendingProductResearchRef.current = pending;
+      const clearPending = () => {
+        if (pendingProductResearchRef.current === pending) {
+          pendingProductResearchRef.current = undefined;
+        }
+      };
+      void pending.then(clearPending, clearPending);
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [answers.objective, productMode, productSourceUrlValue, selectedObjective, session.id, session.useCase]);
 
   if (session.useCase === "abm" && !answers.targetDomain) {
     return (
@@ -1967,18 +2055,95 @@ export function ProgressiveQuestions({
     );
   }
 
-  if (!answers.objective) {
+  const persistedProductContextNeedsAttention = productContextNeedsAttention(session);
+
+  if (!answers.objective || persistedProductContextNeedsAttention) {
     const recommended = recommendedObjectiveFor(session);
     const orderedObjectives = [recommended, ...objectives[session.useCase].filter((objective) => objective !== recommended)];
-    const chosenObjective = selectedObjective ?? recommended;
+    const chosenObjective = selectedObjective ?? answers.objective ?? recommended;
     const contextPrompt = objectiveContextPrompt(chosenObjective, session.useCase === "campaign" ? campaignOfferFor(session) : undefined);
     const objectiveContext = fieldValues["objective-context"] ?? answers.messageBelief ?? "";
+    const needsProductContext = session.useCase === "abm" && chosenObjective === introduceProductObjective;
+    const validProductUrl = isCampaignOfferSourceUrl(productSourceUrlValue);
+    const normalizedProductUrl = validProductUrl
+      ? new URL(productSourceUrlValue.trim()).toString()
+      : undefined;
+    const savedProductUrlMatches = Boolean(
+      normalizedProductUrl && answers.sourceUrl === normalizedProductUrl
+    );
+    const productPdfReady = Boolean(answers.sourceName) || pdfUpload.status === "accepted";
+    const productDescriptionReady = productDescription.trim().length >= 20;
+    const productSourceFailed = savedProductUrlMatches
+      && Boolean(session.sourceInsight && ["failed", "unreadable"].includes(session.sourceInsight.status));
+    const productContextReady = !needsProductContext
+      || (productMode === "url" && savedProductUrlMatches && sourceInsightIsUsable(session))
+      || (productMode === "pdf" && productPdfReady)
+      || (productMode === "text" && productDescriptionReady);
+    const productSourceReady = savedProductUrlMatches && sourceInsightIsUsable(session);
+    const selectProductMode = async (nextMode: ContextMode) => {
+      if (nextMode === productMode) return;
+      setProductMode(nextMode);
+      if (nextMode === "url") return;
+      setFieldValues((current) => ({ ...current, "abm-product-source": "" }));
+      lastProductResearchRef.current = undefined;
+      if (!answers.sourceUrl && !validProductUrl) return;
+      setIsChangingProductSource(true);
+      try {
+        await pendingProductResearchRef.current;
+        await onPatch({ sourceUrl: "" });
+      } finally {
+        setIsChangingProductSource(false);
+      }
+    };
     return (
       <div className="questionCard">
         <span className="questionCount">Final signal · outcome</span>
         <h2>{questionCopy.objectiveTitle}</h2>
         <p>{questionCopy.objectiveBody}</p>
         <ChipGroup label="Choose an outcome" options={orderedObjectives} value={chosenObjective} recommendedOption={recommended} disabled={isSaving} onChange={setSelectedObjective} />
+        {needsProductContext && (
+          <section className="productContextQuestion" aria-labelledby="product-context-title">
+            <div className="productContextHeading">
+              <span className="sectionKicker">One more signal · product</span>
+              <h3 id="product-context-title">Tell us about the product.</h3>
+              <p>Use the source you already have. We will extract the product, proof, and message cues before composing the account experience.</p>
+            </div>
+            <div className="contextModeRail" role="tablist" aria-label="Product information type">
+              <button type="button" role="tab" aria-selected={productMode === "url"} className={productMode === "url" ? "isActive" : ""} disabled={isChangingProductSource || (productPdfReady && productMode !== "url")} onClick={() => void selectProductMode("url")}><ExternalLink size={16} />Product page</button>
+              <button type="button" role="tab" aria-selected={productMode === "pdf"} className={productMode === "pdf" ? "isActive" : ""} disabled={isChangingProductSource} onClick={() => void selectProductMode("pdf")}><FileText size={16} />Product PDF</button>
+              <button type="button" role="tab" aria-selected={productMode === "text"} className={productMode === "text" ? "isActive" : ""} disabled={isChangingProductSource || (productPdfReady && productMode !== "text")} onClick={() => void selectProductMode("text")}><MessageSquareText size={16} />Tell us</button>
+            </div>
+            {productMode === "url" && (
+              <div className="contextPanel" role="tabpanel">
+                <label htmlFor="abm-product-source">Existing product page</label>
+                <div className="contextUrlInput"><ExternalLink size={17} /><input id="abm-product-source" value={productSourceUrlValue} onChange={(event) => setFieldValues((current) => ({ ...current, "abm-product-source": event.target.value }))} placeholder="https://yourcompany.com/product" inputMode="url" /></div>
+                <div className="contextPanelFooter">
+                  <small role={productSourceFailed ? "alert" : "status"} aria-live="polite">{productSourceReady ? `Product page understood${session.sourceInsight?.title ? `: ${session.sourceInsight.title}` : "."}` : productSourceFailed ? "We could not read that page. Paste another URL or choose a PDF or description." : validProductUrl ? "Researching the product page now. You can keep moving." : "Paste a public HTTPS product page. Research starts after you pause typing."}</small>
+                </div>
+              </div>
+            )}
+            {productMode === "pdf" && (
+              <div className={`contextPanel contextPdfPanel is-${pdfUpload.status}`} role="tabpanel" aria-busy={pdfUpload.status === "uploading" || pdfUpload.status === "processing" || undefined}>
+                {productPdfReady ? <CircleCheck size={21} /> : pdfUpload.status === "error" ? <X size={21} /> : <FileText size={21} />}
+                <div><strong>{productPdfReady ? "Product PDF understood" : pdfUpload.status === "error" ? "That PDF was not added" : "Upload a product document"}</strong><span>{pdfUpload.message || pdfUpload.fileName || "Up to 10 MB. We will use the document to improve the product story and proof."}</span></div>
+                {!productPdfReady && (
+                  <label className="contextUploadButton">
+                    {pdfUpload.status === "error" ? "Choose another PDF" : "Choose PDF"}
+                    <input type="file" accept="application/pdf,.pdf" disabled={isSaving || isChangingProductSource} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void onUpload(file); }} />
+                  </label>
+                )}
+                <PdfUploadProgress feedback={pdfUpload} />
+              </div>
+            )}
+            {productMode === "text" && (
+              <div className="contextPanel" role="tabpanel">
+                <label htmlFor="abm-product-description">What should buyers understand about the product?</label>
+                <textarea id="abm-product-description" value={productDescription} onChange={(event) => setProductDescription(event.target.value)} placeholder={`Describe what ${brandNameFor(session)} is introducing, who it helps, and what makes it useful.`} maxLength={240} />
+                <div className="contextPanelFooter"><small>{productDescription.length}/240 · Add at least one useful sentence.</small></div>
+              </div>
+            )}
+          </section>
+        )}
         {session.useCase === "campaign" && (
           <label className="briefPromptField">
             <span><MessageSquareText size={15} />{contextPrompt.label}</span>
@@ -1986,7 +2151,13 @@ export function ProgressiveQuestions({
             <small>Optional. This sharpens the promise without adding another setup step.</small>
           </label>
         )}
-        <button className="buttonPrimary" type="button" disabled={isSaving} onClick={() => void onPatch({ objective: chosenObjective, messageBelief: objectiveContext.trim() || undefined })}>
+        <button className="buttonPrimary" type="button" disabled={isSaving || isChangingProductSource || !productContextReady} onClick={() => void onPatch({
+          objective: chosenObjective,
+          messageBelief: needsProductContext && productMode === "text"
+            ? productDescription.trim()
+            : objectiveContext.trim() || undefined,
+          ...(needsProductContext && productMode === "url" ? { sourceUrl: productSourceUrlValue.trim() } : {})
+        })}>
           {isSaving ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}Build my experience
         </button>
         <p className="buildExpectationInline"><Clock3 size={15} />Usually takes 30–60 seconds. Your brief stays safe if a stage needs to retry.</p>
@@ -2957,14 +3128,16 @@ export function TryMeNowApp() {
                 onWorkspacePatch={patchWorkspace}
                 onUpload={uploadPdf}
               />
-              <OptionalContextComposer
-                session={session}
-                answers={answers}
-                isSaving={isSaving}
-                pdfUpload={pdfUpload}
-                onPatch={patchAnswers}
-                onUpload={uploadPdf}
-              />
+              {!(session.useCase === "abm" && (!answers.objective || productContextNeedsAttention(session))) && (
+                <OptionalContextComposer
+                  session={session}
+                  answers={answers}
+                  isSaving={isSaving}
+                  pdfUpload={pdfUpload}
+                  onPatch={patchAnswers}
+                  onUpload={uploadPdf}
+                />
+              )}
               {error && <div className="inlineError" role="alert">{error}</div>}
               {connectionError && <div className="connectionNotice" role="status"><LoaderCircle className="spin" size={15} />{connectionError}</div>}
             </div>

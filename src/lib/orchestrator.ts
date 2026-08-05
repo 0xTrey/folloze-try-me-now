@@ -679,7 +679,11 @@ async function releaseLeaseSafely(
 export function isGenerationReady(useCase: UseCase, answers: SessionAnswers): boolean {
   const common = Boolean(answers.audience && answers.objective);
   if (!common) return false;
-  if (useCase === "abm") return Boolean(answers.targetDomain);
+  if (useCase === "abm") {
+    const productContextReady = answers.objective !== "Introduce a product"
+      || Boolean(answers.sourceUrl || answers.sourceName || answers.messageBelief?.trim());
+    return Boolean(answers.targetDomain && productContextReady);
+  }
   if (useCase === "campaign") {
     return Boolean(
       answers.campaignType &&
@@ -1191,12 +1195,12 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
     ? "content"
     : preflight?.useCase === "campaign"
       ? "campaign-offer"
+      : preflight?.useCase === "abm" && preflight.answers.sourceUrl
+        ? "abm-product"
       : undefined;
-  const sourceUrl = sourceKind === "content"
-    ? preflight?.answers.sourceUrl
-    : sourceKind === "campaign-offer"
+  const sourceUrl = sourceKind === "campaign-offer"
       ? preflight?.answers.offerSourceUrl
-      : undefined;
+      : preflight?.answers.sourceUrl;
   const artifactMatches = Boolean(
     sourceUrl &&
     preflight?.sourceArtifact &&
@@ -1219,9 +1223,9 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
   let shouldResumeStory = false;
   try {
     await updateSession(id, (session) => {
-      const currentUrl = sourceKind === "content"
-        ? session.answers.sourceUrl
-        : session.answers.offerSourceUrl;
+      const currentUrl = sourceKind === "campaign-offer"
+        ? session.answers.offerSourceUrl
+        : session.answers.sourceUrl;
       if (session.useCase !== preflight.useCase || currentUrl !== sourceUrl) {
         return session;
       }
@@ -1233,9 +1237,9 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
       }
       appendEvent(
         session,
-        sourceKind === "content"
-          ? "source_intelligence_started"
-          : "offer_source_intelligence_started",
+        sourceKind === "campaign-offer"
+          ? "offer_source_intelligence_started"
+          : "source_intelligence_started",
         { attemptId, kind: "public-url" }
       );
       return session;
@@ -1246,15 +1250,15 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
       maxBytes: 2_000_000
     });
     await updateSession(id, (session) => {
-      const currentUrl = sourceKind === "content"
-        ? session.answers.sourceUrl
-        : session.answers.offerSourceUrl;
+      const currentUrl = sourceKind === "campaign-offer"
+        ? session.answers.offerSourceUrl
+        : session.answers.sourceUrl;
       if (session.useCase !== preflight.useCase || currentUrl !== sourceUrl) {
         return session;
       }
       session.sourceArtifact = sourceArtifact;
       const rejected = sourceArtifact.status === "failed" || sourceArtifact.status === "unreadable";
-      if (sourceKind === "content") {
+      if (sourceKind !== "campaign-offer") {
         if (sourceArtifact.content.title) session.answers.sourceTitle = sourceArtifact.content.title;
         session.sourceConfirmation = {
           status: rejected ? "rejected" : "confirmed",
@@ -1284,9 +1288,9 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
           session.campaignOfferSource.intelligenceStatus = rejected ? "failed" : "ready";
         }
       }
-      appendEvent(session, sourceKind === "content"
-        ? "source_intelligence_completed"
-        : "offer_source_intelligence_completed", {
+      appendEvent(session, sourceKind === "campaign-offer"
+        ? "offer_source_intelligence_completed"
+        : "source_intelligence_completed", {
         attemptId,
         status: sourceArtifact.status,
         confidence: sourceArtifact.confidence,
@@ -1294,7 +1298,7 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
         claimCount: sourceArtifact.diagnostics.claimCount,
         citationCount: sourceArtifact.diagnostics.citationCount
       });
-      shouldResumeStory = sourceKind === "campaign-offer" && isGenerationReady(
+      shouldResumeStory = isGenerationReady(
         session.useCase,
         session.answers
       );
@@ -1316,6 +1320,16 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
         if (session.campaignOfferSource) {
           session.campaignOfferSource.intelligenceStatus = "failed";
         }
+        return session;
+      });
+    } else {
+      await updateSession(id, (session) => {
+        if (session.answers.sourceUrl !== sourceUrl) return session;
+        session.sourceConfirmation = {
+          status: "rejected",
+          sourceKind: "public-url",
+          provenance: "user-submitted"
+        };
         return session;
       });
     }
@@ -1996,10 +2010,16 @@ export async function runStoryStage(id: string): Promise<void> {
       needsTargetBrandRefresh(refreshed, preflight.answers.targetDomain)
     ) return;
   }
-  if (preflight?.useCase === "content" && preflight.answers.sourceUrl && !preflight.sourceArtifact) {
+  if (
+    (preflight?.useCase === "content" || preflight?.useCase === "abm")
+    && preflight.answers.sourceUrl
+    && !preflight.sourceArtifact
+  ) {
     await runSourceIntelligenceStage(id);
     preflight = await getSession(id);
-    if (!preflight || hasTerminalStoryFailure(preflight)) return;
+    // Another request may still own the extraction lease. That worker resumes
+    // generation after committing the matching artifact, so never race ahead.
+    if (!preflight?.sourceArtifact || hasTerminalStoryFailure(preflight)) return;
   }
   if (
     preflight?.useCase === "campaign" &&
@@ -2073,7 +2093,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
   try {
     let latest = (await getSession(id)) ?? started;
     if (
-      latest.useCase === "content" &&
+      (latest.useCase === "content" ||
+        (latest.useCase === "abm" && latest.answers.objective === "Introduce a product")) &&
       latest.sourceArtifact &&
       (latest.sourceArtifact.status === "failed" || latest.sourceArtifact.status === "unreadable")
     ) {
@@ -2082,7 +2103,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       );
     }
     if (
-      latest.useCase === "content" &&
+      (latest.useCase === "content" ||
+        (latest.useCase === "abm" && latest.answers.objective === "Introduce a product")) &&
       latest.answers.sourceUrl &&
       !latest.sourceArtifact
     ) {

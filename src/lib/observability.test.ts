@@ -57,6 +57,7 @@ describe("observability redaction", () => {
       details: {
         domain: "cisco.com",
         logoStrategy: "inline-svg-unportable",
+        sourceKind: "abm-product",
         sourceUrl: "https://www.cisco.com/private"
       }
     });
@@ -67,7 +68,8 @@ describe("observability redaction", () => {
       event: "brand_harvest_completed",
       traceId: "session-123",
       details: {
-        logoStrategy: "inline-svg-unportable"
+        logoStrategy: "inline-svg-unportable",
+        sourceKind: "abm-product"
       }
     });
     expect(JSON.stringify(parsed)).not.toContain("private");

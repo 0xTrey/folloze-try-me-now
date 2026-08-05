@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const safeFetchMocks = vi.hoisted(() => ({
+  fetchPinnedPublicText: vi.fn()
+}));
+
+vi.mock("@/lib/safe-fetch", () => safeFetchMocks);
 
 import {
   fetchPublicUrlSourceArtifact,
@@ -26,6 +32,10 @@ async function articleFixture(): Promise<{ html: string; expected: ExpectedArtic
   ]);
   return { html, expected: JSON.parse(expected) as ExpectedArticleFixture };
 }
+
+afterEach(() => {
+  safeFetchMocks.fetchPinnedPublicText.mockReset();
+});
 
 describe("public source content normalization", () => {
   it("turns a golden HTML article into a cited source artifact", async () => {
@@ -78,6 +88,7 @@ describe("public source content normalization", () => {
   });
 
   it("keeps invalid or private URLs behind the protected fetch boundary", async () => {
+    safeFetchMocks.fetchPinnedPublicText.mockRejectedValue(new Error("Private URL rejected"));
     const artifact = await fetchPublicUrlSourceArtifact("http://127.0.0.1/internal", {
       timeoutMs: 20,
       createdAt: "2026-08-04T12:00:00.000Z"
@@ -88,5 +99,19 @@ describe("public source content normalization", () => {
     expect(artifact.content.text).toBe("");
     expect(artifact.source.sourceUrl).toBeUndefined();
   });
-});
 
+  it("preserves a submitted source URL separately from its canonical redirect", async () => {
+    safeFetchMocks.fetchPinnedPublicText.mockResolvedValue({
+      status: 200,
+      headers: { "content-type": "text/html" },
+      text: "<main><h1>Product overview</h1><p>A detailed product overview for buyers evaluating the platform and its operating model.</p></main>",
+      finalUrl: new URL("https://example.com/platform/overview"),
+      truncated: false
+    });
+
+    const artifact = await fetchPublicUrlSourceArtifact("https://example.com/platform");
+
+    expect(artifact.source.sourceUrl).toBe("https://example.com/platform");
+    expect(artifact.source.finalUrl).toBe("https://example.com/platform/overview");
+  });
+});

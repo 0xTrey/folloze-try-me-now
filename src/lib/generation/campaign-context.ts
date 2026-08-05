@@ -717,6 +717,10 @@ export function compileCampaignContext(input: {
   const designRegister = designRegisterFor(brand, category);
   const imageMode = brand.imageUrls.length >= 3 ? "image-led" : brand.imageUrls.length ? "image-supported" : "type-led";
   const primaryAction = primaryActionFor({ useCase, objective, campaignType: answers.campaignType });
+  const productIntroduction = useCase === "abm" && objective === "Introduce a product";
+  const visitorProductContext = productIntroduction && answers.messageBelief?.trim()
+    ? cleanWhitespace(answers.messageBelief).slice(0, 240)
+    : null;
   const sellerIdentity =
     brand.identity ?? assessBrandIdentity(brand, brand.domain, answers.sellerConfirmed);
   const targetIdentity = targetBrand
@@ -739,6 +743,8 @@ export function compileCampaignContext(input: {
     : sourceTitle ?? "the submitted source";
   const publicMoment = eventContext
     ? `The visitor supplied ${eventContext} as the event context.`
+    : visitorProductContext
+      ? `Visitor-supplied product context: ${visitorProductContext}`
     : sourceTitle
       ? `The approved source is ${sourceTitle}.`
       : useCase === "campaign" && answers.promotedOffer
@@ -754,7 +760,7 @@ export function compileCampaignContext(input: {
         domain: brand.domain,
         name: brand.companyName,
         category,
-        offer: answers.promotedOffer || profile.offerLabel,
+        offer: productIntroduction ? offerName : answers.promotedOffer || profile.offerLabel,
         identity: sellerIdentity
       },
       targetAccount: targetBrand
@@ -812,6 +818,8 @@ export function compileCampaignContext(input: {
         sellerPromise:
           register === "content-magic"
             ? `Help ${audience} explore the supported ideas in ${sourceTitle ?? "the source"} without adding unrelated product-category claims.`
+            : productIntroduction && visitorProductContext
+              ? `Position ${offerName} for ${audience} using this visitor-supplied product context without inventing unsupported claims: ${visitorProductContext}`
             : useCase === "campaign" && answers.promotedOffer
               ? `Make ${offerName} relevant to ${audience} without adding unsupported product claims.`
             : profile.capabilitySentence,

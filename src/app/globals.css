@@ -832,6 +832,9 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
     #fff;
   box-shadow: 0 16px 44px rgba(7,20,40,.045);
 }
+.productContextQuestion { margin-top: 22px; padding: 20px; border: 1px solid color-mix(in srgb,var(--fz-accent) 24%,var(--fz-border)); border-radius: 18px; background: linear-gradient(145deg,#fff 0%,color-mix(in srgb,var(--fz-accent) 5%,#fff) 100%); }
+.productContextHeading h3 { margin: 6px 0 8px; color: var(--fz-ink); font: 580 24px/1.08 var(--font-display),sans-serif; letter-spacing: -.035em; }
+.productContextHeading p { max-width: 560px; margin: 0 0 16px; color: var(--fz-body); font-size: 12px; line-height: 1.55; }
 .contextComposerHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .contextComposerHeader h2 { margin: 5px 0 0; font: 580 20px/1.15 var(--font-display),sans-serif; letter-spacing: -.025em; }
 .contextComposer > p { max-width: 580px; margin: 8px 0 16px; color: var(--fz-muted); font-size: 11px; line-height: 1.5; }
@@ -840,6 +843,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .contextModeRail button { min-height: 34px; padding: 7px 11px; display: inline-flex; align-items: center; gap: 6px; color: var(--fz-muted); border: 0; border-radius: 999px; background: transparent; cursor: pointer; font-size: 9px; font-weight: 700; }
 .contextModeRail button.isActive { color: var(--fz-ink); background: #fff; box-shadow: 0 2px 8px rgba(7,20,40,.08); }
 .contextModeRail button.isActive svg { color: var(--fz-accent); }
+.contextModeRail button:disabled { opacity: .42; cursor: not-allowed; }
 .contextPanel { margin-top: 12px; padding: 14px; border: 1px solid var(--fz-border); border-radius: 13px; background: #fbfbfd; }
 .contextPanel > label { display: block; margin-bottom: 7px; color: var(--fz-body); font-size: 9px; font-weight: 750; }
 .contextPanel textarea { width: 100%; min-height: 78px; padding: 11px 12px; resize: vertical; color: var(--fz-ink); border: 1px solid #dfe2e9; border-radius: 10px; background: #fff; font: 500 11px/1.5 var(--font-body),sans-serif; }

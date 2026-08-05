@@ -110,6 +110,27 @@ describe("compileCampaignContext", () => {
     });
   });
 
+  it("uses visitor-supplied product context in an ABM introduction without treating it as public proof", () => {
+    const context = compileCampaignContext({
+      brand: seller,
+      targetBrand: target,
+      useCase: "abm",
+      answers: {
+        targetDomain: "cisco.com",
+        audience: "Infrastructure and security architects",
+        objective: "Introduce a product",
+        messageBelief: "Harmony connects governed integration and automation in one operating layer."
+      }
+    });
+
+    expect(context.brief.messageSpine.whyNow).toContain("Visitor-supplied product context");
+    expect(context.brief.messageSpine.sellerPromise).toContain("Harmony connects governed integration");
+    expect(context.brief.messageSpine.proofPolicy).toMatch(/Do not invent|Use seller mechanisms/i);
+    expect(context.brief.offerOrSource.provenance).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "public-page" })
+    ]));
+  });
+
   it("never promotes navigation labels into target-account evidence", () => {
     const navigationHeavyTarget: BrandProfile = {
       ...target,
