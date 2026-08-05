@@ -28,6 +28,7 @@ export const PRODUCT_EVENT_NAMES = [
   "pdf_upload_completed",
   "pdf_upload_failed",
   "pdf_upload_started",
+  "preview_interaction",
   "research_started",
   "session_created",
   "session_status_changed",

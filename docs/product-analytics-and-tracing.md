@@ -99,7 +99,7 @@ Set these Vercel variables only after a PostHog project exists:
 
 ```text
 NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=phc_...
-NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
+NEXT_PUBLIC_POSTHOG_HOST=/signal-dock
 NEXT_PUBLIC_POSTHOG_SESSION_REPLAY=false
 ```
 
@@ -113,10 +113,23 @@ prevents duplicate and unstable DOM-derived events. PostHog person profiles are
 `identified_only`; the person is identified with the stable `tmv_*` ID after
 business-email claim, not with a shared literal or a raw email distinct ID.
 
+PostHog traffic is routed through the same-origin `/signal-dock` Next.js rewrite
+so common domain-level blockers do not silently erase prospect journeys. The
+project uses custom `try_me_*` event names, the same `$insert_id` as the
+first-party event ledger, and release/environment properties on every PostHog
+event. Do Not Track is honored. Generic click events use only explicit analytics
+labels, accessible labels, stable names/IDs, or the element type; rendered buyer
+copy is never used as a fallback label.
+
 Session replay is off by default. If privacy/legal review authorizes it, set the
-replay flag to `true`; all inputs remain masked and query strings are removed
-in the browser before network metadata is sent. Do not enable network bodies or
-unmask fields.
+replay flag to `true`; all inputs and rendered text remain masked, and query
+strings are removed in the browser before network metadata is sent. Do not
+enable network bodies or unmask fields.
+
+Native exception capture stays enabled for PostHog's error-grouping UI, but a
+`before_send` scrubber removes contact data, credentials, and URL query strings.
+The bounded `try_me_browser_error` and `try_me_unhandled_rejection` events remain
+the stable cross-sink reliability vocabulary.
 
 Recommended initial PostHog views:
 

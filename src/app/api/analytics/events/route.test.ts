@@ -23,6 +23,7 @@ function request(body: unknown, origin = "https://preview.example.com") {
     headers: {
       "Content-Type": "application/json",
       origin,
+      "sec-fetch-site": "same-origin",
       "x-forwarded-for": `198.51.100.${Math.floor(Math.random() * 200) + 1}`
     },
     body: JSON.stringify(body)
@@ -46,6 +47,22 @@ describe("POST /api/analytics/events", () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     expect((await POST(request({ events: [validEvent] }, "https://attacker.example"))).status).toBe(403);
     expect((await POST(request({ events: [{ ...validEvent, event: "raw_input_value" }] }))).status).toBe(400);
+    expect(getMemoryProductEventsForTest()).toHaveLength(0);
+  });
+
+  it("rejects missing origins and mixed browser identities", async () => {
+    const missingOrigin = request({ events: [validEvent] });
+    missingOrigin.headers.delete("origin");
+    expect((await POST(missingOrigin)).status).toBe(403);
+
+    const response = await POST(request({
+      events: [validEvent, {
+        ...validEvent,
+        eventId: "tme_fedcba0987654321",
+        browserSessionId: "tmb_fedcba0987654321"
+      }]
+    }));
+    expect(response.status).toBe(400);
     expect(getMemoryProductEventsForTest()).toHaveLength(0);
   });
 });

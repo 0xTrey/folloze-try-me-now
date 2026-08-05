@@ -1,24 +1,16 @@
 import posthog from "posthog-js";
 
+import { postHogBrowserConfig } from "@/lib/posthog-config";
+
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
 const replayEnabled = process.env.NEXT_PUBLIC_POSTHOG_SESSION_REPLAY === "true";
 
 if (projectToken && apiHost) {
-  posthog.init(projectToken, {
-    api_host: apiHost,
-    person_profiles: "identified_only",
-    autocapture: false,
-    capture_pageview: false,
-    capture_pageleave: false,
-    capture_exceptions: true,
-    disable_session_recording: !replayEnabled,
-    session_recording: {
-      maskAllInputs: true,
-      maskCapturedNetworkRequestFn: (request) => {
-        if (request.name) request.name = request.name.split("?")[0];
-        return request;
-      }
-    }
+  posthog.init(projectToken, postHogBrowserConfig({ apiHost, replayEnabled }));
+  posthog.register({
+    app_surface: "try_me_now",
+    app_environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? process.env.NODE_ENV,
+    app_release: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? "local"
   });
 }

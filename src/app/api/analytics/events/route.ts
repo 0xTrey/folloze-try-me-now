@@ -10,9 +10,21 @@ import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 
 function requireSameOrigin(request: NextRequest): void {
   const origin = request.headers.get("origin");
-  if (!origin) return;
-  if (origin !== request.nextUrl.origin) {
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim();
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (!origin || origin !== request.nextUrl.origin || (fetchSite && fetchSite !== "same-origin")) {
     throw new HttpError(403, "analytics_origin_forbidden", "Analytics origin is not allowed.");
+  }
+  if (contentType !== "application/json") {
+    throw new HttpError(415, "analytics_content_type_invalid", "Analytics requires JSON.");
+  }
+}
+
+function requireSingleIdentity(events: ReturnType<typeof parseProductEventBatch>): void {
+  const [first] = events;
+  if (events.some((event) =>
+    event.visitorId !== first.visitorId || event.browserSessionId !== first.browserSessionId)) {
+    throw new HttpError(400, "analytics_identity_mixed", "Analytics batches require one browser identity.");
   }
 }
 
@@ -20,6 +32,7 @@ export async function POST(request: NextRequest) {
   try {
     requireSameOrigin(request);
     const events = parseProductEventBatch(await request.json());
+    requireSingleIdentity(events);
     await Promise.all([
       enforceRateLimit(`product-events:client:${anonymousClientKey(request)}`, 360, 60),
       enforceRateLimit(`product-events:browser:${events[0].browserSessionId}`, 300, 60)

@@ -37,6 +37,23 @@ describe("first-party product analytics", () => {
     expect(getMemoryProductEventsForTest()).toHaveLength(1);
   });
 
+  it("accepts generated-preview interactions as bounded product events", () => {
+    expect(() => parseProductEventBatch({
+      events: [{
+        eventId: "tme_preview123456789",
+        ...identity,
+        sessionId: "session_12345678",
+        event: "preview_interaction",
+        category: "interaction",
+        path: "/",
+        properties: {
+          interaction_type: "section_view",
+          interaction_target: "proof"
+        }
+      }]
+    })).not.toThrow();
+  });
+
   it("rejects unknown events, arbitrary nested data, and contact data", () => {
     const base = {
       eventId: "tme_1234567890abcdef",

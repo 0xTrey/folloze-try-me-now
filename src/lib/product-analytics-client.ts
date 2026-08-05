@@ -101,7 +101,8 @@ function safeProperties(properties: ProductProperties | undefined): ProductPrope
       .map(([key, value]) => [key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase(), value] as const)
       .filter(([key]) => /^[a-z][a-z0-9_]{0,39}$/.test(key))
       .slice(0, 24)
-      .map(([key, value]) => [key, typeof value === "string" ? safeText(value) : value])
+      .map(([key, value]) => [key, typeof value === "string" ? safeText(value) : value] as const)
+      .filter(([, value]) => typeof value !== "string" || value.length > 0)
   );
 }
 
@@ -124,7 +125,7 @@ function landingContext(): QueuedEvent["landing"] {
   const parameters = new URLSearchParams(window.location.search);
   const utm = Object.fromEntries(
     (["source", "medium", "campaign", "term", "content"] as const)
-      .map((key) => [key, parameters.get(`utm_${key}`)?.slice(0, 160)] as const)
+      .map((key) => [key, safeText(parameters.get(`utm_${key}`) ?? "", 160)] as const)
       .filter((entry): entry is readonly [typeof entry[0], string] => Boolean(entry[1]))
   );
   let referrerHost: string | undefined;
@@ -164,8 +165,10 @@ export function captureProductEvent(
   if (typeof window === "undefined") return;
   const identity = productAnalyticsIdentity();
   if (!identity) return;
+  const eventId = opaqueId("tme");
+  const properties = safeProperties(options.properties);
   queue.push({
-    eventId: opaqueId("tme"),
+    eventId,
     ...identity,
     sessionId: options.sessionId ?? activeSessionId,
     event,
@@ -173,14 +176,16 @@ export function captureProductEvent(
     path: window.location.pathname,
     outcome: options.outcome,
     durationMs: options.durationMs,
-    properties: safeProperties(options.properties),
+    properties,
     occurredAt: new Date().toISOString(),
     ...(event === "visitor_session_started" ? { landing: landingContext() } : {})
   });
   if (posthogEnabled) {
     try {
       posthog.capture(`try_me_${event}`, {
-        ...(safeProperties(options.properties) ?? {}),
+        ...(properties ?? {}),
+        $insert_id: eventId,
+        try_me_event_id: eventId,
         try_me_visitor_id: identity.visitorId,
         try_me_browser_session_id: identity.browserSessionId,
         try_me_session_id: options.sessionId ?? activeSessionId,
@@ -213,7 +218,12 @@ export async function flushProductAnalytics(useBeacon = false): Promise<void> {
       keepalive: true,
       body
     });
-    if (!response.ok) throw new Error(`Analytics request failed with ${response.status}.`);
+    if (!response.ok) {
+      if (response.status === 429 || response.status >= 500) {
+        throw new Error(`Analytics request failed with ${response.status}.`);
+      }
+      return;
+    }
   } catch {
     queue.unshift(...batch);
     if (queue.length > maxQueueSize) queue.splice(maxQueueSize);
@@ -248,7 +258,6 @@ function elementDescription(element: Element): ProductProperties {
     || htmlElement.getAttribute("title")
     || htmlElement.getAttribute("name")
     || htmlElement.id
-    || htmlElement.textContent
     || element.tagName.toLowerCase();
   const analyticsArea = htmlElement.closest<HTMLElement>("[data-analytics-area]")?.dataset.analyticsArea;
   return {
@@ -257,6 +266,23 @@ function elementDescription(element: Element): ProductProperties {
     label: safeText(label, 96),
     area: safeText(analyticsArea || "page", 80)
   };
+}
+
+export function resetProductAnalyticsVisitor(): void {
+  if (typeof window === "undefined") return;
+  void flushProductAnalytics(true);
+  queue.length = 0;
+  activeSessionId = undefined;
+  window.localStorage.removeItem(visitorStorageKey);
+  window.sessionStorage.removeItem(browserSessionStorageKey);
+  if (posthogEnabled) {
+    try {
+      posthog.reset(true);
+    } catch {
+      // A new first-party identity is still created even if the optional sink is unavailable.
+    }
+  }
+  productAnalyticsIdentity();
 }
 
 function fieldDescription(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): ProductProperties {
