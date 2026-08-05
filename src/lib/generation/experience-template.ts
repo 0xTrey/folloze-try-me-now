@@ -1,4 +1,7 @@
-import type { ExperienceDraft } from "@/lib/generation/experience-schema";
+import type {
+  ExperienceDraft,
+  PersuasionFramework
+} from "@/lib/generation/experience-schema";
 import {
   experienceTemplateFor,
   SHARED_EXPERIENCE_PRIMITIVES,
@@ -141,17 +144,59 @@ function wordmark(profile: BrandProfile, className: string, darkSurface = false)
   </span>`;
 }
 
-function imageFigure(url: string | undefined, alt: string, className: string, eager = false): string {
+function imageFigure(
+  url: string | undefined,
+  alt: string,
+  className: string,
+  eager = false,
+  allowFallback = true
+): string {
   const safeUrl = safeAssetUrl(url);
+  if (!safeUrl && !allowFallback) return "";
   const roleClass = safeUrl && /diagram|architecture|marketecture|workflow|chart/i.test(safeUrl) ? " is-diagram" : "";
-  return `<figure class="media ${className}${roleClass}">
-    <div class="media-fallback" data-fallback-kind="experience-blueprint" aria-hidden="true">
+  return `<figure class="media ${className}${roleClass}"${allowFallback ? "" : ' data-no-fallback="true"'}>
+    ${allowFallback ? `<div class="media-fallback" data-fallback-kind="experience-blueprint" aria-hidden="true">
       <span class="media-fallback-kicker">Experience blueprint</span>
       <strong>Context.<br>Proof.<br>Next step.</strong>
       <span class="media-fallback-steps"><i>01</i><i>02</i><i>03</i></span>
-    </div>
+    </div>` : ""}
     ${safeUrl ? `<img src="${escapeHtml(safeUrl)}" alt="${escapeHtml(alt)}" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>` : ""}
   </figure>`;
+}
+
+function frameworkImage(
+  images: string[],
+  brief: PersuasionFramework["opening"]["imageBrief"],
+  className: string,
+  eager = false
+): string {
+  if (brief.source === "none" || brief.assetType === "typographic-treatment") return "";
+  const assetPatterns: Record<PersuasionFramework["opening"]["imageBrief"]["assetType"], RegExp> = {
+    "logo-lockup": /logo|wordmark|brandmark/i,
+    "product-ui": /product|platform|screen|ui|dashboard|solution|hero/i,
+    "workflow-diagram": /workflow|diagram|architecture|flow|marketecture|process/i,
+    "customer-proof": /customer|case|story|result|proof/i,
+    "source-visual": /report|ebook|guide|resource|cover|source/i,
+    "data-visual": /chart|data|metric|benchmark|graph/i,
+    "typographic-treatment": /$a/
+  };
+  const purposeTokens = `${brief.purpose} ${brief.caption}`
+    .toLocaleLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 5);
+  const ranked = images
+    .map((url, index) => {
+      const pathname = new URL(url, "https://first-party.invalid").pathname.toLocaleLowerCase();
+      const typeScore = assetPatterns[brief.assetType].test(pathname) ? 100 : 0;
+      const purposeScore = purposeTokens.reduce(
+        (score, token) => score + (pathname.includes(token) ? 12 : 0),
+        0
+      );
+      return { url, index, score: typeScore + purposeScore };
+    })
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  const selected = ranked[0]?.score ? ranked[0].url : undefined;
+  return imageFigure(selected, brief.caption, className, eager, false);
 }
 
 type RenderStyleVariant = "standard" | "brand-led" | "editorial" | "technical" | "minimal";
@@ -242,6 +287,14 @@ export function renderExperienceHtml(input: {
   const supportingImages = images.filter((image) => image !== heroImage);
   const vendorUrl = safePublicLinkUrl(`https://${brand.domain}`) ?? "https://www.folloze.com";
   const template = experienceTemplateFor(draft);
+  const framework = template.family === "content-source" ? undefined : draft.persuasionFramework;
+  const templateFingerprint = framework
+    ? template.fingerprint
+    : template.family === "account-abm"
+      ? "v3-account-thesis-paths-proof"
+      : template.family === "campaign-launch"
+        ? "v3-campaign-routes-proof-thesis"
+        : template.fingerprint;
   const sourceTitle =
     compactText(input.answers.sourceTitle, 140) ??
     compactText(input.answers.sourceName, 140) ??
@@ -275,14 +328,34 @@ export function renderExperienceHtml(input: {
     lenses: "decision-path",
     resources: "supporting-resources"
   };
-  const journeyNavItems = [
-    { id: "experience-overview", label: "Overview" },
-    ...template.regionOrder.map((region) => ({
-      id: sectionIds[region],
-      label: template.navigation[region]
-    })),
-    { id: "next-step", label: "Next step" }
-  ];
+  const journeyNavItems = framework
+    ? template.family === "account-abm"
+      ? [
+          { id: "experience-overview", label: `Opportunity for ${targetBrand?.companyName ?? "the account"}` },
+          { id: "credibility-anchor", label: "What is working" },
+          { id: "why-change-now", label: "Why now" },
+          { id: "starting-points", label: "Where to start" },
+          { id: "outcome-mechanism", label: "How it works" },
+          { id: "team-value", label: "What teams need" },
+          { id: "next-step", label: "Map the first use case" }
+        ]
+      : [
+          { id: "experience-overview", label: offerTitle ?? "The offer" },
+          { id: "credibility-anchor", label: "Reasons to believe" },
+          { id: "why-change-now", label: "Why it persists" },
+          { id: "starting-points", label: "Choose a use case" },
+          { id: "outcome-mechanism", label: "What changes" },
+          { id: "team-value", label: "Value for your team" },
+          { id: "next-step", label: draft.sectionLabels.close }
+        ]
+    : [
+        { id: "experience-overview", label: "Overview" },
+        ...template.regionOrder.map((region) => ({
+          id: sectionIds[region],
+          label: template.navigation[region]
+        })),
+        { id: "next-step", label: "Next step" }
+      ];
   const journeyNavButtons = journeyNavItems
     .map(
       (item, index) => `<button type="button" data-scroll-target="${escapeHtml(item.id)}" data-journey-link="${escapeHtml(item.id)}" ${index === 0 ? 'aria-current="location"' : ""}>
@@ -290,19 +363,29 @@ export function renderExperienceHtml(input: {
       </button>`
     )
     .join("");
-  const lensButtons = draft.signalLabels
+  const frameworkChoices = framework?.startingPoints.choices;
+  const lensButtons = (frameworkChoices ?? draft.sections.map((section, index) => ({ label: draft.signalLabels[index], buyerJob: section.headline })))
     .map(
-      (label, index) => `<button type="button" role="tab" id="lens-tab-${index}" aria-controls="lens-panel-${index}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" data-lens-index="${index}" ${editableBlock(`lens.${index}.label`, "tab-label")}>${escapeHtml(label)}</button>`
+      (choice, index) => `<button type="button" role="tab" id="lens-tab-${index}" aria-controls="lens-panel-${index}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" data-lens-index="${index}" ${editableBlock(`lens.${index}.label`, "tab-label")}>${escapeHtml(choice.label)}</button>`
     )
     .join("");
 
-  const lensPanels = draft.sections
+  const lensPanels = (frameworkChoices ?? draft.sections)
     .map(
-      (section, index) => `<section class="lens-panel" id="lens-panel-${index}" role="tabpanel" aria-labelledby="lens-tab-${index}" tabindex="0" ${index === 0 ? "" : "hidden"}>
+      (section, index) => {
+        const label = frameworkChoices ? frameworkChoices[index].label : draft.sections[index].eyebrow;
+        const headline = frameworkChoices ? frameworkChoices[index].buyerJob : draft.sections[index].headline;
+        const body = frameworkChoices ? frameworkChoices[index].outcome : draft.sections[index].body;
+        const question = frameworkChoices ? frameworkChoices[index].validationQuestion : undefined;
+        const media = frameworkChoices
+          ? frameworkImage(images, frameworkChoices[index].imageBrief, "lens-media")
+          : imageFigure(supportingImages[index] ?? supportingImages[0] ?? heroImage, `${brand.companyName}: ${label}`, "lens-media");
+        return `<section class="lens-panel${media ? "" : " no-media"}" id="lens-panel-${index}" role="tabpanel" aria-labelledby="lens-tab-${index}" tabindex="0" ${index === 0 ? "" : "hidden"}>
         <div class="lens-number" aria-hidden="true">0${index + 1}</div>
-        <div class="lens-copy"><p class="eyebrow" ${editableBlock(`lens.${index}.eyebrow`, "eyebrow")}>${escapeHtml(section.eyebrow)}</p><h2 ${editableBlock(`lens.${index}.headline`, "headline")}>${escapeHtml(section.headline)}</h2><p ${editableBlock(`lens.${index}.body`, "body")}>${escapeHtml(section.body)}</p></div>
-        ${imageFigure(supportingImages[index] ?? supportingImages[0] ?? heroImage, `${brand.companyName}: ${section.eyebrow}`, "lens-media")}
-      </section>`
+        <div class="lens-copy"><p class="eyebrow" ${editableBlock(`lens.${index}.eyebrow`, "eyebrow")}>${escapeHtml(label)}</p><h2 ${editableBlock(`lens.${index}.headline`, "headline")}>${escapeHtml(headline)}</h2><p ${editableBlock(`lens.${index}.body`, "body")}>${escapeHtml(body)}</p>${question ? `<p class="validation-question"><strong>Question to answer</strong>${escapeHtml(question)}</p>` : ""}</div>
+        ${media}
+      </section>`;
+      }
     )
     .join("");
 
@@ -359,6 +442,65 @@ export function renderExperienceHtml(input: {
       <div class="signature-intro"><p class="eyebrow">${escapeHtml(template.signatureEyebrow(draft.audienceLabel, targetBrand?.companyName))}</p><h2>${escapeHtml(draft.narrativeArc)}</h2><p>${escapeHtml(signatureContext)}</p></div>
       <div class="signature-items">${signatureButtons}</div>
     </section>`;
+  const evidenceAttribute = (ids: string[]) =>
+    `data-evidence-ids="${escapeHtml(ids.join(","))}"`;
+  const frameworkFlow = framework
+    ? `<section class="framework-section credibility-anchor" id="credibility-anchor" data-journey-section="credibility-anchor" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)} aria-labelledby="credibility-anchor-heading">
+        <div class="framework-copy">
+          <p class="eyebrow" ${editableBlock("credibility.eyebrow", "section-label")}>${escapeHtml(framework.credibility.eyebrow)}</p>
+          <h2 id="credibility-anchor-heading" ${editableBlock("credibility.headline", "headline")}>${escapeHtml(framework.credibility.headline)}</h2>
+          <div class="fact-implication">
+            <div><span>Verified fact</span><p ${editableBlock("credibility.fact", "evidence")}>${escapeHtml(framework.credibility.fact)}</p></div>
+            <div><span>What it means</span><p ${editableBlock("credibility.implication", "body")}>${escapeHtml(framework.credibility.implication)}</p></div>
+          </div>
+        </div>
+        ${frameworkImage(images, framework.credibility.imageBrief, "framework-media")}
+      </section>
+      <section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)} aria-labelledby="why-change-now-heading">
+        <header class="framework-heading"><p class="eyebrow" ${editableBlock("urgency.eyebrow", "section-label")}>${escapeHtml(framework.urgency.eyebrow)}</p><h2 id="why-change-now-heading" ${editableBlock("urgency.headline", "headline")}>${escapeHtml(framework.urgency.headline)}</h2></header>
+        <div class="argument-sequence">
+          <article><span>01 · The change</span><p ${editableBlock("urgency.change", "evidence")}>${escapeHtml(framework.urgency.change)}</p></article>
+          <article><span>02 · The consequence</span><p ${editableBlock("urgency.consequence", "body")}>${escapeHtml(framework.urgency.consequence)}</p></article>
+          <article><span>03 · The better path</span><p ${editableBlock("urgency.reframe", "body")}>${escapeHtml(framework.urgency.reframe)}</p></article>
+        </div>
+      </section>
+      <section class="lens-lab framework-starting-points" id="starting-points" data-journey-section="starting-points" data-template-primitive="starting-points" aria-labelledby="starting-points-heading">
+        <header class="region-heading"><p class="eyebrow" ${editableBlock("startingPoints.eyebrow", "section-label")}>${escapeHtml(framework.startingPoints.eyebrow)}</p><h2 id="starting-points-heading" ${editableBlock("startingPoints.headline", "headline")}>${escapeHtml(framework.startingPoints.headline)}</h2><p class="region-intro" ${editableBlock("startingPoints.intro", "body")}>${escapeHtml(framework.startingPoints.intro)}</p></header>
+        <div class="lens-tabs" role="tablist" aria-orientation="horizontal" aria-label="${escapeHtml(framework.startingPoints.headline)}">${lensButtons}</div>
+        ${lensPanels}
+      </section>
+      <section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism" aria-labelledby="outcome-mechanism-heading">
+        <div class="framework-copy">
+          <p class="eyebrow" ${editableBlock("mechanism.eyebrow", "section-label")}>${escapeHtml(framework.mechanism.eyebrow)}</p>
+          <h2 id="outcome-mechanism-heading" ${editableBlock("mechanism.headline", "headline")}>${escapeHtml(framework.mechanism.headline)}</h2>
+          <p class="region-intro" ${editableBlock("mechanism.intro", "body")}>${escapeHtml(framework.mechanism.intro)}</p>
+          <div class="mechanism-steps">${framework.mechanism.steps
+            .map(
+              (step, index) => `<article ${evidenceAttribute(step.evidenceIds)}><span class="step-index">0${index + 1}</span><div><h3 ${editableBlock(`mechanism.${index}.action`, "headline")}>${escapeHtml(step.action)}</h3><p ${editableBlock(`mechanism.${index}.capability`, "body")}>${escapeHtml(step.capability)}</p><strong ${editableBlock(`mechanism.${index}.output`, "outcome")}>${escapeHtml(step.output)}</strong></div></article>`
+            )
+            .join("")}</div>
+        </div>
+        ${frameworkImage(images, framework.mechanism.imageBrief, "framework-media mechanism-media")}
+      </section>
+      <section class="framework-section team-value-section" id="team-value" data-journey-section="team-value" data-template-primitive="team-value" aria-labelledby="team-value-heading">
+        <header class="framework-heading"><p class="eyebrow" ${editableBlock("teamValue.eyebrow", "section-label")}>${escapeHtml(framework.teamValue.eyebrow)}</p><h2 id="team-value-heading" ${editableBlock("teamValue.headline", "headline")}>${escapeHtml(framework.teamValue.headline)}</h2><p class="region-intro" ${editableBlock("teamValue.intro", "body")}>${escapeHtml(framework.teamValue.intro)}</p></header>
+        <div class="role-grid">${framework.teamValue.roles
+          .map(
+            (role, index) => `<article ${evidenceAttribute(role.evidenceIds)}><span class="role-index">0${index + 1}</span><h3 ${editableBlock(`teamValue.${index}.role`, "role")}>${escapeHtml(role.role)}</h3><dl><div><dt>Decision</dt><dd ${editableBlock(`teamValue.${index}.decision`, "body")}>${escapeHtml(role.decision)}</dd></div><div><dt>Risk</dt><dd ${editableBlock(`teamValue.${index}.risk`, "body")}>${escapeHtml(role.risk)}</dd></div><div><dt>Value</dt><dd ${editableBlock(`teamValue.${index}.benefit`, "body")}>${escapeHtml(role.benefit)}</dd></div><div><dt>Evidence needed</dt><dd ${editableBlock(`teamValue.${index}.evidence`, "evidence")}>${escapeHtml(role.evidenceNeeded)}</dd></div></dl></article>`
+          )
+          .join("")}</div>
+      </section>`
+    : "";
+  const pageFlow = framework ? frameworkFlow : `${signatureMoment}${experienceFlow}`;
+  const closeMarkup = framework
+    ? `<section class="close framework-close" id="next-step" data-journey-section="next-step" ${evidenceAttribute(framework.nextStep.evidenceIds)} aria-labelledby="next-step-heading">
+        <div><p class="eyebrow" ${editableBlock("nextStep.eyebrow", "section-label")}>${escapeHtml(framework.nextStep.eyebrow)}</p><h2 id="next-step-heading" ${editableBlock("nextStep.headline", "headline")}>${escapeHtml(framework.nextStep.headline)}</h2><p ${editableBlock("nextStep.body", "body")}>${escapeHtml(framework.nextStep.body)}</p></div>
+        <div class="next-step-panel"><dl><div><dt>Scope</dt><dd>${escapeHtml(framework.nextStep.scope)}</dd></div><div><dt>Activity</dt><dd>${escapeHtml(framework.nextStep.activity)}</dd></div><div><dt>You leave with</dt><dd>${escapeHtml(framework.nextStep.deliverable)}</dd></div><div><dt>Decision</dt><dd>${escapeHtml(framework.nextStep.resultingDecision)}</dd></div></dl><button type="button" class="primary" data-demo-cta="true" data-flz-cta-id="close-primary" ${editableBlock("nextStep.ctaLabel", "cta")}>${escapeHtml(framework.nextStep.ctaLabel)}</button></div>
+      </section>`
+    : `<section class="close" id="next-step" data-journey-section="next-step" aria-labelledby="next-step-heading">
+        <div><p class="eyebrow" ${editableBlock("close.label", "section-label")}>${escapeHtml(draft.sectionLabels.close)}</p><h2 id="next-step-heading" ${editableBlock("close.headline", "headline")}>${escapeHtml(draft.closingHeadline)}</h2><p ${editableBlock("close.body", "body")}>${escapeHtml(draft.closingBody)}</p></div>
+        <button type="button" class="primary" data-demo-cta="true" data-flz-cta-id="close-primary" ${editableBlock("close.primaryCta", "cta")}>${escapeHtml(draft.primaryCta)}</button>
+      </section>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -381,20 +523,22 @@ export function renderExperienceHtml(input: {
     .media.media .media-fallback-steps{width:100%;padding-top:16px;display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid color-mix(in srgb,var(--brand-ink) 20%,transparent)}
     .media.media .media-fallback-steps i{font-style:normal;font-size:11px;font-weight:850;letter-spacing:.12em}
     *{box-sizing:border-box}[hidden]{display:none!important}html{scroll-behavior:auto;overflow-x:clip;scroll-padding-top:70px}body{margin:0;background:var(--brand-surface);color:var(--brand-ink);font-family:var(--body);line-height:1.5;overflow-x:clip;overscroll-behavior-y:contain;-webkit-font-smoothing:antialiased}button,a{font:inherit;touch-action:manipulation}.hero-copy,.lens-copy,.journey-copy,.close>div,.region-heading{min-width:0}.shell{max-width:1600px;min-height:100dvh;margin:0 auto;background:var(--brand-surface);overflow:clip}.eyebrow{margin:0 0 18px;color:var(--brand-accent);font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.skip-link{position:fixed;left:16px;top:12px;z-index:1000;padding:10px 14px;border-radius:6px;background:var(--brand-ink);color:#fff;text-decoration:none;transform:translateY(-180%);transition:transform .16s ease}.skip-link:focus{transform:translateY(0)}.nav{height:78px;padding:0 clamp(22px,6vw,96px);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:var(--brand-surface)}.brand-lockup{display:flex;flex:0 0 auto;align-items:center;gap:12px;min-width:0}.lockup-divider{min-width:38px;min-height:32px;padding:0 9px;display:grid;place-items:center;border-inline:1px solid color-mix(in srgb,var(--muted) 32%,transparent);color:var(--muted);font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.wordmark{display:inline-grid;grid-template-areas:"mark";flex:0 0 auto;align-items:center;max-width:172px;min-height:36px;color:var(--brand-ink);font-weight:800;font-size:19px;line-height:1;white-space:nowrap}.wordmark img,.wordmark-fallback{grid-area:mark}.wordmark img{display:block;width:auto;height:auto;max-width:172px;max-height:32px;object-fit:contain;opacity:0}.wordmark-fallback{max-width:100%;overflow:hidden;text-overflow:ellipsis}.wordmark.has-image img{opacity:1}.wordmark.has-image .wordmark-fallback{visibility:hidden}.target-wordmark{max-width:142px}.target-wordmark img{max-width:142px;max-height:30px}.nav-action{border:0;background:transparent;color:var(--brand-ink);min-height:44px;padding:0;cursor:pointer;font-weight:750}.nav-action:hover,.nav-action:focus-visible{color:var(--brand-accent)}
-    .journey-nav{position:sticky;top:0;z-index:40;min-height:58px;border-bottom:1px solid color-mix(in srgb,var(--brand-ink) 14%,transparent);background:color-mix(in srgb,var(--brand-surface) 92%,transparent);box-shadow:0 12px 34px color-mix(in srgb,var(--brand-ink) 7%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}.journey-nav-inner{min-height:58px;padding:0 clamp(22px,6vw,96px);display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:clamp(18px,3vw,42px)}.journey-nav-title{display:grid;min-width:124px;line-height:1.1}.journey-nav-title strong{font-size:11px;letter-spacing:.13em;text-transform:uppercase}.journey-nav-title small{max-width:170px;margin-top:4px;overflow:hidden;color:var(--muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.journey-links{min-width:0;width:100%;display:flex;align-self:stretch;align-items:center;justify-content:center;gap:clamp(4px,1vw,14px);overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none}.journey-links::-webkit-scrollbar{display:none}.journey-links button{position:relative;display:inline-flex;flex:0 0 auto;align-items:center;gap:8px;min-height:44px;padding:0 9px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-weight:750;white-space:nowrap}.journey-links button>span{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.35;transition:opacity .18s ease,transform .18s ease}.journey-links button:after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:var(--brand-accent);transform:scaleX(0);transform-origin:center;transition:transform .18s ease}.journey-links button:hover,.journey-links button:focus-visible,.journey-links button[aria-current="location"]{color:var(--brand-ink)}.journey-links button[aria-current="location"]>span{background:var(--brand-accent);opacity:1;transform:scale(1.45)}.journey-links button[aria-current="location"]:after{transform:scaleX(1)}.fullscreen-control{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:var(--brand-surface);color:var(--brand-ink);cursor:pointer;font-size:11px;font-weight:800;white-space:nowrap}.fullscreen-control svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.6}.fullscreen-control:hover,.fullscreen-control:focus-visible,.fullscreen-control[aria-pressed="true"]{border-color:var(--brand-accent);color:var(--brand-accent)}
+    .journey-nav{position:sticky;top:0;z-index:40;min-height:58px;border-bottom:1px solid color-mix(in srgb,var(--brand-ink) 14%,transparent);background:color-mix(in srgb,var(--brand-surface) 92%,transparent);box-shadow:0 12px 34px color-mix(in srgb,var(--brand-ink) 7%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}.journey-nav-inner{min-height:58px;padding:0 clamp(22px,6vw,96px);display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:clamp(18px,3vw,42px)}.journey-nav-title{display:grid;min-width:124px;line-height:1.1}.journey-nav-title strong{font-size:11px;letter-spacing:.13em;text-transform:uppercase}.journey-nav-title small{max-width:170px;margin-top:4px;overflow:hidden;color:var(--muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.journey-links{min-width:0;width:100%;display:flex;align-self:stretch;align-items:center;justify-content:flex-start;gap:clamp(4px,1vw,14px);overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none}.journey-links::-webkit-scrollbar{display:none}.journey-links button{position:relative;display:inline-flex;flex:0 0 auto;align-items:center;gap:8px;min-height:44px;padding:0 9px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-weight:750;white-space:nowrap}.journey-links button>span{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.35;transition:opacity .18s ease,transform .18s ease}.journey-links button:after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:var(--brand-accent);transform:scaleX(0);transform-origin:center;transition:transform .18s ease}.journey-links button:hover,.journey-links button:focus-visible,.journey-links button[aria-current="location"]{color:var(--brand-ink)}.journey-links button[aria-current="location"]>span{background:var(--brand-accent);opacity:1;transform:scale(1.45)}.journey-links button[aria-current="location"]:after{transform:scaleX(1)}.fullscreen-control{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:var(--brand-surface);color:var(--brand-ink);cursor:pointer;font-size:11px;font-weight:800;white-space:nowrap}.fullscreen-control svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.6}.fullscreen-control:hover,.fullscreen-control:focus-visible,.fullscreen-control[aria-pressed="true"]{border-color:var(--brand-accent);color:var(--brand-accent)}
     .hero{position:relative;min-height:650px;padding:clamp(70px,8vw,128px) clamp(24px,7vw,112px);display:grid;grid-template-columns:minmax(0,1.04fr) minmax(360px,.76fr);gap:clamp(44px,7vw,108px);align-items:center;background:linear-gradient(132deg,var(--brand-surface) 0 58%,var(--soft) 58% 100%)}.hero-copy{position:relative;z-index:2}.hero h1{max-width:940px;margin:0;font-family:var(--display);font-size:clamp(46px,4.6vw,72px);font-weight:800;line-height:1.02;letter-spacing:-.01em;text-wrap:balance;overflow-wrap:break-word}.hero .subhead{max-width:780px;margin:28px 0 34px;color:var(--text);font-size:clamp(18px,1.65vw,22px);line-height:1.5}.primary,.secondary{display:inline-flex;align-items:center;justify-content:center;min-height:var(--button-height);padding:13px 24px;border-radius:var(--button-radius);text-decoration:none;font-weight:750;cursor:pointer;transition:background-color .18s ease,color .18s ease,border-color .18s ease}.primary{border:var(--button-border-width) solid var(--brand-button-bg);background:var(--brand-button-bg);color:var(--brand-button-text)}.primary:hover,.primary:focus-visible{border-color:var(--brand-button-hover);background:var(--brand-button-hover)}.primary:active{border-color:var(--brand-button-active);background:var(--brand-button-active)}.secondary{border:var(--button-border-width) solid var(--brand-secondary-border);background:transparent;color:var(--brand-secondary-text)}.secondary:hover,.secondary:focus-visible{border-color:var(--brand-button-hover);color:var(--brand-button-hover)}.actions{display:flex;gap:12px;flex-wrap:wrap}.hero-media{width:100%;max-width:100%;height:clamp(380px,42vw,560px);min-height:0;align-self:center;border:1px solid color-mix(in srgb,var(--brand-ink) 12%,transparent);border-radius:var(--card-radius);box-shadow:0 28px 80px color-mix(in srgb,var(--brand-ink) 16%,transparent)}.media{position:relative;margin:0;overflow:hidden;background:var(--soft)}.media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;opacity:0;transition:opacity .2s ease}.media.has-asset img{opacity:1}.media-fallback{position:absolute;inset:0;isolation:isolate}.media.has-asset .media-fallback{opacity:0}.context-note{display:inline-flex;align-items:center;gap:9px;margin-top:24px;padding:9px 13px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:13px}.context-note:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--brand-accent)}
     .signature{padding:clamp(58px,7vw,104px) clamp(24px,7vw,112px)}.signature-intro h2{max-width:1060px;margin:0;font-family:var(--display);font-size:clamp(38px,4.4vw,66px);line-height:1.03;letter-spacing:-.035em}.signature-intro>p:last-child{margin:22px 0 0;color:var(--muted);font-weight:700}.signature-items button{appearance:none;width:100%;border:0;text-align:left;color:inherit;font:inherit;cursor:pointer}.signature-index{padding-top:5px;font:800 13px/1 var(--body);letter-spacing:.12em}.signature-item-copy{display:grid;gap:8px}.signature-item-copy strong{font-size:13px;letter-spacing:.1em;text-transform:uppercase}.signature-item-copy>span{font-family:var(--display);font-size:clamp(18px,1.7vw,25px);line-height:1.18}.signature-canonical{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(420px,1.08fr);gap:clamp(44px,7vw,110px);align-items:start;background:var(--soft);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.signature-canonical .signature-items{display:grid;border-top:1px solid color-mix(in srgb,var(--brand-ink) 20%,transparent)}.signature-canonical button{display:grid;grid-template-columns:52px 1fr;gap:18px;padding:28px 0;background:transparent;border-bottom:1px solid color-mix(in srgb,var(--brand-ink) 20%,transparent)}.signature-canonical button:hover,.signature-canonical button:focus-visible{color:var(--brand-accent-on-light)}
     .thesis{padding:clamp(72px,8vw,126px) clamp(24px,7vw,112px);background:var(--brand-ink);color:#fff}.thesis h2{max-width:1120px;margin:0;font-family:var(--display);font-size:clamp(42px,5.4vw,78px);font-weight:700;line-height:1.02;letter-spacing:-.04em;overflow-wrap:anywhere}.thesis p{max-width:760px;margin:26px 0 0;color:color-mix(in srgb,#fff 74%,var(--brand-ink));font-size:19px;line-height:1.55}
     .lens-lab{padding:clamp(70px,8vw,118px) clamp(24px,7vw,112px) clamp(76px,8vw,126px);background:var(--soft)}.region-heading{max-width:1060px;margin:0 0 50px}.region-heading h2{margin:0;font-family:var(--display);font-size:clamp(40px,4.8vw,70px);line-height:1.03;letter-spacing:-.04em}.lens-tabs{display:flex;gap:8px;padding:0 0 28px;overflow-x:auto;scrollbar-width:thin}.lens-tabs button{flex:0 0 auto;min-height:46px;padding:10px 16px;border:1px solid color-mix(in srgb,var(--brand-ink) 28%,transparent);background:transparent;color:var(--brand-ink);font-weight:750;cursor:pointer}.lens-tabs button[aria-selected="true"]{border-color:var(--brand-ink);background:var(--brand-ink);color:#fff}.lens-tabs button:focus-visible{outline:3px solid color-mix(in srgb,var(--brand-accent) 45%,transparent);outline-offset:3px}.lens-panel{display:grid;grid-template-columns:120px minmax(0,.94fr) minmax(320px,.78fr);gap:clamp(34px,5vw,76px);align-items:center;min-height:520px}.lens-panel[hidden]{display:none}.lens-number{align-self:start;padding-top:10px;color:color-mix(in srgb,var(--brand-ink) 18%,transparent);font:700 clamp(82px,10vw,150px)/.82 var(--display)}.lens-copy h2{margin:0;font-family:var(--display);font-size:clamp(38px,4.5vw,66px);line-height:1.04;letter-spacing:-.035em}.lens-copy>p:not(.eyebrow){max-width:650px;margin:24px 0;color:var(--text);font-size:19px}.lens-media{min-height:390px;background:var(--brand-surface)}
     .journey{padding:clamp(68px,7vw,104px) clamp(24px,7vw,112px);background:var(--brand-surface)}.journey-header{max-width:980px;margin-bottom:44px}.journey-header h2{margin:0;font-family:var(--display);font-size:clamp(42px,5vw,68px);line-height:1.03;letter-spacing:-.04em}.source-basis{max-width:680px;margin:18px 0 0;color:var(--muted);font-size:14px}.journey-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.journey-card{min-height:360px;padding:28px;display:flex;flex-direction:column;border:1px solid var(--line);background:var(--soft);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}.journey-card:hover{transform:translateY(-5px);border-color:var(--brand-accent);box-shadow:0 22px 56px color-mix(in srgb,var(--brand-ink) 12%,transparent)}.journey-index{color:var(--brand-accent);font:800 14px/1 var(--body);letter-spacing:.13em}.journey-copy{margin-top:38px}.journey-copy .eyebrow{margin-bottom:12px}.journey-copy h3{margin:0;font-family:var(--display);font-size:clamp(25px,2.2vw,34px);line-height:1.08;letter-spacing:-.025em}.journey-copy>p:not(.eyebrow){margin:18px 0 0;color:var(--text);font-size:15px;line-height:1.55}.journey-copy .source-citation{margin-top:16px;color:var(--muted);font-size:12px;font-weight:750;letter-spacing:.05em}.journey-action{min-height:44px;margin-top:auto;padding:20px 0 0;display:flex;align-items:center;justify-content:space-between;border:0;border-top:1px solid color-mix(in srgb,var(--brand-ink) 16%,transparent);background:transparent;color:var(--brand-ink);font-weight:750;cursor:pointer}.journey-action:hover,.journey-action:focus-visible{color:var(--brand-accent)}
-    .close{margin:0 clamp(14px,3vw,46px) clamp(14px,3vw,46px);padding:clamp(66px,8vw,116px);display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:54px;align-items:end;background:radial-gradient(circle at 90% 10%,color-mix(in srgb,var(--brand-accent) 58%,transparent),transparent 30%),var(--brand-ink);color:#fff}.close h2{max-width:980px;margin:0;font-family:var(--display);font-size:clamp(42px,5.2vw,76px);line-height:1.01;letter-spacing:-.04em}.close p{max-width:720px;margin:24px 0 0;color:color-mix(in srgb,#fff 76%,var(--brand-ink));font-size:18px}.close .primary{width:100%;white-space:nowrap}body.cta-outline .primary{background:transparent;color:var(--brand-accent)}body.cta-outline .close .primary{background:transparent;border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.cta-text .primary{min-height:44px;padding:8px 0;border:0;border-bottom:2px solid currentColor;border-radius:0;background:transparent;color:var(--brand-accent)}body.cta-text .close .primary{color:#fff}.footer{padding:26px clamp(24px,6vw,96px);display:flex;justify-content:space-between;gap:24px;color:var(--muted);font-size:12px}.footer a{color:inherit;text-decoration:none}.footer a:hover,.footer a:focus-visible{color:var(--brand-accent)}.experience-region,.close,#next-step,.hero{scroll-margin-top:70px}
+    .close{margin:0 clamp(14px,3vw,46px) clamp(14px,3vw,46px);padding:clamp(66px,8vw,116px);display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:54px;align-items:end;background:radial-gradient(circle at 90% 10%,color-mix(in srgb,var(--brand-accent) 58%,transparent),transparent 30%),var(--brand-ink);color:#fff}.close h2{max-width:980px;margin:0;font-family:var(--display);font-size:clamp(42px,5.2vw,76px);line-height:1.01;letter-spacing:-.04em}.close p{max-width:720px;margin:24px 0 0;color:color-mix(in srgb,#fff 76%,var(--brand-ink));font-size:18px}.close .primary{width:100%;white-space:nowrap}
+    .framework-seven .hero-no-media{grid-template-columns:minmax(0,980px);background:linear-gradient(132deg,var(--brand-surface),var(--soft))}.framework-seven .hero-no-media .hero-copy{max-width:980px}.framework-section{padding:clamp(76px,8vw,126px) clamp(24px,7vw,112px);scroll-margin-top:70px}.framework-section h2,.framework-starting-points .region-heading h2{max-width:1040px;margin:0;font-family:var(--display);font-size:clamp(42px,5vw,72px);font-weight:750;line-height:1.02;letter-spacing:-.04em;text-wrap:balance}.framework-heading{max-width:1080px;margin-bottom:46px}.region-intro{max-width:760px;margin:24px 0 0;color:var(--text);font-size:18px;line-height:1.6}.credibility-anchor{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.72fr);gap:clamp(46px,7vw,106px);align-items:center;background:var(--brand-surface)}.credibility-anchor:not(:has(.framework-media)){grid-template-columns:minmax(0,980px)}.fact-implication{margin-top:46px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}.fact-implication>div{padding:28px;background:var(--brand-surface)}.fact-implication span,.argument-sequence span,.step-index,.role-index,.next-step-panel dt{display:block;color:var(--brand-accent-on-light);font-size:11px;font-weight:850;letter-spacing:.13em;text-transform:uppercase}.fact-implication p{margin:14px 0 0;color:var(--text);font-size:17px;line-height:1.55}.framework-media{width:100%;min-height:420px;border:1px solid var(--line);border-radius:var(--card-radius)}.urgency-section{background:var(--brand-dark);color:#fff}.urgency-section .eyebrow{color:var(--brand-accent)}.argument-sequence{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid color-mix(in srgb,#fff 28%,transparent)}.argument-sequence article{min-height:250px;padding:30px clamp(18px,2.2vw,34px);border-right:1px solid color-mix(in srgb,#fff 20%,transparent)}.argument-sequence article:last-child{border-right:0}.argument-sequence span{color:var(--brand-accent)}.argument-sequence p{margin:38px 0 0;color:color-mix(in srgb,#fff 84%,transparent);font-family:var(--display);font-size:clamp(22px,2vw,30px);line-height:1.22}.framework-starting-points .region-heading{max-width:1080px}.validation-question{margin-top:26px!important;padding:18px 20px;border-left:3px solid var(--brand-accent);background:color-mix(in srgb,var(--brand-surface) 72%,transparent);font-size:15px!important}.validation-question strong{display:block;margin-bottom:6px;color:var(--brand-ink);font-size:10px;letter-spacing:.12em;text-transform:uppercase}.lens-panel.no-media{grid-template-columns:90px minmax(0,1fr)}.mechanism-section{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(300px,.62fr);gap:clamp(46px,7vw,100px);background:var(--brand-surface)}.mechanism-section:not(:has(.framework-media)){grid-template-columns:minmax(0,1120px)}.mechanism-steps{margin-top:48px;border-top:1px solid var(--line)}.mechanism-steps article{padding:28px 0;display:grid;grid-template-columns:64px minmax(0,1fr);gap:20px;border-bottom:1px solid var(--line)}.mechanism-steps h3{margin:0;font-family:var(--display);font-size:clamp(22px,2vw,31px);line-height:1.16}.mechanism-steps p{margin:12px 0;color:var(--text)}.mechanism-steps strong{display:block;color:var(--brand-accent-on-light);font-size:14px}.team-value-section{background:var(--soft)}.role-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.role-grid article{padding:30px;border:1px solid var(--line);background:var(--brand-surface)}.role-grid h3{min-height:70px;margin:24px 0 0;font-family:var(--display);font-size:clamp(24px,2.1vw,32px);line-height:1.12}.role-grid dl{margin:26px 0 0}.role-grid dl>div{padding:15px 0;border-top:1px solid var(--line)}.role-grid dt{color:var(--muted);font-size:10px;font-weight:850;letter-spacing:.12em;text-transform:uppercase}.role-grid dd{margin:6px 0 0;color:var(--text);font-size:14px;line-height:1.5}.framework-close{grid-template-columns:minmax(0,1fr) minmax(340px,.65fr);align-items:start}.next-step-panel{padding:26px;border:1px solid color-mix(in srgb,#fff 22%,transparent);background:color-mix(in srgb,#fff 7%,transparent)}.next-step-panel dl{margin:0}.next-step-panel dl>div{padding:12px 0;border-bottom:1px solid color-mix(in srgb,#fff 18%,transparent)}.next-step-panel dt{color:var(--brand-accent)}.next-step-panel dd{margin:5px 0 0;color:color-mix(in srgb,#fff 84%,transparent);font-size:14px;line-height:1.45}.next-step-panel .primary{margin-top:24px}
+    body.cta-outline .primary{background:transparent;color:var(--brand-accent)}body.cta-outline .close .primary{background:transparent;border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.cta-text .primary{min-height:44px;padding:8px 0;border:0;border-bottom:2px solid currentColor;border-radius:0;background:transparent;color:var(--brand-accent)}body.cta-text .close .primary{color:#fff}.footer{padding:26px clamp(24px,6vw,96px);display:flex;justify-content:space-between;gap:24px;color:var(--muted);font-size:12px}.footer a{color:inherit;text-decoration:none}.footer a:hover,.footer a:focus-visible{color:var(--brand-accent)}.experience-region,.framework-section,.close,#next-step,.hero{scroll-margin-top:70px}
     html:fullscreen,html:fullscreen body,html:fullscreen .shell{width:100%;max-width:none;min-height:100%;background:var(--brand-surface)}body.is-fullscreen .shell{max-width:none}body.is-fullscreen .journey-nav{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}body.is-fullscreen .hero{min-height:calc(100dvh - 58px)}
     body.style-editorial .hero h1,body.style-editorial .signature-intro h2,body.style-editorial .thesis h2,body.style-editorial .region-heading h2,body.style-editorial .journey-header h2{letter-spacing:-.025em}body.style-editorial .eyebrow{letter-spacing:.18em}body.style-technical .fullscreen-control{border-radius:4px}body.style-technical .hero{background-image:linear-gradient(color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px);background-size:42px 42px}body.style-minimal .hero{background:var(--brand-surface)}body.style-minimal .hero-media{box-shadow:none}body.style-minimal .signature,body.style-minimal .lens-lab,body.style-minimal .journey{background:var(--brand-surface)}body.style-minimal .journey-card{background:transparent}
     body[data-edit-mode="true"] [data-flz-editable]{cursor:text;outline:1px dashed color-mix(in srgb,var(--brand-accent) 62%,transparent);outline-offset:5px}
     body.design-source-brand-technical .lens-tabs button{border-radius:6px}body.design-source-brand-editorial .hero h1,body.design-source-brand-editorial .thesis h2,body.design-source-brand-editorial .region-heading h2{letter-spacing:-.028em}body.design-neutral-fallback .hero-media{box-shadow:none}
     body.brand-hero-dark .nav{border-color:color-mix(in srgb,#fff 15%,transparent);background:var(--brand-dark)}body.brand-hero-dark .wordmark,body.brand-hero-dark .nav-action{color:#fff}body.brand-hero-dark .lockup-divider{color:color-mix(in srgb,#fff 64%,transparent)}body.brand-hero-dark .journey-nav{border-color:color-mix(in srgb,#fff 14%,transparent);background:color-mix(in srgb,var(--brand-dark) 94%,transparent);box-shadow:0 12px 34px color-mix(in srgb,#000 24%,transparent)}body.brand-hero-dark .journey-nav-title,body.brand-hero-dark .journey-links button,body.brand-hero-dark .fullscreen-control{color:color-mix(in srgb,#fff 72%,transparent)}body.brand-hero-dark .journey-links button:hover,body.brand-hero-dark .journey-links button:focus-visible,body.brand-hero-dark .journey-links button[aria-current="location"]{color:#fff}body.brand-hero-dark .fullscreen-control{border-color:color-mix(in srgb,#fff 30%,transparent);background:transparent}body.brand-hero-dark .hero{background:radial-gradient(ellipse 80% 48% at 3% 100%,color-mix(in srgb,var(--brand-accent) 48%,transparent) 0,transparent 72%),radial-gradient(ellipse 72% 60% at 100% 0,color-mix(in srgb,var(--brand-support) 46%,transparent) 0,transparent 72%),var(--brand-dark);color:#fff}body.brand-hero-dark .hero h1{background:none;-webkit-text-fill-color:currentColor;color:#fff}body.brand-hero-dark .hero h1::first-line{-webkit-text-fill-color:var(--brand-accent);color:var(--brand-accent)}body.brand-hero-dark .hero .subhead{color:color-mix(in srgb,#fff 84%,transparent)}body.brand-hero-dark .hero .eyebrow{color:var(--brand-accent)}body.brand-hero-dark .hero .context-note{border-color:color-mix(in srgb,#fff 30%,transparent);color:color-mix(in srgb,#fff 78%,transparent)}body.brand-hero-dark .hero-media{border-color:color-mix(in srgb,#fff 20%,transparent);background:color-mix(in srgb,#fff 7%,transparent);box-shadow:0 36px 110px color-mix(in srgb,#000 34%,transparent)}body.brand-hero-dark .media.media .media-fallback{background:linear-gradient(145deg,color-mix(in srgb,var(--brand-accent) 22%,var(--brand-dark)),var(--brand-dark) 58%,color-mix(in srgb,var(--brand-support) 22%,var(--brand-dark)));color:#fff}body.brand-hero-dark .close{background:radial-gradient(circle at 90% 10%,color-mix(in srgb,var(--brand-support) 44%,transparent),transparent 32%),var(--brand-dark)}body.brand-hero-dark.cta-outline .hero .primary{border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.brand-hero-dark.cta-text .hero .primary{color:var(--brand-accent)}
     button:focus-visible,a:focus-visible{outline:3px solid color-mix(in srgb,var(--brand-focus) 68%,transparent);outline-offset:4px}
-    @media(max-width:980px){.hero{grid-template-columns:1fr;min-height:auto}.hero-media{height:clamp(380px,58vw,540px)}.signature-canonical{grid-template-columns:1fr}.lens-panel{grid-template-columns:90px 1fr}.lens-media{grid-column:2}.journey-grid{grid-template-columns:1fr}.journey-card{min-height:230px}.journey-copy{margin-top:30px}.close{grid-template-columns:1fr;align-items:start}.journey-nav-inner{grid-template-columns:minmax(0,1fr) auto;gap:12px}.journey-nav-title{display:none}.journey-links{justify-content:flex-start}}
+    @media(max-width:980px){.hero{grid-template-columns:1fr;min-height:auto}.hero-media{height:clamp(380px,58vw,540px)}.signature-canonical{grid-template-columns:1fr}.lens-panel{grid-template-columns:90px 1fr}.lens-media{grid-column:2}.journey-grid{grid-template-columns:1fr}.journey-card{min-height:230px}.journey-copy{margin-top:30px}.close{grid-template-columns:1fr;align-items:start}.journey-nav-inner{grid-template-columns:minmax(0,1fr) auto;gap:12px}.journey-nav-title{display:none}.journey-links{justify-content:flex-start}.credibility-anchor,.mechanism-section{grid-template-columns:1fr}.fact-implication,.argument-sequence,.role-grid{grid-template-columns:1fr}.argument-sequence article{min-height:0;border-right:0;border-bottom:1px solid color-mix(in srgb,#fff 20%,transparent)}.role-grid h3{min-height:0}.framework-close{grid-template-columns:1fr}.framework-media{min-height:360px}}
     @media(max-width:620px){.nav{height:68px;padding:0 20px}.brand-lockup{gap:10px}.seller-wordmark{max-width:116px}.seller-wordmark img{height:27px;max-width:116px}.target-wordmark,.lockup-divider{display:none}.nav-action{font-size:13px}.hero{padding:50px 22px 42px;background:var(--brand-surface)}.hero h1{font-size:clamp(38px,10.5vw,46px);line-height:1.02}.hero .subhead{font-size:17px}.actions{align-items:stretch;flex-direction:column}.actions>*{width:100%}.hero-media{height:auto;min-height:280px;margin-top:12px;box-shadow:0 18px 48px color-mix(in srgb,var(--brand-ink) 14%,transparent)}.context-note{border-radius:14px;align-items:flex-start}.signature{padding:54px 22px}.signature-intro h2{font-size:36px}.signature-canonical button{grid-template-columns:40px 1fr}.thesis{padding:58px 22px}.thesis h2{font-size:clamp(34px,9.6vw,46px)}.thesis p{font-size:17px}.lens-lab{padding:54px 22px 64px}.lens-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;overflow:visible}.lens-tabs button{min-width:0;padding:9px 7px;white-space:normal;font-size:12px;line-height:1.2}.lens-panel{grid-template-columns:1fr;min-height:0;gap:28px}.lens-number{font-size:68px}.lens-media{grid-column:1;min-height:270px}.lens-copy h2{font-size:37px}.lens-copy>p:not(.eyebrow){font-size:17px}.journey{padding:58px 22px}.journey-header{margin-bottom:34px}.journey-card{min-height:260px;padding:24px}.journey-copy h3{font-size:28px}.close{margin:0 10px 10px;padding:56px 24px;gap:32px}.close h2{font-size:40px}.close .primary{width:100%}.footer{padding:26px 22px;flex-direction:column;gap:8px}html{scroll-padding-top:58px}.journey-nav,.journey-nav-inner{min-height:54px}.journey-nav-inner{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}.journey-links{gap:2px;scroll-snap-type:x proximity}.journey-links button{min-height:50px;padding:0 8px;scroll-snap-align:start;font-size:11px}.journey-links button:after{left:8px;right:8px}.fullscreen-control{width:40px;height:40px;padding:0}.fullscreen-control [data-fullscreen-label]{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.signal-toast{bottom:max(14px,env(safe-area-inset-bottom));border-radius:12px}.folloze-invite,.folloze-insight{right:16px;bottom:max(16px,env(safe-area-inset-bottom))}body.is-fullscreen .nav{display:none}body.is-fullscreen .hero{min-height:auto}.experience-region,.close,#next-step,.hero{scroll-margin-top:62px}}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.skip-link,.primary,.secondary,.journey-links button>span,.journey-links button:after,.journey-card,.media img,.signal-toast{transition:none!important;animation:none!important}.signal-toast{transform:translate(-50%,0)}.journey-links{scroll-behavior:auto}}
     @media(forced-colors:active){body.brand-hero-dark .hero h1{-webkit-text-fill-color:currentColor;background:none;color:CanvasText}.journey-links button[aria-current="location"]{outline:2px solid currentColor}.signal-toast,.folloze-invite,.folloze-insight{border:2px solid currentColor}.signal-toast-mark>span{box-shadow:none}}
@@ -404,7 +548,7 @@ export function renderExperienceHtml(input: {
     body.brand-hero-dark .hero .eyebrow,.close .eyebrow{color:var(--brand-accent)}
   </style>
 </head>
-<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${template.fingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}">
+<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${framework ? " framework-seven" : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}">
 <button class="skip-link" type="button" data-scroll-target="main-content">Skip to experience</button>
 <div class="shell">
   <header class="nav">
@@ -412,7 +556,7 @@ export function renderExperienceHtml(input: {
       ${wordmark(brand, "seller-wordmark", heroTheme === "dark")}
       ${targetBrand ? `<span class="lockup-divider">for</span>${wordmark(targetBrand, "target-wordmark", heroTheme === "dark")}` : ""}
     </div>
-    <button type="button" class="nav-action" data-scroll-target="next-step" data-flz-cta-id="header-next-step">${escapeHtml(draft.sectionLabels.close)}</button>
+    <button type="button" class="nav-action" data-scroll-target="next-step" data-flz-cta-id="header-next-step">${escapeHtml(framework?.nextStep.ctaLabel ?? draft.sectionLabels.close)}</button>
   </header>
   <nav class="journey-nav" aria-label="Experience journey" data-flz-journey-nav>
     <div class="journey-nav-inner">
@@ -425,24 +569,20 @@ export function renderExperienceHtml(input: {
     </div>
   </nav>
   <main id="main-content" tabindex="-1">
-    <section class="hero" id="experience-overview" data-journey-section="experience-overview" data-template-primitive="hero" aria-labelledby="experience-headline">
+    <section class="hero${framework && !frameworkImage(images, framework.opening.imageBrief, "hero-media", true) ? " hero-no-media" : ""}" id="experience-overview" data-journey-section="experience-overview" data-template-primitive="hero" ${framework ? evidenceAttribute(framework.opening.evidenceIds) : ""} aria-labelledby="experience-headline">
       <div class="hero-copy">
-        <p class="eyebrow" ${editableBlock("hero.eyebrow", "eyebrow")}>${escapeHtml(heroEyebrow)}</p>
-        <h1 id="experience-headline" ${editableBlock("hero.headline", "headline")}>${escapeHtml(draft.headline)}</h1>
-        <p class="subhead" ${editableBlock("hero.subhead", "subhead")}>${escapeHtml(draft.subhead)}</p>
+        <p class="eyebrow" ${editableBlock("hero.eyebrow", "eyebrow")}>${escapeHtml(framework?.opening.eyebrow ?? heroEyebrow)}</p>
+        <h1 id="experience-headline" ${editableBlock("hero.headline", "headline")}>${escapeHtml(framework?.opening.headline ?? draft.headline)}</h1>
+        <p class="subhead" ${editableBlock("hero.subhead", "subhead")}>${escapeHtml(framework?.opening.body ?? draft.subhead)}</p>
         <div class="actions">
-          <button type="button" class="primary" data-demo-cta="true" data-flz-cta-id="hero-primary" ${editableBlock("hero.primaryCta", "cta")}>${escapeHtml(draft.primaryCta)}</button>
+          <button type="button" class="primary" data-demo-cta="true" data-flz-cta-id="hero-primary" ${editableBlock("hero.primaryCta", "cta")}>${escapeHtml(framework?.opening.ctaLabel ?? draft.primaryCta)}</button>
         </div>
         <span class="context-note" ${editableBlock("hero.audience", "audience")}>For ${escapeHtml(draft.audienceLabel)}</span>
       </div>
-      ${imageFigure(heroImage, `${brand.companyName} platform visual`, "hero-media", true)}
+      ${framework ? frameworkImage(images, framework.opening.imageBrief, "hero-media", true) : imageFigure(heroImage, `${brand.companyName} platform visual`, "hero-media", true)}
     </section>
-    ${signatureMoment}
-    ${experienceFlow}
-    <section class="close" id="next-step" data-journey-section="next-step" aria-labelledby="next-step-heading">
-      <div><p class="eyebrow" ${editableBlock("close.label", "section-label")}>${escapeHtml(draft.sectionLabels.close)}</p><h2 id="next-step-heading" ${editableBlock("close.headline", "headline")}>${escapeHtml(draft.closingHeadline)}</h2><p ${editableBlock("close.body", "body")}>${escapeHtml(draft.closingBody)}</p></div>
-      <button type="button" class="primary" data-demo-cta="true" data-flz-cta-id="close-primary" ${editableBlock("close.primaryCta", "cta")}>${escapeHtml(draft.primaryCta)}</button>
-    </section>
+    ${pageFlow}
+    ${closeMarkup}
   </main>
   <footer class="footer"><span>${escapeHtml(contextLabel)}</span><a href="${escapeHtml(vendorUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(brand.domain)}</a></footer>
 </div>
@@ -531,7 +671,7 @@ export function renderExperienceHtml(input: {
     function settleImage(image,readyClass){
       var parent=image&&image.parentElement;
       if(!parent)return;
-      function failed(){parent.classList.remove(readyClass);image.remove()}
+      function failed(){parent.classList.remove(readyClass);if(parent.hasAttribute('data-no-fallback'))parent.remove();else image.remove()}
       function loaded(){if(image.naturalWidth)parent.classList.add(readyClass);else failed()}
       image.addEventListener('load',loaded,{once:true});
       image.addEventListener('error',failed,{once:true});

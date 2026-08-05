@@ -753,6 +753,7 @@ describe("renderExperienceHtml", () => {
       sharedPrimitives: output.match(/data-shared-primitives="([^"]+)"/)?.[1],
       layout: output.match(/data-layout-variant="([^"]+)"/)?.[1],
       sectionOrder: [...output.matchAll(/<section class="(?:thesis|lens-lab|journey) experience-region" id="([^"]+)"/g)].map((match) => match[1]),
+      journeyOrder: [...output.matchAll(/<section[^>]+data-journey-section="([^"]+)"/g)].map((match) => match[1]),
       signatureButtons: output.match(/data-signature-lens-index=/g)?.length,
       lensPanels: output.match(/class="lens-panel"/g)?.length,
       resourceCards: output.match(/<article class="journey-card resource-card/g)?.length,
@@ -772,20 +773,39 @@ describe("renderExperienceHtml", () => {
     for (const [index, output] of outputs.entries()) {
       const fingerprint = fingerprints[index];
       expect(output).not.toContain("body.register-");
-      expect(output).toContain('class="signature signature-canonical"');
       expect(output).not.toContain('class="secondary"');
       expect(fingerprint.layout).toBe("standard");
-      expect(fingerprint.signatureButtons).toBe(3);
       expect(fingerprint.lensPanels).toBe(3);
-      expect(fingerprint.resourceCards).toBe(3);
       expect(fingerprint.heroActions).toBe(1);
       expect(output).not.toContain("Experience receipt");
       expect(output).not.toContain('id="guided-questions"');
+      if (index < 4) {
+        expect(output).toContain('class="register-');
+        expect(output).toContain("framework-seven");
+        expect(output).not.toContain('class="signature signature-canonical"');
+        expect(fingerprint.signatureButtons).toBeUndefined();
+        expect(fingerprint.resourceCards).toBeUndefined();
+        expect(fingerprint.journeyOrder).toEqual([
+          "experience-overview",
+          "credibility-anchor",
+          "why-change-now",
+          "starting-points",
+          "outcome-mechanism",
+          "team-value",
+          "next-step"
+        ]);
+        expect(output).not.toMatch(/Account thesis|Decision paths|Supporting proof/);
+        expect(output).not.toMatch(/The visitor|public operating context|form field|submitted input/i);
+      } else {
+        expect(output).toContain('class="signature signature-canonical"');
+        expect(fingerprint.signatureButtons).toBe(3);
+        expect(fingerprint.resourceCards).toBe(3);
+      }
     }
-    expect(fingerprints[0]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
-    expect(fingerprints[1]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
-    expect(fingerprints[2]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
-    expect(fingerprints[3]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
+    expect(fingerprints[0]?.sectionOrder).toEqual([]);
+    expect(fingerprints[1]?.sectionOrder).toEqual([]);
+    expect(fingerprints[2]?.sectionOrder).toEqual([]);
+    expect(fingerprints[3]?.sectionOrder).toEqual([]);
     expect(fingerprints[4]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
   });
 

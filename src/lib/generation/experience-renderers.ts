@@ -24,8 +24,8 @@ const canonicalRegionOrder: readonly ExperiencePrimitive[] = [
 
 const accountComposition: ExperienceTemplateComposition = {
   family: "account-abm",
-  fingerprint: "v3-account-thesis-paths-proof",
-  heroLabel: "Account brief",
+  fingerprint: "v4-account-seven-section-persuasion",
+  heroLabel: "Account experience",
   signatureAriaLabel: "Account decision paths",
   signatureEyebrow: (audience, targetName) =>
     `Decision paths for ${targetName ?? audience}`,
@@ -41,8 +41,8 @@ const accountComposition: ExperienceTemplateComposition = {
 
 const campaignComposition: ExperienceTemplateComposition = {
   family: "campaign-launch",
-  fingerprint: "v3-campaign-routes-proof-thesis",
-  heroLabel: "Campaign experience",
+  fingerprint: "v4-campaign-seven-section-persuasion",
+  heroLabel: "Campaign",
   signatureAriaLabel: "Campaign exploration paths",
   signatureEyebrow: (audience) => `Three ways in for ${audience}`,
   navigation: {

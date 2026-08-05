@@ -15,10 +15,23 @@ import {
 import {
   experienceDraftSchema,
   normalizeAudienceLabel,
-  type ExperienceDraft
+  type ExperienceDraft,
+  type PersuasionFramework
 } from "@/lib/generation/experience-schema";
 import { extractPublicContent } from "@/lib/integrations/brand-harvester";
 import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
+
+const experienceDraftResponseSchema = experienceDraftSchema.extend({
+  persuasionFramework: experienceDraftSchema.shape.persuasionFramework.unwrap().nullable()
+});
+type ExperienceDraftResponse = ReturnType<typeof experienceDraftResponseSchema.parse>;
+
+function normalizeResponseDraft(draft: ExperienceDraftResponse): ExperienceDraft {
+  if (draft.persuasionFramework) return experienceDraftSchema.parse(draft);
+  const { persuasionFramework, ...legacyDraft } = draft;
+  void persuasionFramework;
+  return experienceDraftSchema.parse(legacyDraft);
+}
 
 const bannedCopy = /make the next move easier to believe|brings the problem, proof, and next step together|generic pages|relevance is a sequence|one clear goal|see the path forward|aligned to the objective|focused on the objective|grounded in .*public|public platform story|build process|source:|guided story|campaign landing page|buyer path|decision path|prepared for/i;
 const marketingCliche =
@@ -45,9 +58,6 @@ const metadataFromContext = (context: CampaignGenerationContext) => ({
   primaryCta: context.brief.primaryAction
 });
 
-const validateDeterministicDraft = (draft: ExperienceDraft): ExperienceDraft =>
-  experienceDraftSchema.parse(draft);
-
 function profileSections(
   profile: ReturnType<typeof narrativeProfileFor>
 ): ExperienceDraft["sections"] {
@@ -58,6 +68,296 @@ function profileSections(
     proof: profile.decisionQuestions[index]
   })) as ExperienceDraft["sections"];
 }
+
+function sourceUrlOrNull(value: string | undefined | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function imageBrief(input: {
+  purpose: string;
+  caption: string;
+  source?: PersuasionFramework["opening"]["imageBrief"]["source"];
+  assetType?: PersuasionFramework["opening"]["imageBrief"]["assetType"];
+  provenance?: string;
+}): PersuasionFramework["opening"]["imageBrief"] {
+  return {
+    purpose: input.purpose,
+    assetType: input.assetType ?? "typographic-treatment",
+    source: input.source ?? "none",
+    caption: input.caption,
+    provenance:
+      input.provenance ??
+      "Evidence-backed typographic treatment; no decorative or invented visual is required."
+  };
+}
+
+function persuasionFrameworkFor(input: {
+  draft: Omit<ExperienceDraft, "persuasionFramework">;
+  brand: BrandProfile;
+  targetBrand?: BrandProfile;
+  answers: SessionAnswers;
+  context: CampaignGenerationContext;
+  sourceArtifact?: SourceArtifact;
+}): PersuasionFramework {
+  const { draft, brand, targetBrand, context, sourceArtifact } = input;
+  const account = context.brief.targetAccount?.name ?? targetBrand?.companyName;
+  const isAccount = context.brief.campaignRegister === "one-to-one-abm";
+  const audience = normalizeAudienceLabel(context.brief.audience);
+  const offer = context.brief.offerOrSource.name;
+  const sellerFact =
+    (
+      brand.description?.trim() ||
+      brand.publicContext?.trim() ||
+      `${brand.companyName} provides ${context.brief.seller.offer} for ${audience}.`
+    )
+      .replace(/[—–]/g, ", ")
+      .replace(/\s+/g, " ");
+  const targetFacts = context.brief.accountEvidence.evidenceItems.slice(0, 3);
+  const sourceClaim = sourceArtifact?.understanding.claims[0]?.text?.trim();
+  const evidenceMap: PersuasionFramework["strategy"]["evidenceMap"] = [
+    {
+      id: "seller.public-positioning",
+      kind: "seller-fact" as const,
+      claim: trimSentence(sellerFact, 240),
+      sourceUrl: sourceUrlOrNull(brand.sourceUrl)
+    },
+    ...(targetFacts.length
+      ? targetFacts.map((item, index) => ({
+          id: `target.public-signal-${index + 1}`,
+          kind: "target-fact" as const,
+          claim: trimSentence(`Account signal: ${draft.signalLabels[index] ?? "Verified public context"}.`, 240),
+          sourceUrl: sourceUrlOrNull(item.sourceUrl)
+        }))
+      : []),
+    ...(sourceClaim
+      ? [
+          {
+            id: "source.claim-1",
+            kind: "source-claim" as const,
+            claim: trimSentence(sourceClaim, 240),
+            sourceUrl: sourceUrlOrNull(context.brief.offerOrSource.sourceUrl)
+          }
+        ]
+      : []),
+    {
+      id: "visitor.audience-objective",
+      kind: "visitor-input" as const,
+      claim: trimSentence(
+        `${audience} are the selected audience, with the goal to ${context.brief.campaignGoal.toLowerCase()}.`,
+        240
+      ),
+      sourceUrl: null
+    },
+    {
+      id: "seller.mechanism",
+      kind: "mechanism" as const,
+      claim: trimSentence(context.brief.messageSpine.sellerPromise, 240),
+      sourceUrl: sourceUrlOrNull(brand.sourceUrl)
+    }
+  ].slice(0, 10);
+  const evidenceIds = evidenceMap.map(({ id }) => id);
+  const sellerEvidence = evidenceIds.includes("seller.mechanism")
+    ? ["seller.public-positioning", "seller.mechanism"]
+    : ["seller.public-positioning"];
+  const targetEvidence = evidenceIds.filter((id) => id.startsWith("target."));
+  const contextEvidence = targetEvidence.length ? targetEvidence : ["visitor.audience-objective"];
+  const credibilityEvidence = evidenceIds.includes("source.claim-1")
+    ? ["source.claim-1", ...sellerEvidence]
+    : sellerEvidence;
+  const [first, second, third] = draft.sections;
+  const visualSource = brand.imageUrls.length ? "seller" : "none";
+  const visualAssetType = brand.imageUrls.length ? "product-ui" : "typographic-treatment";
+  const nowHeadline = isAccount && account ? `Why this matters now for ${account}` : "Why the old approach keeps falling short";
+  const accountSignal = draft.signalLabels[0]?.toLowerCase() || "operating priorities";
+  const nextAction = draft.primaryCta;
+  const targetPhrase = account ? ` at ${account}` : "";
+  const messageSpine = `For ${audience}${targetPhrase}, ${offer} helps ${context.brief.campaignGoal.toLowerCase()} through ${context.brief.messageSpine.sellerPromise.toLowerCase()}, supported by verified seller, target, and supplied-source evidence.`;
+
+  return {
+    strategy: {
+      evidenceMap,
+      messageSpine: trimSentence(messageSpine, 320),
+      selectedAngle: targetEvidence.length
+        ? "status-quo-tension"
+        : sourceClaim
+          ? "business-upside"
+          : "differentiated-mechanism",
+      angleRationale: targetEvidence.length
+        ? "The strongest route starts with a verified account signal and turns it into a consequence the audience can examine."
+        : sourceClaim
+          ? "The supplied source provides the clearest factual opening, with the seller mechanism explaining how to act on it."
+          : "The seller mechanism is the strongest supported reason to believe, so the page leads with what changes in practice."
+    },
+    opening: {
+      eyebrow: draft.eyebrow,
+      headline: draft.headline,
+      body: draft.subhead,
+      ctaLabel: draft.primaryCta,
+      evidenceIds: [...new Set([...contextEvidence.slice(0, 1), ...sellerEvidence])],
+      imageBrief: imageBrief({
+        purpose: "Make the offer and business context recognizable before the buyer reads the supporting argument.",
+        source: visualSource,
+        assetType: visualAssetType,
+        caption: `${brand.companyName} product context`,
+        provenance: brand.imageUrls.length
+          ? "Use a verified source-owned image harvested from the seller site."
+          : undefined
+      })
+    },
+    credibility: {
+      eyebrow: isAccount ? "What is already working" : "Reasons to believe",
+      headline: draft.thesisHeadline,
+      fact: trimSentence(sourceClaim || sellerFact, 240),
+      implication: draft.thesisBody,
+      evidenceIds: credibilityEvidence,
+      imageBrief: imageBrief({
+        purpose: "Support the strongest factual reason to believe without inventing customer results or metrics.",
+        source: visualSource,
+        assetType: visualAssetType,
+        caption: `${brand.companyName} mechanism in practice`,
+        provenance: brand.imageUrls.length
+          ? "Use a verified seller-owned product, workflow, or platform image."
+          : undefined
+      })
+    },
+    urgency: {
+      eyebrow: "Why change now",
+      headline: nowHeadline,
+      change: trimSentence(
+        isAccount
+          ? `${account ?? "The account"}'s ${accountSignal} makes cross-system coordination a concrete operating question.`
+          : `${offer} enters a workflow that already spans applications, data, APIs, and operational ownership.`,
+        220
+      ),
+      consequence: trimSentence(context.brief.messageSpine.whyChange, 220),
+      reframe: trimSentence(
+        isAccount
+          ? `The better move is to validate ${offer} against one concrete buyer job before widening the scope.`
+          : `The better move is to connect ${offer} to one workflow and one observable outcome before widening the launch story.`,
+        220
+      ),
+      evidenceIds: [...new Set([...contextEvidence, ...sellerEvidence])].slice(0, 5),
+      imageBrief: imageBrief({
+        purpose: "Make the verified change and its business consequence immediately scannable.",
+        source: "none",
+        caption: "Change, consequence, and better path"
+      })
+    },
+    startingPoints: {
+      eyebrow: "Choose where to start",
+      headline: isAccount ? `Choose the first opportunity for ${account ?? "the account"}` : "Choose the use case that matters first",
+      intro: "Start with the buyer job, the outcome it should create, and the question that proves whether the path is worth pursuing.",
+      choices: [first, second, third].map((section, index) => ({
+        label: draft.signalLabels[index],
+        buyerJob: section.headline,
+        outcome: section.body,
+        validationQuestion: section.proof,
+        evidenceIds: [...new Set([...sellerEvidence, ...contextEvidence.slice(index, index + 1)])],
+        imageBrief: imageBrief({
+          purpose: `Show the product or workflow evidence most relevant to ${draft.signalLabels[index]}.`,
+          source: visualSource,
+          assetType: visualAssetType,
+          caption: `${draft.signalLabels[index]} workflow`,
+          provenance: brand.imageUrls.length
+            ? "Select a verified seller-owned image by relevance, never by array position alone."
+            : undefined
+        })
+      })) as PersuasionFramework["startingPoints"]["choices"]
+    },
+    mechanism: {
+      eyebrow: "How the outcome is created",
+      headline: isAccount ? "Move from account context to a provable first use case" : "Move from interest to an observable result",
+      intro: "Each step connects an action to a supported capability and a concrete output the team can examine.",
+      steps: [first, second, third].map((section, index) => ({
+        action: section.headline,
+        capability: section.body,
+        output: `A clear ${draft.signalLabels[index].toLowerCase()} decision the team can validate together.`,
+        evidenceIds: sellerEvidence
+      })) as PersuasionFramework["mechanism"]["steps"],
+      imageBrief: imageBrief({
+        purpose: "Show the real sequence from buyer action through seller capability to observable output.",
+        source: visualSource,
+        assetType: brand.imageUrls.length ? "workflow-diagram" : "typographic-treatment",
+        caption: `${brand.companyName} outcome sequence`,
+        provenance: brand.imageUrls.length
+          ? "Use a verified seller workflow or architecture asset when one is available."
+          : undefined
+      })
+    },
+    teamValue: {
+      eyebrow: "What each team needs to believe",
+      headline: isAccount ? `Make the decision useful across ${account ?? "the account"}` : "Give every team a reason to move",
+      intro: "Different teams need different evidence. Keep the decision, risk, benefit, and proof requirement explicit for each one.",
+      roles: [
+        {
+          role: trimSentence(audience, 70),
+          decision: `Whether ${offer} can deliver the selected business outcome.`,
+          risk: "The evaluation stays interesting but never becomes actionable.",
+          benefit: "A clear path from the offer to the outcome this audience owns.",
+          evidenceNeeded: trimSentence(`A supported answer to ${first.proof}`, 160),
+          evidenceIds: [...new Set([...sellerEvidence, "visitor.audience-objective"])]
+        },
+        {
+          role: "Technical and operational owners",
+          decision: "Whether the mechanism fits the systems and workflow already in place.",
+          risk: "The promise cannot be translated into a practical operating model.",
+          benefit: "A bounded first use case with visible dependencies and outputs.",
+          evidenceNeeded: trimSentence(`A supported answer to ${second.proof}`, 160),
+          evidenceIds: sellerEvidence
+        },
+        {
+          role: isAccount ? "Business and go-to-market owners" : "Business sponsors and governance owners",
+          decision: "Whether the first use case is valuable enough to prioritize.",
+          risk: "The team evaluates features without agreeing on the business decision.",
+          benefit: "A shared result, scope, and next action the group can align around.",
+          evidenceNeeded: trimSentence(`A supported answer to ${third.proof}`, 160),
+          evidenceIds: [...new Set([...contextEvidence.slice(0, 1), "visitor.audience-objective"])]
+        }
+      ]
+    },
+    nextStep: {
+      eyebrow: "The first useful move",
+      headline: draft.closingHeadline,
+      body: draft.closingBody,
+      scope: `One ${offer} use case and the teams it affects.`,
+      activity: "A focused working session using the three validation questions above.",
+      deliverable: "A shared view of the workflow, dependencies, evidence, and intended outcome.",
+      resultingDecision: "Whether to advance the first use case, refine it, or stop before expanding scope.",
+      ctaLabel: nextAction,
+      evidenceIds: [...new Set([...sellerEvidence, "visitor.audience-objective"])],
+      imageBrief: imageBrief({
+        purpose: "Show the concrete outputs of the next step rather than adding decorative imagery.",
+        source: "none",
+        caption: "Scope, activity, deliverable, and decision"
+      })
+    }
+  };
+}
+
+const validateDeterministicDraft = (
+  draft: Omit<ExperienceDraft, "persuasionFramework">,
+  input: {
+    brand: BrandProfile;
+    targetBrand?: BrandProfile;
+    answers: SessionAnswers;
+    context: CampaignGenerationContext;
+    sourceArtifact?: SourceArtifact;
+  }
+): ExperienceDraft =>
+  experienceDraftSchema.parse(
+    input.context.brief.campaignRegister === "content-magic"
+      ? draft
+      : {
+          ...draft,
+          persuasionFramework: persuasionFrameworkFor({ draft, ...input })
+        }
+  );
 
 type PublicContent = Awaited<ReturnType<typeof extractPublicContent>>;
 
@@ -341,6 +641,14 @@ export function deterministicDraft(input: {
     signalLabels: [...profile.signalLabels],
     sections: profileSections(profile)
   };
+  const finalize = (draft: Omit<ExperienceDraft, "persuasionFramework">) =>
+    validateDeterministicDraft(draft, {
+      brand,
+      targetBrand: input.targetBrand,
+      answers,
+      context,
+      sourceArtifact: input.sourceArtifact
+    });
 
   if (context.brief.campaignRegister === "one-to-one-abm") {
     const account = target || "the priority account";
@@ -359,7 +667,7 @@ export function deterministicDraft(input: {
       sectionSignal,
       profile.signalLabels[2]
     ] as ExperienceDraft["signalLabels"];
-    return validateDeterministicDraft({
+    return finalize({
       ...common,
       title: trimSentence(`${brand.companyName} for ${account} | ${abmOffer}`, 90),
       eyebrow: trimSentence(`${brand.companyName} for ${account}`, 52),
@@ -422,7 +730,7 @@ export function deterministicDraft(input: {
 
   if (context.brief.campaignRegister === "campaign-event") {
     const registration = /registr|attend|rsvp/i.test(context.brief.campaignGoal);
-    return validateDeterministicDraft({
+    return finalize({
       ...common,
       title: trimSentence(`${eventContext} | ${brand.companyName}`, 90),
       eyebrow: trimSentence(`${brand.companyName} ${registration ? "at" : "after"} ${eventContext}`, 72),
@@ -489,16 +797,17 @@ export function deterministicDraft(input: {
   }
 
   if (context.brief.campaignRegister === "campaign-product") {
-    return validateDeterministicDraft({
+    const promotedOffer = context.brief.offerOrSource.name || profile.offerLabel;
+    return finalize({
       ...common,
-      title: trimSentence(`${brand.companyName} | ${profile.offerLabel}`, 90),
-      eyebrow: trimSentence(`${brand.companyName} | What changes`, 52),
-      headline: trimSentence(`Bring ${profile.theme} into the way the team actually works.`, 120),
+      title: trimSentence(`${brand.companyName} | ${promotedOffer}`, 90),
+      eyebrow: trimSentence(`${brand.companyName} | ${promotedOffer}`, 52),
+      headline: trimSentence(`Bring ${promotedOffer} into the way the team actually works.`, 120),
       subhead: trimSentence(
-        `${brand.companyName} gives ${roleAudience.toLowerCase()} a product path grounded in ${profile.theme}, the operating change, and the first use case worth validating.`,
+        `${brand.companyName} gives ${roleAudience.toLowerCase()} a focused way to connect ${promotedOffer} to the operating change and first use case worth validating.`,
         280
       ),
-      thesisHeadline: trimSentence(`${profile.offerLabel} matters when the operating change is concrete.`, 130),
+      thesisHeadline: trimSentence(`${promotedOffer} matters when the operating change is concrete.`, 130),
       thesisBody: trimSentence(profile.thesisBody, 320),
       narrativeArc: trimSentence(`What should ${roleAudience.toLowerCase()} test in the first use case?`, 180),
       sections: profileSections(profile).map((section, index) =>
@@ -550,7 +859,7 @@ export function deterministicDraft(input: {
               )
             }
     ) as ExperienceDraft["sections"];
-    return validateDeterministicDraft({
+    return finalize({
       ...common,
       title: trimSentence(
         sourceTitle.toLowerCase().includes(brand.companyName.toLowerCase())
@@ -587,7 +896,7 @@ export function deterministicDraft(input: {
     });
   }
 
-  return validateDeterministicDraft({
+  return finalize({
     ...common,
     title: trimSentence(`${brand.companyName} | ${profile.offerLabel}`, 90),
     eyebrow: trimSentence(`${brand.companyName} | For ${audience}`, 52),
@@ -690,6 +999,80 @@ export function experienceQualityFailure(input: {
   sourceArtifact?: SourceArtifact;
 }): string | undefined {
   const { draft, brand, targetBrand, answers, context, sourceContent, sourceArtifact } = input;
+  const framework = draft.persuasionFramework;
+  if (context.brief.campaignRegister !== "content-magic" && !framework) {
+    return "copy_framework_missing";
+  }
+  if (framework) {
+    const knownEvidenceIds = new Set(framework.strategy.evidenceMap.map(({ id }) => id));
+    const referencedEvidenceIds = [
+      ...framework.opening.evidenceIds,
+      ...framework.credibility.evidenceIds,
+      ...framework.urgency.evidenceIds,
+      ...framework.startingPoints.choices.flatMap(({ evidenceIds }) => evidenceIds),
+      ...framework.mechanism.steps.flatMap(({ evidenceIds }) => evidenceIds),
+      ...framework.teamValue.roles.flatMap(({ evidenceIds }) => evidenceIds),
+      ...framework.nextStep.evidenceIds
+    ];
+    if (referencedEvidenceIds.some((id) => !knownEvidenceIds.has(id))) {
+      return "copy_framework_unknown_evidence";
+    }
+    if (
+      framework.startingPoints.choices.some(
+        ({ validationQuestion }) => !validationQuestion.trim().endsWith("?")
+      )
+    ) {
+      return "copy_framework_validation_question";
+    }
+    const sectionHeadlines = [
+      framework.opening.headline,
+      framework.credibility.headline,
+      framework.urgency.headline,
+      framework.startingPoints.headline,
+      framework.mechanism.headline,
+      framework.teamValue.headline,
+      framework.nextStep.headline
+    ].map((value) => value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim());
+    if (new Set(sectionHeadlines).size !== sectionHeadlines.length) {
+      return "copy_framework_repeated_section";
+    }
+    const frameworkCopy = [
+      framework.strategy.messageSpine,
+      framework.strategy.angleRationale,
+      framework.credibility.fact,
+      framework.credibility.implication,
+      framework.urgency.change,
+      framework.urgency.consequence,
+      framework.urgency.reframe,
+      framework.startingPoints.intro,
+      ...framework.startingPoints.choices.flatMap((choice) => [
+        choice.label,
+        choice.buyerJob,
+        choice.outcome,
+        choice.validationQuestion
+      ]),
+      framework.mechanism.intro,
+      ...framework.mechanism.steps.flatMap((step) => [step.action, step.capability, step.output]),
+      framework.teamValue.intro,
+      ...framework.teamValue.roles.flatMap((role) => [
+        role.role,
+        role.decision,
+        role.risk,
+        role.benefit,
+        role.evidenceNeeded
+      ]),
+      framework.nextStep.scope,
+      framework.nextStep.activity,
+      framework.nextStep.deliverable,
+      framework.nextStep.resultingDecision
+    ].join(" ");
+    if (/\b(account thesis|decision paths?|decision lens|supporting proof|narrative arc|stakeholder map|buying committee)\b/i.test(frameworkCopy)) {
+      return "copy_framework_internal_jargon";
+    }
+    if (/\bthe visitor\b|public operating context|form field|submitted input/i.test(frameworkCopy)) {
+      return "copy_framework_internal_process_language";
+    }
+  }
   const visibleCopy = [
     draft.title,
     draft.eyebrow,
@@ -1036,6 +1419,16 @@ export async function generateExperienceDraft(input: {
       "Never add a number, metric, benchmark, named outcome, or comparative claim unless the exact claim appears in the supplied evidence.",
       "Follow campaignContext.brief.proofMode. If proof is unavailable, use mechanism, use-case, scenario, resource, and validation-question proof without implying hidden customers. Do not invent customers, logos, metrics, outcomes, events, speakers, dates, awards, integrations, proof, or urgency.",
       "Build one message spine: recognizable context, why the decision matters, the relevant seller path, and one objective-specific action.",
+      "For every account and campaign register except content-magic, populate persuasionFramework as the canonical seven-section copy contract. Keep the legacy headline, subhead, primaryCta, closingHeadline, and closingBody exactly synchronized with persuasionFramework.opening and persuasionFramework.nextStep so saved previews remain compatible.",
+      "Build persuasionFramework.strategy in seven editorial passes: map every usable fact to a stable evidence ID; write one message-spine sentence; compare status-quo tension, business upside, and differentiated mechanism; select the strongest supported angle; write each section to its contract; edit for rhythm and non-repetition; then reject unsupported claims and jargon.",
+      "The seven buyer-facing section jobs are fixed: opening makes one sharp promise to one audience; credibility turns the strongest supported fact into an implication; urgency moves from a verified change to its consequence and a better path without fabricated urgency; startingPoints offers exactly three distinct buyer jobs with outcomes and validation questions; mechanism connects action to capability to observable output; teamValue gives three functions distinct decisions, risks, benefits, and evidence needs; nextStep names a bounded scope, activity, deliverable, resulting decision, and objective-specific CTA.",
+      "Apply five Folloze Demo Builder principles throughout: open from a real fact or strategic tension; state a point of view; turn facts into consequences; let the buyer choose a real job; end with a bounded decision.",
+      "Every persuasionFramework evidenceIds value must exactly match an ID in persuasionFramework.strategy.evidenceMap. Evidence items may be seller facts, target facts, supplied-source claims, mechanisms, genuine proof, or explicit visitor inputs. Do not disguise an inference as evidence.",
+      "Every imageBrief is a creative-direction contract, not a license to invent an asset. Name the visual purpose, asset type, owning source, caption, and provenance. Use source='none' plus assetType='typographic-treatment' when no relevant verified visual exists. Never request a generic placeholder, stock image, fake blueprint, or invented product UI.",
+      "Use the family language in the writing. Account: Opportunity for the named account; What is already working; Why now; Choose where to start; How it works; What each team needs; Map the first use case. Campaign: Offer for the audience; Reasons to believe; Why this problem persists; Choose a use case; What changes in practice; Value for your team; an objective-specific action.",
+      "Never use the buyer-facing labels account thesis, decision path, decision lens, supporting proof, narrative arc, stakeholder map, or buying committee in persuasionFramework.",
+      "Every startingPoints.validationQuestion must be a genuine question ending in a question mark. Do not put a question into an evidence or proof field.",
+      "For content-magic, preserve the existing draft contract and omit persuasionFramework. Content is being redesigned separately.",
       "Make all three sections do different jobs and make every run specific to seller category, selected audience, objective, subtype or source, and available public evidence. Make signalLabels concrete buyer decision lenses whose matching section content can be shown in an interactive tab panel.",
       "Set each section eyebrow to exactly the corresponding signalLabels value so every selector, panel, and question card uses one coherent lens name.",
       "Write each section proof field as a distinct buyer-facing validation question ending in a question mark. Never use that field for sourcing, attribution, internal rationale, or form selections.",
@@ -1063,7 +1456,7 @@ export async function generateExperienceDraft(input: {
           ? `${generationInstructions}\n${repairInstruction}`
           : generationInstructions,
         input: requestInput,
-        text: { format: zodTextFormat(experienceDraftSchema, "folloze_try_me_experience_v3") }
+        text: { format: zodTextFormat(experienceDraftResponseSchema, "folloze_try_me_experience_v4") }
       },
         { timeout, maxRetries: 0, signal: controller.signal }
       );
@@ -1073,8 +1466,9 @@ export async function generateExperienceDraft(input: {
     const response = await requestDraft(responseInput, remaining);
 
     if (!response.output_parsed) throw new Error("OpenAI returned no structured experience.");
+    const primaryDraft = normalizeResponseDraft(response.output_parsed);
     const failure = experienceQualityFailure({
-      draft: response.output_parsed,
+      draft: primaryDraft,
       ...input,
       context,
       sourceContent
@@ -1087,7 +1481,7 @@ export async function generateExperienceDraft(input: {
             task: "Rewrite the rejected draft so it passes the named quality gate.",
             failedGate: failure,
             expectedMetadata: metadataFromContext(context),
-            rejectedDraft: response.output_parsed
+            rejectedDraft: primaryDraft
           });
           const repairResponse = await requestDraft(
             [
@@ -1098,22 +1492,23 @@ export async function generateExperienceDraft(input: {
             "This is one compact quality-repair pass. Fix the failed gate with a genuine copy rewrite, preserve all expected metadata exactly, and introduce no new factual claims."
           );
           if (repairResponse.output_parsed) {
+            const repairedDraft = normalizeResponseDraft(repairResponse.output_parsed);
             const repairFailure = experienceQualityFailure({
-              draft: repairResponse.output_parsed,
+              draft: repairedDraft,
               ...input,
               context,
               sourceContent
             });
             if (!repairFailure) {
               return {
-                draft: repairResponse.output_parsed,
+                draft: repairedDraft,
                 source: "openai",
                 durationMs: Date.now() - startedAt
               };
             }
             if (isNonBlockingStyleFailure(repairFailure, context)) {
               return {
-                draft: repairResponse.output_parsed,
+                draft: repairedDraft,
                 source: "openai",
                 durationMs: Date.now() - startedAt
               };
@@ -1127,7 +1522,7 @@ export async function generateExperienceDraft(input: {
           }
           if (isNonBlockingStyleFailure(failure, context)) {
             return {
-              draft: response.output_parsed,
+              draft: primaryDraft,
               source: "openai",
               durationMs: Date.now() - startedAt
             };
@@ -1141,7 +1536,7 @@ export async function generateExperienceDraft(input: {
         } catch (repairError) {
           if (isNonBlockingStyleFailure(failure, context)) {
             return {
-              draft: response.output_parsed,
+              draft: primaryDraft,
               source: "openai",
               durationMs: Date.now() - startedAt
             };
@@ -1159,7 +1554,7 @@ export async function generateExperienceDraft(input: {
       }
       if (isNonBlockingStyleFailure(failure, context)) {
         return {
-          draft: response.output_parsed,
+          draft: primaryDraft,
           source: "openai",
           durationMs: Date.now() - startedAt
         };
@@ -1171,7 +1566,7 @@ export async function generateExperienceDraft(input: {
         fallbackReason: `openai_quality_${failure}`
       };
     }
-    return { draft: response.output_parsed, source: "openai", durationMs: Date.now() - startedAt };
+    return { draft: primaryDraft, source: "openai", durationMs: Date.now() - startedAt };
   } catch (error) {
     if (error instanceof SourceFetchError) throw error;
     return {
