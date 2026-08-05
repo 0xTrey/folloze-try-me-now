@@ -308,4 +308,80 @@ describe("verified fallback brand recovery", () => {
     expect(integrationMocks.harvestBrand).not.toHaveBeenCalled();
     expect((await getSession(id))?.brand?.source).toBe("fast-extractor");
   });
+
+  it("preserves the harvested provider and logo evidence when identity is rejected", async () => {
+    const id = `brand-rejection-trace-${Date.now()}`;
+    const session = fallbackSession(id, "hellopebble.com");
+    session.brand = {
+      ...session.brand!,
+      source: "fast-extractor"
+    };
+    ids.add(id);
+    await putSession(session);
+    integrationMocks.harvestBrand.mockResolvedValue({
+      ...session.brand!,
+      domain: "hellopebble.com",
+      canonicalDomain: "hellopebble.com",
+      companyName: "PitchBook",
+      sourceUrl: "https://hellopebble.com/",
+      logoUrl: "https://cdn.example.com/assets/pitchbook-logo.svg",
+      logoSourceUrl: "https://cdn.example.com/assets/pitchbook-logo.svg",
+      source: "brand-harvester",
+      diagnostics: {
+        logo: {
+          strategy: "semantic-image",
+          imageCandidateCount: 4,
+          rejectedImageCount: 2,
+          inlineSvgCandidateCount: 0,
+          selectedSource: "json-ld",
+          validationAttempted: 3,
+          validationRejected: 2,
+          resolutionComplete: true
+        },
+        palette: {
+          strategy: "semantic-tokens",
+          confidence: "high",
+          candidateCount: 8,
+          semanticCandidateCount: 5,
+          rejectedCandidateCount: 0,
+          gradientCandidateCount: 0,
+          resolutionComplete: true
+        },
+        providers: {
+          publicPage: "succeeded",
+          publicPageAttempts: 1,
+          remoteBrowser: "not_configured",
+          brandfetch: "failed",
+          brandfetchLogoApi: "configured",
+          brandfetchBrandApi: "not_found",
+          verifiedFallback: false
+        }
+      }
+    });
+
+    await runBrandStage(id);
+
+    const stored = await getSession(id);
+    const completion = stored?.events.find(({ name }) => name === "brand_harvest_completed");
+    const rejection = stored?.events.find(({ name }) => name === "brand_identity_rejected");
+    expect(stored?.brand?.source).toBe("fallback");
+    expect(completion?.meta).toMatchObject({
+      identityFallback: true,
+      harvestedSource: "brand-harvester",
+      logoStrategy: "semantic-image",
+      logoSelectedSource: "json-ld",
+      logoAssetPath: "/assets/pitchbook-logo.svg",
+      brandPublicPageProvider: "succeeded",
+      brandfetchBrandApiProvider: "not_found"
+    });
+    expect(rejection?.meta).toMatchObject({
+      harvestedSource: "brand-harvester",
+      logoStrategy: "semantic-image",
+      logoSelectedSource: "json-ld",
+      logoAssetPath: "/assets/pitchbook-logo.svg"
+    });
+    expect(rejection?.meta?.identityRejectionReason).toContain(
+      "public company name could not be reconciled"
+    );
+  });
 });

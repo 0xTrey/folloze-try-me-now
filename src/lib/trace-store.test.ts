@@ -51,6 +51,10 @@ describe("server-only operational trace store", () => {
       sourceKind: "abm-product",
       durationMs: 912,
       logoStrategy: "inline-svg-unportable",
+      logoSelectedSource: "json-ld",
+      logoAssetPath: "/assets/logo-open-graph.gif",
+      harvestedSource: "brand-harvester",
+      identityRejectionReason: "The logo owner signal did not match.",
       sourceContent: "private customer content"
     });
 
@@ -71,7 +75,11 @@ describe("server-only operational trace store", () => {
         source: "fast-extractor",
         sourceKind: "abm-product",
         durationMs: 912,
-        logoStrategy: "inline-svg-unportable"
+        logoStrategy: "inline-svg-unportable",
+        logoSelectedSource: "json-ld",
+        logoAssetPath: "/assets/logo-open-graph.gif",
+        harvestedSource: "brand-harvester",
+        identityRejectionReason: "The logo owner signal did not match."
       }
     });
     expect(JSON.stringify(records)).not.toContain("cisco.com");

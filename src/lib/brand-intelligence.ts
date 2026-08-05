@@ -136,12 +136,60 @@ function descriptiveLogoOwner(logoUrl: string | undefined): string | null {
     const file = pathname.split("/").at(-1)?.replace(/\.[a-z0-9]+$/i, "") ?? "";
     const match = file.match(/(?:^|[-_])([a-z0-9]{4,})(?:[-_])?logo(?:[-_]|$)|(?:^|[-_])logo(?:[-_])?([a-z0-9]{4,})(?:[-_]|$)/i);
     const owner = identityKey(match?.[1] || match?.[2] || "");
-    return owner && !new Set(["brand", "company", "header", "primary", "footer", "white", "black", "color", "desktop", "mobile"]).has(owner)
+    return owner && !new Set([
+      "brand",
+      "company",
+      "header",
+      "primary",
+      "footer",
+      "white",
+      "black",
+      "color",
+      "desktop",
+      "mobile",
+      "open",
+      "graph",
+      "social",
+      "share",
+      "default",
+      "global",
+      "site",
+      "navigation",
+      "light",
+      "dark"
+    ]).has(owner)
       ? owner
       : null;
   } catch {
     return null;
   }
+}
+
+function logoAssetMatchesBrandDomain(
+  logoUrl: string | undefined,
+  expectedDomain: string,
+  aliases: Array<string | undefined> = []
+): boolean {
+  if (!logoUrl) return false;
+  try {
+    const assetDomain = canonicalDomain(new URL(logoUrl).hostname);
+    return [expectedDomain, ...aliases]
+      .map((value) => canonicalDomain(value ?? ""))
+      .filter(Boolean)
+      .some((domain) => sharesRegistrableCompanyDomain(assetDomain, domain));
+  } catch {
+    return false;
+  }
+}
+
+function hasAuthoritativeBrandfetchMatch(
+  profile: BrandProfile,
+  expectedDomain: string
+): boolean {
+  const canonicalAlias = canonicalDomain(profile.canonicalDomain ?? "");
+  return profile.diagnostics?.providers?.brandfetchBrandApi === "succeeded" && Boolean(
+    canonicalAlias && sharesRegistrableCompanyDomain(canonicalAlias, expectedDomain)
+  );
 }
 
 /**
@@ -185,17 +233,26 @@ export function assessBrandIdentity(
     profile.canonicalDomain,
     ...(profile.domainAliases ?? [])
   ]);
+  const brandfetchMatches = hasAuthoritativeBrandfetchMatch(profile, expected);
+  const firstPartyLogo = logoAssetMatchesBrandDomain(profile.logoUrl, expected, [
+    profile.canonicalDomain,
+    ...(profile.domainAliases ?? [])
+  ]);
   const logoOwner = descriptiveLogoOwner(profile.logoUrl);
-  const logoMatches = !logoOwner || [domainKey, relaxedDomainKey, nameKey].some(
-    (key) => key.length >= 3 && (logoOwner.includes(key) || key.includes(logoOwner))
-  );
+  const logoMatches = brandfetchMatches || firstPartyLogo || !logoOwner ||
+    [domainKey, relaxedDomainKey, nameKey].some(
+      (key) => key.length >= 3 && (logoOwner.includes(key) || key.includes(logoOwner))
+    );
+  const effectiveNameMatches = nameMatches || brandfetchMatches;
   const reasons: string[] = [];
   if (domainMatches) reasons.push("The harvested profile matches the submitted domain.");
   else reasons.push(`The harvested profile belongs to ${actual || "an unknown domain"}, not ${expected}.`);
   if (sourceMatches) reasons.push("The public evidence came from the submitted company domain.");
   else reasons.push("The public evidence URL does not match the submitted company domain.");
-  if (nameMatches) reasons.push("The public company name matches the submitted domain.");
+  if (brandfetchMatches) reasons.push("Brandfetch returned a matching canonical-domain brand record.");
+  if (effectiveNameMatches) reasons.push("The public company name matches the submitted domain.");
   else reasons.push("The public company name could not be reconciled with the submitted domain.");
+  if (firstPartyLogo) reasons.push("The selected logo is hosted on the submitted brand's domain.");
   if (!logoMatches) reasons.push("The harvested logo filename appears to name a different company.");
   if (aliasNeedsConfirmation) {
     reasons.push(`Brandfetch resolved this to ${canonicalAlias}, but that alias is unclaimed and needs confirmation.`);
@@ -205,17 +262,19 @@ export function assessBrandIdentity(
   let confidence: IntelligenceConfidence = "low";
   if (
     domainMatches &&
-    sourceMatches &&
-    nameMatches &&
+    (sourceMatches || brandfetchMatches) &&
+    effectiveNameMatches &&
     logoMatches &&
     profile.source !== "fallback" &&
     !aliasNeedsConfirmation
   ) {
     confidence = "high";
-  } else if (domainMatches && nameMatches && logoMatches && profile.source !== "fallback") {
+  } else if (domainMatches && effectiveNameMatches && logoMatches && profile.source !== "fallback") {
     confidence = "medium";
   }
-  const rejected = !domainMatches || (!nameMatches && profile.source !== "fallback") || !logoMatches;
+  const rejected = !domainMatches ||
+    (!effectiveNameMatches && profile.source !== "fallback") ||
+    !logoMatches;
   return {
     expectedDomain: expected,
     canonicalDomain: rejected ? expected : actual,

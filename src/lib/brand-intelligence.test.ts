@@ -186,6 +186,59 @@ describe("company-specific audience intelligence", () => {
     });
   });
 
+  it("accepts a generic logo filename when the asset is hosted by the submitted company", () => {
+    const cisco = brand({
+      domain: "cisco.com",
+      canonicalDomain: "cisco.com",
+      companyName: "Cisco",
+      sourceUrl: "https://www.cisco.com/",
+      logoUrl: "https://www.cisco.com/web/fw/i/logo-open-graph.gif"
+    });
+
+    expect(assessBrandIdentity(cisco, "cisco.com")).toMatchObject({
+      canonicalName: "Cisco",
+      confidence: "high",
+      confirmationStatus: "confirmed",
+      confirmedBy: "system"
+    });
+  });
+
+  it("treats a successful matching-domain Brandfetch record as authoritative", () => {
+    const cisco = brand({
+      domain: "cisco.com",
+      canonicalDomain: "cisco.com",
+      companyName: "Cisco",
+      sourceUrl: "https://www.cisco.com/",
+      logoUrl: "https://cdn.brandfetch.io/cisco.com/networking-logo.svg",
+      diagnostics: {
+        logo: {
+          strategy: "brandfetch-brand-api",
+          imageCandidateCount: 1,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0,
+          selectedSource: "brandfetch",
+          resolutionComplete: true
+        },
+        providers: {
+          publicPage: "succeeded",
+          publicPageAttempts: 1,
+          remoteBrowser: "not_configured",
+          brandfetch: "succeeded",
+          brandfetchLogoApi: "configured",
+          brandfetchBrandApi: "succeeded",
+          verifiedFallback: false
+        }
+      }
+    });
+
+    expect(assessBrandIdentity(cisco, "cisco.com")).toMatchObject({
+      canonicalName: "Cisco",
+      confidence: "high",
+      confirmationStatus: "confirmed",
+      confirmedBy: "system"
+    });
+  });
+
   it("recognizes a clean hello-prefixed domain without confusing it for another company", () => {
     const pebble = brand({
       domain: "hellopebble.com",

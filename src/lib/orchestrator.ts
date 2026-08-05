@@ -87,7 +87,7 @@ function trustedBrandProfile(
   profile: BrandProfile,
   expectedDomain: string,
   userConfirmed = false
-): { profile: BrandProfile; usedFallback: boolean } {
+): { profile: BrandProfile; usedFallback: boolean; rejectedProfile?: BrandProfile } {
   const assessed = withBrandIdentity(profile, expectedDomain, userConfirmed);
   if (assessed.identity?.confirmationStatus !== "rejected") {
     return { profile: assessed, usedFallback: false };
@@ -109,7 +109,60 @@ function trustedBrandProfile(
         provenance: [...assessed.identity.provenance, ...safeFallback.identity!.provenance]
       }
     },
-    usedFallback: true
+    usedFallback: true,
+    rejectedProfile: assessed
+  };
+}
+
+function traceableLogoPath(profile: BrandProfile): string | null {
+  const candidate = profile.logoSourceUrl ?? profile.logoUrl;
+  if (!candidate) return null;
+  try {
+    return decodeURIComponent(new URL(candidate).pathname).slice(0, 240);
+  } catch {
+    return candidate.startsWith("/") ? candidate.slice(0, 240) : null;
+  }
+}
+
+function brandEvidenceTrace(profile: BrandProfile) {
+  return {
+    harvestedSource: profile.source,
+    logoStrategy: profile.diagnostics?.logo.strategy ?? (profile.logoUrl ? "remote-profile" : "none"),
+    logoAvailable: Boolean(profile.logoUrl || profile.portableLogo),
+    logoCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
+    inlineLogoCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
+    logoSelectedSource: profile.diagnostics?.logo.selectedSource ?? "none",
+    logoAssetPath: traceableLogoPath(profile),
+    logoValidationAttempted: profile.diagnostics?.logo.validationAttempted ?? 0,
+    logoValidationRejected: profile.diagnostics?.logo.validationRejected ?? 0,
+    brandPublicPageProvider: profile.diagnostics?.providers?.publicPage ?? "unknown",
+    brandPublicPageAttempts: profile.diagnostics?.providers?.publicPageAttempts ?? 0,
+    brandRemoteBrowserProvider: profile.diagnostics?.providers?.remoteBrowser ?? "unknown",
+    brandfetchProvider: profile.diagnostics?.providers?.brandfetch ?? "unknown",
+    brandfetchLogoApiProvider: profile.diagnostics?.providers?.brandfetchLogoApi ?? "unknown",
+    brandfetchBrandApiProvider: profile.diagnostics?.providers?.brandfetchBrandApi ?? "unknown",
+    brandfetchQualityTier: profile.diagnostics?.brandfetch?.qualityTier ?? "unknown",
+    brandfetchClaimed: profile.diagnostics?.brandfetch?.claimed ?? false,
+    brandfetchColorCount: profile.diagnostics?.brandfetch?.colorCount ?? 0,
+    brandfetchFontCount: profile.diagnostics?.brandfetch?.fontCount ?? 0,
+    brandfetchImageCount: profile.diagnostics?.brandfetch?.imageCount ?? 0,
+    brandfetchIndustryCount: profile.diagnostics?.brandfetch?.industryCount ?? 0,
+    verifiedBrandFallback: profile.diagnostics?.providers?.verifiedFallback ?? false,
+    stylesheetAttempted: profile.diagnostics?.stylesheetAttempted ?? 0,
+    stylesheetSucceeded: profile.diagnostics?.stylesheetSucceeded ?? 0,
+    harvestedColorCount: profile.colors.length,
+    paletteConfidence: profile.diagnostics?.palette?.confidence ?? "unknown"
+  };
+}
+
+function brandRejectionTrace(profile: BrandProfile) {
+  const reasons = profile.identity?.reasons ?? [];
+  const primaryReason = reasons.find((reason) =>
+    /could not|different company|does not match|appears to name|unknown domain/i.test(reason)
+  ) ?? reasons.at(-1) ?? "Identity evidence was rejected.";
+  return {
+    ...brandEvidenceTrace(profile),
+    identityRejectionReason: primaryReason
   };
 }
 
@@ -892,6 +945,7 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
     const harvested = await harvestBrand(expectedDomain);
     const trusted = trustedBrandProfile(harvested, expectedDomain);
     const profile = brandWithSessionLogoDelivery(id, "seller", trusted.profile);
+    const harvestedEvidence = trusted.rejectedProfile ?? harvested;
     const readiness = profile.readiness ?? assessBrandReadiness(profile);
     await updateSession(id, (session) => {
       if (
@@ -926,34 +980,16 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
         identityConfidence: profile.identity?.confidence ?? "unknown",
         identityFallback: trusted.usedFallback,
         durationMs: durationSince(session.stages.brand.startedAt),
-        logoStrategy: profile.diagnostics?.logo.strategy ?? (profile.logoUrl ? "remote-profile" : "none"),
-        logoAvailable: Boolean(profile.logoUrl || profile.portableLogo),
-        logoCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
-        inlineLogoCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
-        logoSelectedSource: profile.diagnostics?.logo.selectedSource ?? "none",
-        logoValidationAttempted: profile.diagnostics?.logo.validationAttempted ?? 0,
-        logoValidationRejected: profile.diagnostics?.logo.validationRejected ?? 0,
-        brandPublicPageProvider: profile.diagnostics?.providers?.publicPage ?? "unknown",
-        brandPublicPageAttempts: profile.diagnostics?.providers?.publicPageAttempts ?? 0,
-        brandRemoteBrowserProvider: profile.diagnostics?.providers?.remoteBrowser ?? "unknown",
-        brandfetchProvider: profile.diagnostics?.providers?.brandfetch ?? "unknown",
-        brandfetchLogoApiProvider: profile.diagnostics?.providers?.brandfetchLogoApi ?? "unknown",
-        brandfetchBrandApiProvider: profile.diagnostics?.providers?.brandfetchBrandApi ?? "unknown",
-        brandfetchQualityTier: profile.diagnostics?.brandfetch?.qualityTier ?? "unknown",
-        brandfetchClaimed: profile.diagnostics?.brandfetch?.claimed ?? false,
-        brandfetchColorCount: profile.diagnostics?.brandfetch?.colorCount ?? 0,
-        brandfetchFontCount: profile.diagnostics?.brandfetch?.fontCount ?? 0,
-        brandfetchImageCount: profile.diagnostics?.brandfetch?.imageCount ?? 0,
-        brandfetchIndustryCount: profile.diagnostics?.brandfetch?.industryCount ?? 0,
-        verifiedBrandFallback: profile.diagnostics?.providers?.verifiedFallback ?? false,
-        stylesheetAttempted: profile.diagnostics?.stylesheetAttempted ?? 0,
-        stylesheetSucceeded: profile.diagnostics?.stylesheetSucceeded ?? 0,
+        ...brandEvidenceTrace(harvestedEvidence),
+        acceptedLogoAvailable: Boolean(profile.logoUrl || profile.portableLogo),
         colorCount: profile.colors.length,
         brandReadiness: readiness.status,
-        paletteConfidence: profile.diagnostics?.palette?.confidence ?? "unknown"
       });
       if (trusted.usedFallback) {
-        appendEvent(session, "brand_identity_rejected", { domain: expectedDomain });
+        appendEvent(session, "brand_identity_rejected", {
+          domain: expectedDomain,
+          ...brandRejectionTrace(harvestedEvidence)
+        });
       }
       appendEvent(session, "audience_hypotheses_ready", {
         count: session.audienceSuggestions.length,
@@ -1070,6 +1106,7 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
     const harvested = await harvestBrand(expectedDomain);
     const trusted = trustedBrandProfile(harvested, expectedDomain);
     const profile = brandWithSessionLogoDelivery(id, "target", trusted.profile);
+    const harvestedEvidence = trusted.rejectedProfile ?? harvested;
     const readiness = profile.readiness ?? assessBrandReadiness(profile);
     await updateSession(id, (session) => {
       if (
@@ -1112,34 +1149,16 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
         identityConfidence: profile.identity?.confidence ?? "unknown",
         identityFallback: trusted.usedFallback,
         durationMs: durationSince(session.stages.audience.startedAt),
-        logoStrategy: profile.diagnostics?.logo.strategy ?? (profile.logoUrl ? "remote-profile" : "none"),
-        logoAvailable: Boolean(profile.logoUrl || profile.portableLogo),
-        logoCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
-        inlineLogoCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
-        logoSelectedSource: profile.diagnostics?.logo.selectedSource ?? "none",
-        logoValidationAttempted: profile.diagnostics?.logo.validationAttempted ?? 0,
-        logoValidationRejected: profile.diagnostics?.logo.validationRejected ?? 0,
-        brandPublicPageProvider: profile.diagnostics?.providers?.publicPage ?? "unknown",
-        brandPublicPageAttempts: profile.diagnostics?.providers?.publicPageAttempts ?? 0,
-        brandRemoteBrowserProvider: profile.diagnostics?.providers?.remoteBrowser ?? "unknown",
-        brandfetchProvider: profile.diagnostics?.providers?.brandfetch ?? "unknown",
-        brandfetchLogoApiProvider: profile.diagnostics?.providers?.brandfetchLogoApi ?? "unknown",
-        brandfetchBrandApiProvider: profile.diagnostics?.providers?.brandfetchBrandApi ?? "unknown",
-        brandfetchQualityTier: profile.diagnostics?.brandfetch?.qualityTier ?? "unknown",
-        brandfetchClaimed: profile.diagnostics?.brandfetch?.claimed ?? false,
-        brandfetchColorCount: profile.diagnostics?.brandfetch?.colorCount ?? 0,
-        brandfetchFontCount: profile.diagnostics?.brandfetch?.fontCount ?? 0,
-        brandfetchImageCount: profile.diagnostics?.brandfetch?.imageCount ?? 0,
-        brandfetchIndustryCount: profile.diagnostics?.brandfetch?.industryCount ?? 0,
-        verifiedBrandFallback: profile.diagnostics?.providers?.verifiedFallback ?? false,
-        stylesheetAttempted: profile.diagnostics?.stylesheetAttempted ?? 0,
-        stylesheetSucceeded: profile.diagnostics?.stylesheetSucceeded ?? 0,
+        ...brandEvidenceTrace(harvestedEvidence),
+        acceptedLogoAvailable: Boolean(profile.logoUrl || profile.portableLogo),
         colorCount: profile.colors.length,
         brandReadiness: readiness.status,
-        paletteConfidence: profile.diagnostics?.palette?.confidence ?? "unknown"
       });
       if (trusted.usedFallback) {
-        appendEvent(session, "target_identity_rejected", { domain: expectedDomain });
+        appendEvent(session, "target_identity_rejected", {
+          domain: expectedDomain,
+          ...brandRejectionTrace(harvestedEvidence)
+        });
       }
       appendEvent(session, "audience_hypotheses_refined", {
         domain: expectedDomain,
