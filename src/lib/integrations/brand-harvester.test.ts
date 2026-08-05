@@ -37,6 +37,52 @@ describe("fast brand extraction", () => {
     expect(profile.logoUrl).not.toContain("favicon");
   });
 
+  it("uses the strongest responsive picture candidate instead of DOM order", () => {
+    const responsive = extractFastBrandProfile({
+      domain: "northstar.com",
+      html: `<!doctype html><html><head>
+        <title>NorthStar</title>
+        <base href="https://assets.northstar.com/brand/">
+      </head><body><header><picture>
+        <source media="(min-width: 900px)" srcset="wordmark-large.svg 1440w, wordmark-small.svg 320w">
+        <img class="header-logo" src="wordmark-fallback.svg" alt="NorthStar logo" width="240" height="48">
+      </picture></header></body></html>`,
+      finalUrl: new URL("https://northstar.com/")
+    });
+
+    expect(responsive.logoUrl).toBe(
+      "https://assets.northstar.com/brand/wordmark-large.svg"
+    );
+    expect(responsive.diagnostics?.logo).toMatchObject({
+      strategy: "semantic-image",
+      selectedSource: "semantic-image"
+    });
+  });
+
+  it("discovers an Organization JSON-LD logo when no image tag exists", () => {
+    const structured = extractFastBrandProfile({
+      domain: "northstar.com",
+      html: `<!doctype html><html><head>
+        <title>NorthStar</title>
+        <script type="application/ld+json">{
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          "name": "NorthStar",
+          "logo": {"@type": "ImageObject", "contentUrl": "/media/northstar-wordmark.svg"}
+        }</script>
+      </head></html>`,
+      finalUrl: new URL("https://northstar.com/")
+    });
+
+    expect(structured.logoUrl).toBe(
+      "https://northstar.com/media/northstar-wordmark.svg"
+    );
+    expect(structured.diagnostics?.logo).toMatchObject({
+      selectedSource: "json-ld",
+      selectedScore: 130
+    });
+  });
+
   it("derives semantic colors instead of an error color found in page CSS", () => {
     expect(profile.primaryColor).toBe("#1B3E51");
     expect(profile.accentColor).toBe("#F44414");

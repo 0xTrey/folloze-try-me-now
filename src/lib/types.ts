@@ -196,6 +196,21 @@ export interface BrandProfile {
       rejectedImageCount: number;
       inlineSvgCandidateCount: number;
       selectedScore?: number;
+      /** Candidate layer that supplied the selected logo, without exposing its URL. */
+      selectedSource?:
+        | "semantic-image"
+        | "json-ld"
+        | "itemprop"
+        | "css"
+        | "meta"
+        | "link-icon"
+        | "remote-profile"
+        | "brandfetch"
+        | "verified-profile";
+      /** Number of remote candidates whose bytes were checked before selection. */
+      validationAttempted?: number;
+      /** Number of candidates rejected for status, size, or non-image bytes. */
+      validationRejected?: number;
       /** True after all configured logo-resolution layers have been exhausted. */
       resolutionComplete?: boolean;
     };
@@ -219,6 +234,14 @@ export interface BrandProfile {
     };
     stylesheetAttempted?: number;
     stylesheetSucceeded?: number;
+    /** Aggregate provider receipt. No page text, credentials, or asset URLs. */
+    providers?: {
+      publicPage: "succeeded" | "failed";
+      publicPageAttempts: number;
+      remoteBrowser: "succeeded" | "failed" | "not_configured";
+      brandfetch: "succeeded" | "failed" | "not_configured" | "not_needed";
+      verifiedFallback: boolean;
+    };
   };
 }
 

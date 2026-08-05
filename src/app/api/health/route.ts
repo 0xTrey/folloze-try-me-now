@@ -62,7 +62,12 @@ export function GET() {
       },
       rateLimiter: { mode: rateLimitStoreMode, distributed: distributedRateLimits },
       generation: { mode: config.generationMode, connected: hasOpenAI },
-      brandHarvester: hasRemoteBrandHarvester ? "remote" : "safe-fast-extractor",
+      brandHarvester: {
+        mode: hasRemoteBrandHarvester ? "remote" : "safe-fast-extractor",
+        remoteBrowserConfigured: hasRemoteBrandHarvester,
+        brandfetchConfigured: Boolean(process.env.BRANDFETCH_API_KEY),
+        validationFirstCandidateSelection: true
+      },
       follozeMcp: {
         mode: config.follozeMode,
         connected: hasRemoteFolloze,

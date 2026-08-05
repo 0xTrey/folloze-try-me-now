@@ -240,6 +240,7 @@ Production configuration is server-only unless prefixed `NEXT_PUBLIC_`. Secrets 
 | `BLOB_READ_WRITE_TOKEN` | Yes | Private upload and versioned artifact storage. |
 | `DATABASE_URL` | Yes | Postgres connection for claimed records, publish ledger, and delivery state. |
 | `BRAND_HARVESTER_URL`, `BRAND_HARVESTER_TOKEN` | Yes for full-fidelity launch | Authenticated controlled-egress brand service. The fast extractor may remain an explicit degraded mode. |
+| `BRANDFETCH_API_KEY` | Recommended recovery layer | Server-only Brand API access for validated logo and palette recovery when the source site blocks static harvesting. |
 | `FOLLOZE_MCP_SERVER_URL`, `FOLLOZE_MCP_AUTH_TOKEN` | Yes | Remote narrow gateway and service credential. |
 | `FOLLOZE_MCP_TOOL_NAME` | Yes | Deployment allowlist value; expected `create_try_me_experience`. |
 | `FOLLOZE_THEME_ID`, `FOLLOZE_THEME_URL` | Yes when a fixed theme is required | Gateway theme identity and trusted template asset URL; validate consistency at startup. |

@@ -74,6 +74,7 @@ These names already exist in `.env.example`. The â€œcurrent behavior if missingâ
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Rate limiting and Redis-only session compatibility | Blob remains the session store when connected; Redis still provides distributed rate limits. Redis-only sessions do not satisfy production readiness. | Both required for distributed rate limits; an eventual Redis session store must add atomic revision/CAS writes before it can replace Blob. |
 | `BRAND_HARVESTER_URL` | Company/target brand | Remote mode is not connected. Fast mode does not require it. | Required for `BRAND_MODE=remote`. |
 | `BRAND_HARVESTER_TOKEN` | Remote Brand Harvester authorization | Sends no authorization header. | Required whenever remote service is configured. |
+| `BRANDFETCH_API_KEY` | Server-side Brandfetch Brand API recovery | Blocked or JS-only sites cannot use Brandfetch as a generic final provider. | Recommended until the authenticated browser harvester is deployed; never expose as `NEXT_PUBLIC_*`. |
 | `FOLLOZE_MCP_SERVER_URL` | Remote MCP tool | Remote mode is not connected; disabled mode remains preview-only. | Required and HTTPS for `FOLLOZE_MODE=draft` or `FOLLOZE_MODE=publish`. |
 | `FOLLOZE_MCP_AUTH_TOKEN` | Remote MCP authorization | Sends no gateway authorization header. | Required until replaced with short-lived workload identity. |
 | `FOLLOZE_MCP_TOOL_NAME` | Remote MCP allowlist | Defaults to `create_try_me_experience`. | Pin to the gateway's only public tool. |

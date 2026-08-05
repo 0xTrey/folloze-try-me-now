@@ -28,6 +28,12 @@ describe("health production capability", () => {
       posthogConfigured: false,
       sessionReplayEnabled: false
     });
+    expect(health.services.brandHarvester).toEqual({
+      mode: "safe-fast-extractor",
+      remoteBrowserConfigured: false,
+      brandfetchConfigured: false,
+      validationFirstCandidateSelection: true
+    });
   });
 
   it("accepts the Blob CAS session store when every required service is connected", () => {

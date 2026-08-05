@@ -1,4 +1,5 @@
 import { hasRemoteBrandHarvester } from "@/lib/config";
+import sharp from "sharp";
 import { withBrandReadiness } from "@/lib/brand-readiness";
 import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
 import { logServerError } from "@/lib/http";
@@ -110,19 +111,132 @@ function extractMeta(html: string, key: string): string | undefined {
   return undefined;
 }
 
+function strongestSrcsetSource(srcset: string, base: URL): string | undefined {
+  return srcset
+    .split(",")
+    .map((entry, index) => {
+      const [rawUrl, rawDescriptor = ""] = entry.trim().split(/\s+/, 2);
+      const url = absoluteHttpsUrl(rawUrl, base);
+      const descriptor = rawDescriptor.toLowerCase();
+      const width = descriptor.endsWith("w")
+        ? Number.parseFloat(descriptor.slice(0, -1))
+        : 0;
+      const density = descriptor.endsWith("x")
+        ? Number.parseFloat(descriptor.slice(0, -1))
+        : 0;
+      return {
+        url,
+        // Width descriptors are the strongest signal. Density descriptors are
+        // normalized below them, and source order only breaks exact ties.
+        score: Number.isFinite(width) && width > 0
+          ? 10_000 + width
+          : Number.isFinite(density) && density > 0
+            ? 1_000 + density * 100
+            : index
+      };
+    })
+    .filter((candidate): candidate is { url: string; score: number } => Boolean(candidate.url))
+    .sort((left, right) => right.score - left.score)[0]?.url;
+}
+
 function imageSource(tag: string, base: URL): string | undefined {
   const srcset = attr(tag, "srcset") ?? attr(tag, "data-srcset");
   if (srcset) {
-    const candidate = srcset
-      .split(",")
-      .map((entry) => entry.trim().split(/\s+/)[0])
-      .filter(Boolean)
-      .at(-1);
-    const srcsetUrl = absoluteHttpsUrl(candidate, base);
+    const srcsetUrl = strongestSrcsetSource(srcset, base);
     if (srcsetUrl) return srcsetUrl;
   }
   const direct = attr(tag, "src") ?? attr(tag, "data-src") ?? attr(tag, "data-lazy-src");
   return absoluteHttpsUrl(direct, base);
+}
+
+type LogoCandidateSource =
+  | "semantic-image"
+  | "json-ld"
+  | "itemprop"
+  | "css"
+  | "meta"
+  | "link-icon"
+  | "brandfetch"
+  | "remote-profile"
+  | "verified-profile";
+
+interface LogoCandidate {
+  source: string;
+  score: number;
+  sourceKind: LogoCandidateSource;
+  width?: number;
+  height?: number;
+}
+
+const logoCandidatesByProfile = new WeakMap<BrandProfile, LogoCandidate[]>();
+
+function documentBaseUrl(html: string, fallback: URL): URL {
+  const baseTag = html.match(/<base\b[^>]*>/i)?.[0];
+  const href = absoluteHttpsUrl(baseTag ? attr(baseTag, "href") : undefined, fallback);
+  return href ? new URL(href) : fallback;
+}
+
+function structuredLogoUrls(html: string, base: URL, companyKeys: string[]): string[] {
+  const results: string[] = [];
+  const visit = (value: unknown, inheritedOrganization = false): void => {
+    if (Array.isArray(value)) {
+      value.forEach((entry) => visit(entry, inheritedOrganization));
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    const types = (Array.isArray(record["@type"]) ? record["@type"] : [record["@type"]])
+      .filter((type): type is string => typeof type === "string")
+      .map((type) => type.toLowerCase());
+    const nameKey = entityKey(typeof record.name === "string" ? record.name : "");
+    const organization = inheritedOrganization ||
+      types.some((type) => ["organization", "corporation", "brand"].includes(type));
+    const ownerMatches = !nameKey || companyKeys.some((key) => nameKey.includes(key) || key.includes(nameKey));
+    if (organization && ownerMatches) {
+      const logo = record.logo;
+      const rawUrls = typeof logo === "string"
+        ? [logo]
+        : logo && typeof logo === "object"
+          ? [
+              (logo as Record<string, unknown>).contentUrl,
+              (logo as Record<string, unknown>).url
+            ]
+          : [];
+      for (const raw of rawUrls) {
+        const url = absoluteHttpsUrl(typeof raw === "string" ? raw : undefined, base);
+        if (url) results.push(url);
+      }
+    }
+    Object.values(record).forEach((child) => visit(child, organization));
+  };
+  for (const match of html.matchAll(
+    /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+  )) {
+    try {
+      visit(JSON.parse(match[1] ?? ""));
+    } catch {
+      // Malformed public JSON-LD is ignored; it is evidence, never instructions.
+    }
+  }
+  return results.filter((url, index, urls) => urls.indexOf(url) === index);
+}
+
+function responsiveLogoTags(html: string): string[] {
+  const tags: string[] = [...(html.match(/<img\b[^>]*>/gi) ?? [])];
+  for (const picture of html.match(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi) ?? []) {
+    const fallback = picture.match(/<img\b[^>]*>/i)?.[0] ?? "";
+    const inherited = ["alt", "class", "id", "width", "height"]
+      .map((name) => {
+        const value = attr(fallback, name);
+        return value ? `${name}="${escapeSvgAttribute(value)}"` : "";
+      })
+      .filter(Boolean)
+      .join(" ");
+    for (const source of picture.match(/<source\b[^>]*>/gi) ?? []) {
+      tags.push(`<img data-picture-source="true" ${inherited} ${source.replace(/^<source\b|>$/gi, "")}>`);
+    }
+  }
+  return tags;
 }
 
 function numericAttr(tag: string, name: string): number {
@@ -205,8 +319,10 @@ function extractLogo(
 ): {
   logoUrl?: string;
   portableLogo?: BrandProfile["portableLogo"];
+  candidates: LogoCandidate[];
   receipt: NonNullable<BrandProfile["diagnostics"]>["logo"];
 } {
+  const assetBase = documentBaseUrl(html, base);
   const companyKeys = [entityKey(companyName), entityKey(base.hostname.split(".")[0] ?? "")]
     .filter((key) => key.length >= 2)
     .filter((key, index, values) => values.indexOf(key) === index);
@@ -231,9 +347,9 @@ function extractLogo(
       );
     });
   const inlineSvgCandidateCount = inlineSvgCandidates.length;
-  const scored = (html.match(/<img\b[^>]*>/gi) ?? [])
-    .map((tag) => {
-      const source = imageSource(tag, base);
+  const scored = responsiveLogoTags(html)
+    .map((tag): LogoCandidate | null => {
+      const source = imageSource(tag, assetBase);
       if (!source) return null;
       imageCandidateCount += 1;
       const sourceName = (() => {
@@ -292,25 +408,82 @@ function extractLogo(
       if (descriptor.includes("logo")) score += 50;
       if (companyNameSignal) score += 35;
       if (/mainnav|site[-_ ]?logo|navbar.*logo|header.*logo/.test(descriptor)) score += 45;
+      if (attr(tag, "data-picture-source") === "true") score += 15;
       if (/favicon|apple-touch|lang-picker|customer|partner|testimonial/.test(descriptor)) score -= 90;
       // A small square mark is often an app icon or favicon-sized symbol. Keep
       // it as a last-resort candidate, but prefer a deliverable wordmark when a
       // verified provider can resolve one.
       if (width && height && width <= 96 && height <= 96 && Math.abs(width - height) < 20) score -= 65;
       if (width > height * 1.6) score += 25;
-      return { source, score };
+      return { source, score, sourceKind: "semantic-image" as const, width, height };
     })
-    .filter((candidate): candidate is { source: string; score: number } => Boolean(candidate))
-    .sort((a, b) => b.score - a.score);
-  if (scored[0] && scored[0].score >= 35) {
+    .filter((candidate): candidate is LogoCandidate => Boolean(candidate));
+
+  const supplemental: LogoCandidate[] = [];
+  for (const source of structuredLogoUrls(html, assetBase, companyKeys)) {
+    supplemental.push({ source, score: 130, sourceKind: "json-ld" });
+  }
+  for (const tag of html.match(/<(?:img|meta|link)\b[^>]*\bitemprop\s*=\s*["'][^"']*logo[^"']*["'][^>]*>/gi) ?? []) {
+    const source = imageSource(tag, assetBase) ??
+      absoluteHttpsUrl(attr(tag, "content") ?? attr(tag, "href"), assetBase);
+    if (source) supplemental.push({ source, score: 125, sourceKind: "itemprop" });
+  }
+  for (const key of ["og:logo", "twitter:logo", "logo"]) {
+    const source = absoluteHttpsUrl(extractMeta(html, key), assetBase);
+    if (source) supplemental.push({ source, score: 115, sourceKind: "meta" });
+  }
+  for (const tag of html.match(/<[^>]+\bstyle\s*=\s*["'][^"']*(?:background|mask)(?:-image)?\s*:[^"']+["'][^>]*>/gi) ?? []) {
+    const descriptor = [attr(tag, "aria-label"), attr(tag, "class"), attr(tag, "id")]
+      .filter(Boolean)
+      .join(" ");
+    const descriptorKey = entityKey(descriptor);
+    if (!/logo|wordmark|brand/i.test(descriptor) || !companyKeys.some((key) => descriptorKey.includes(key))) {
+      continue;
+    }
+    const style = attr(tag, "style") ?? "";
+    for (const match of style.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/gi)) {
+      const source = absoluteHttpsUrl(match[1], assetBase);
+      if (source) supplemental.push({ source, score: 105, sourceKind: "css" });
+    }
+  }
+  const links = html.match(/<link\b[^>]*>/gi) ?? [];
+  for (const tag of links) {
+    const rel = attr(tag, "rel")?.toLowerCase() ?? "";
+    if (!/apple-touch-icon|mask-icon|(?:^|\s)icon(?:\s|$)/.test(rel)) continue;
+    const source = absoluteHttpsUrl(attr(tag, "href"), assetBase);
+    if (!source) continue;
+    const sizes = attr(tag, "sizes") ?? "";
+    const largestSize = Math.max(
+      0,
+      ...[...sizes.matchAll(/(\d+)x(\d+)/gi)].map((match) => Number.parseInt(match[1] ?? "0", 10))
+    );
+    supplemental.push({
+      source,
+      score: 5 + Math.min(largestSize / 64, 8),
+      sourceKind: "link-icon",
+      width: largestSize || undefined,
+      height: largestSize || undefined
+    });
+  }
+  const candidates = [...scored, ...supplemental]
+    .sort((left, right) => right.score - left.score)
+    .filter(
+      (candidate, index, values) =>
+        values.findIndex((other) => other.source === candidate.source) === index
+    )
+    .slice(0, 12);
+  const selected = candidates.find((candidate) => candidate.score >= 35);
+  if (selected) {
     return {
-      logoUrl: scored[0].source,
+      logoUrl: selected.source,
+      candidates,
       receipt: {
         strategy: "semantic-image",
         imageCandidateCount,
         rejectedImageCount,
         inlineSvgCandidateCount,
-        selectedScore: scored[0].score
+        selectedScore: selected.score,
+        selectedSource: selected.sourceKind
       }
     };
   }
@@ -326,6 +499,7 @@ function extractLogo(
   if (portableLogo) {
     return {
       portableLogo,
+      candidates,
       receipt: {
         strategy: "inline-svg-portable",
         imageCandidateCount,
@@ -335,25 +509,23 @@ function extractLogo(
     };
   }
 
-  const links = html.match(/<link\b[^>]*>/gi) ?? [];
-  for (const tag of links) {
-    const rel = attr(tag, "rel")?.toLowerCase() ?? "";
-    if (/apple-touch-icon|icon/.test(rel)) {
-      const href = absoluteHttpsUrl(attr(tag, "href"), base);
-      if (href) {
-        return {
-          logoUrl: href,
-          receipt: {
-            strategy: "favicon",
-            imageCandidateCount,
-            rejectedImageCount,
-            inlineSvgCandidateCount
-          }
-        };
+  const fallbackIcon = candidates.find((candidate) => candidate.sourceKind === "link-icon");
+  if (fallbackIcon) {
+    return {
+      logoUrl: fallbackIcon.source,
+      candidates,
+      receipt: {
+        strategy: "favicon",
+        imageCandidateCount,
+        rejectedImageCount,
+        inlineSvgCandidateCount,
+        selectedScore: fallbackIcon.score,
+        selectedSource: fallbackIcon.sourceKind
       }
-    }
+    };
   }
   return {
+    candidates,
     receipt: {
       strategy: inlineSvgCandidateCount > 0 ? "inline-svg-unportable" : "none",
       imageCandidateCount,
@@ -936,6 +1108,29 @@ async function fetchPublicText(startUrl: URL, signal?: AbortSignal): Promise<{ t
   return { text: response.text, finalUrl: response.finalUrl };
 }
 
+function retryablePublicFetchFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /returned (?:403|408|425|429|5\d\d)|timed out|ECONNRESET|socket hang up/i.test(message);
+}
+
+async function fetchPublicTextWithRetry(
+  startUrl: URL,
+  signal?: AbortSignal
+): Promise<{ text: string; finalUrl: URL; attempts: number }> {
+  const maxAttempts = 2;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return { ...(await fetchPublicText(startUrl, signal)), attempts: attempt };
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts || !retryablePublicFetchFailure(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+  }
+  throw lastError;
+}
+
 export function extractFastBrandProfile(input: {
   domain: string;
   html: string;
@@ -967,7 +1162,7 @@ export function extractFastBrandProfile(input: {
   );
   const fonts = extractFontProfile(input.html, input.css ?? "");
   const fontBase = finalUrl;
-  return {
+  const profile: BrandProfile = {
     domain: input.domain,
     companyName,
     title: title || undefined,
@@ -989,6 +1184,8 @@ export function extractFastBrandProfile(input: {
       palette: paletteDiagnostics
     }
   };
+  logoCandidatesByProfile.set(profile, logoDecision.candidates);
+  return profile;
 }
 
 function strings(value: unknown, limit: number): string[] {
@@ -1054,13 +1251,14 @@ function mergeVerifiedDesign(
 ): BrandProfile {
   if (!verified) return profile;
   const presentation = brandPresentationFor(verified);
-  const logoUrl = verified.logoUrl ?? profile.logoUrl;
+  const useVerifiedLogo = !profile.portableLogo && !profile.logoUrl && Boolean(verified.logoUrl);
+  const logoUrl = useVerifiedLogo ? verified.logoUrl : profile.logoUrl;
   return {
     ...profile,
     companyName: verified.companyName,
     logoUrl,
     logoSourceUrl: logoUrl ?? profile.logoSourceUrl,
-    portableLogo: verified.logoUrl ? undefined : profile.portableLogo,
+    portableLogo: useVerifiedLogo ? undefined : profile.portableLogo,
     imageUrls: [...new Set([...verified.imageUrls, ...profile.imageUrls])].slice(0, 6),
     colors: [...verified.colors],
     primaryColor: verified.primaryColor,
@@ -1074,12 +1272,14 @@ function mergeVerifiedDesign(
     source: "brand-harvester",
     diagnostics: {
       ...profile.diagnostics,
-      logo: verified.logoUrl
+      logo: useVerifiedLogo
         ? {
             strategy: "verified-profile",
             imageCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
             rejectedImageCount: profile.diagnostics?.logo.rejectedImageCount ?? 0,
-            inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0
+            inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
+            selectedSource: "verified-profile",
+            resolutionComplete: true
           }
         : profile.diagnostics?.logo ?? {
             strategy: "none",
@@ -1127,6 +1327,9 @@ function cacheBrandProfile(domain: string, profile: BrandProfile): BrandProfile 
         rejectedImageCount: profile.diagnostics?.logo.rejectedImageCount ?? 0,
         inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
         selectedScore: profile.diagnostics?.logo.selectedScore,
+        selectedSource: profile.diagnostics?.logo.selectedSource,
+        validationAttempted: profile.diagnostics?.logo.validationAttempted,
+        validationRejected: profile.diagnostics?.logo.validationRejected,
         resolutionComplete: true
       },
       palette: profile.diagnostics?.palette
@@ -1159,6 +1362,33 @@ interface BrandfetchLogoResult {
   companyName?: string;
   colors: string[];
   portableLogo: NonNullable<BrandProfile["portableLogo"]>;
+}
+
+async function validatedPortableRemoteLogo(
+  bytes: Uint8Array,
+  source: "official-remote-asset" | "brandfetch"
+): Promise<NonNullable<BrandProfile["portableLogo"]> | undefined> {
+  const portable = portableBrandLogoFromBytes(bytes, source);
+  if (!portable) return undefined;
+  if (portable.mediaType === "image/svg+xml") return portable;
+  try {
+    const metadata = await sharp(Buffer.from(bytes), {
+      failOn: "warning",
+      limitInputPixels: 16_000_000
+    }).metadata();
+    const width = metadata.width ?? 0;
+    const height = metadata.height ?? 0;
+    if (
+      width < 8 ||
+      height < 8 ||
+      width > 8192 ||
+      height > 8192 ||
+      width * height > 16_000_000
+    ) return undefined;
+    return portable;
+  } catch {
+    return undefined;
+  }
 }
 
 function brandfetchLogoFormats(payload: Record<string, unknown>): string[] {
@@ -1234,7 +1464,7 @@ async function fetchBrandfetchLogo(domain: string): Promise<BrandfetchLogoResult
           }
         });
         if (asset.status !== 200 || asset.truncated) continue;
-        const portableLogo = portableBrandLogoFromBytes(asset.bytes, "brandfetch");
+        const portableLogo = await validatedPortableRemoteLogo(asset.bytes, "brandfetch");
         if (portableLogo) {
           return {
             companyName: typeof payload.name === "string" ? payload.name : undefined,
@@ -1354,7 +1584,12 @@ function logoEvidenceScore(profile: BrandProfile): number {
 function needsBrandfetchLogo(profile: BrandProfile | undefined): boolean {
   if (!profile) return true;
   if (profile.diagnostics?.logo.strategy === "verified-profile") return false;
-  if (profile.portableLogo) return false;
+  if (profile.portableLogo) {
+    // A validated file can still be a tiny square navigation icon. Keep it as
+    // a safe fallback, but ask the configured provider for a true wordmark.
+    return profile.diagnostics?.logo.strategy === "official-remote-portable" &&
+      (profile.diagnostics.logo.selectedScore ?? 0) < 75;
+  }
   if (["none", "favicon", "inline-svg-unportable", "remote-profile"].includes(
     profile.diagnostics?.logo.strategy ?? "none"
   )) return true;
@@ -1412,50 +1647,133 @@ function mergePublicBrandEvidence(
   return mergeVerifiedDesign(merged, verified);
 }
 
-async function copyOfficialRemoteLogo(profile: BrandProfile): Promise<BrandProfile> {
-  if (
-    profile.portableLogo ||
-    !profile.logoUrl ||
-    profile.diagnostics?.logo.strategy === "favicon"
-  ) return profile;
-  try {
-    const asset = await fetchPinnedPublicBytes(profile.logoUrl, {
-      timeoutMs: 5_000,
-      maxBytes: 350_000,
-      maxRedirects: 2,
-      headers: {
-        Accept: "image/svg+xml,image/png,image/webp,image/jpeg,image/avif,image/gif;q=0.8,*/*;q=0.1"
-      }
-    });
-    if (asset.status !== 200 || asset.truncated) return profile;
-    const portableLogo = portableBrandLogoFromBytes(asset.bytes, "official-remote-asset");
-    if (!portableLogo) return profile;
+async function copyOfficialRemoteLogo(
+  profile: BrandProfile,
+  discovered: LogoCandidate[] = []
+): Promise<BrandProfile> {
+  const receipt = profile.diagnostics?.logo;
+  if (profile.portableLogo) {
     return {
       ...profile,
-      logoSourceUrl: profile.logoSourceUrl ?? profile.logoUrl,
-      portableLogo,
       diagnostics: {
         ...profile.diagnostics,
         logo: {
-          strategy: "official-remote-portable",
-          imageCandidateCount: profile.diagnostics?.logo.imageCandidateCount ?? 0,
-          rejectedImageCount: profile.diagnostics?.logo.rejectedImageCount ?? 0,
-          inlineSvgCandidateCount: profile.diagnostics?.logo.inlineSvgCandidateCount ?? 0,
-          selectedScore: profile.diagnostics?.logo.selectedScore
+          strategy: receipt?.strategy ?? "inline-svg-portable",
+          imageCandidateCount: receipt?.imageCandidateCount ?? 0,
+          rejectedImageCount: receipt?.rejectedImageCount ?? 0,
+          inlineSvgCandidateCount: receipt?.inlineSvgCandidateCount ?? 0,
+          selectedScore: receipt?.selectedScore,
+          selectedSource: receipt?.selectedSource,
+          validationAttempted: receipt?.validationAttempted ?? 0,
+          validationRejected: receipt?.validationRejected ?? 0,
+          resolutionComplete: true
         }
       }
     };
-  } catch {
-    // The session image route can still proxy the bounded official URL. Do not
-    // log or expose the upstream asset URL because it may contain transient CDN data.
-    return profile;
   }
+  if (!profile.logoUrl || receipt?.strategy === "favicon") return profile;
+  // Reviewed profiles have a compile-time, exact-domain delivery fallback.
+  // Keep that emergency cache available even when the public origin blocks
+  // server fetches; all non-reviewed candidates must prove their bytes here.
+  if (receipt?.strategy === "verified-profile") return profile;
+
+  const candidates = [
+    ...discovered,
+    {
+      source: profile.logoUrl,
+      score: receipt?.selectedScore ?? 50,
+      sourceKind: receipt?.selectedSource ??
+        (receipt?.strategy === "remote-profile" ? "remote-profile" : "semantic-image")
+    } satisfies LogoCandidate
+  ]
+    .filter((candidate) => candidate.score >= 35)
+    .sort((left, right) => right.score - left.score)
+    .filter(
+      (candidate, index, values) =>
+        values.findIndex((other) => other.source === candidate.source) === index
+    )
+    .slice(0, 6);
+  let attempted = 0;
+  let rejected = 0;
+  for (const candidate of candidates) {
+    attempted += 1;
+    try {
+      const asset = await fetchPinnedPublicBytes(candidate.source, {
+        timeoutMs: 5_000,
+        maxBytes: 350_000,
+        maxRedirects: 2,
+        headers: {
+          Accept: "image/svg+xml,image/png,image/webp,image/jpeg,image/avif,image/gif;q=0.8,*/*;q=0.1"
+        }
+      });
+      if (asset.status !== 200 || asset.truncated) {
+        rejected += 1;
+        continue;
+      }
+      const portableLogo = await validatedPortableRemoteLogo(
+        asset.bytes,
+        "official-remote-asset"
+      );
+      if (!portableLogo) {
+        rejected += 1;
+        continue;
+      }
+      return {
+        ...profile,
+        logoUrl: candidate.source,
+        logoSourceUrl: candidate.source,
+        portableLogo,
+        diagnostics: {
+          ...profile.diagnostics,
+          logo: {
+            strategy: "official-remote-portable",
+            imageCandidateCount: receipt?.imageCandidateCount ?? 0,
+            rejectedImageCount: receipt?.rejectedImageCount ?? 0,
+            inlineSvgCandidateCount: receipt?.inlineSvgCandidateCount ?? 0,
+            selectedScore: candidate.score,
+            selectedSource: candidate.sourceKind,
+            validationAttempted: attempted,
+            validationRejected: rejected,
+            resolutionComplete: true
+          }
+        }
+      };
+    } catch {
+      rejected += 1;
+    }
+  }
+
+  return {
+    ...profile,
+    logoUrl: undefined,
+    logoSourceUrl: undefined,
+    diagnostics: {
+      ...profile.diagnostics,
+      logo: {
+        strategy: "none",
+        imageCandidateCount: receipt?.imageCandidateCount ?? 0,
+        rejectedImageCount: (receipt?.rejectedImageCount ?? 0) + rejected,
+        inlineSvgCandidateCount: receipt?.inlineSvgCandidateCount ?? 0,
+        validationAttempted: attempted,
+        validationRejected: rejected,
+        resolutionComplete: true
+      }
+    }
+  };
 }
 
 export async function harvestBrand(domain: string): Promise<BrandProfile> {
   const cached = cachedBrandProfile(domain);
   if (cached) return cached;
   const verified = verifiedBrandProfileFor(domain);
+  let publicPageStatus: "succeeded" | "failed" = "failed";
+  let publicPageAttempts = 0;
+  let remoteBrowserStatus: "succeeded" | "failed" | "not_configured" =
+    hasRemoteBrandHarvester && process.env.BRAND_HARVESTER_URL
+      ? "failed"
+      : "not_configured";
+  let brandfetchStatus: "succeeded" | "failed" | "not_configured" | "not_needed" =
+    process.env.BRANDFETCH_API_KEY ? "not_needed" : "not_configured";
   // Run the deterministic public-page pass alongside an optional browser
   // harvester. This keeps richer semantic color evidence inside the existing
   // experience-generation window instead of stacking two network budgets.
@@ -1463,10 +1781,11 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     { profile: BrandProfile } | { error: unknown }
   > => {
     try {
-      const { text: html, finalUrl } = await fetchPublicText(
+      const { text: html, finalUrl, attempts } = await fetchPublicTextWithRetry(
         new URL(`https://${domain}`),
         AbortSignal.timeout(8_500)
       );
+      publicPageAttempts = attempts;
       const styles = await Promise.allSettled(
         stylesheetUrls(html, finalUrl).map(async (url) =>
           (await fetchPublicText(new URL(url), AbortSignal.timeout(2_500))).text
@@ -1484,6 +1803,7 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
       };
       return { profile };
     } catch (error) {
+      publicPageAttempts = retryablePublicFetchFailure(error) ? 2 : 1;
       return { error };
     }
   })();
@@ -1501,7 +1821,10 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
       });
       if (response.ok) {
         const normalized = normalizeRemoteProfile(await response.json(), domain);
-        if (normalized) candidate = mergeVerifiedDesign(normalized, verified);
+        if (normalized) {
+          candidate = normalized;
+          remoteBrowserStatus = "succeeded";
+        }
         else {
           logServerError(new Error("Remote Brand Harvester returned an invalid profile."), {
             operation: "brand_harvest_remote",
@@ -1534,28 +1857,65 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     // Public HTML/CSS is useful even when a remote profile already supplied a
     // logo. It supplies source-owned semantic colors and prevents a generic
     // remote palette from overriding the same evidence used by ABM flows.
-    const extracted = publicEvidence.profile;
+    publicPageStatus = "succeeded";
+    const extracted = await copyOfficialRemoteLogo(
+      publicEvidence.profile,
+      logoCandidatesByProfile.get(publicEvidence.profile) ?? []
+    );
     candidate = candidate
-      ? mergePublicBrandEvidence(candidate, extracted, verified)
-      : mergeVerifiedDesign(extracted, verified);
+      ? mergePublicBrandEvidence(candidate, extracted, undefined)
+      : extracted;
   } else {
     publicFetchError = publicEvidence.error;
     logServerError(publicEvidence.error, {
       operation: "brand_harvest_public_fallback",
-      code: verified ? "brand_harvest_verified_fallback" : "brand_harvest_failed",
-      details: { domain }
+      code: "brand_harvest_public_fetch_failed",
+      details: {
+        domain,
+        remoteBrowserConfigured: hasRemoteBrandHarvester,
+        brandfetchConfigured: Boolean(process.env.BRANDFETCH_API_KEY),
+        verifiedFallbackAvailable: Boolean(verified)
+      }
     });
-    candidate ??= verified;
   }
 
+  if (candidate) candidate = await copyOfficialRemoteLogo(candidate);
   if (needsBrandfetchLogo(candidate)) {
     const brandfetch = await fetchBrandfetchLogo(domain);
-    if (brandfetch) candidate = profileWithBrandfetchLogo(domain, candidate, brandfetch);
+    if (brandfetch) {
+      candidate = profileWithBrandfetchLogo(domain, candidate, brandfetch);
+      brandfetchStatus = "succeeded";
+    } else if (process.env.BRANDFETCH_API_KEY) {
+      brandfetchStatus = "failed";
+    }
   }
 
+  candidate ??= verified;
   if (candidate) {
-    candidate = await copyOfficialRemoteLogo(candidate);
-    return cacheBrandProfile(domain, candidate);
+    const mergedCandidate = mergeVerifiedDesign(candidate, verified);
+    const resolvedCandidate = await copyOfficialRemoteLogo(mergedCandidate);
+    const finalLogoReceipt = resolvedCandidate.diagnostics?.logo ?? {
+      strategy: resolvedCandidate.logoUrl ? "remote-profile" as const : "none" as const,
+      imageCandidateCount: 0,
+      rejectedImageCount: 0,
+      inlineSvgCandidateCount: 0,
+      resolutionComplete: true
+    };
+    const finalCandidate: BrandProfile = {
+      ...resolvedCandidate,
+      diagnostics: {
+        ...resolvedCandidate.diagnostics,
+        logo: finalLogoReceipt,
+        providers: {
+          publicPage: publicPageStatus,
+          publicPageAttempts,
+          remoteBrowser: remoteBrowserStatus,
+          brandfetch: brandfetchStatus,
+          verifiedFallback: finalLogoReceipt.strategy === "verified-profile"
+        }
+      }
+    };
+    return cacheBrandProfile(domain, finalCandidate);
   }
   throw publicFetchError instanceof Error
     ? publicFetchError

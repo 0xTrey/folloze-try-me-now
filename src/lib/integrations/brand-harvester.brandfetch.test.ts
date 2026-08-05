@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const safeFetchMocks = vi.hoisted(() => ({
   fetchPinnedPublicBytes: vi.fn(),
@@ -18,7 +20,13 @@ const samsungSvg = new TextEncoder().encode(
 const fordSvg = new TextEncoder().encode(
   '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ford wordmark" viewBox="0 0 220 82"><title>Ford</title><path fill="#00095B" d="M1 1h218v80H1z"/></svg>'
 );
-const tinyPng = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const validWordmarkPng = new Uint8Array(readFileSync(join(
+  process.cwd(),
+  "public",
+  "verified-brands",
+  "servicenow",
+  "homepage-header-logo.png"
+)));
 
 describe("credentialed Brandfetch logo fallback", () => {
   beforeEach(() => {
@@ -189,7 +197,7 @@ describe("credentialed Brandfetch logo fallback", () => {
     safeFetchMocks.fetchPinnedPublicBytes.mockResolvedValue({
       status: 200,
       headers: { "content-type": "image/png" },
-      bytes: tinyPng,
+      bytes: validWordmarkPng,
       finalUrl: new URL("https://cdn.ttgtmedia.com/rms/ux/responsive/img/nav_logo.png"),
       truncated: false
     });

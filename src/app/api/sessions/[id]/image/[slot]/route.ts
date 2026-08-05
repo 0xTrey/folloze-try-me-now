@@ -214,51 +214,15 @@ function canonicalDomain(value: string): string {
 }
 
 async function readReviewedLogo(path: string): Promise<Uint8Array> {
-  switch (path) {
-    case "public/brand/folloze-logo.svg":
-      return new Uint8Array(await readFile(join(
-        process.cwd(),
-        "public",
-        "brand",
-        "folloze-logo.svg"
-      )));
-    case "public/verified-brands/servicenow/homepage-header-logo.png":
-      return new Uint8Array(await readFile(join(
-        process.cwd(),
-        "public",
-        "verified-brands",
-        "servicenow",
-        "homepage-header-logo.png"
-      )));
-    case "public/verified-brands/medidata/official-wordmark.svg":
-      return new Uint8Array(await readFile(join(
-        process.cwd(),
-        "public",
-        "verified-brands",
-        "medidata",
-        "official-wordmark.svg"
-      )));
-    case "public/verified-brands/lilly/official-wordmark.svg":
-      return new Uint8Array(await readFile(join(
-        process.cwd(),
-        "public",
-        "verified-brands",
-        "lilly",
-        "official-wordmark.svg"
-      )));
-    case "public/verified-brands/6sense/official-wordmark.png.b64": {
-      const encoded = await readFile(join(
-        process.cwd(),
-        "public",
-        "verified-brands",
-        "6sense",
-        "official-wordmark.png.b64"
-      ), "utf8");
-      return new Uint8Array(Buffer.from(encoded.trim(), "base64"));
-    }
-    default:
-      throw new Error("The reviewed logo path is not registered for delivery.");
+  if (!/^(?:public\/verified-brands\/[a-z0-9-]+\/[a-z0-9._-]+\.(?:png|svg|webp)(?:\.b64)?|public\/brand\/folloze-logo\.svg)$/.test(path)) {
+    throw new Error("The reviewed logo path is not registered for delivery.");
   }
+  const absolutePath = join(process.cwd(), "public", path.slice("public/".length));
+  if (path.endsWith(".b64")) {
+    const encoded = await readFile(absolutePath, "utf8");
+    return new Uint8Array(Buffer.from(encoded.trim(), "base64"));
+  }
+  return new Uint8Array(await readFile(absolutePath));
 }
 
 async function verifiedLogoFallback(

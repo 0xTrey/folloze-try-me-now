@@ -94,7 +94,7 @@ describe("blocked public brand sites", () => {
       .at(-1);
     expect(logged).toMatchObject({
       type: "try_me_error",
-      code: "brand_harvest_failed",
+      code: "brand_harvest_public_fetch_failed",
       operation: "brand_harvest_public_fallback"
     });
     expect(logged?.requestId).toMatch(/^[0-9a-f-]{36}$/i);

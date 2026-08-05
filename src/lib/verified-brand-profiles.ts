@@ -68,7 +68,7 @@ function canonicalDomain(value: string): string {
 }
 
 const SAFE_LOGO_FALLBACK_PATH =
-  /^(?:public\/verified-brands\/[a-z0-9-]+\/[a-z0-9._-]+\.(?:png|svg|webp)|public\/verified-brands\/6sense\/official-wordmark\.png\.b64|public\/brand\/folloze-logo\.svg)$/;
+  /^(?:public\/verified-brands\/[a-z0-9-]+\/[a-z0-9._-]+\.(?:png|svg|webp)(?:\.b64)?|public\/brand\/folloze-logo\.svg)$/;
 
 export interface VerifiedBrandLogoFallback {
   path: string;
