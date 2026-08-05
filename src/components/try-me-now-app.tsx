@@ -50,7 +50,6 @@ import {
   EntryPathMicroDemo,
   ExpirySaveValuePanel,
   InstantBrandLockStrip,
-  ProgressiveArtifactStream,
   ToneChips,
   type AnalyticsSignal,
   type CtaValue,
@@ -793,7 +792,7 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
       audienceBody: `Choose the closest role. Every recommendation is tied to ${targetName}'s public context and the problem ${brandName} can help that team solve.`,
       objectiveTitle: `Choose the outcome this experience should drive for ${targetName}.`,
       objectiveBody: "Choose one outcome. It will align the opening promise, proof, and visual CTA treatment.",
-      completeTitle: `${brandName} × ${targetName}. The brief is locked.`,
+      completeTitle: `${brandName} × ${targetName}. The brief is ready.`,
       completeBody: "Folloze is composing the account story, proof sequence, interaction path, and next move now."
     };
   }
@@ -830,7 +829,7 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
     audienceBody: "Choose the buyer who should recognize the problem, trust the proof, and care about the next step. Evidence-backed options cite the public signals behind them; the rest stay labeled as hypotheses.",
     objectiveTitle: `What should ${campaignOfferFor(session) || "this campaign"} help them do?`,
     objectiveBody: "Choose one outcome. It will keep the promise, proof, and visual CTA treatment pointed in the same direction.",
-    completeTitle: `${campaignTypeFor(session)} brief locked.`,
+    completeTitle: `${campaignTypeFor(session)} brief ready.`,
     completeBody: "Folloze is composing the campaign promise, proof sequence, interaction, and conversion path now."
   };
 }
@@ -1178,7 +1177,7 @@ function LiveChecklist({ session, compact = false }: { session?: PublicTryMeSess
       {!compact && (
         <div className="buildLedgerHeader">
           <div>
-            <span>{lockedCount} of {moments.length} intelligence layers locked</span>
+            <span>{lockedCount} of {moments.length} intelligence layers ready</span>
             <strong>{lockedCount === moments.length ? "Experience ready" : `Now assembling · ${moments.find((moment) => moment.key === currentKey)?.phase || "Live brief"}`}</strong>
           </div>
           <span className="buildOrbit" aria-hidden="true"><i /><i /><i /></span>
@@ -1300,6 +1299,7 @@ export function CampaignOverviewRail({ session }: { session: PublicTryMeSession 
         {rows.map((row, index) => {
           const Icon = row.icon;
           const state = row.value ? "complete" : !row.required ? "optional" : index === currentIndex ? "current" : "pending";
+          const stateLabel = state === "complete" ? "Done" : state === "current" ? "Active" : "Waiting";
           return (
             <div className={`overviewField is-${state}`} data-overview-field={row.key} key={row.key}>
               <span className="overviewFieldIcon" aria-hidden="true"><Icon size={17} /></span>
@@ -1307,8 +1307,8 @@ export function CampaignOverviewRail({ session }: { session: PublicTryMeSession 
                 <span>{row.label}</span>
                 <strong>{row.value || row.detail}</strong>
               </div>
-              <span className="overviewFieldState" aria-label={state === "complete" ? "Collected" : state === "current" ? "Current question" : state === "optional" ? "Optional" : "Not collected"}>
-                {state === "complete" ? <Check size={14} /> : state === "optional" ? "+" : String(index + 1).padStart(2, "0")}
+              <span className="overviewFieldState" aria-label={stateLabel} title={stateLabel}>
+                {state === "complete" ? <Check size={14} /> : state === "current" ? <span className="liveDot" /> : <span aria-hidden="true" />}
               </span>
             </div>
           );
@@ -1433,6 +1433,13 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
   const targetVerified = Boolean(
     session.targetBrand && session.targetBrand.readiness?.status !== "incomplete"
   );
+  const latestSelection = objectiveComplete
+    ? { label: "Outcome", value: session.answers.objective || "" }
+    : audienceComplete
+      ? { label: "Buyer persona", value: audienceFor(session) }
+      : contextComplete
+        ? { label: contextLabel, value: contextValue }
+        : undefined;
 
   return (
     <section className="guidedThread" aria-labelledby="guided-thread-title">
@@ -1458,10 +1465,10 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
             {brandVerified && <CircleCheck size={18} className="identityCheck" aria-label="Seller brand evidence verified" />}
           </div>
         </article>
-        {contextComplete && (
+        {latestSelection && (
           <article className="prospectBubble">
-            <span>You chose</span><strong>{contextLabel}: {contextValue}</strong>
-            {session.useCase === "content" && <button type="button" onClick={onRestart}><PencilLine size={13} />Replace source</button>}
+            <span>You chose</span><strong>{latestSelection.label}: {latestSelection.value}</strong>
+            {session.useCase === "content" && latestSelection.label === contextLabel && <button type="button" onClick={onRestart}><PencilLine size={13} />Replace source</button>}
           </article>
         )}
         {session.useCase === "abm" && session.answers.targetDomain && (
@@ -1476,7 +1483,6 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
             </div>
           </article>
         )}
-        {audienceComplete && <article className="prospectBubble"><span>You chose</span><strong>Buyer persona: {audienceFor(session)}</strong></article>}
       </div>
       <button type="button" className="identityReset buttonTertiary" onClick={onRestart}>{brandResolved && !brandVerified ? "Brand evidence looks wrong? Try another domain" : "Something look wrong? Start over"}</button>
     </section>
@@ -2349,7 +2355,7 @@ export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSe
           <div className="assemblyGrid" aria-hidden="true" />
           <div className="assemblyStatus" role="status" aria-live="polite">
             <span><i className="liveDot" />{currentMoment.title}</span>
-            <small>{lockedCount} / {moments.length} intelligence layers locked</small>
+            <small>{lockedCount} / {moments.length} intelligence layers ready</small>
           </div>
           <div className={`artifact brandArtifact ${brandReady ? "isPlaced" : ""}`}>
             <div className="assemblyIdentity">
@@ -3173,29 +3179,6 @@ export function TryMeNowApp() {
               {error && <div className="inlineError" role="alert">{error}</div>}
               {connectionError && <div className="connectionNotice" role="status"><LoaderCircle className="spin" size={15} />{connectionError}</div>}
             </div>
-          </div>
-          <div className="buildPanel">
-            <div className="buildTop">
-              <div className="buildTopCopy"><span className="sectionKicker">{buildPanelCopy.kicker}</span><h2>{buildPanelCopy.headline}</h2></div>
-              <span className="tempLink"><span className="liveDot" />{buildPanelCopy.urlLabel}</span>
-            </div>
-            <ProgressiveArtifactStream
-              headline={`Building ${brandNameFor(session)} into a buyer-ready experience`}
-              artifacts={buildMoments(session).map((moment) => ({
-                id: moment.key,
-                phase: moment.phase,
-                title: moment.title,
-                detail: moment.detail,
-                artifact: moment.artifact,
-                status: moment.status === "complete" || moment.status === "fallback"
-                  ? "ready"
-                  : moment.status === "running"
-                    ? "running"
-                    : moment.status === "failed"
-                      ? "failed"
-                      : "queued"
-              }))}
-            />
           </div>
           <aside className="processRail">
             <CampaignOverviewRail session={session} />

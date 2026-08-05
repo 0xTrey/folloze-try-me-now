@@ -580,8 +580,8 @@ export function ProgressiveArtifactStream({ artifacts, headline = "Your experien
   const visualProgress = running && focus?.id === "experience"
     ? { value: "Final assembly", label: "" }
     : complete
-      ? { value: "Ready", label: `${artifacts.length} of ${artifacts.length} stages locked` }
-      : { value: `${ready} of ${artifacts.length}`, label: "stages locked" };
+      ? { value: "Ready", label: `${artifacts.length} of ${artifacts.length} stages ready` }
+      : { value: `${ready} of ${artifacts.length}`, label: "stages ready" };
   return (
     <section className={styles.artifactStream} aria-labelledby="artifact-stream-title" aria-busy={Boolean(running)}>
       <div className={styles.streamHeader}>
