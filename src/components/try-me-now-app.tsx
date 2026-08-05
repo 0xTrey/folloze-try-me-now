@@ -2572,6 +2572,14 @@ export function TryMeNowApp() {
         && persistedSectionSignals.current.has(sectionSignalKey);
       if (!duplicateSectionView) {
         if (event.data.action === "section_view") persistedSectionSignals.current.add(sectionSignalKey);
+        captureProductEvent("preview_interaction", {
+          category: event.data.action === "cta_click" ? "conversion" : "interaction",
+          sessionId: session.id,
+          properties: {
+            interaction_type: event.data.action,
+            interaction_target: elementId || "experience_preview"
+          }
+        });
         void recordPreviewSignal(session.id, serverEvent, elementId).catch(() => undefined);
       }
     };

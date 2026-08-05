@@ -2,23 +2,20 @@ import posthog from "posthog-js";
 
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
-const replayEnabled = process.env.NEXT_PUBLIC_POSTHOG_SESSION_REPLAY === "true";
 
-if (projectToken && apiHost) {
+if (!projectToken || !apiHost) {
+  if (process.env.NODE_ENV === "development") {
+    const variableName = projectToken
+      ? "NEXT_PUBLIC_POSTHOG_HOST"
+      : "NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN";
+    throw new Error(
+      `${variableName} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${variableName} is configured`
+    );
+  }
+} else {
   posthog.init(projectToken, {
     api_host: apiHost,
     person_profiles: "identified_only",
-    autocapture: false,
-    capture_pageview: false,
-    capture_pageleave: false,
-    capture_exceptions: true,
-    disable_session_recording: !replayEnabled,
-    session_recording: {
-      maskAllInputs: true,
-      maskCapturedNetworkRequestFn: (request) => {
-        if (request.name) request.name = request.name.split("?")[0];
-        return request;
-      }
-    }
+    capture_exceptions: true
   });
 }
