@@ -1,7 +1,8 @@
 # Product analytics, visitor sessions, and tracing
 
-Status: implemented in source. Migration 009, deployment configuration, and live
-readback are separate release checkpoints.
+Status: production-active as of 2026-08-05. Migration 009, deployment
+configuration, first-party writes, PostHog ingestion, and the production alias
+were verified separately.
 
 ## Decision
 
@@ -139,6 +140,13 @@ Recommended initial PostHog views:
 4. Time to value: `api_request_completed.duration_ms` and domain-to-preview time.
 5. Cohorts: use case, claimed versus anonymous, and company domain from the
    identified server-side session export.
+
+The live product-analytics dashboard is
+[`Analytics basics (wizard)`](https://us.posthog.com/project/383322/dashboard/1957009).
+It contains the corrected `try_me_*` session, claim, preview-interaction, and
+domain-to-claim funnel queries. The Folloze Try Me Now product owner owns the
+dashboard; Neon remains the authoritative interaction and submitted-input
+ledger when the optional PostHog sink is unavailable.
 
 ## Operator workflow
 
