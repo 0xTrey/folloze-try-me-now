@@ -609,6 +609,31 @@ function normalizeHex(value: string): string | undefined {
   return `#${(raw.length === 3 ? raw.split("").map((char) => `${char}${char}`).join("") : raw).toUpperCase()}`;
 }
 
+function normalizeCssColor(value: string): string | undefined {
+  const normalizedHex = normalizeHex(value);
+  if (normalizedHex) return normalizedHex;
+  const match = value.trim().match(
+    /^rgba?\(\s*(\d{1,3})\s*(?:,\s*|\s+)(\d{1,3})\s*(?:,\s*|\s+)(\d{1,3})(?:\s*(?:,|\/)\s*(\d*\.?\d+%?))?\s*\)$/i
+  );
+  if (!match) return undefined;
+  const channels = match.slice(1, 4).map(Number);
+  if (channels.some((channel) => !Number.isInteger(channel) || channel < 0 || channel > 255)) {
+    return undefined;
+  }
+  const rawAlpha = match[4];
+  if (rawAlpha) {
+    const alpha = rawAlpha.endsWith("%")
+      ? Number.parseFloat(rawAlpha) / 100
+      : Number.parseFloat(rawAlpha);
+    if (!Number.isFinite(alpha) || alpha < 0.5 || alpha > 1) return undefined;
+  }
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+}
+
+function cssColorLiterals(value: string): string[] {
+  return value.match(/#[0-9a-f]{3,6}\b|rgba?\([^)]{1,64}\)/gi) ?? [];
+}
+
 function rgb(hex: string): [number, number, number] {
   return [
     Number.parseInt(hex.slice(1, 3), 16),
@@ -639,8 +664,8 @@ function extractPalette(html: string, css: string): {
 } {
   const source = css.trim() || html;
   const counts = new Map<string, number>();
-  for (const match of source.matchAll(/#[0-9a-f]{3,6}\b/gi)) {
-    const color = normalizeHex(match[0]);
+  for (const literal of cssColorLiterals(source)) {
+    const color = normalizeCssColor(literal);
     if (color) counts.set(color, (counts.get(color) ?? 0) + 1);
   }
 
@@ -651,8 +676,10 @@ function extractPalette(html: string, css: string): {
     ])
   );
   const resolveVariableColor = (value: string, seen = new Set<string>()): string | undefined => {
-    const direct = value.match(/#[0-9a-f]{3,6}\b/i)?.[0];
-    if (direct) return normalizeHex(direct);
+    const direct = cssColorLiterals(value)
+      .map(normalizeCssColor)
+      .find((color): color is string => Boolean(color));
+    if (direct) return direct;
     const reference = value.match(/var\(\s*--([a-z0-9_-]+)/i)?.[1]?.toLowerCase();
     if (!reference || seen.has(reference)) return undefined;
     const referencedValue = rawVariables.get(reference);
@@ -714,8 +741,8 @@ function extractPalette(html: string, css: string): {
       const bodyOrText = /(?:^|[\s>,])(?:html|body|h[1-3]|p)(?:$|[\s.:#\[])/i.test(selector) ||
         /shell|headline|heading|title|copy|text/i.test(selector);
       const gradient = /(?:linear|radial|conic)-gradient\s*\(/i.test(declarationBody);
-      return [...declarationBody.matchAll(/#[0-9a-f]{3,6}\b/gi)]
-        .map((colorMatch) => normalizeHex(colorMatch[0]))
+      return cssColorLiterals(declarationBody)
+        .map(normalizeCssColor)
         .filter((color): color is string => Boolean(color))
         .map((color) => ({ color, heroOrBrand, bodyOrText, gradient, selector }));
     });
@@ -735,8 +762,8 @@ function extractPalette(html: string, css: string): {
         /(?:linear|radial|conic)-gradient\s*\(/i.test(value)
     )
     .flatMap(([, value]) =>
-      [...value.matchAll(/#[0-9a-f]{3,6}\b/gi)]
-        .map((match) => normalizeHex(match[0]))
+      cssColorLiterals(value)
+        .map(normalizeCssColor)
         .filter((color): color is string => Boolean(color))
     );
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([color]) => color);
@@ -785,6 +812,7 @@ function extractPalette(html: string, css: string): {
     if (/(^|[-_])ui[-_]?0?1([-_]|$)/.test(name)) return 180;
     if (/(^|[-_])accent([-_]|$)/.test(name)) return 155;
     if (/cta|button.*background/.test(name)) return 145;
+    if (/(^|[-_])(action|focus|interactive|link)([-_]|$)/.test(name)) return 140;
     if (/(^|[-_])primary([-_]|$)/.test(name)) return 130;
     if (/highlight/.test(name)) return 120;
     if (/radiant|flame|electric|energy|vivid/.test(name)) return 115;
@@ -809,7 +837,6 @@ function extractPalette(html: string, css: string): {
       ({ color, bodyOrText }) =>
         bodyOrText &&
         luminance(color) < 0.32 &&
-        saturation(color) > 0.08 &&
         !stateOnlyColors.has(color) &&
         !frameworkOnlyColors.has(color)
     )

@@ -1,0 +1,50 @@
+{
+  "domain": "apple.com",
+  "companyName": "Apple",
+  "sourceUrl": "https://www.apple.com/ipad/",
+  "description": "Discover Apple's iPhone, iPad, Apple Watch, Mac, Apple TV, accessories, entertainment, and device support.",
+  "publicTopics": [
+    "iPad",
+    "Apple at Work",
+    "MacBook Air",
+    "Apple Trade In"
+  ],
+  "imageUrls": [],
+  "colors": [
+    "#1D1D1F",
+    "#000000",
+    "#FFFFFF",
+    "#0071E3",
+    "#0066CC",
+    "#F5F5F7",
+    "#6E6E73",
+    "#D2D2D7"
+  ],
+  "primaryColor": "#1D1D1F",
+  "accentColor": "#0071E3",
+  "surfaceColor": "#FFFFFF",
+  "displayFontFamily": "SF Pro Display",
+  "bodyFontFamily": "SF Pro Text",
+  "presentation": {
+    "heroTheme": "light",
+    "darkSurfaceColor": "#1D1D1F",
+    "softSurfaceColor": "#F5F5F7",
+    "supportingAccentColor": "#86868B",
+    "lightSurfaceAccentColor": "#0066CC",
+    "lightTextColor": "#1D1D1F",
+    "mutedTextColor": "#6E6E73",
+    "dividerColor": "#D2D2D7",
+    "primaryButtonBackground": "#0071E3",
+    "primaryButtonText": "#FFFFFF",
+    "primaryButtonHover": "#0077ED",
+    "primaryButtonActive": "#006EDB",
+    "secondaryButtonBorder": "#0071E3",
+    "secondaryButtonText": "#0066CC",
+    "focusColor": "#0071E3",
+    "buttonRadiusPx": 500,
+    "buttonHeightPx": 50,
+    "buttonBorderWidthPx": 1,
+    "cardRadiusPx": 28,
+    "fontFallback": "sans"
+  }
+}

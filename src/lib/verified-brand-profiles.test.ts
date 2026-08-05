@@ -38,6 +38,32 @@ describe("verified browser-backed brand profiles", () => {
     });
   });
 
+  it("keeps Apple's harvested neutral system primary and blue interactive", () => {
+    const apple = verifiedBrandProfileFor("https://www.apple.com/ipad/");
+
+    expect(apple).toMatchObject({
+      domain: "apple.com",
+      companyName: "Apple",
+      primaryColor: "#1D1D1F",
+      accentColor: "#0071E3",
+      surfaceColor: "#FFFFFF",
+      displayFontFamily: "SF Pro Display",
+      bodyFontFamily: "SF Pro Text",
+      source: "brand-harvester"
+    });
+    expect(apple && brandPresentationFor(apple)).toMatchObject({
+      heroTheme: "light",
+      softSurfaceColor: "#F5F5F7",
+      lightTextColor: "#1D1D1F",
+      mutedTextColor: "#6E6E73",
+      primaryButtonBackground: "#0071E3",
+      primaryButtonText: "#FFFFFF",
+      lightSurfaceAccentColor: "#0066CC",
+      cardRadiusPx: 28,
+      fontFallback: "sans"
+    });
+  });
+
   it("does not pretend an unverified domain has a browser-backed profile", () => {
     expect(verifiedBrandProfileFor("unknown-example.test")).toBeUndefined();
   });

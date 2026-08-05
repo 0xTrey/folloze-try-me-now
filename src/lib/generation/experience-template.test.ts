@@ -215,6 +215,33 @@ describe("renderExperienceHtml", () => {
     expect(serviceNowHtml).not.toContain('--display:"Instrument Sans",ui-serif');
   });
 
+  it("renders Apple headlines in harvested neutral ink and reserves blue for actions", () => {
+    const apple = verifiedBrandProfileFor("apple.com");
+    expect(apple).toBeDefined();
+
+    const appleHtml = renderExperienceHtml({
+      draft: {
+        ...draft,
+        title: "Apple for Google",
+        headline: "Apple and Google examine the first business platform use case."
+      },
+      brand: apple!,
+      useCase: "abm",
+      answers: { ctaStyle: "solid" }
+    });
+
+    expect(appleHtml).toContain("--brand-ink:#1D1D1F");
+    expect(appleHtml).toContain("--brand-accent:#0071E3");
+    expect(appleHtml).toContain("--brand-accent-on-light:#0066CC");
+    expect(appleHtml).toContain("--brand-soft-surface:#F5F5F7");
+    expect(appleHtml).toContain("--brand-button-bg:#0071E3");
+    expect(appleHtml).toContain("--text:#1D1D1F");
+    expect(appleHtml).toContain("--card-radius:28px");
+    expect(appleHtml).not.toContain("--brand-ink:#0071E3");
+    expect(appleHtml).toContain('data-hero-theme="light"');
+    expect(appleHtml).not.toMatch(/<body[^>]*class="[^"]*brand-hero-dark/);
+  });
+
   it("puts the strongest evergreen product visual in the hero", () => {
     const heroStart = html.indexOf('<section class="hero"');
     const hero = html.slice(heroStart, html.indexOf("</section>", heroStart));

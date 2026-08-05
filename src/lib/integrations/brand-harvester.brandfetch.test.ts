@@ -206,6 +206,27 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
     expect(profile.diagnostics?.palette?.strategy).toBe("fallback");
   });
 
+  it("preserves Apple's reviewed neutral palette when Brandfetch enrichment is rejected", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", {
+      status: 403,
+      headers: { "content-type": "application/json" }
+    })));
+
+    const profile = await harvestBrand("apple.com");
+
+    expect(profile).toMatchObject({
+      companyName: "Apple",
+      primaryColor: "#1D1D1F",
+      accentColor: "#0071E3",
+      surfaceColor: "#FFFFFF",
+      diagnostics: {
+        palette: { strategy: "verified-profile", confidence: "high" },
+        providers: { brandfetchBrandApi: "unauthorized", verifiedFallback: false }
+      },
+      readiness: { paletteReady: true }
+    });
+  });
+
   it("trusts a first-party redirect as a canonical-domain alias and retries Brandfetch there", async () => {
     safeFetchMocks.fetchPinnedPublicText.mockResolvedValue({
       status: 200,

@@ -96,6 +96,35 @@ describe("fast brand extraction", () => {
     });
   });
 
+  it("keeps neutral-first brand typography neutral while reserving vivid colors for interaction", () => {
+    const apple = extractFastBrandProfile({
+      domain: "apple.com",
+      html: `<!doctype html><html><head>
+        <title>Apple</title>
+        <meta property="og:site_name" content="Apple">
+      </head><body><main><h1>iPad</h1><a class="learn-more" href="/ipad/">Learn more</a></main></body></html>`,
+      css: `:root {
+        --sk-body-text-color: rgb(29,29,31);
+        --sk-headline-text-color: rgb(29, 29, 31);
+        --sk-body-background-color: rgb(255,255,255);
+        --sk-focus-color: #0071e3;
+        --image-card-fill: rgb(245,245,247);
+      }
+      body, h1 { color: rgb(29,29,31); background: rgb(255,255,255); }
+      .learn-more { color: #0066cc; }`,
+      finalUrl: new URL("https://www.apple.com/ipad/")
+    });
+
+    expect(apple.primaryColor).toBe("#1D1D1F");
+    expect(apple.accentColor).toBe("#0071E3");
+    expect(apple.surfaceColor).toBe("#FFFFFF");
+    expect(apple.colors.slice(0, 3)).toEqual(["#1D1D1F", "#0071E3", "#FFFFFF"]);
+    expect(apple.diagnostics?.palette).toMatchObject({
+      strategy: "semantic-tokens",
+      confidence: "high"
+    });
+  });
+
   it("prefers source-owned hero gradients over generic framework variables", () => {
     const seller = extractFastBrandProfile({
       domain: "jitterbit.com",

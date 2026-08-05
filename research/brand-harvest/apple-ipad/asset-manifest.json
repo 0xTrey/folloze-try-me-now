@@ -1,0 +1,210 @@
+{
+  "logos": [],
+  "images": [
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_chapternav/small/ipad_pro_8c6c9576c.png",
+      "alt": "",
+      "className": "",
+      "width": 54,
+      "height": 64,
+      "rect": {
+        "x": 90,
+        "y": 332,
+        "width": 54,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_chapternav/small/ipad_air_a25153037.png",
+      "alt": "",
+      "className": "",
+      "width": 54,
+      "height": 64,
+      "rect": {
+        "x": 185,
+        "y": 332,
+        "width": 54,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_chapternav/small/ipad_9308ca47a.png",
+      "alt": "",
+      "className": "",
+      "width": 50,
+      "height": 64,
+      "rect": {
+        "x": 279,
+        "y": 332,
+        "width": 50,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_chapternav/small/ipad_mini_6884caafc.png",
+      "alt": "",
+      "className": "",
+      "width": 36,
+      "height": 64,
+      "rect": {
+        "x": 381,
+        "y": 332,
+        "width": 36,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_chapternav/small/compare_b74d7a1e3.png",
+      "alt": "",
+      "className": "",
+      "width": 91,
+      "height": 64,
+      "rect": {
+        "x": 468,
+        "y": 332,
+        "width": 91,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_chapternav/small/apple_pencil_6c8408c54.png",
+      "alt": "",
+      "className": "",
+      "width": 19,
+      "height": 64,
+      "rect": {
+        "x": 630,
+        "y": 332,
+        "width": 19,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_chapternav/small/keyboards_c8202d7ef.png",
+      "alt": "",
+      "className": "",
+      "width": 65,
+      "height": 64,
+      "rect": {
+        "x": 722,
+        "y": 332,
+        "width": 65,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_chapternav/small/accessories_d7234e26e.png",
+      "alt": "",
+      "className": "",
+      "width": 47,
+      "height": 64,
+      "rect": {
+        "x": 846,
+        "y": 332,
+        "width": 47,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/04_chapternav/small/ipados_14bbae36a.png",
+      "alt": "",
+      "className": "",
+      "width": 52,
+      "height": 64,
+      "rect": {
+        "x": 957,
+        "y": 333,
+        "width": 52,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_chapternav/small/shop_ipad_fad2a5a84.png",
+      "alt": "",
+      "className": "",
+      "width": 68,
+      "height": 64,
+      "rect": {
+        "x": 1056,
+        "y": 336,
+        "width": 68,
+        "height": 64
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_product_tile/large/ipad_pro_b15908d8a.png",
+      "alt": "",
+      "className": "",
+      "width": 372,
+      "height": 443,
+      "rect": {
+        "x": 90,
+        "y": 716,
+        "width": 372,
+        "height": 443
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_product_tile/large/ipad_air_000dd2f9c.png",
+      "alt": "",
+      "className": "",
+      "width": 372,
+      "height": 443,
+      "rect": {
+        "x": 482,
+        "y": 716,
+        "width": 372,
+        "height": 443
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_product_tile/large/ipad_07e11a653.png",
+      "alt": "",
+      "className": "",
+      "width": 372,
+      "height": 443,
+      "rect": {
+        "x": 874,
+        "y": 716,
+        "width": 372,
+        "height": 443
+      }
+    },
+    {
+      "src": "https://www.apple.com/assets-www/en_WW/ipad/03_product_tile/large/ipad_mini_cde3db6eb.png",
+      "alt": "",
+      "className": "",
+      "width": 372,
+      "height": 443,
+      "rect": {
+        "x": 1266,
+        "y": 716,
+        "width": 372,
+        "height": 443
+      }
+    }
+  ],
+  "background_images": [],
+  "brandfetch_logos": [],
+  "screenshots": {
+    "desktop_full": {
+      "path": "research/brand-harvest/apple-ipad/screenshots/homepage-desktop-full.png",
+      "width": 1440,
+      "height": 8463,
+      "clipped": false
+    },
+    "mobile_full": {
+      "path": "research/brand-harvest/apple-ipad/screenshots/homepage-mobile-full.png",
+      "width": 390,
+      "height": 9543,
+      "clipped": false
+    }
+  },
+  "manual_screenshots": [
+    {
+      "source": "/var/folders/3j/0zw35hjd0p38rbqnvffx48bh0000gn/T/TemporaryItems/NSIRD_screencaptureui_BNqtfu/Screenshot 2026-08-05 at 12.13.10 PM.png",
+      "status": "copied",
+      "path": "research/brand-harvest/apple-ipad/screenshots/manual-1.png"
+    }
+  ]
+}

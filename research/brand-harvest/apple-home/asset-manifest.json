@@ -1,0 +1,465 @@
+{
+  "logos": [
+    {
+      "src": "https://www.apple.com/v/home/images/logos/tv/a/hero_logo_tv__gc8wzur53cyi_large.png",
+      "alt": "Apple TV",
+      "className": "",
+      "width": 88,
+      "height": 66,
+      "rect": {
+        "x": 676,
+        "y": 375,
+        "width": 88,
+        "height": 66
+      }
+    },
+    {
+      "src": "https://www.apple.com/v/home/images/iphone-family/a/hero_iphone_family__be5jkzxszb1e_largetall.jpg",
+      "alt": "iPhone 17 Pro, back exterior, deep blue color, Pro Fusion camera system in top left corner, Apple logo in center, iPhone 17, back exterior, white color, Dual Fusion camera system in top left corner, Apple logo in center, iPhone 17e, back exterior, soft pink color, Fusion camera system in top left corner, Apple logo in center, iPhone Air, side, titanium frame profile, Fusion camera system in top left corner",
+      "className": "",
+      "width": 3008,
+      "height": 692,
+      "rect": {
+        "x": -784,
+        "y": 1452,
+        "width": 3008,
+        "height": 692
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "Apple Card, front, Apple logo in top left, cardholder name in middle left Marisa Robertson, card chip in middle right.",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 787,
+        "y": 3340,
+        "width": 580,
+        "height": 580
+      }
+    }
+  ],
+  "images": [
+    {
+      "src": "https://www.apple.com/v/home/images/logos/tv/a/hero_logo_tv__gc8wzur53cyi_large.png",
+      "alt": "Apple TV",
+      "className": "",
+      "width": 88,
+      "height": 66,
+      "rect": {
+        "x": 676,
+        "y": 375,
+        "width": 88,
+        "height": 66
+      }
+    },
+    {
+      "src": "https://www.apple.com/v/home/images/tv/a/hero_headline_ted_lasso__bucdbvna2ez6_large.png",
+      "alt": "",
+      "className": "",
+      "width": 490,
+      "height": 93,
+      "rect": {
+        "x": 475,
+        "y": 453,
+        "width": 490,
+        "height": 93
+      }
+    },
+    {
+      "src": "https://www.apple.com/v/home/images/back-to-school-2026/a/hero_back_to_school_startframe__cd4vg5frm39e_largetall.png",
+      "alt": "",
+      "className": "",
+      "width": 1222,
+      "height": 460,
+      "rect": {
+        "x": 109,
+        "y": 980,
+        "width": 1222,
+        "height": 460
+      }
+    },
+    {
+      "src": "https://www.apple.com/v/home/images/iphone-family/a/hero_iphone_family__be5jkzxszb1e_largetall.jpg",
+      "alt": "iPhone 17 Pro, back exterior, deep blue color, Pro Fusion camera system in top left corner, Apple logo in center, iPhone 17, back exterior, white color, Dual Fusion camera system in top left corner, Apple logo in center, iPhone 17e, back exterior, soft pink color, Fusion camera system in top left corner, Apple logo in center, iPhone Air, side, titanium frame profile, Fusion camera system in top left corner",
+      "className": "",
+      "width": 3008,
+      "height": 692,
+      "rect": {
+        "x": -784,
+        "y": 1452,
+        "width": 3008,
+        "height": 692
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "Two open MacBook Air laptops in sky blue color forming arrow shape, emphasizing narrow profile",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 73,
+        "y": 2156,
+        "width": 580,
+        "height": 580
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "Several photos of professionals using Mac in diverse work settings, including offices, outdoors, and collaborative spaces.",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 787,
+        "y": 2156,
+        "width": 580,
+        "height": 580
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 362,
+        "y": 2805,
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "iPad Air models floating, back exterior, single-lens camera, front exterior, rounded corners, black display bezel",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 73,
+        "y": 2748,
+        "width": 580,
+        "height": 580
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "MacBook Pro positioned into the shape of a V, referencing the M5 chip family",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 787,
+        "y": 2748,
+        "width": 580,
+        "height": 580
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 363,
+        "y": 3397,
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "Side-by-side, hand holding iPhone 13 in silicon case with stickers on back exterior, trade-in with hand holding new iPhone box for iPhone 17 Pro",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 73,
+        "y": 3340,
+        "width": 580,
+        "height": 580
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1077,
+        "y": 3397,
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "Apple Card, front, Apple logo in top left, cardholder name in middle left Marisa Robertson, card chip in middle right.",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 787,
+        "y": 3340,
+        "width": 580,
+        "height": 580
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 255,
+        "y": 4071,
+        "width": 930,
+        "height": 930
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1198,
+        "y": 4071,
+        "width": 930,
+        "height": 930
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2141,
+        "y": 4071,
+        "width": 930,
+        "height": 930
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 3084,
+        "y": 4071,
+        "width": 930,
+        "height": 930
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 4027,
+        "y": 4071,
+        "width": 930,
+        "height": 930
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 4970,
+        "y": 4071,
+        "width": 930,
+        "height": 930
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 5913,
+        "y": 4071,
+        "width": 930,
+        "height": 930
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 6856,
+        "y": 4071,
+        "width": 930,
+        "height": 930
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": -688,
+        "y": 4071,
+        "width": 930,
+        "height": 930
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 531,
+        "y": 4724,
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 942,
+        "y": 4607,
+        "width": 417,
+        "height": 417
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1372,
+        "y": 4607,
+        "width": 417,
+        "height": 417
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 1821,
+        "y": 4724,
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2232,
+        "y": 4607,
+        "width": 417,
+        "height": 417
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 2662,
+        "y": 4607,
+        "width": 417,
+        "height": 417
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": -759,
+        "y": 4724,
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": -348,
+        "y": 4607,
+        "width": 417,
+        "height": 417
+      }
+    },
+    {
+      "src": "data:image/gif;base64,R0lGODlhAQABAHAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "alt": "",
+      "className": "",
+      "width": 1,
+      "height": 1,
+      "rect": {
+        "x": 82,
+        "y": 4607,
+        "width": 417,
+        "height": 417
+      }
+    }
+  ],
+  "background_images": [],
+  "brandfetch_logos": [],
+  "screenshots": {
+    "desktop_full": {
+      "path": "research/brand-harvest/apple-home/screenshots/homepage-desktop-full.png",
+      "width": 1440,
+      "height": 5993,
+      "clipped": false
+    },
+    "mobile_full": {
+      "path": "research/brand-harvest/apple-home/screenshots/homepage-mobile-full.png",
+      "width": 390,
+      "height": 7216,
+      "clipped": false
+    }
+  },
+  "manual_screenshots": []
+}

@@ -1,0 +1,14 @@
+/* Manually reviewed against the harvested iPad screenshots and computed styles. */
+:root {
+  --brand-primary: #1D1D1F;
+  --brand-accent: #0071E3;
+  --brand-text: #1D1D1F;
+  --brand-surface: #FFFFFF;
+  --brand-font-display: "SF Pro Text", "Myriad Set Pro", "SF Pro Icons", "Apple Legacy Chevron", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --brand-font-body: "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --brand-button-radius: 999px;
+  --brand-button-padding: 12px 22px;
+  --brand-button-font-weight: 600;
+  --brand-card-radius: 28px;
+  --brand-card-shadow: none;
+}
