@@ -201,4 +201,40 @@ describe("company-specific audience intelligence", () => {
       confirmedBy: "system"
     });
   });
+
+  it("confirms a parent-domain brand for a regional subdomain", () => {
+    const philips = brand({
+      domain: "usa.philips.com",
+      canonicalDomain: "philips.com",
+      domainAliases: ["philips.com"],
+      companyName: "Philips",
+      sourceUrl: "https://www.usa.philips.com/",
+      logoUrl: "https://cdn.brandfetch.io/domain/philips.com/logo.svg",
+      diagnostics: {
+        logo: {
+          strategy: "brandfetch-logo-api",
+          imageCandidateCount: 1,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0
+        },
+        brandfetch: {
+          claimed: false,
+          logoCandidateCount: 1,
+          logoValidationAttempted: 0,
+          logoValidationRejected: 0,
+          colorCount: 3,
+          fontCount: 0,
+          imageCount: 0,
+          industryCount: 0,
+          qualityTier: "medium"
+        }
+      }
+    });
+
+    expect(assessBrandIdentity(philips, "usa.philips.com")).toMatchObject({
+      canonicalName: "Philips",
+      confidence: "high",
+      confirmationStatus: "confirmed"
+    });
+  });
 });

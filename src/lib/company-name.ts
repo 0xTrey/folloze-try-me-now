@@ -1,3 +1,5 @@
+import { companyDomainStem } from "@/lib/domain-identity";
+
 const MIXED_CASE_COMPANY_NAMES: Readonly<Record<string, string>> = Object.freeze({
   datadog: "DataDog",
   docusign: "DocuSign",
@@ -16,7 +18,7 @@ const MIXED_CASE_COMPANY_NAMES: Readonly<Record<string, string>> = Object.freeze
 const entityKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 function domainRoot(domain: string): string {
-  return domain.toLowerCase().replace(/^www\./, "").split(".")[0] ?? "";
+  return companyDomainStem(domain);
 }
 
 function cleanCandidate(value: string): string {

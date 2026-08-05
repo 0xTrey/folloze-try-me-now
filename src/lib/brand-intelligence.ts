@@ -5,6 +5,10 @@ import type {
   SessionAnswers
 } from "@/lib/types";
 import { withBrandReadiness } from "@/lib/brand-readiness";
+import {
+  companyDomainStem,
+  sharesRegistrableCompanyDomain
+} from "@/lib/domain-identity";
 
 export type BrandCategory =
   | "buyer-experience"
@@ -72,7 +76,7 @@ function identityKey(value: string): string {
 }
 
 function domainIdentityKey(domain: string): string {
-  return identityKey(canonicalDomain(domain).split(".")[0] ?? "");
+  return identityKey(companyDomainStem(canonicalDomain(domain)));
 }
 
 function withoutDomainPrefix(value: string): string {
@@ -133,6 +137,7 @@ export function assessBrandIdentity(
   const aliasNeedsConfirmation = Boolean(
     canonicalAlias &&
       canonicalAlias !== expected &&
+      !sharesRegistrableCompanyDomain(canonicalAlias, expected) &&
       profile.diagnostics?.brandfetch?.claimed !== true
   );
   const domainKey = domainIdentityKey(expected);

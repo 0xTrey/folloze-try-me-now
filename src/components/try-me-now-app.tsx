@@ -78,6 +78,7 @@ import {
   brandfetchLogoRecoveryUrls,
   isBrandfetchLogoApiUrl
 } from "@/lib/brandfetch-logo";
+import { fallbackCompanyName } from "@/lib/company-name";
 import { imageDeliveryPath } from "@/lib/image-delivery";
 import {
   captureProductEvent,
@@ -381,13 +382,7 @@ type GuidedQuestionCopy = {
 };
 
 function displayNameFromDomain(value?: string): string {
-  const stem = value?.replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[./]/)[0];
-  if (!stem) return "the company";
-  return stem
-    .split("-")
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(" ");
+  return value?.trim() ? fallbackCompanyName(value) : "the company";
 }
 
 function trimLabel(value: string, max = 42): string {

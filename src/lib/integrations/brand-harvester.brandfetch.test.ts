@@ -246,6 +246,57 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
     expect(profile.readiness?.sourceEvidenceReady).toBe(true);
   });
 
+  it("resolves a regional subdomain through the parent Brandfetch brand", async () => {
+    safeFetchMocks.fetchPinnedPublicText.mockResolvedValue({
+      status: 200,
+      headers: { "content-type": "text/html" },
+      text: `<!doctype html><html><head>
+        <title>Philips - United States</title>
+        <meta property="og:site_name" content="Philips">
+      </head><body><main><h1>Philips</h1></main></body></html>`,
+      finalUrl: new URL("https://www.usa.philips.com/"),
+      truncated: false
+    });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/domain/usa.philips.com")) {
+        return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      }
+      expect(url).toContain("/domain/philips.com");
+      return new Response(JSON.stringify({
+        name: "Philips",
+        domain: "philips.com",
+        claimed: false,
+        colors: [
+          { hex: "#0B5ED7", type: "dark" },
+          { hex: "#1474E4", type: "accent" },
+          { hex: "#FFFFFF", type: "light" }
+        ],
+        logos: []
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+
+    const profile = await harvestBrand("usa.philips.com");
+
+    expect(profile).toMatchObject({
+      domain: "usa.philips.com",
+      canonicalDomain: "philips.com",
+      companyName: "Philips",
+      domainAliases: ["philips.com"]
+    });
+    expect(profile.logoUrl).toContain("/domain/philips.com/");
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("/domain/usa.philips.com"),
+      expect.any(Object)
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("/domain/philips.com"),
+      expect.any(Object)
+    );
+  });
+
   it("copies TechTarget's semantic navigation wordmark for reliable first-party delivery", async () => {
     vi.stubEnv("BRANDFETCH_MODE", "disabled");
     vi.stubEnv("BRANDFETCH_CLIENT_ID", "");

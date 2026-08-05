@@ -15,6 +15,19 @@ describe("public company name resolution", () => {
     expect(fallbackCompanyName("hubspot.com")).toBe("HubSpot");
   });
 
+  it("uses the registrable parent brand for regional subdomains", () => {
+    expect(fallbackCompanyName("usa.philips.com")).toBe("Philips");
+    expect(fallbackCompanyName("usa.phillips.com")).toBe("Phillips");
+    expect(fallbackCompanyName("enterprise.acme.co.uk")).toBe("Acme");
+    expect(
+      resolvePublicCompanyName({
+        domain: "usa.philips.com",
+        html: "",
+        title: "Philips - United States"
+      })
+    ).toBe("Philips");
+  });
+
   it("uses matching Organization JSON-LD before a generic page title", () => {
     expect(
       resolvePublicCompanyName({

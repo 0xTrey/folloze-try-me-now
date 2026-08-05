@@ -8,6 +8,7 @@ import sharp from "sharp";
 import { brandfetchLogoApiUrl, isBrandfetchLogoApiUrl } from "@/lib/brandfetch-logo";
 import { withBrandReadiness } from "@/lib/brand-readiness";
 import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
+import { companyDomainStem, registrableCompanyDomain } from "@/lib/domain-identity";
 import { logServerError } from "@/lib/http";
 import {
   portableBrandLogoFromBytes,
@@ -83,7 +84,7 @@ const entityKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "
 
 function canonicalCompanyName(value: string, domain: string): string {
   const cleaned = value.replace(/\.(?:com|net|org)\s*$/i, "").trim();
-  const domainKey = entityKey(domain.split(".")[0] ?? "");
+  const domainKey = entityKey(companyDomainStem(domain));
   const words = cleaned.split(/\s+/).filter(Boolean);
   for (let length = 1; length <= words.length; length += 1) {
     const prefix = words.slice(0, length).join(" ");
@@ -2102,8 +2103,10 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     hasBrandfetchBrandApi ? "not_needed" : "not_configured";
   const brandfetchLogoStatus: "configured" | "not_configured" =
     hasBrandfetchLogoApi ? "configured" : "not_configured";
+  const submittedBrandfetchDomain = normalizeDomain(domain);
+  const parentBrandfetchDomain = registrableCompanyDomain(domain) || submittedBrandfetchDomain;
   const eagerBrandfetchPromise = config.brandfetchMode === "enrich" && hasBrandfetchBrandApi
-    ? fetchBrandfetchBrandSingleflight(domain)
+    ? fetchBrandfetchBrandSingleflight(submittedBrandfetchDomain)
     : undefined;
   // Run the deterministic public-page pass alongside an optional browser
   // harvester. This keeps richer semantic color evidence inside the existing
@@ -2220,7 +2223,9 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
       candidate.colors.length < 3
   );
   if (shouldFetchBrandData) {
-    let brandfetchLookup = await (eagerBrandfetchPromise ?? fetchBrandfetchBrandSingleflight(domain));
+    let brandfetchLookup = await (
+      eagerBrandfetchPromise ?? fetchBrandfetchBrandSingleflight(submittedBrandfetchDomain)
+    );
     // A first-party redirect is the only automatic alias authority. If the
     // submitted hostname redirects to a canonical host, retry Brandfetch with
     // that exact host rather than accepting an unrelated search result.
@@ -2231,10 +2236,20 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     ) {
       brandfetchLookup = await fetchBrandfetchBrandSingleflight(publicCanonicalDomain);
     }
+    // A regional or application host may not have a standalone Brandfetch
+    // record. Preserve real sub-brands by trying the submitted host first, then
+    // fall back to its registrable company domain only after an exact miss.
+    if (
+      !brandfetchLookup.result &&
+      parentBrandfetchDomain !== submittedBrandfetchDomain &&
+      parentBrandfetchDomain !== publicCanonicalDomain
+    ) {
+      brandfetchLookup = await fetchBrandfetchBrandSingleflight(parentBrandfetchDomain);
+    }
     if (!brandfetchLookup.result) {
       const searchedDomain = await fetchBrandfetchSearchDomain(
         candidate?.companyName ?? domain,
-        [domain, publicCanonicalDomain]
+        [domain, parentBrandfetchDomain, publicCanonicalDomain]
       );
       if (searchedDomain && searchedDomain !== normalizeDomain(domain)) {
         brandfetchLookup = await fetchBrandfetchBrandSingleflight(searchedDomain);
