@@ -3,6 +3,7 @@ const BRANDFETCH_CLIENT_ID = /^[A-Za-z0-9_-]{8,80}$/;
 const PUBLIC_DOMAIN = /^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
 export type BrandfetchLogoTheme = "light" | "dark";
+export type BrandfetchLogoType = "logo" | "symbol" | "icon";
 
 function normalizeLogoDomain(value: string): string | undefined {
   try {
@@ -23,7 +24,8 @@ function normalizeLogoDomain(value: string): string | undefined {
 export function brandfetchLogoApiUrl(
   domain: string,
   clientId: string | undefined,
-  theme: BrandfetchLogoTheme
+  theme: BrandfetchLogoTheme,
+  type: BrandfetchLogoType = "logo"
 ): string | undefined {
   const normalized = normalizeLogoDomain(domain);
   const normalizedClientId = clientId?.trim();
@@ -32,10 +34,40 @@ export function brandfetchLogoApiUrl(
   }
   const url = new URL(
     `https://${BRANDFETCH_LOGO_HOST}/domain/${encodeURIComponent(normalized)}` +
-      `/w/320/h/96/theme/${theme}/fallback/404/type/logo`
+      `/w/320/h/96/theme/${theme}/fallback/404/type/${type}`
   );
   url.searchParams.set("c", normalizedClientId);
   return url.toString();
+}
+
+/**
+ * Return a bounded render recovery chain without ever falling back to a
+ * generic or broken image. The browser tries the wordmark first, then a
+ * symbol and icon from the same verified brand/domain.
+ */
+export function brandfetchLogoApiCandidates(
+  domain: string,
+  clientId: string | undefined,
+  theme: BrandfetchLogoTheme
+): string[] {
+  return (["logo", "symbol", "icon"] as const)
+    .map((type) => brandfetchLogoApiUrl(domain, clientId, theme, type))
+    .filter((value): value is string => Boolean(value));
+}
+
+export function brandfetchLogoRecoveryUrls(
+  value: string | undefined,
+  expectedDomain?: string
+): string[] {
+  if (!isBrandfetchLogoApiUrl(value, expectedDomain) || !value) return value ? [value] : [];
+  const parsed = new URL(value);
+  const match = parsed.pathname.match(
+    /^\/domain\/([^/]+)\/w\/320\/h\/96\/theme\/(light|dark)\/fallback\/404\/type\/(logo|symbol|icon)$/
+  );
+  if (!match?.[1] || !match[2]) return [value];
+  const domain = decodeURIComponent(match[1]);
+  const clientId = parsed.searchParams.get("c") ?? undefined;
+  return brandfetchLogoApiCandidates(domain, clientId, match[2] as BrandfetchLogoTheme);
 }
 
 /**
@@ -62,7 +94,7 @@ export function isBrandfetchLogoApiUrl(
     const clientId = url.searchParams.get("c");
     if (!clientId || !BRANDFETCH_CLIENT_ID.test(clientId)) return false;
     const match = url.pathname.match(
-      /^\/domain\/([^/]+)\/w\/320\/h\/96\/theme\/(light|dark)\/fallback\/404\/type\/logo$/
+      /^\/domain\/([^/]+)\/w\/320\/h\/96\/theme\/(light|dark)\/fallback\/404\/type\/(logo|symbol|icon)$/
     );
     const embeddedDomain = match?.[1]
       ? normalizeLogoDomain(decodeURIComponent(match[1]))

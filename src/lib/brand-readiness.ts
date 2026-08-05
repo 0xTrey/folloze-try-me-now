@@ -7,7 +7,12 @@ function sourceMatchesDomain(profile: BrandProfile): boolean {
   try {
     const sourceHost = canonicalDomain(new URL(profile.sourceUrl).hostname);
     const expected = canonicalDomain(profile.domain);
-    return sourceHost === expected || sourceHost.endsWith(`.${expected}`);
+    const allowed = new Set([
+      expected,
+      canonicalDomain(profile.canonicalDomain ?? ""),
+      ...(profile.domainAliases ?? []).map(canonicalDomain)
+    ].filter(Boolean));
+    return [...allowed].some((domain) => sourceHost === domain || sourceHost.endsWith(`.${domain}`));
   } catch {
     return false;
   }
@@ -35,9 +40,27 @@ export function assessBrandReadiness(profile: BrandProfile): BrandReadiness {
     : false;
   const sourceEvidenceReady = profile.source !== "fallback" && sourceMatchesDomain(profile);
   const reasons: string[] = [];
-  if (!identityReady) reasons.push("Company identity still needs confirmation.");
+  if (!identityReady) {
+    reasons.push(
+      profile.identity?.reasons.find((reason) => /alias|different domain|does not match/i.test(reason)) ??
+        "Company identity still needs confirmation."
+    );
+  }
   if (!logoReady) reasons.push("An official wordmark is not yet deliverable.");
-  if (!paletteReady) reasons.push("Source-owned semantic colors are incomplete.");
+  if (!paletteReady) {
+    const provider = profile.diagnostics?.providers?.brandfetchBrandApi;
+    if (provider === "unauthorized") {
+      reasons.push("Brandfetch color enrichment was rejected; verify the Brand API key and plan access.");
+    } else if (provider === "rate_limited") {
+      reasons.push("Brandfetch color enrichment is rate-limited; retry after the provider window resets.");
+    } else if (provider === "not_found") {
+      reasons.push("Brandfetch has no verified color profile for this canonical domain.");
+    } else if (provider === "invalid_response") {
+      reasons.push("Brandfetch returned incomplete brand metadata, so no colors were accepted.");
+    } else {
+      reasons.push("Source-owned semantic colors are incomplete.");
+    }
+  }
   if (!sourceEvidenceReady) reasons.push("First-party source evidence is incomplete.");
   return {
     status:

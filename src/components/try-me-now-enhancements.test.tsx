@@ -148,8 +148,10 @@ describe("Try Me Now prospect enhancement components", () => {
     );
 
     expect(screen.getByText("Brand evidence needs review")).toBeInTheDocument();
-    expect(screen.getByText("No verified logo was captured. The palette is still provisional.")).toBeInTheDocument();
+    expect(screen.getAllByText("No verified logo was captured. The palette is still provisional.")).toHaveLength(2);
     expect(screen.getByText("Needs review")).toBeInTheDocument();
+    expect(screen.getByText("No generic palette applied")).toBeInTheDocument();
+    expect(screen.queryByText("#5B5BFF")).not.toBeInTheDocument();
     expect(screen.getByLabelText("ServiceNow brand palette evidence needs review")).toBeInTheDocument();
     expect(screen.queryByText("Identity and brand matched")).not.toBeInTheDocument();
   });

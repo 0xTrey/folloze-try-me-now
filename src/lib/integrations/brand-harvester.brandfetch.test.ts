@@ -5,7 +5,7 @@ import { join } from "node:path";
 vi.hoisted(() => {
   process.env.BRANDFETCH_MODE = "enrich";
   process.env.BRANDFETCH_CLIENT_ID = "testClient_12345";
-  process.env.BRANDFETCH_API_KEY = "server-only-test-key";
+  process.env.BRANDFETCH_API_KEY = "server-only-test-key-that-is-long-enough";
 });
 
 const safeFetchMocks = vi.hoisted(() => ({
@@ -38,7 +38,7 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
   beforeEach(() => {
     vi.stubEnv("BRANDFETCH_MODE", "enrich");
     vi.stubEnv("BRANDFETCH_CLIENT_ID", "testClient_12345");
-    vi.stubEnv("BRANDFETCH_API_KEY", "server-only-test-key");
+    vi.stubEnv("BRANDFETCH_API_KEY", "server-only-test-key-that-is-long-enough");
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     safeFetchMocks.fetchPinnedPublicText.mockRejectedValue(new Error("Official site blocked"));
     safeFetchMocks.fetchPinnedPublicBytes.mockResolvedValue({
@@ -75,7 +75,7 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
       expect.objectContaining({
         headers: {
           Accept: "application/json",
-          Authorization: "Bearer server-only-test-key"
+          Authorization: "Bearer server-only-test-key-that-is-long-enough"
         },
         redirect: "error"
       })
@@ -92,12 +92,12 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
           resolutionComplete: true
         },
         providers: {
-          brandfetchLogoApi: "succeeded",
+          brandfetchLogoApi: "configured",
           brandfetchBrandApi: "succeeded"
         }
       }
     });
-    expect(JSON.stringify(profile)).not.toContain("server-only-test-key");
+    expect(JSON.stringify(profile)).not.toContain("server-only-test-key-that-is-long-enough");
     expect(profile.logoUrl).toContain("type/logo?c=testClient_12345");
   });
 
@@ -185,6 +185,65 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
         palette: { strategy: "brandfetch", confidence: "high" }
       }
     });
+  });
+
+  it("surfaces an explicit provider error and refuses to treat generic colors as brand evidence", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", {
+      status: 403,
+      headers: { "content-type": "application/json" }
+    })));
+
+    const profile = await harvestBrand("brand-api-denied.example");
+
+    expect(profile.diagnostics?.providers).toMatchObject({
+      brandfetchLogoApi: "configured",
+      brandfetchBrandApi: "unauthorized"
+    });
+    expect(profile.readiness?.paletteReady).toBe(false);
+    expect(profile.readiness?.reasons.join(" ")).toMatch(/Brandfetch color enrichment was rejected/i);
+    expect(profile.diagnostics?.palette?.strategy).toBe("fallback");
+  });
+
+  it("trusts a first-party redirect as a canonical-domain alias and retries Brandfetch there", async () => {
+    safeFetchMocks.fetchPinnedPublicText.mockResolvedValue({
+      status: 200,
+      headers: { "content-type": "text/html" },
+      text: `<!doctype html><html><head>
+        <title>Canonical Company</title>
+        <meta property="og:site_name" content="Canonical Company">
+      </head><body><main><h1>Canonical Company</h1></main></body></html>`,
+      finalUrl: new URL("https://canonical-company.example/"),
+      truncated: false
+    });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/domain/submitted-alias.example")) {
+        return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify({
+        name: "Canonical Company",
+        domain: "canonical-company.example",
+        colors: [
+          { hex: "#10243E", type: "dark" },
+          { hex: "#FF5C35", type: "accent" },
+          { hex: "#FFFFFF", type: "light" }
+        ],
+        logos: []
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+
+    const profile = await harvestBrand("submitted-alias.example");
+
+    expect(profile).toMatchObject({
+      domain: "submitted-alias.example",
+      canonicalDomain: "canonical-company.example",
+      domainAliases: ["canonical-company.example"],
+      primaryColor: "#10243E",
+      accentColor: "#FF5C35",
+      surfaceColor: "#FFFFFF"
+    });
+    expect(profile.logoUrl).toContain("/domain/canonical-company.example/");
+    expect(profile.readiness?.sourceEvidenceReady).toBe(true);
   });
 
   it("copies TechTarget's semantic navigation wordmark for reliable first-party delivery", async () => {

@@ -86,11 +86,17 @@ function withoutDomainPrefix(value: string): string {
   return result;
 }
 
-function sourceHostMatches(sourceUrl: string, expectedDomain: string): boolean {
+function sourceHostMatches(
+  sourceUrl: string,
+  expectedDomain: string,
+  aliases: Array<string | undefined> = []
+): boolean {
   try {
     const host = canonicalDomain(new URL(sourceUrl).hostname);
-    const expected = canonicalDomain(expectedDomain);
-    return host === expected || host.endsWith(`.${expected}`);
+    const allowed = new Set(
+      [expectedDomain, ...aliases].map((value) => canonicalDomain(value ?? "")).filter(Boolean)
+    );
+    return [...allowed].some((domain) => host === domain || host.endsWith(`.${domain}`));
   } catch {
     return false;
   }
@@ -123,6 +129,12 @@ export function assessBrandIdentity(
 ): EntityIdentity {
   const expected = canonicalDomain(expectedDomain);
   const actual = canonicalDomain(profile.domain);
+  const canonicalAlias = canonicalDomain(profile.canonicalDomain ?? "");
+  const aliasNeedsConfirmation = Boolean(
+    canonicalAlias &&
+      canonicalAlias !== expected &&
+      profile.diagnostics?.brandfetch?.claimed !== true
+  );
   const domainKey = domainIdentityKey(expected);
   const nameKey = identityKey(profile.companyName);
   const relaxedDomainKey = withoutDomainPrefix(domainKey);
@@ -136,7 +148,10 @@ export function assessBrandIdentity(
           (nameKey.includes(relaxedDomainKey) || relaxedDomainKey.includes(nameKey))))
   );
   const domainMatches = actual === expected;
-  const sourceMatches = sourceHostMatches(profile.sourceUrl, expected);
+  const sourceMatches = sourceHostMatches(profile.sourceUrl, expected, [
+    profile.canonicalDomain,
+    ...(profile.domainAliases ?? [])
+  ]);
   const logoOwner = descriptiveLogoOwner(profile.logoUrl);
   const logoMatches = !logoOwner || [domainKey, relaxedDomainKey, nameKey].some(
     (key) => key.length >= 3 && (logoOwner.includes(key) || key.includes(logoOwner))
@@ -149,10 +164,20 @@ export function assessBrandIdentity(
   if (nameMatches) reasons.push("The public company name matches the submitted domain.");
   else reasons.push("The public company name could not be reconciled with the submitted domain.");
   if (!logoMatches) reasons.push("The harvested logo filename appears to name a different company.");
+  if (aliasNeedsConfirmation) {
+    reasons.push(`Brandfetch resolved this to ${canonicalAlias}, but that alias is unclaimed and needs confirmation.`);
+  }
   if (profile.source === "fallback") reasons.push("Only deterministic fallback identity is available.");
 
   let confidence: IntelligenceConfidence = "low";
-  if (domainMatches && sourceMatches && nameMatches && logoMatches && profile.source !== "fallback") {
+  if (
+    domainMatches &&
+    sourceMatches &&
+    nameMatches &&
+    logoMatches &&
+    profile.source !== "fallback" &&
+    !aliasNeedsConfirmation
+  ) {
     confidence = "high";
   } else if (domainMatches && nameMatches && logoMatches && profile.source !== "fallback") {
     confidence = "medium";
@@ -163,7 +188,13 @@ export function assessBrandIdentity(
     canonicalDomain: rejected ? expected : actual,
     canonicalName: profile.companyName,
     confidence: userConfirmed ? "high" : confidence,
-    confirmationStatus: userConfirmed ? "confirmed" : rejected ? "rejected" : confidence === "low" ? "needs-confirmation" : "confirmed",
+    confirmationStatus: userConfirmed
+      ? "confirmed"
+      : rejected
+        ? "rejected"
+        : aliasNeedsConfirmation || confidence === "low"
+          ? "needs-confirmation"
+          : "confirmed",
     confirmedBy: userConfirmed ? "user" : confidence === "high" ? "system" : undefined,
     reasons,
     provenance: [

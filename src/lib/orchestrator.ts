@@ -1948,6 +1948,41 @@ export async function runStoryStage(id: string): Promise<void> {
     preflight = await getSession(id);
     if (!preflight?.brand || hasTerminalStoryFailure(preflight)) return;
   }
+  const preflightBrandReadiness = preflight?.brand?.readiness;
+  if (
+    preflight?.brand &&
+    !preflight.experience &&
+    preflightBrandReadiness &&
+    (!preflightBrandReadiness.paletteReady || !preflightBrandReadiness.identityReady)
+  ) {
+    await updateSession(id, (session) => {
+      const readiness = session.brand ? assessBrandReadiness(session.brand) : undefined;
+      const reason = readiness?.paletteReady === false
+        ? "brand_palette_unavailable"
+        : "brand_identity_confirmation_required";
+      session.status = "collecting";
+      session.stages.story = {
+        status: "failed",
+        completedAt: new Date().toISOString(),
+        errorCode: reason,
+        detail: readiness?.reasons.find((message) =>
+          reason === "brand_palette_unavailable"
+            ? /color|palette|Brandfetch/i.test(message)
+            : /identity|alias|domain|confirmation/i.test(message)
+        ) ?? (reason === "brand_palette_unavailable"
+          ? "Verified brand colors could not be resolved. No generic palette was applied."
+          : "The resolved brand identity needs confirmation before generation can continue.")
+      };
+      appendEvent(session, "generation_blocked", {
+        reason,
+        brandfetchBrandApiProvider:
+          session.brand?.diagnostics?.providers?.brandfetchBrandApi ?? "unknown",
+        colorCount: session.brand?.colors.length ?? 0
+      });
+      return session;
+    });
+    return;
+  }
   if (
     preflight?.useCase === "abm" &&
     preflight.answers.targetDomain &&

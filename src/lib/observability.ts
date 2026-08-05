@@ -92,6 +92,8 @@ const safeDetailKeys = new Set([
   "brandfetchFontCount",
   "brandfetchImageCount",
   "brandfetchIndustryCount",
+  "brandReadiness",
+  "paletteConfidence",
   "verifiedBrandFallback",
   "remoteBrowserConfigured",
   "brandfetchConfigured",

@@ -61,11 +61,17 @@ export const hasOpenAIKey = Boolean(process.env.OPENAI_API_KEY);
 export const hasOpenAI = config.generationMode === "openai" && hasOpenAIKey;
 export const hasRemoteBrandHarvester =
   config.brandMode === "remote" && Boolean(process.env.BRAND_HARVESTER_URL);
+const validBrandfetchClientId = /^[A-Za-z0-9_-]{8,80}$/.test(
+  process.env.BRANDFETCH_CLIENT_ID?.trim() ?? ""
+);
+const validBrandfetchApiKey = /^[A-Za-z0-9._-]{32,256}$/.test(
+  process.env.BRANDFETCH_API_KEY?.trim() ?? ""
+);
 export const hasBrandfetchLogoApi =
-  config.brandfetchMode !== "disabled" && Boolean(process.env.BRANDFETCH_CLIENT_ID);
+  config.brandfetchMode !== "disabled" && validBrandfetchClientId;
 export const hasBrandfetchBrandApi =
   ["fallback", "enrich"].includes(config.brandfetchMode) &&
-  Boolean(process.env.BRANDFETCH_API_KEY);
+  validBrandfetchApiKey;
 export const hasRemoteFolloze =
   config.follozeMode !== "disabled" && Boolean(process.env.FOLLOZE_MCP_SERVER_URL);
 export const canPublishFolloze =

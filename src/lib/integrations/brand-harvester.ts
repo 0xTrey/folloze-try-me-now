@@ -1145,6 +1145,8 @@ export function extractFastBrandProfile(input: {
   finalUrl?: URL;
 }): BrandProfile {
   const finalUrl = input.finalUrl ?? new URL(`https://${input.domain}`);
+  const submittedDomain = normalizeDomain(input.domain);
+  const canonicalDomain = normalizeDomain(finalUrl.hostname);
   const title = stripTags(input.html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
   const ogSiteName = extractMeta(input.html, "og:site_name");
   const description = extractMeta(input.html, "description") ?? extractMeta(input.html, "og:description");
@@ -1170,7 +1172,9 @@ export function extractFastBrandProfile(input: {
   const fonts = extractFontProfile(input.html, input.css ?? "");
   const fontBase = finalUrl;
   const profile: BrandProfile = {
-    domain: input.domain,
+    domain: submittedDomain,
+    canonicalDomain,
+    domainAliases: canonicalDomain !== submittedDomain ? [canonicalDomain] : [],
     companyName,
     title: title || undefined,
     description: cleanDescription,
@@ -1323,9 +1327,10 @@ function cachedBrandProfile(domain: string): BrandProfile | undefined {
 }
 
 function cacheBrandProfile(domain: string, profile: BrandProfile): BrandProfile {
+  const logoDomain = profile.canonicalDomain ?? domain;
   const completed = withBrandReadiness({
     ...profile,
-    logoSourceUrl: isBrandfetchLogoApiUrl(profile.logoUrl, domain)
+    logoSourceUrl: isBrandfetchLogoApiUrl(profile.logoUrl, logoDomain)
       ? undefined
       : profile.logoSourceUrl ?? profile.logoUrl,
     diagnostics: {
@@ -1373,6 +1378,7 @@ interface BrandfetchColor {
 }
 
 interface BrandfetchResult {
+  canonicalDomain: string;
   companyName?: string;
   description?: string;
   publicContext?: string;
@@ -1388,6 +1394,19 @@ interface BrandfetchResult {
   logoValidationRejected: number;
   fontCount: number;
   industryCount: number;
+}
+
+type BrandfetchBrandApiStatus =
+  | "succeeded"
+  | "not_found"
+  | "unauthorized"
+  | "rate_limited"
+  | "invalid_response"
+  | "failed";
+
+interface BrandfetchLookup {
+  result?: BrandfetchResult;
+  status: BrandfetchBrandApiStatus;
 }
 
 async function validatedPortableRemoteLogo(
@@ -1526,9 +1545,9 @@ function brandfetchFonts(payload: Record<string, unknown>): {
   };
 }
 
-async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchResult | undefined> {
+async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchLookup> {
   const token = process.env.BRANDFETCH_API_KEY;
-  if (!token || !hasBrandfetchBrandApi) return undefined;
+  if (!token || !hasBrandfetchBrandApi) return { status: "failed" };
   try {
     // The authenticated request is fixed to Brandfetch's API and stays
     // server-side. The response contributes only bounded brand metadata;
@@ -1545,13 +1564,21 @@ async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchResult | 
       }
     );
     if (!response.ok) {
+      const status: BrandfetchBrandApiStatus =
+        response.status === 401 || response.status === 403
+          ? "unauthorized"
+          : response.status === 404
+            ? "not_found"
+            : response.status === 429
+              ? "rate_limited"
+              : "failed";
       logServerError(new Error(`Brandfetch returned HTTP ${response.status}.`), {
-        operation: "brandfetch_logo_lookup",
+        operation: "brandfetch_brand_lookup",
         code: "brandfetch_upstream_failed",
         status: response.status,
         details: { domain }
       });
-      return undefined;
+      return { status };
     }
     const contentLength = Number.parseInt(response.headers.get("content-length") ?? "", 10);
     if (Number.isFinite(contentLength) && contentLength > 1_000_000) {
@@ -1576,7 +1603,7 @@ async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchResult | 
         code: "brandfetch_domain_mismatch",
         details: { domain }
       });
-      return undefined;
+      return { status: "invalid_response" };
     }
     if (payload.isNsfw === true) {
       logServerError(new Error("Brandfetch marked the brand as unsafe."), {
@@ -1584,7 +1611,7 @@ async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchResult | 
         code: "brandfetch_unsafe_brand",
         details: { domain }
       });
-      return undefined;
+      return { status: "invalid_response" };
     }
     const colors = (Array.isArray(payload.colors) ? payload.colors : [])
       .filter((color): color is Record<string, unknown> => Boolean(color && typeof color === "object"))
@@ -1627,27 +1654,88 @@ async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchResult | 
     ].filter((value): value is string => Boolean(value));
     const fonts = brandfetchFonts(payload);
     return {
-      companyName: boundedBrandfetchText(payload.name, 120),
-      description,
-      publicContext: contextParts.join(" ").slice(0, 1600) || undefined,
-      publicTopics: industries,
-      colors,
-      displayFontFamily: fonts.displayFontFamily,
-      bodyFontFamily: fonts.bodyFontFamily,
-      imageUrls: brandfetchImageUrls(payload),
-      qualityTier: brandfetchQualityTier(payload.qualityScore),
-      claimed: typeof payload.claimed === "boolean" ? payload.claimed : undefined,
-      logoCandidateCount: logoFormats.length,
-      logoValidationAttempted: 0,
-      logoValidationRejected: 0,
-      fontCount: fonts.count,
-      industryCount: industries.length
+      status: "succeeded",
+      result: {
+        canonicalDomain: returnedDomain,
+        companyName: boundedBrandfetchText(payload.name, 120),
+        description,
+        publicContext: contextParts.join(" ").slice(0, 1600) || undefined,
+        publicTopics: industries,
+        colors,
+        displayFontFamily: fonts.displayFontFamily,
+        bodyFontFamily: fonts.bodyFontFamily,
+        imageUrls: brandfetchImageUrls(payload),
+        qualityTier: brandfetchQualityTier(payload.qualityScore),
+        claimed: typeof payload.claimed === "boolean" ? payload.claimed : undefined,
+        logoCandidateCount: logoFormats.length,
+        logoValidationAttempted: 0,
+        logoValidationRejected: 0,
+        fontCount: fonts.count,
+        industryCount: industries.length
+      }
     };
   } catch (error) {
     logServerError(error, {
       operation: "brandfetch_brand_lookup",
       code: "brandfetch_lookup_failed",
       details: { domain }
+    });
+    return { status: error instanceof SyntaxError ? "invalid_response" : "failed" };
+  }
+}
+
+async function fetchBrandfetchSearchDomain(
+  query: string,
+  allowedDomains: Array<string | undefined>
+): Promise<string | undefined> {
+  const clientId = process.env.BRANDFETCH_CLIENT_ID?.trim();
+  if (!hasBrandfetchLogoApi || !clientId) return undefined;
+  const allowed = new Set(
+    allowedDomains
+      .filter((value): value is string => Boolean(value?.trim()))
+      .map((value) => normalizeDomain(value))
+  );
+  if (!allowed.size) return undefined;
+  try {
+    const url = new URL(
+      `https://api.brandfetch.io/v2/search/${encodeURIComponent(query.slice(0, 120))}`
+    );
+    url.searchParams.set("c", clientId);
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      redirect: "error",
+      signal: AbortSignal.timeout(5_000)
+    });
+    if (!response.ok) return undefined;
+    const parsed = JSON.parse(await readBoundedResponseText(response, 250_000)) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const matches = parsed
+      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+      .map((item) => ({
+        domain: typeof item.domain === "string" ? normalizeDomain(item.domain) : "",
+        name: boundedBrandfetchText(item.name, 120) ?? "",
+        claimed: item.claimed === true
+      }))
+      .filter((item) => Boolean(item.domain));
+    const allowedMatches = matches.filter((item) => allowed.has(item.domain));
+    if (allowedMatches.length) {
+      return allowedMatches.find((item) => item.claimed)?.domain ?? allowedMatches[0]?.domain;
+    }
+    const identityKey = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
+    const queryKey = identityKey(query.includes(".") ? query.split(".")[0] ?? query : query);
+    const lexicalMatches = matches.filter((item) => {
+      const domainKey = identityKey(item.domain.split(".")[0] ?? item.domain);
+      return identityKey(item.name) === queryKey || domainKey === queryKey;
+    });
+    // Brand Search is allowed to establish a canonical alias only when there
+    // is one exact lexical identity match. Fuzzy or multi-entity results must
+    // be confirmed by a person instead of silently selecting the first hit.
+    return lexicalMatches.length === 1 ? lexicalMatches[0]?.domain : undefined;
+  } catch (error) {
+    logServerError(error, {
+      operation: "brandfetch_search_lookup",
+      code: "brandfetch_search_failed",
+      details: { queryKind: query.includes(".") ? "domain" : "company_name" }
     });
     return undefined;
   }
@@ -1671,9 +1759,9 @@ async function readBoundedResponseText(response: Response, maximumBytes: number)
   return new TextDecoder().decode(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))));
 }
 
-const brandfetchRequests = new Map<string, Promise<BrandfetchResult | undefined>>();
+const brandfetchRequests = new Map<string, Promise<BrandfetchLookup>>();
 
-function fetchBrandfetchBrandSingleflight(domain: string): Promise<BrandfetchResult | undefined> {
+function fetchBrandfetchBrandSingleflight(domain: string): Promise<BrandfetchLookup> {
   const normalized = normalizeDomain(domain);
   const existing = brandfetchRequests.get(normalized);
   if (existing) return existing;
@@ -1724,6 +1812,11 @@ function profileWithBrandfetchEnrichment(
     : base.colors;
   return {
     ...base,
+    canonicalDomain: result.canonicalDomain,
+    domainAliases: [...new Set([
+      ...(base.domainAliases ?? []),
+      result.canonicalDomain
+    ].filter((alias) => alias !== normalizeDomain(domain)))],
     companyName: profile && profile.source !== "fallback"
       ? profile.companyName
       : result.companyName ?? base.companyName,
@@ -1779,8 +1872,9 @@ function profileWithBrandfetchEnrichment(
 }
 
 function profileWithBrandfetchLogoApi(domain: string, profile: BrandProfile): BrandProfile {
-  const logoUrl = brandfetchLogoApiUrl(domain, process.env.BRANDFETCH_CLIENT_ID, "dark");
-  const logoUrlOnDark = brandfetchLogoApiUrl(domain, process.env.BRANDFETCH_CLIENT_ID, "light");
+  const logoDomain = profile.canonicalDomain ?? domain;
+  const logoUrl = brandfetchLogoApiUrl(logoDomain, process.env.BRANDFETCH_CLIENT_ID, "dark");
+  const logoUrlOnDark = brandfetchLogoApiUrl(logoDomain, process.env.BRANDFETCH_CLIENT_ID, "light");
   if (!hasBrandfetchLogoApi || !logoUrl || !logoUrlOnDark) return profile;
   const receipt = profile.diagnostics?.logo;
   return {
@@ -2001,10 +2095,13 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     hasRemoteBrandHarvester && process.env.BRAND_HARVESTER_URL
       ? "failed"
       : "not_configured";
-  let brandfetchBrandStatus: "succeeded" | "failed" | "not_configured" | "not_needed" =
+  let brandfetchBrandStatus:
+    | BrandfetchBrandApiStatus
+    | "not_configured"
+    | "not_needed" =
     hasBrandfetchBrandApi ? "not_needed" : "not_configured";
-  const brandfetchLogoStatus: "succeeded" | "not_configured" =
-    hasBrandfetchLogoApi ? "succeeded" : "not_configured";
+  const brandfetchLogoStatus: "configured" | "not_configured" =
+    hasBrandfetchLogoApi ? "configured" : "not_configured";
   const eagerBrandfetchPromise = config.brandfetchMode === "enrich" && hasBrandfetchBrandApi
     ? fetchBrandfetchBrandSingleflight(domain)
     : undefined;
@@ -2041,6 +2138,7 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
       return { error };
     }
   })();
+  let publicCanonicalDomain: string | undefined;
   let candidate: BrandProfile | undefined;
   if (hasRemoteBrandHarvester && process.env.BRAND_HARVESTER_URL) {
     try {
@@ -2092,6 +2190,7 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     // logo. It supplies source-owned semantic colors and prevents a generic
     // remote palette from overriding the same evidence used by ABM flows.
     publicPageStatus = "succeeded";
+    publicCanonicalDomain = publicEvidence.profile.canonicalDomain;
     const extracted = await copyOfficialRemoteLogo(
       publicEvidence.profile,
       logoCandidatesByProfile.get(publicEvidence.profile) ?? []
@@ -2121,12 +2220,29 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
       candidate.colors.length < 3
   );
   if (shouldFetchBrandData) {
-    const brandfetch = await (eagerBrandfetchPromise ?? fetchBrandfetchBrandSingleflight(domain));
-    if (brandfetch) {
-      candidate = profileWithBrandfetchEnrichment(domain, candidate, brandfetch);
-      brandfetchBrandStatus = "succeeded";
-    } else {
-      brandfetchBrandStatus = "failed";
+    let brandfetchLookup = await (eagerBrandfetchPromise ?? fetchBrandfetchBrandSingleflight(domain));
+    // A first-party redirect is the only automatic alias authority. If the
+    // submitted hostname redirects to a canonical host, retry Brandfetch with
+    // that exact host rather than accepting an unrelated search result.
+    if (
+      !brandfetchLookup.result &&
+      publicCanonicalDomain &&
+      publicCanonicalDomain !== normalizeDomain(domain)
+    ) {
+      brandfetchLookup = await fetchBrandfetchBrandSingleflight(publicCanonicalDomain);
+    }
+    if (!brandfetchLookup.result) {
+      const searchedDomain = await fetchBrandfetchSearchDomain(
+        candidate?.companyName ?? domain,
+        [domain, publicCanonicalDomain]
+      );
+      if (searchedDomain && searchedDomain !== normalizeDomain(domain)) {
+        brandfetchLookup = await fetchBrandfetchBrandSingleflight(searchedDomain);
+      }
+    }
+    brandfetchBrandStatus = brandfetchLookup.status;
+    if (brandfetchLookup.result) {
+      candidate = profileWithBrandfetchEnrichment(domain, candidate, brandfetchLookup.result);
     }
   }
 
@@ -2153,9 +2269,11 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
           publicPage: publicPageStatus,
           publicPageAttempts,
           remoteBrowser: remoteBrowserStatus,
-          brandfetch: brandfetchLogoStatus === "succeeded" || brandfetchBrandStatus === "succeeded"
+          brandfetch: brandfetchLogoStatus === "configured" || brandfetchBrandStatus === "succeeded"
             ? "succeeded"
-            : brandfetchBrandStatus,
+            : brandfetchBrandStatus === "not_configured" || brandfetchBrandStatus === "not_needed"
+              ? brandfetchBrandStatus
+              : "failed",
           brandfetchLogoApi: brandfetchLogoStatus,
           brandfetchBrandApi: brandfetchBrandStatus,
           verifiedFallback: usedVerifiedFallback

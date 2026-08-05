@@ -34,6 +34,7 @@ import {
 import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
@@ -73,7 +74,10 @@ import {
   validatePdfFile
 } from "@/lib/client-response";
 import { primaryActionFor } from "@/lib/cta-presentation";
-import { isBrandfetchLogoApiUrl } from "@/lib/brandfetch-logo";
+import {
+  brandfetchLogoRecoveryUrls,
+  isBrandfetchLogoApiUrl
+} from "@/lib/brandfetch-logo";
 import { imageDeliveryPath } from "@/lib/image-delivery";
 import {
   captureProductEvent,
@@ -1397,7 +1401,7 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
           <span><ShieldCheck size={14} />Identity check</span>
           <div className="identityMessage">
             <span className="identityLogo">
-              {previewLogoUrl(session) ? <Image src={previewLogoUrl(session) ?? ""} alt={`${brandName} logo`} width={92} height={28} unoptimized /> : <Building2 size={18} />}
+              <SafeBrandLogo session={session} owner="seller" companyName={brandName} fallback={<Building2 size={18} />} />
             </span>
             <div><strong>{brandResolved ? brandName : `Checking ${brandName}`}</strong><small>{session.companyDomain} · {brandVerified ? "Brand evidence matched to the public company site" : brandResolved ? "Identity found; logo, palette, or source evidence needs review" : "Enrichment in progress"}</small></div>
             {brandVerified && <CircleCheck size={18} className="identityCheck" aria-label="Seller brand evidence verified" />}
@@ -1414,7 +1418,7 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
             <span><Search size={14} />Account check</span>
             <div className="identityMessage">
               <span className="identityLogo">
-                {previewLogoUrl(session, "target") ? <Image src={previewLogoUrl(session, "target") ?? ""} alt={`${targetName} logo`} width={92} height={28} unoptimized /> : <Target size={18} />}
+                <SafeBrandLogo session={session} owner="target" companyName={targetName} fallback={<Target size={18} />} />
               </span>
               <div><strong>{session.targetBrand ? targetName : `Researching ${targetName}`}</strong><small>{session.answers.targetDomain} · {targetVerified ? "Target identity and brand matched" : session.targetBrand ? "Identity found; brand evidence needs review" : "Public account signals are loading"}</small></div>
               {targetVerified && <CircleCheck size={18} className="identityCheck" aria-label="Target identity and brand matched" />}
@@ -2040,11 +2044,70 @@ function previewLogoUrl(
   const profile = owner === "seller" ? session.brand : session.targetBrand;
   if (!profile?.logoUrl) return undefined;
   const candidate = surface === "dark" ? profile.logoUrlOnDark ?? profile.logoUrl : profile.logoUrl;
-  if (isBrandfetchLogoApiUrl(candidate, profile.domain)) return candidate;
+  if (isBrandfetchLogoApiUrl(candidate, profile.canonicalDomain ?? profile.domain)) return candidate;
   return imageDeliveryPath(
     session.id,
     `${owner}-logo`,
     session.experience?.artifactRevision
+  );
+}
+
+function SafeBrandLogo({
+  session,
+  owner,
+  companyName,
+  fallback
+}: {
+  session: PublicTryMeSession;
+  owner: "seller" | "target";
+  companyName: string;
+  fallback: ReactNode;
+}) {
+  const [failed, setFailed] = useState<string[]>([]);
+  const profile = owner === "seller" ? session.brand : session.targetBrand;
+  const preferred = previewLogoUrl(session, owner);
+  const expectedDomain = profile?.canonicalDomain ?? profile?.domain;
+  const delivery = imageDeliveryPath(
+    session.id,
+    `${owner}-logo`,
+    session.experience?.artifactRevision
+  );
+  const candidates = [...new Set([
+    ...brandfetchLogoRecoveryUrls(preferred, expectedDomain),
+    delivery
+  ].filter((value): value is string => Boolean(value)))];
+  const candidate = candidates.find((value) => !failed.includes(value));
+  if (!candidate) return <>{fallback}</>;
+  return (
+    <Image
+      key={candidate}
+      src={candidate}
+      alt={`${companyName} logo`}
+      width={92}
+      height={28}
+      unoptimized
+      onLoad={() => captureProductEvent("brand_logo_rendered", {
+        category: "performance",
+        outcome: "success",
+        properties: {
+          owner,
+          provider: candidate.includes("cdn.brandfetch.io") ? "brandfetch" : "first_party",
+          candidate_index: Math.max(0, candidates.indexOf(candidate))
+        }
+      })}
+      onError={() => {
+        setFailed((current) => current.includes(candidate) ? current : [...current, candidate]);
+        captureProductEvent("brand_logo_failed", {
+          category: "error",
+          outcome: "failure",
+          properties: {
+            owner,
+            provider: candidate.includes("cdn.brandfetch.io") ? "brandfetch" : "first_party",
+            candidate_index: Math.max(0, candidates.indexOf(candidate))
+          }
+        });
+      }}
+    />
   );
 }
 
@@ -2876,6 +2939,7 @@ export function TryMeNowApp() {
                   brand={session.brand ? {
                     companyName: session.brand.companyName,
                     domain: session.brand.domain,
+                    canonicalDomain: session.brand.canonicalDomain,
                     logoUrl: previewLogoUrl(session),
                     colors: session.brand.colors,
                     primaryColor: session.brand.primaryColor,

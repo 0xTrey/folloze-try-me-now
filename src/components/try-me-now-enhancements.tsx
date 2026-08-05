@@ -35,6 +35,8 @@ import {
 } from "react";
 import Image from "next/image";
 
+import { brandfetchLogoRecoveryUrls } from "@/lib/brandfetch-logo";
+import { captureProductEvent } from "@/lib/product-analytics-client";
 import { buildSimulatedEngagement } from "@/lib/simulated-engagement";
 
 import styles from "./try-me-now-enhancements.module.css";
@@ -118,6 +120,7 @@ export function ExampleModeCta({ label = "See an example", href, onClick }: { la
 export interface BrandLockProfile {
   companyName: string;
   domain: string;
+  canonicalDomain?: string;
   logoUrl?: string;
   logoUrlOnDark?: string;
   colors?: string[];
@@ -184,16 +187,23 @@ function brandPaletteTokens(brand: BrandLockProfile | undefined) {
 
 export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrandLockStripProps) {
   const companyName = brand?.companyName || brand?.domain || "Your brand";
-  const [failedLogoUrl, setFailedLogoUrl] = useState<string>();
-  const palette = brandPaletteTokens(brand);
-  const logoUrl = brand?.logoUrlOnDark ?? brand?.logoUrl;
-  const hasLogo = Boolean(logoUrl) && failedLogoUrl !== logoUrl;
+  const [failedLogoUrls, setFailedLogoUrls] = useState<string[]>([]);
+  const paletteReady = status !== "scanning" && Boolean(
+    brand && brand.source !== "fallback" && (brand.readiness?.paletteReady ?? true)
+  );
+  const palette = brandPaletteTokens(paletteReady ? brand : undefined);
+  const logoUrls = brandfetchLogoRecoveryUrls(
+    brand?.logoUrlOnDark ?? brand?.logoUrl,
+    brand?.canonicalDomain ?? brand?.domain
+  );
+  const logoUrl = logoUrls.find((candidate) => !failedLogoUrls.includes(candidate));
+  const hasLogo = Boolean(logoUrl);
   const isCaptured = status === "locked";
   const needsReview = status === "fallback" || brand?.readiness?.status === "incomplete";
   const paletteKind = status === "scanning"
     ? "Detecting palette"
-    : needsReview
-      ? palette.colors.length ? "Palette evidence" : "Neutral preview palette"
+    : !paletteReady
+      ? "Brand colors unavailable"
       : "Harvested palette";
   const stateTitle = status === "scanning"
     ? "Scanning public brand"
@@ -212,10 +222,10 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
       ? "Scanning"
       : "Captured");
   const stripStyle = {
-    "--harvest-primary": palette.primary ?? "#1C293F",
-    "--harvest-accent": palette.accent ?? "#D7DAE4",
-    "--harvest-surface": palette.surface ?? "#FFFFFF",
-    "--harvest-support": palette.support ?? palette.accent ?? "#C6CAD7"
+    "--harvest-primary": paletteReady ? palette.primary : "var(--deep)",
+    "--harvest-accent": paletteReady ? palette.accent : "var(--border)",
+    "--harvest-surface": paletteReady ? palette.surface : "#FFFFFF",
+    "--harvest-support": paletteReady ? palette.support ?? palette.accent : "var(--muted)"
   } as CSSProperties;
 
   return (
@@ -237,7 +247,26 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
             height={38}
             style={{ width: "auto", height: "auto" }}
             unoptimized
-            onError={() => setFailedLogoUrl(logoUrl)}
+            onLoad={() => captureProductEvent("brand_logo_rendered", {
+              category: "performance",
+              outcome: "success",
+              properties: {
+                provider: logoUrl?.includes("cdn.brandfetch.io") ? "brandfetch" : "first_party",
+                candidate_index: Math.max(0, logoUrls.indexOf(logoUrl ?? ""))
+              }
+            })}
+            onError={() => {
+              if (!logoUrl) return;
+              setFailedLogoUrls((current) => current.includes(logoUrl) ? current : [...current, logoUrl]);
+              captureProductEvent("brand_logo_failed", {
+                category: "error",
+                outcome: "failure",
+                properties: {
+                  provider: logoUrl.includes("cdn.brandfetch.io") ? "brandfetch" : "first_party",
+                  candidate_index: Math.max(0, logoUrls.indexOf(logoUrl))
+                }
+              });
+            }}
           />
         ) : (
           <span className={styles.brandLogoUnavailable} aria-label={`${companyName} logo unavailable`}>
@@ -261,10 +290,14 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
       >
         <div className={styles.brandPaletteHeader}>
           <span>{paletteKind}</span>
-          <small>{status === "scanning" ? "Reading CSS + imagery" : needsReview ? "Verification needed" : `${palette.colors.length} colors captured`}</small>
+          <small>{status === "scanning" ? "Reading Brandfetch + public CSS" : !paletteReady ? "No generic palette applied" : `${palette.colors.length} colors captured`}</small>
         </div>
         {status === "scanning" ? (
           <span className={styles.brandPaletteSkeleton} aria-hidden="true"><i /><i /><i /><i /></span>
+        ) : !paletteReady ? (
+          <p className={styles.brandPaletteUnavailable} role="alert">
+            {readinessReason || "Brand API and public-site color evidence did not produce a verified palette."}
+          </p>
         ) : (
           <>
             <span className={styles.brandPaletteRail} aria-hidden="true">

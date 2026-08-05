@@ -15,6 +15,8 @@ export const PRODUCT_EVENT_NAMES = [
   "api_request_completed",
   "api_request_failed",
   "browser_error",
+  "brand_logo_failed",
+  "brand_logo_rendered",
   "campaign_type_selected",
   "claim_completed",
   "claim_failed",

@@ -107,6 +107,7 @@
 .brandPaletteSkeleton { height:28px;grid-column:1 / -1;display:grid;grid-template-columns:1.2fr .8fr 1fr .7fr;overflow:hidden;border-radius:9px }
 .brandPaletteSkeleton i { background:linear-gradient(90deg,#e8ebf0,#f5f6f8,#e8ebf0);background-size:200% 100%;animation:brandScan 1.25s linear infinite }
 .brandPaletteSkeleton i:nth-child(2) { animation-delay:.12s }.brandPaletteSkeleton i:nth-child(3) { animation-delay:.24s }.brandPaletteSkeleton i:nth-child(4) { animation-delay:.36s }
+.brandPaletteUnavailable { margin:0;padding:9px 10px;grid-column:1 / -1;color:#8a3b12;border:1px solid #f0c9ac;border-radius:9px;background:#fff7ed;font-size:9px;font-weight:700;line-height:1.4 }
 .lockStatus { min-height:32px;padding:0 11px;grid-area:status;display:flex;align-items:center;gap:7px;justify-self:start;color:#126a3d;background:#e7f8ef;border:1px solid #c9efda;border-radius:999px;font-size:8px;font-weight:850;letter-spacing:.08em;text-transform:uppercase }
 .brandStrip>.tertiaryAction { grid-area:action;justify-self:end }
 .orbit { width:8px;height:8px;display:inline-block;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:orbit .75s linear infinite }

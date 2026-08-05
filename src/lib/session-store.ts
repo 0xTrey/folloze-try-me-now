@@ -321,6 +321,8 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
     brand
       ? {
           domain: brand.domain,
+          canonicalDomain: brand.canonicalDomain,
+          domainAliases: brand.domainAliases,
           companyName: brand.companyName,
           logoUrl: brand.logoUrl,
           logoUrlOnDark: brand.logoUrlOnDark,

@@ -156,6 +156,10 @@ export interface BrandReadiness {
 
 export interface BrandProfile {
   domain: string;
+  /** Canonical public hostname after a verified first-party redirect or provider match. */
+  canonicalDomain?: string;
+  /** Verified host aliases that may supply first-party source evidence for this brand. */
+  domainAliases?: string[];
   companyName: string;
   title?: string;
   description?: string;
@@ -255,8 +259,17 @@ export interface BrandProfile {
       publicPageAttempts: number;
       remoteBrowser: "succeeded" | "failed" | "not_configured";
       brandfetch: "succeeded" | "failed" | "not_configured" | "not_needed";
-      brandfetchLogoApi?: "succeeded" | "not_configured";
-      brandfetchBrandApi?: "succeeded" | "failed" | "not_configured" | "not_needed";
+      /** Configured means the browser hotlink was issued; onLoad/onError confirms rendering. */
+      brandfetchLogoApi?: "configured" | "not_configured";
+      brandfetchBrandApi?:
+        | "succeeded"
+        | "not_found"
+        | "unauthorized"
+        | "rate_limited"
+        | "invalid_response"
+        | "failed"
+        | "not_configured"
+        | "not_needed";
       verifiedFallback: boolean;
     };
   };
@@ -312,6 +325,8 @@ export type PublicStageState = Pick<
 export type PublicBrandProfile = Pick<
   BrandProfile,
   | "domain"
+  | "canonicalDomain"
+  | "domainAliases"
   | "companyName"
   | "logoUrl"
   | "logoUrlOnDark"

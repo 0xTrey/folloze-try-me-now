@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { brandfetchLogoApiUrl, isBrandfetchLogoApiUrl } from "@/lib/brandfetch-logo";
+import {
+  brandfetchLogoApiUrl,
+  brandfetchLogoRecoveryUrls,
+  isBrandfetchLogoApiUrl
+} from "@/lib/brandfetch-logo";
 
 describe("Brandfetch Logo API URLs", () => {
   it("builds explicit, wordmark-only hotlinks with a 404 fallback", () => {
@@ -11,6 +15,15 @@ describe("Brandfetch Logo API URLs", () => {
     expect(isBrandfetchLogoApiUrl(url)).toBe(true);
     expect(isBrandfetchLogoApiUrl(url, "6sense.com")).toBe(true);
     expect(isBrandfetchLogoApiUrl(url, "cisco.com")).toBe(false);
+  });
+
+  it("builds a bounded wordmark, symbol, and icon recovery chain", () => {
+    const wordmark = brandfetchLogoApiUrl("6sense.com", "client_123456", "dark");
+    expect(brandfetchLogoRecoveryUrls(wordmark, "6sense.com")).toEqual([
+      expect.stringContaining("/type/logo?"),
+      expect.stringContaining("/type/symbol?"),
+      expect.stringContaining("/type/icon?")
+    ]);
   });
 
   it.each([
