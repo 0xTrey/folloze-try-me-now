@@ -48,6 +48,7 @@ describe("server-only operational trace store", () => {
       attemptId: "attempt-123",
       domain: "cisco.com",
       source: "fast-extractor",
+      sourceKind: "abm-product",
       durationMs: 912,
       logoStrategy: "inline-svg-unportable",
       sourceContent: "private customer content"
@@ -68,6 +69,7 @@ describe("server-only operational trace store", () => {
       meta: {
         attemptId: "attempt-123",
         source: "fast-extractor",
+        sourceKind: "abm-product",
         durationMs: 912,
         logoStrategy: "inline-svg-unportable"
       }

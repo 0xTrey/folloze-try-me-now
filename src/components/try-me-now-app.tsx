@@ -1720,6 +1720,7 @@ export function ProgressiveQuestions({
   );
   const [productDescription, setProductDescription] = useState(answers.messageBelief ?? "");
   const [isChangingProductSource, setIsChangingProductSource] = useState(false);
+  const [productResearchStartRevision, setProductResearchStartRevision] = useState<number>();
   const backgroundPatchRef = useRef(onBackgroundPatch ?? onPatch);
   const lastOfferResearchRef = useRef<string | undefined>(undefined);
   const lastProductResearchRef = useRef<string | undefined>(undefined);
@@ -1727,7 +1728,7 @@ export function ProgressiveQuestions({
   const textValue = fieldValues[questionKey] ?? "";
   const sourceUrlValue = fieldValues["content-source-url"] ?? "";
   const campaignOfferSourceValue = fieldValues["campaign-offer-source"] ?? "";
-  const productSourceUrlValue = fieldValues["abm-product-source"] ?? answers.sourceUrl ?? "";
+  const productSourceUrlValue = fieldValues["abm-product-source"] ?? "";
   const activeCampaignChoice = campaignChoice ?? answers.campaignType;
   const setTextValue = (value: string) =>
     setFieldValues((current) => ({ ...current, [questionKey]: value }));
@@ -2065,26 +2066,32 @@ export function ProgressiveQuestions({
     const objectiveContext = fieldValues["objective-context"] ?? answers.messageBelief ?? "";
     const needsProductContext = session.useCase === "abm" && chosenObjective === introduceProductObjective;
     const validProductUrl = isCampaignOfferSourceUrl(productSourceUrlValue);
-    const normalizedProductUrl = validProductUrl
-      ? new URL(productSourceUrlValue.trim()).toString()
-      : undefined;
-    const savedProductUrlMatches = Boolean(
-      normalizedProductUrl && answers.sourceUrl === normalizedProductUrl
-    );
     const productPdfReady = Boolean(answers.sourceName) || pdfUpload.status === "accepted";
     const productDescriptionReady = productDescription.trim().length >= 20;
-    const productSourceFailed = savedProductUrlMatches
+    const productResearchFinished = productResearchStartRevision !== undefined
+      && session.revision > productResearchStartRevision
+      && Boolean(
+        session.sourceInsight
+          && ["ready", "needs-review", "failed", "unreadable"].includes(session.sourceInsight.status)
+      );
+    const productResearchPending = productResearchStartRevision !== undefined
+      && !productResearchFinished;
+    const productSourceFailed = !productResearchPending
+      && Boolean(answers.sourceUrl)
       && Boolean(session.sourceInsight && ["failed", "unreadable"].includes(session.sourceInsight.status));
+    const productSourceReady = !productResearchPending
+      && Boolean(answers.sourceUrl)
+      && sourceInsightIsUsable(session);
     const productContextReady = !needsProductContext
-      || (productMode === "url" && savedProductUrlMatches && sourceInsightIsUsable(session))
+      || (productMode === "url" && productSourceReady)
       || (productMode === "pdf" && productPdfReady)
       || (productMode === "text" && productDescriptionReady);
-    const productSourceReady = savedProductUrlMatches && sourceInsightIsUsable(session);
     const selectProductMode = async (nextMode: ContextMode) => {
       if (nextMode === productMode) return;
       setProductMode(nextMode);
       if (nextMode === "url") return;
       setFieldValues((current) => ({ ...current, "abm-product-source": "" }));
+      setProductResearchStartRevision(undefined);
       lastProductResearchRef.current = undefined;
       if (!answers.sourceUrl && !validProductUrl) return;
       setIsChangingProductSource(true);
@@ -2116,7 +2123,7 @@ export function ProgressiveQuestions({
             {productMode === "url" && (
               <div className="contextPanel" role="tabpanel">
                 <label htmlFor="abm-product-source">Existing product page</label>
-                <div className="contextUrlInput"><ExternalLink size={17} /><input id="abm-product-source" value={productSourceUrlValue} onChange={(event) => setFieldValues((current) => ({ ...current, "abm-product-source": event.target.value }))} placeholder="https://yourcompany.com/product" inputMode="url" /></div>
+                <div className="contextUrlInput"><ExternalLink size={17} /><input id="abm-product-source" value={productSourceUrlValue} onChange={(event) => { setFieldValues((current) => ({ ...current, "abm-product-source": event.target.value })); setProductResearchStartRevision(session.revision); lastProductResearchRef.current = undefined; }} placeholder={productSourceReady ? "A product page is attached — paste another URL to replace it" : "https://yourcompany.com/product"} inputMode="url" /></div>
                 <div className="contextPanelFooter">
                   <small role={productSourceFailed ? "alert" : "status"} aria-live="polite">{productSourceReady ? `Product page understood${session.sourceInsight?.title ? `: ${session.sourceInsight.title}` : "."}` : productSourceFailed ? "We could not read that page. Paste another URL or choose a PDF or description." : validProductUrl ? "Researching the product page now. You can keep moving." : "Paste a public HTTPS product page. Research starts after you pause typing."}</small>
                 </div>
@@ -2156,7 +2163,9 @@ export function ProgressiveQuestions({
           messageBelief: needsProductContext && productMode === "text"
             ? productDescription.trim()
             : objectiveContext.trim() || undefined,
-          ...(needsProductContext && productMode === "url" ? { sourceUrl: productSourceUrlValue.trim() } : {})
+          ...(needsProductContext && productMode === "url" && validProductUrl
+            ? { sourceUrl: productSourceUrlValue.trim() }
+            : {})
         })}>
           {isSaving ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}Build my experience
         </button>

@@ -537,9 +537,10 @@ describe("guided campaign workspace", () => {
     });
     const researchedSession = {
       ...abmSession,
+      revision: abmSession.revision + 2,
       answers: {
         ...abmSession.answers,
-        sourceUrl: "https://www.folloze.com/platform"
+        sourceUrl: "https://source-provided.invalid/"
       },
       sourceInsight: readyProductInsight
     };

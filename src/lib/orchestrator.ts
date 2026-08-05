@@ -1240,7 +1240,7 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
         sourceKind === "campaign-offer"
           ? "offer_source_intelligence_started"
           : "source_intelligence_started",
-        { attemptId, kind: "public-url" }
+        { attemptId, kind: "public-url", sourceKind }
       );
       return session;
     });
@@ -1292,6 +1292,7 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
         ? "offer_source_intelligence_completed"
         : "source_intelligence_completed", {
         attemptId,
+        sourceKind,
         status: sourceArtifact.status,
         confidence: sourceArtifact.confidence,
         extractionMethod: sourceArtifact.extraction.method,
