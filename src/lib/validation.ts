@@ -55,6 +55,7 @@ export const answersSchema = z
     eventSource: z.string().max(1000).optional(),
     sourceUrl: z.string().max(1000).optional(),
     promotedOffer: z.string().trim().min(2).max(160).optional(),
+    promotedOfferConfirmed: z.boolean().optional(),
     offerSourceUrl: z.union([httpsDestinationSchema, z.literal("")]).optional(),
     offerSourceTitle: z.string().trim().min(2).max(180).optional(),
     offerSourceConfirmed: z.boolean().optional(),

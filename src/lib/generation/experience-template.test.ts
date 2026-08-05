@@ -415,8 +415,8 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain('data-template-fingerprint="v3-campaign-routes-proof-thesis"');
     expect(html).toContain('data-layout-variant="standard"');
     expect(html).toContain('data-style-variant="standard"');
+    expect(html.indexOf('id="experience-thesis"')).toBeLessThan(html.indexOf('id="decision-path"'));
     expect(html.indexOf('id="decision-path"')).toBeLessThan(html.indexOf('id="supporting-resources"'));
-    expect(html.indexOf('id="supporting-resources"')).toBeLessThan(html.indexOf('id="experience-thesis"'));
     expect(html).toContain("Explore what changes");
   });
 
@@ -625,7 +625,7 @@ describe("renderExperienceHtml", () => {
       shape: "offer-landing-page",
       family: "campaign-launch",
       template: "v3-campaign-routes-proof-thesis",
-      sectionOrder: ["decision-path", "supporting-resources", "experience-thesis"]
+      sectionOrder: ["experience-thesis", "decision-path", "supporting-resources"]
     });
     expect(abmFingerprint).toMatchObject({
       wireframe: "abm-account-microsite",
@@ -639,7 +639,7 @@ describe("renderExperienceHtml", () => {
       shape: "resource-companion",
       family: "content-source",
       template: "v3-content-source-findings-paths",
-      sectionOrder: ["supporting-resources", "experience-thesis", "decision-path"]
+      sectionOrder: ["experience-thesis", "decision-path", "supporting-resources"]
     });
     expect(abm).toContain("Jitterbit × Cisco");
     expect(abm).toContain("Decision paths for Cisco");
@@ -755,10 +755,10 @@ describe("renderExperienceHtml", () => {
       expect(output).not.toContain('id="guided-questions"');
     }
     expect(fingerprints[0]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
-    expect(fingerprints[1]?.sectionOrder).toEqual(["decision-path", "supporting-resources", "experience-thesis"]);
-    expect(fingerprints[2]?.sectionOrder).toEqual(["decision-path", "supporting-resources", "experience-thesis"]);
-    expect(fingerprints[3]?.sectionOrder).toEqual(["decision-path", "supporting-resources", "experience-thesis"]);
-    expect(fingerprints[4]?.sectionOrder).toEqual(["supporting-resources", "experience-thesis", "decision-path"]);
+    expect(fingerprints[1]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
+    expect(fingerprints[2]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
+    expect(fingerprints[3]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
+    expect(fingerprints[4]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
   });
 
   it("makes external links safe and avoids raw fragment links", () => {

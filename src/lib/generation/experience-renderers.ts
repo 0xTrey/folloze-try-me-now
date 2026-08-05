@@ -16,6 +16,12 @@ export interface ExperienceTemplateComposition {
   resourceAction: string;
 }
 
+const canonicalRegionOrder: readonly ExperiencePrimitive[] = [
+  "thesis",
+  "lenses",
+  "resources"
+];
+
 const accountComposition: ExperienceTemplateComposition = {
   family: "account-abm",
   fingerprint: "v3-account-thesis-paths-proof",
@@ -28,7 +34,7 @@ const accountComposition: ExperienceTemplateComposition = {
     lenses: "Decision paths",
     resources: "Supporting proof"
   },
-  regionOrder: ["thesis", "lenses", "resources"],
+  regionOrder: canonicalRegionOrder,
   resourcesEyebrow: "Evidence to carry forward",
   resourceAction: "Explore the evidence"
 };
@@ -44,7 +50,7 @@ const campaignComposition: ExperienceTemplateComposition = {
     lenses: "Explore the offer",
     resources: "Proof and resources"
   },
-  regionOrder: ["lenses", "resources", "thesis"],
+  regionOrder: canonicalRegionOrder,
   resourcesEyebrow: "Proof for the campaign",
   resourceAction: "Explore this proof"
 };
@@ -60,7 +66,7 @@ const contentComposition: ExperienceTemplateComposition = {
     lenses: "Explore the source",
     resources: "Source highlights"
   },
-  regionOrder: ["resources", "thesis", "lenses"],
+  regionOrder: canonicalRegionOrder,
   resourcesEyebrow: "From the source",
   resourceAction: "Explore this highlight"
 };

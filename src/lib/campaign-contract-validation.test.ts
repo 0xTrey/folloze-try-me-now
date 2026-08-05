@@ -7,11 +7,13 @@ describe("campaign contract validation", () => {
     expect(
       answersSchema.parse({
         promotedOffer: "Jitterbit Harmony",
+        promotedOfferConfirmed: true,
         offerSourceUrl: "https://jitterbit.com/harmony/",
         offerSourceTitle: "Jitterbit Harmony"
       })
     ).toEqual({
       promotedOffer: "Jitterbit Harmony",
+      promotedOfferConfirmed: true,
       offerSourceUrl: "https://jitterbit.com/harmony/",
       offerSourceTitle: "Jitterbit Harmony"
     });

@@ -8,7 +8,7 @@ test.describe("guided first-run experience", () => {
 
   test("starts with three plain-language paths and no premature email gate", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "What do you want to build?" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Personalize for an account" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Build an ABM campaign" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Launch a campaign" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Transform my content" })).toBeVisible();
     await expect(page.getByText("No blank canvas")).toBeVisible();
@@ -28,7 +28,7 @@ test.describe("guided first-run experience", () => {
   });
 
   test("asks for one company signal before exposing the three-decision flow", async ({ page }) => {
-    await page.getByRole("button", { name: "Personalize for an account" }).click();
+    await page.getByRole("button", { name: "Build an ABM campaign" }).click();
 
     await expect(page.getByRole("heading", { name: "What is your company domain?" })).toBeVisible();
     await expect(page.getByText("We confirm before we compose.")).toBeVisible();

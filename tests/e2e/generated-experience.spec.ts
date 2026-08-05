@@ -174,9 +174,9 @@ test.describe("generated 1:1 experience", () => {
       sectionOrder: [
         "experience-overview",
         "signature signature-canonical",
-        "campaign-thesis",
+        "experience-thesis",
         "decision-path",
-        "guided-questions",
+        "supporting-resources",
         "next-step"
       ],
       counts: {
