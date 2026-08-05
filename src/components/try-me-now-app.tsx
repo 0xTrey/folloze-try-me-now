@@ -2060,6 +2060,7 @@ function SafeBrandLogo({
 }) {
   const [failed, setFailed] = useState<string[]>([]);
   const profile = owner === "seller" ? session.brand : session.targetBrand;
+  if (!profile?.logoUrl) return <>{fallback}</>;
   const preferred = previewLogoUrl(session, owner);
   const expectedDomain = profile?.canonicalDomain ?? profile?.domain;
   const delivery = imageDeliveryPath(
