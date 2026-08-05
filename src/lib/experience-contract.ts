@@ -284,6 +284,9 @@ export function campaignOfferSourceFor(
       : sameSource && session.campaignOfferSource?.status === "rejected"
         ? "rejected"
         : "unconfirmed",
+    intelligenceStatus: sameSource
+      ? session.campaignOfferSource?.intelligenceStatus
+      : "pending",
     confirmedAt: session.answers.offerSourceConfirmed
       ? session.campaignOfferSource?.confirmedAt ?? new Date().toISOString()
       : undefined

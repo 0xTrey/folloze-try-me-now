@@ -410,11 +410,35 @@ function campaignOfferFor(session: Pick<PublicTryMeSession, "answers" | "campaig
   return session.answers.promotedOffer?.trim() || session.campaignOfferSource?.title?.trim() || undefined;
 }
 
+export function isCampaignOfferSourceUrl(value: string | undefined): boolean {
+  if (!value?.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && !url.port
+      && url.hostname.includes(".");
+  } catch {
+    return false;
+  }
+}
+
 export function campaignIntakeComplete(
   session: Pick<PublicTryMeSession, "useCase" | "answers" | "campaignOfferSource">
 ): boolean {
   if (session.useCase !== "campaign") return true;
-  if (!session.answers.campaignType || !campaignOfferFor(session)) return false;
+  // A background URL harvest is allowed to populate an offer hypothesis, but
+  // it must not advance the guided flow before the visitor presses Continue.
+  if (
+    session.campaignOfferSource?.sourceHost
+    && session.answers.promotedOfferConfirmed !== true
+  ) return false;
+  const offerIsIdentified = Boolean(
+    campaignOfferFor(session)
+      || (session.campaignOfferSource?.status !== "rejected" && session.campaignOfferSource?.sourceHost)
+  );
+  if (!session.answers.campaignType || !offerIsIdentified) return false;
   return session.answers.campaignType !== "event" || Boolean(session.answers.eventSource);
 }
 
@@ -436,14 +460,14 @@ function campaignOfferPrompt(type: SessionAnswers["campaignType"]): {
     return {
       label: "Offer, report, or initiative",
       placeholder: "Your report, guide, offer, or initiative",
-      sourceLabel: "Offer page or source URL (optional)",
+      sourceLabel: "Offer page or source URL",
       sourcePlaceholder: "https://yourcompany.com/report"
     };
   }
   return {
     label: "Product or solution name",
     placeholder: "Your product or solution",
-    sourceLabel: "Product page or source URL (optional)",
+    sourceLabel: "Product page or source URL",
     sourcePlaceholder: "https://yourcompany.com/product"
   };
 }
@@ -1545,6 +1569,7 @@ export function ProgressiveQuestions({
   isSaving,
   pdfUpload = idlePdfUpload,
   onPatch,
+  onBackgroundPatch,
   onWorkspacePatch,
   onUpload
 }: {
@@ -1553,6 +1578,7 @@ export function ProgressiveQuestions({
   isSaving: boolean;
   pdfUpload?: PdfUploadFeedback;
   onPatch: (patch: SessionAnswers) => Promise<void>;
+  onBackgroundPatch?: (patch: SessionAnswers) => Promise<void>;
   onWorkspacePatch: (patch: WorkspacePatch) => Promise<void>;
   onUpload: (file: File) => Promise<void>;
 }) {
@@ -1570,8 +1596,12 @@ export function ProgressiveQuestions({
   );
   const [customAudience, setCustomAudience] = useState(answers.customAudience ?? "");
   const [selectedObjective, setSelectedObjective] = useState<string>();
+  const backgroundPatchRef = useRef(onBackgroundPatch ?? onPatch);
+  const lastOfferResearchRef = useRef<string | undefined>(undefined);
   const textValue = fieldValues[questionKey] ?? "";
   const sourceUrlValue = fieldValues["content-source-url"] ?? "";
+  const campaignOfferSourceValue = fieldValues["campaign-offer-source"] ?? "";
+  const activeCampaignChoice = campaignChoice ?? answers.campaignType;
   const setTextValue = (value: string) =>
     setFieldValues((current) => ({ ...current, [questionKey]: value }));
   const setSourceUrlValue = (value: string) =>
@@ -1580,6 +1610,31 @@ export function ProgressiveQuestions({
   const sourceInsight = session.useCase === "content" && session.sourceInsight
     ? <SourceUnderstandingSummary insight={session.sourceInsight} />
     : null;
+
+  useEffect(() => {
+    backgroundPatchRef.current = onBackgroundPatch ?? onPatch;
+  }, [onBackgroundPatch, onPatch]);
+
+  useEffect(() => {
+    if (
+      session.useCase !== "campaign"
+      || !activeCampaignChoice
+      || activeCampaignChoice === "event"
+      || !isCampaignOfferSourceUrl(campaignOfferSourceValue)
+    ) return;
+    const normalizedUrl = new URL(campaignOfferSourceValue.trim()).toString();
+    const signature = `${session.id}:${activeCampaignChoice}:${normalizedUrl}`;
+    if (lastOfferResearchRef.current === signature) return;
+    const timer = window.setTimeout(() => {
+      lastOfferResearchRef.current = signature;
+      void backgroundPatchRef.current({
+        campaignType: activeCampaignChoice,
+        offerSourceUrl: normalizedUrl,
+        offerSourceConfirmed: false
+      });
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [activeCampaignChoice, campaignOfferSourceValue, session.id, session.useCase]);
 
   if (session.useCase === "abm" && !answers.targetDomain) {
     return (
@@ -1603,39 +1658,72 @@ export function ProgressiveQuestions({
     const choice = campaignChoice ?? answers.campaignType;
     const offerPrompt = campaignOfferPrompt(choice);
     const offerValue = fieldValues["campaign-offer"] ?? answers.promotedOffer ?? "";
-    const offerSourceValue = fieldValues["campaign-offer-source"] ?? "";
+    const offerSourceValue = campaignOfferSourceValue;
     const eventContextValue = fieldValues.eventSource ?? "";
     const hasExistingEventContext = Boolean(answers.eventSource);
-    const validOfferSource = !offerSourceValue.trim() || /^https:\/\//i.test(offerSourceValue.trim());
+    const hasNamedOffer = offerValue.trim().length >= 2;
+    const hasValidOfferSource = isCampaignOfferSourceUrl(offerSourceValue);
+    const validOfferSource = !offerSourceValue.trim() || hasValidOfferSource;
+    const offerRequirementMet = choice === "event" ? hasNamedOffer : hasNamedOffer || hasValidOfferSource;
+    const offerSourceHost = hasValidOfferSource
+      ? new URL(offerSourceValue.trim()).hostname.replace(/^www\./, "")
+      : undefined;
+    const matchingOfferSource = offerSourceHost === session.campaignOfferSource?.sourceHost
+      ? session.campaignOfferSource
+      : undefined;
+    const offerResearchStatus = matchingOfferSource?.intelligenceStatus;
+    const understoodOfferTitle = matchingOfferSource?.title || session.sourceInsight?.title;
+    const offerResearchCopy = offerResearchStatus === "ready"
+      ? `Source understood${understoodOfferTitle ? `: ${understoodOfferTitle}` : "."} We’re using its cited context to shape the page.`
+      : offerResearchStatus === "failed"
+        ? "We could not read every page signal, so we’ll use the URL identity and company research as a safe fallback."
+        : offerResearchStatus === "researching" || offerResearchStatus === "pending"
+          ? `Researching ${offerSourceHost} now — extracting the offer, proof, and message cues in the background.`
+          : "Research starts automatically after you pause typing. We’ll identify the offer and research this page while you keep moving.";
     return (
       <div className="questionCard">
         <span className="questionCount">Next signal · campaign</span>
         <h2>{questionCopy.campaignTitle}</h2>
         <p>{questionCopy.campaignBody}</p>
-        <div className="largeChoiceGrid" aria-busy={isSaving || undefined}>
+        <div className="largeChoiceGrid" aria-label="Campaign format" aria-busy={isSaving || undefined}>
           {[
             ["product", "Product or solution", "Build demand around one clear promise."],
             ["demand", "Demand generation", "Create a focused path from interest to action."],
             ["event", "Event or webinar", "Frame the reason to attend and make registration obvious."]
-          ].map(([value, title, body]) => (
-            <button type="button" key={value} disabled={isSaving} className={choice === value ? "isSelected" : ""} onClick={() => setCampaignChoice(value as SessionAnswers["campaignType"])}>
-              <strong>{title}</strong><span>{body}</span><ArrowRight size={16} />
-            </button>
-          ))}
+          ].map(([value, title, body]) => {
+            const isSelected = choice === value;
+            return (
+              <button
+                type="button"
+                key={value}
+                disabled={isSaving}
+                className={isSelected ? "isSelected" : ""}
+                aria-pressed={isSelected}
+                data-selected={isSelected || undefined}
+                onClick={() => setCampaignChoice(value as SessionAnswers["campaignType"])}
+              >
+                <strong>{title}</strong>
+                <span>{body}</span>
+                {isSelected ? (
+                  <span className="campaignChoiceState" aria-hidden="true"><CircleCheck size={17} />Selected</span>
+                ) : <ArrowRight size={16} />}
+              </button>
+            );
+          })}
         </div>
-        {choice && <label className="lineInput"><span>{offerPrompt.label}</span><div><Megaphone size={19} /><input value={offerValue} onChange={(event) => setFieldValues((current) => ({ ...current, "campaign-offer": event.target.value }))} placeholder={offerPrompt.placeholder} /></div></label>}
+        {choice && <label className="lineInput"><span>{offerPrompt.label}{choice !== "event" ? " (optional with URL)" : ""}</span><div><Megaphone size={19} /><input value={offerValue} onChange={(event) => setFieldValues((current) => ({ ...current, "campaign-offer": event.target.value }))} placeholder={offerPrompt.placeholder} /></div></label>}
         {choice === "event" ? (
           <label className="lineInput"><span>{offerPrompt.sourceLabel}</span><div><FileText size={19} /><input value={eventContextValue} onChange={(event) => setFieldValues((current) => ({ ...current, eventSource: event.target.value }))} placeholder={hasExistingEventContext ? "Event details already added; enter new details only to replace them" : offerPrompt.sourcePlaceholder} /></div></label>
         ) : choice ? (
-          <label className="lineInput"><span>{offerPrompt.sourceLabel}</span><div><ExternalLink size={19} /><input value={offerSourceValue} onChange={(event) => setFieldValues((current) => ({ ...current, "campaign-offer-source": event.target.value }))} placeholder={offerPrompt.sourcePlaceholder} /></div>{offerSourceValue.trim() && !validOfferSource && <small className="fieldError">Use a public HTTPS URL.</small>}</label>
+          <label className={`lineInput campaignSourceInput ${hasValidOfferSource ? "isReady" : ""}`}><span>{offerPrompt.sourceLabel}</span><div><ExternalLink size={19} /><input value={offerSourceValue} onChange={(event) => setFieldValues((current) => ({ ...current, "campaign-offer-source": event.target.value }))} placeholder={offerPrompt.sourcePlaceholder} /></div>{offerSourceValue.trim() && !validOfferSource ? <small className="fieldError">Use a public HTTPS URL.</small> : hasValidOfferSource ? <small className={`campaignSourceGuidance isReady is-${offerResearchStatus ?? "queued"}`} role="status" aria-live="polite">{offerResearchStatus === "ready" ? <CircleCheck size={14} /> : offerResearchStatus === "failed" ? <Search size={14} /> : <LoaderCircle className="spin" size={14} />}{offerResearchCopy}</small> : <small className="campaignSourceGuidance">Add either a name above or a URL here. A URL lets us identify and research the offer for you.</small>}</label>
         ) : null}
         <button
           className="buttonPrimary"
           type="button"
-          disabled={!choice || offerValue.trim().length < 2 || !validOfferSource || (choice === "event" && !hasExistingEventContext && eventContextValue.trim().length < 8) || isSaving}
+          disabled={!choice || !offerRequirementMet || !validOfferSource || (choice === "event" && !hasExistingEventContext && eventContextValue.trim().length < 8) || isSaving}
           onClick={() => void onPatch({
             campaignType: choice,
-            promotedOffer: offerValue.trim(),
+            promotedOffer: offerValue.trim() || undefined,
             promotedOfferConfirmed: true,
             offerSourceUrl: choice !== "event" && offerSourceValue.trim() ? offerSourceValue.trim() : undefined,
             offerSourceConfirmed: choice !== "event" && Boolean(offerSourceValue.trim()),
@@ -2422,6 +2510,22 @@ export function TryMeNowApp() {
     }
   };
 
+  const backgroundSessionId = session?.id;
+  const patchAnswersInBackground = useCallback(async (patch: SessionAnswers) => {
+    if (!backgroundSessionId) return;
+    try {
+      await api<{ session: PublicTryMeSession }>(`/api/sessions/${backgroundSessionId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+      });
+      setConnectionError("");
+    } catch {
+      // Keep the visitor's in-progress form untouched. Polling or a later
+      // Continue click can retry the same bounded research mutation.
+      setConnectionError("Product research paused. We’ll retry without losing your brief…");
+    }
+  }, [backgroundSessionId]);
+
   const patchWorkspace = async (patch: WorkspacePatch) => {
     if (!session) return;
     const requestNumber = ++patchRequestRef.current;
@@ -2665,6 +2769,7 @@ export function TryMeNowApp() {
                 isSaving={isSaving}
                 pdfUpload={pdfUpload}
                 onPatch={patchAnswers}
+                onBackgroundPatch={patchAnswersInBackground}
                 onWorkspacePatch={patchWorkspace}
                 onUpload={uploadPdf}
               />

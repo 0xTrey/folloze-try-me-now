@@ -13,6 +13,7 @@ import {
   getGuidedQuestionCopy,
   getRevealCopy,
   getRevealShellHeadline,
+  isCampaignOfferSourceUrl,
   objectiveContextPrompt,
   preservePreviewDuringRegeneration,
   previewBoundaryScrollDelta,
@@ -126,6 +127,22 @@ describe("Try Me Now experience copy", () => {
       answers: { campaignType: "product", promotedOffer: "Ford Pro Intelligence" }
     }))).toBe(true);
     expect(campaignIntakeComplete(session("campaign", {
+      answers: { campaignType: "product" },
+      campaignOfferSource: {
+        sourceHost: "fordpro.com",
+        status: "unconfirmed"
+      }
+    }))).toBe(false);
+    expect(campaignIntakeComplete(session("campaign", {
+      answers: { campaignType: "product", promotedOfferConfirmed: true },
+      campaignOfferSource: {
+        title: "Ford Pro Intelligence",
+        sourceHost: "fordpro.com",
+        status: "unconfirmed",
+        intelligenceStatus: "ready"
+      }
+    }))).toBe(true);
+    expect(campaignIntakeComplete(session("campaign", {
       answers: { campaignType: "event", promotedOffer: "Enterprise Automation Summit" }
     }))).toBe(false);
     expect(campaignIntakeComplete(session("campaign", {
@@ -135,6 +152,14 @@ describe("Try Me Now experience copy", () => {
         eventSource: "September 12 live webinar"
       }
     }))).toBe(true);
+  });
+
+  it("accepts only a clean public-looking HTTPS offer URL in the campaign UI", () => {
+    expect(isCampaignOfferSourceUrl("https://6sense.com/platform/revvyai/")).toBe(true);
+    expect(isCampaignOfferSourceUrl("http://6sense.com/platform/revvyai/")).toBe(false);
+    expect(isCampaignOfferSourceUrl("https://user:secret@6sense.com/platform/revvyai/")).toBe(false);
+    expect(isCampaignOfferSourceUrl("https://localhost/product")).toBe(false);
+    expect(isCampaignOfferSourceUrl("not a URL")).toBe(false);
   });
 
   it("asks one objective-dependent question without adding another mandatory setup stage", () => {

@@ -311,6 +311,20 @@ describe("harvested image delivery route", () => {
     expect(fetchPinnedPublicBytes).not.toHaveBeenCalled();
   });
 
+  it("serves the official 6sense media-kit wordmark when its site blocks server delivery", async () => {
+    const sixsense = verifiedBrandProfileFor("6sense.com")!;
+    vi.mocked(getSession).mockResolvedValue({ answers: {}, brand: sixsense } as never);
+
+    const response = await GET(request, context("seller-logo"));
+    const logo = new Uint8Array(await response.arrayBuffer());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    expect([...logo.slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(logo.byteLength).toBeGreaterThan(50_000);
+    expect(fetchPinnedPublicBytes).not.toHaveBeenCalled();
+  });
+
   it("accepts a CDN-negotiated WebP when declared MIME and detected bytes agree", async () => {
     installImage({
       bytes: webp,

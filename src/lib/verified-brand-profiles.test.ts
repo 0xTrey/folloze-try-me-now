@@ -86,9 +86,34 @@ describe("verified browser-backed brand profiles", () => {
     });
   });
 
+  it("restores the reviewed 6sense wordmark when Cloudflare blocks server fetches", () => {
+    const sixsense = verifiedBrandProfileFor("https://www.6sense.com/platform/revvyai/");
+
+    expect(sixsense).toMatchObject({
+      domain: "6sense.com",
+      companyName: "6sense",
+      primaryColor: "#192232",
+      accentColor: "#13BBB2",
+      surfaceColor: "#FFFFFF",
+      logoUrl: "https://6sense.com/wp-content/themes/6Sense-2025/assets/img/logos/logo.svg",
+      source: "brand-harvester",
+      diagnostics: {
+        logo: {
+          strategy: "verified-profile",
+          resolutionComplete: true
+        }
+      }
+    });
+    expect(verifiedBrandLogoFallbackFor(sixsense!.domain, sixsense!.logoUrl!)).toEqual({
+      path: "public/verified-brands/6sense/official-wordmark.png.b64",
+      sourceUrl: sixsense!.logoUrl
+    });
+  });
+
   it("does not map near-match domains or substituted URLs to local files", () => {
     const medidata = verifiedBrandProfileFor("medidata.com")!;
     const folloze = verifiedBrandProfileFor("folloze.com")!;
+    const sixsense = verifiedBrandProfileFor("6sense.com")!;
 
     expect(
       verifiedBrandLogoFallbackFor("medidata.com.attacker.example", medidata.logoUrl!)
@@ -101,6 +126,12 @@ describe("verified browser-backed brand profiles", () => {
     ).toBeUndefined();
     expect(
       verifiedBrandLogoFallbackFor("folloze.com", "https://attacker.example/folloze-logo.svg")
+    ).toBeUndefined();
+    expect(
+      verifiedBrandLogoFallbackFor("6sense.com.attacker.example", sixsense.logoUrl!)
+    ).toBeUndefined();
+    expect(
+      verifiedBrandLogoFallbackFor("6sense.com", "https://attacker.example/6sense.svg")
     ).toBeUndefined();
   });
 });

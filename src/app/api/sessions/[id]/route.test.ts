@@ -134,6 +134,19 @@ describe("session workspace API", () => {
     expect(runSourceIntelligenceStage).toHaveBeenCalledWith(sessionId);
   });
 
+  it("starts offer intelligence as soon as a campaign product URL is submitted", async () => {
+    const offerSourceUrl = "https://example.com/products/automation-cloud";
+    const response = await PATCH(request("PATCH", { offerSourceUrl }), context);
+
+    expect(response.status).toBe(200);
+    const sourceCallback = vi.mocked(after).mock.calls
+      .map(([callback]) => callback)
+      .find((callback) => typeof callback === "function");
+    expect(sourceCallback).toBeTypeOf("function");
+    await (sourceCallback as () => Promise<void>)();
+    expect(runSourceIntelligenceStage).toHaveBeenCalledWith(sessionId);
+  });
+
   it("accepts one coherent workspace mutation for creative controls", async () => {
     const body = {
       operation: "update-workspace",

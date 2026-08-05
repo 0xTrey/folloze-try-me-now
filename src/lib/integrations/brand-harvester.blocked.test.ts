@@ -69,6 +69,24 @@ describe("blocked public brand sites", () => {
     });
   });
 
+  it("uses the reviewed 6sense identity when Cloudflare blocks the fast fetch", async () => {
+    const profile = await harvestBrand("6sense.com");
+
+    expect(profile).toMatchObject({
+      domain: "6sense.com",
+      companyName: "6sense",
+      logoUrl: "https://6sense.com/wp-content/themes/6Sense-2025/assets/img/logos/logo.svg",
+      primaryColor: "#192232",
+      accentColor: "#13BBB2",
+      surfaceColor: "#FFFFFF",
+      source: "brand-harvester",
+      diagnostics: {
+        logo: { strategy: "verified-profile" },
+        palette: { strategy: "verified-profile", confidence: "high" }
+      }
+    });
+  });
+
   it("does not mislabel an unknown blocked site as verified", async () => {
     await expect(harvestBrand("unknown-example.test")).rejects.toThrow("Akamai returned 403");
     const logged = vi.mocked(console.error).mock.calls

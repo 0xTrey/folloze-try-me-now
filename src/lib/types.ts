@@ -509,6 +509,8 @@ export interface CampaignOfferSource {
   sourceUrl: string;
   sourceHost: string;
   status: "unconfirmed" | "confirmed" | "rejected";
+  /** Public-safe progress for the background offer/source extraction pass. */
+  intelligenceStatus?: "pending" | "researching" | "ready" | "failed";
   confirmedAt?: string;
 }
 

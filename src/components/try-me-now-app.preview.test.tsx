@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicTryMeSession } from "@/lib/types";
@@ -17,7 +17,10 @@ import {
   SourceUnderstandingSummary
 } from "./try-me-now-app";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const readySession: PublicTryMeSession = {
   id: "desktop-preview-session",
@@ -300,11 +303,15 @@ describe("guided campaign workspace", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Product or solution/i }));
-    fireEvent.change(screen.getByLabelText("Product or solution name"), {
+    const productChoice = screen.getByRole("button", { name: /Product or solution/i });
+    fireEvent.click(productChoice);
+    expect(productChoice).toHaveAttribute("aria-pressed", "true");
+    expect(productChoice).toHaveClass("isSelected");
+    expect(screen.getByRole("button", { name: /Demand generation/i })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.change(screen.getByLabelText(/Product or solution name/i), {
       target: { value: "Ford Pro Intelligence" }
     });
-    fireEvent.change(screen.getByLabelText("Product page or source URL (optional)"), {
+    fireEvent.change(screen.getByLabelText(/Product page or source URL/i), {
       target: { value: "https://www.fordpro.com/en-us/intelligence/" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -316,6 +323,88 @@ describe("guided campaign workspace", () => {
       offerSourceUrl: "https://www.fordpro.com/en-us/intelligence/",
       offerSourceConfirmed: true,
       eventSource: undefined
+    });
+  });
+
+  it("uses a valid product URL as the offer input when the name is left blank", () => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const campaignSession = {
+      ...readySession,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {}
+    };
+    render(
+      <ProgressiveQuestions
+        session={campaignSession}
+        answers={campaignSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Product or solution/i }));
+    const continueButton = screen.getByRole("button", { name: "Continue" });
+    expect(continueButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/Product page or source URL/i), {
+      target: { value: "https://6sense.com/platform/revvyai/" }
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(/identify the offer and research this page/i);
+    expect(continueButton).toBeEnabled();
+    fireEvent.click(continueButton);
+
+    expect(onPatch).toHaveBeenCalledWith({
+      campaignType: "product",
+      promotedOffer: undefined,
+      promotedOfferConfirmed: true,
+      offerSourceUrl: "https://6sense.com/platform/revvyai/",
+      offerSourceConfirmed: true,
+      eventSource: undefined
+    });
+  });
+
+  it("starts offer research after a short typing pause without waiting for Continue", async () => {
+    vi.useFakeTimers();
+    const onBackgroundPatch = vi.fn().mockResolvedValue(undefined);
+    const campaignSession = {
+      ...readySession,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {}
+    };
+    render(
+      <ProgressiveQuestions
+        session={campaignSession}
+        answers={campaignSession.answers}
+        isSaving={false}
+        onPatch={vi.fn().mockResolvedValue(undefined)}
+        onBackgroundPatch={onBackgroundPatch}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Product or solution/i }));
+    fireEvent.change(screen.getByLabelText(/Product page or source URL/i), {
+      target: { value: "https://6sense.com/platform/revvyai/" }
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(649);
+    });
+    expect(onBackgroundPatch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(onBackgroundPatch).toHaveBeenCalledWith({
+      campaignType: "product",
+      offerSourceUrl: "https://6sense.com/platform/revvyai/",
+      offerSourceConfirmed: false
     });
   });
 

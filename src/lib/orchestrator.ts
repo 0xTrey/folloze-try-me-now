@@ -70,6 +70,7 @@ import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 // generation cannot be duplicated by recovery polling.
 const STORY_GENERATION_LEASE_SECONDS = 90;
 const STORY_GENERATION_STALE_MS = STORY_GENERATION_LEASE_SECONDS * 1_000;
+const sourceIntelligenceControllers = new Map<string, AbortController>();
 
 function opaqueId(): string {
   return randomBytes(24).toString("base64url");
@@ -682,7 +683,7 @@ export function isGenerationReady(useCase: UseCase, answers: SessionAnswers): bo
   if (useCase === "campaign") {
     return Boolean(
       answers.campaignType &&
-      answers.promotedOffer?.trim() &&
+      (answers.promotedOffer?.trim() || answers.offerSourceUrl) &&
       (answers.campaignType !== "event" || answers.eventSource)
     );
   }
@@ -1149,38 +1150,106 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
 
 export async function runSourceIntelligenceStage(id: string): Promise<void> {
   const preflight = await getSession(id);
-  const sourceUrl = preflight?.useCase === "content" ? preflight.answers.sourceUrl : undefined;
-  if (!preflight || !sourceUrl || preflight.sourceArtifact) return;
+  const sourceKind = preflight?.useCase === "content"
+    ? "content"
+    : preflight?.useCase === "campaign"
+      ? "campaign-offer"
+      : undefined;
+  const sourceUrl = sourceKind === "content"
+    ? preflight?.answers.sourceUrl
+    : sourceKind === "campaign-offer"
+      ? preflight?.answers.offerSourceUrl
+      : undefined;
+  const artifactMatches = Boolean(
+    sourceUrl &&
+    preflight?.sourceArtifact &&
+    (preflight.sourceArtifact.source.sourceUrl === sourceUrl ||
+      preflight.sourceArtifact.source.finalUrl === sourceUrl)
+  );
+  if (!preflight || !sourceKind || !sourceUrl || artifactMatches) return;
 
-  const lease = await acquireSessionLease(id, `source-intelligence:${sourceUrl}`, 30);
+  const sourceDigest = createHash("sha256").update(sourceUrl).digest("hex").slice(0, 20);
+  const lease = await acquireSessionLease(
+    id,
+    `source-intelligence:${sourceKind}:${sourceDigest}`,
+    30
+  );
   if (!lease) return;
   const attemptId = opaqueId();
+  const controller = new AbortController();
+  sourceIntelligenceControllers.get(id)?.abort();
+  sourceIntelligenceControllers.set(id, controller);
+  let shouldResumeStory = false;
   try {
     await updateSession(id, (session) => {
-      if (session.useCase !== "content" || session.answers.sourceUrl !== sourceUrl || session.sourceArtifact) {
+      const currentUrl = sourceKind === "content"
+        ? session.answers.sourceUrl
+        : session.answers.offerSourceUrl;
+      if (session.useCase !== preflight.useCase || currentUrl !== sourceUrl) {
         return session;
       }
-      appendEvent(session, "source_intelligence_started", { attemptId, kind: "public-url" });
+      if (sourceKind === "campaign-offer") {
+        syncCampaignContracts(session);
+        if (session.campaignOfferSource) {
+          session.campaignOfferSource.intelligenceStatus = "researching";
+        }
+      }
+      appendEvent(
+        session,
+        sourceKind === "content"
+          ? "source_intelligence_started"
+          : "offer_source_intelligence_started",
+        { attemptId, kind: "public-url" }
+      );
       return session;
     });
     const sourceArtifact = await fetchPublicUrlSourceArtifact(sourceUrl, {
+      signal: controller.signal,
       timeoutMs: 12_000,
       maxBytes: 2_000_000
     });
     await updateSession(id, (session) => {
-      if (session.useCase !== "content" || session.answers.sourceUrl !== sourceUrl || session.sourceArtifact) {
+      const currentUrl = sourceKind === "content"
+        ? session.answers.sourceUrl
+        : session.answers.offerSourceUrl;
+      if (session.useCase !== preflight.useCase || currentUrl !== sourceUrl) {
         return session;
       }
       session.sourceArtifact = sourceArtifact;
-      if (sourceArtifact.content.title) session.answers.sourceTitle = sourceArtifact.content.title;
       const rejected = sourceArtifact.status === "failed" || sourceArtifact.status === "unreadable";
-      session.sourceConfirmation = {
-        status: rejected ? "rejected" : "confirmed",
-        confirmedAt: rejected ? undefined : new Date().toISOString(),
-        sourceKind: "public-url",
-        provenance: "system-extracted"
-      };
-      appendEvent(session, "source_intelligence_completed", {
+      if (sourceKind === "content") {
+        if (sourceArtifact.content.title) session.answers.sourceTitle = sourceArtifact.content.title;
+        session.sourceConfirmation = {
+          status: rejected ? "rejected" : "confirmed",
+          confirmedAt: rejected ? undefined : new Date().toISOString(),
+          sourceKind: "public-url",
+          provenance: "system-extracted"
+        };
+      } else {
+        const priorInferredTitle = session.answers.offerSourceTitle;
+        const extractedTitle = inferCampaignOfferTitle(
+          sourceArtifact.content.title,
+          session.brand?.companyName
+        );
+        const resolvedTitle = extractedTitle || priorInferredTitle || inferPublicSourceTitle(sourceUrl);
+        if (resolvedTitle) {
+          session.answers.offerSourceTitle = resolvedTitle;
+          if (
+            !session.answers.promotedOffer ||
+            (!session.answers.promotedOfferConfirmed &&
+              session.answers.promotedOffer === priorInferredTitle)
+          ) {
+            session.answers.promotedOffer = resolvedTitle;
+          }
+        }
+        syncCampaignContracts(session);
+        if (session.campaignOfferSource) {
+          session.campaignOfferSource.intelligenceStatus = rejected ? "failed" : "ready";
+        }
+      }
+      appendEvent(session, sourceKind === "content"
+        ? "source_intelligence_completed"
+        : "offer_source_intelligence_completed", {
         attemptId,
         status: sourceArtifact.status,
         confidence: sourceArtifact.confidence,
@@ -1188,6 +1257,10 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
         claimCount: sourceArtifact.diagnostics.claimCount,
         citationCount: sourceArtifact.diagnostics.citationCount
       });
+      shouldResumeStory = sourceKind === "campaign-offer" && isGenerationReady(
+        session.useCase,
+        session.answers
+      );
       return session;
     });
   } catch (error) {
@@ -1197,11 +1270,25 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
       traceId: failedSession ? traceIdForSession(failedSession) : undefined,
       operation: "source_intelligence",
       code: "source_intelligence_failed",
-      details: { attemptId }
+      details: { attemptId, sourceKind }
     });
+    if (sourceKind === "campaign-offer") {
+      await updateSession(id, (session) => {
+        if (session.answers.offerSourceUrl !== sourceUrl) return session;
+        syncCampaignContracts(session);
+        if (session.campaignOfferSource) {
+          session.campaignOfferSource.intelligenceStatus = "failed";
+        }
+        return session;
+      });
+    }
   } finally {
+    if (sourceIntelligenceControllers.get(id) === controller) {
+      sourceIntelligenceControllers.delete(id);
+    }
     await releaseLeaseSafely(lease, id, "source_intelligence");
   }
+  if (shouldResumeStory) await runStoryStage(id);
 }
 
 function sourceKindFor(session: TryMeSession): NonNullable<TryMeSession["sourceConfirmation"]>["sourceKind"] {
@@ -1230,14 +1317,42 @@ export function inferPublicSourceTitle(sourceUrl: string): string | undefined {
     if (!cleaned || /^(?:index|home|default)$/i.test(cleaned)) return undefined;
     return cleaned
       .split(" ")
-      .map((word) => /^(?:ai|api|abm|roi|pdf)$/i.test(word)
-        ? word.toLocaleUpperCase()
-        : `${word.charAt(0).toLocaleUpperCase()}${word.slice(1)}`)
+      .map((word) => {
+        if (/^(?:ai|api|abm|roi|pdf)$/i.test(word)) return word.toLocaleUpperCase();
+        if (/^[a-z0-9]+ai$/i.test(word) && word.length > 2) {
+          return `${word.charAt(0).toLocaleUpperCase()}${word.slice(1, -2).toLocaleLowerCase()}AI`;
+        }
+        return `${word.charAt(0).toLocaleUpperCase()}${word.slice(1)}`;
+      })
       .join(" ")
       .slice(0, 120);
   } catch {
     return undefined;
   }
+}
+
+export function inferCampaignOfferTitle(
+  sourceTitle: string | undefined,
+  sellerName?: string
+): string | undefined {
+  let cleaned = sourceTitle?.replace(/\s+/g, " ").trim();
+  if (!cleaned) return undefined;
+  if (sellerName?.trim()) {
+    const escapedSeller = sellerName.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    cleaned = cleaned.replace(
+      new RegExp(`\\s*(?:\\||-|–|—)\\s*${escapedSeller}(?:\\.com)?\\s*$`, "i"),
+      ""
+    ).trim();
+  }
+  const pipeLead = cleaned.split(/\s+\|\s+/, 2)[0]?.trim();
+  if (pipeLead && pipeLead.length >= 2) cleaned = pipeLead;
+  const colon = cleaned.indexOf(":");
+  if (colon > 1) {
+    const lead = cleaned.slice(0, colon).trim();
+    const explanation = cleaned.slice(colon + 1).trim();
+    if (lead.length <= 72 && explanation.length >= 14) cleaned = lead;
+  }
+  return cleaned.slice(0, 120) || undefined;
 }
 
 function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
@@ -1255,6 +1370,9 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
     sourceUploadWasSupplied ||
     eventSourceWasSupplied;
   const offerSourceUrlWasSupplied = Object.hasOwn(patch, "offerSourceUrl");
+  const offerSourceTitleWasSupplied = Object.hasOwn(patch, "offerSourceTitle");
+  const previousOfferSourceUrl = session.answers.offerSourceUrl;
+  const previousOfferSourceTitle = session.answers.offerSourceTitle;
   const previousSourceFingerprint = sourceFingerprintForAnswers(session.answers);
   if (patch.targetDomain) patch.targetDomain = normalizeDomain(patch.targetDomain);
   if (patch.sourceUrl) {
@@ -1263,7 +1381,20 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
       patch.sourceTitle = inferPublicSourceTitle(patch.sourceUrl);
     }
   }
-  if (patch.offerSourceUrl) patch.offerSourceUrl = new URL(patch.offerSourceUrl).toString();
+  if (patch.offerSourceUrl) {
+    patch.offerSourceUrl = new URL(patch.offerSourceUrl).toString();
+    if (!offerSourceTitleWasSupplied) {
+      patch.offerSourceTitle = inferPublicSourceTitle(patch.offerSourceUrl);
+    }
+    if (
+      !patch.promotedOffer &&
+      (!session.answers.promotedOffer ||
+        (!session.answers.promotedOfferConfirmed &&
+          session.answers.promotedOffer === previousOfferSourceTitle))
+    ) {
+      patch.promotedOffer = patch.offerSourceTitle;
+    }
+  }
   if (
     patch.offerSourceConfirmed &&
     !patch.offerSourceUrl &&
@@ -1306,6 +1437,11 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const currentSourceFingerprint = sourceFingerprintForAnswers(session.answers);
   const sourceChanged = sourceWasSupplied && currentSourceFingerprint !== previousSourceFingerprint;
   if (sourceChanged) session.sourceArtifact = undefined;
+  const offerSourceChanged =
+    offerSourceUrlWasSupplied && session.answers.offerSourceUrl !== previousOfferSourceUrl;
+  if (offerSourceChanged && session.useCase === "campaign") {
+    session.sourceArtifact = undefined;
+  }
   if (offerSourceUrlWasSupplied && !patch.offerSourceUrl) {
     delete session.answers.offerSourceUrl;
     delete session.answers.offerSourceTitle;
@@ -1787,6 +1923,17 @@ export async function runStoryStage(id: string): Promise<void> {
     await runSourceIntelligenceStage(id);
     preflight = await getSession(id);
     if (!preflight || hasTerminalStoryFailure(preflight)) return;
+  }
+  if (
+    preflight?.useCase === "campaign" &&
+    preflight.answers.offerSourceUrl &&
+    !preflight.sourceArtifact
+  ) {
+    await runSourceIntelligenceStage(id);
+    preflight = await getSession(id);
+    // Another request may still own the extraction lease. That worker resumes
+    // generation after committing the matching artifact, so never race ahead.
+    if (!preflight?.sourceArtifact || hasTerminalStoryFailure(preflight)) return;
   }
 
   const lease = await acquireSessionLease(id, "generation", STORY_GENERATION_LEASE_SECONDS);

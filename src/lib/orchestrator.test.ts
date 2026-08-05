@@ -27,6 +27,13 @@ describe("isGenerationReady", () => {
     expect(
       isGenerationReady("campaign", {
         ...common,
+        campaignType: "product",
+        offerSourceUrl: "https://example.com/products/automation-cloud"
+      })
+    ).toBe(true);
+    expect(
+      isGenerationReady("campaign", {
+        ...common,
         campaignType: "event",
         promotedOffer: "Automation Summit"
       })
@@ -55,6 +62,8 @@ describe("inferPublicSourceTitle", () => {
     ).toBe("Now Platform");
     expect(inferPublicSourceTitle("https://example.com/reports/enterprise-ai-guide.pdf"))
       .toBe("Enterprise AI Guide");
+    expect(inferPublicSourceTitle("https://6sense.com/platform/revvyai/"))
+      .toBe("RevvyAI");
   });
 
   it("does not pretend a home page has a document title", () => {

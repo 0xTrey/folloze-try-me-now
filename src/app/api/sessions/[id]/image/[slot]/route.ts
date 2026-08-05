@@ -246,6 +246,16 @@ async function readReviewedLogo(path: string): Promise<Uint8Array> {
         "lilly",
         "official-wordmark.svg"
       )));
+    case "public/verified-brands/6sense/official-wordmark.png.b64": {
+      const encoded = await readFile(join(
+        process.cwd(),
+        "public",
+        "verified-brands",
+        "6sense",
+        "official-wordmark.png.b64"
+      ), "utf8");
+      return new Uint8Array(Buffer.from(encoded.trim(), "base64"));
+    }
     default:
       throw new Error("The reviewed logo path is not registered for delivery.");
   }

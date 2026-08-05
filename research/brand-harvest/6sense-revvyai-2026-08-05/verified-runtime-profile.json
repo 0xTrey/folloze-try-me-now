@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "domain": "6sense.com",
+  "companyName": "6sense",
+  "sourceUrl": "https://6sense.com/platform/revvyai/",
+  "verifiedAt": "2026-08-05T12:21:15Z",
+  "source": "brand-harvester-browser",
+  "description": "6sense turns revenue signals into intelligence for agentic go-to-market teams across Revvy AI, Ads, AI Email, Revenue Marketing, and Sales Intelligence.",
+  "publicTopics": [
+    "Connect first-party and third-party buying signals",
+    "Turn signals into account and buying-group intelligence",
+    "Activate intelligence across go-to-market applications and tools"
+  ],
+  "logoUrl": "https://6sense.com/wp-content/themes/6Sense-2025/assets/img/logos/logo.svg",
+  "logoEvidence": {
+    "sourcePage": "https://6sense.com/platform/revvyai/",
+    "altText": "6Sense",
+    "className": "logo-img-base",
+    "dimensions": {
+      "width": 114,
+      "height": 33
+    },
+    "assetType": "first-party SVG"
+  },
+  "logoDeliveryFallback": {
+    "path": "public/verified-brands/6sense/official-wordmark.png.b64",
+    "sha256": "0b6e379cb0cf4e47e830d8fee0dfba01ddd80e2c255d9c1fba2900af9402ad3b",
+    "mimeType": "image/png",
+    "dimensions": {
+      "width": 2641,
+      "height": 721
+    },
+    "sourcePage": "https://revcity.6sense.com/home/discussion/798/6sense-media-kit",
+    "sourceAsset": "6sense_fullcolor_dark.png",
+    "reason": "The current first-party navbar SVG is visible in the browser harvest, but Cloudflare rejects server-side delivery. This immutable local wrapper embeds the official dark-text full-color wordmark published in the 6sense media kit so the real logo remains deliverable without a runtime CDN dependency."
+  },
+  "imageUrls": [
+    "https://6sense.com/wp-content/uploads/2026/05/hero-ai-d.png",
+    "https://6sense.com/wp-content/uploads/2026/05/revvy-01-1.png"
+  ],
+  "colors": [
+    "#192232",
+    "#13BBB2",
+    "#FFFFFF",
+    "#FF534D",
+    "#DCDDE3",
+    "#F6F6F5"
+  ],
+  "primaryColor": "#192232",
+  "accentColor": "#13BBB2",
+  "surfaceColor": "#FFFFFF",
+  "displayFontFamily": "Aeonik",
+  "bodyFontFamily": "Aeonik"
+}

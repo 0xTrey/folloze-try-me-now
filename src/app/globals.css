@@ -134,13 +134,26 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .buttonSecondary { border: 1px solid var(--fz-border); background: white; color: var(--fz-action); }
 .buttonSecondary:hover { color: var(--fz-accent); }
 .largeChoiceGrid { display: grid; gap: 10px; }
-.largeChoiceGrid button { min-height: 92px; padding: 19px; display: grid; grid-template-columns: 1fr auto; gap: 5px 18px; text-align: left; border: 1px solid var(--fz-border); border-radius: 16px; background: white; color: var(--fz-ink); cursor: pointer; transition: .18s var(--ease); }
-.largeChoiceGrid button:hover { border-color: var(--fz-accent); transform: translateX(4px); }.largeChoiceGrid strong{font:520 19px/1.2 var(--font-display),sans-serif}.largeChoiceGrid span{grid-column:1;color:var(--fz-muted);font-size:13px}.largeChoiceGrid svg{grid-column:2;grid-row:1 / span 2;align-self:center;color:var(--fz-accent)}
+.largeChoiceGrid button { min-height: 92px; padding: 19px; display: grid; grid-template-columns: 1fr auto; gap: 5px 18px; position: relative; overflow: hidden; text-align: left; border: 1px solid var(--fz-border); border-radius: 16px; background: white; color: var(--fz-ink); cursor: pointer; transition: .18s var(--ease); }
+.largeChoiceGrid button:hover { border-color: var(--fz-accent); transform: translateX(4px); }
+.largeChoiceGrid button.isSelected { padding-left: 23px; border: 2px solid var(--fz-accent); background: linear-gradient(102deg,var(--fz-accent-tint) 0%,white 76%); box-shadow: 0 0 0 4px color-mix(in srgb,var(--fz-accent) 10%,transparent),0 12px 28px color-mix(in srgb,var(--fz-accent) 11%,transparent); transform: translateX(4px); }
+.largeChoiceGrid button.isSelected::before { content:""; width: 5px; position:absolute; inset:0 auto 0 0; background:var(--fz-accent); }
+.largeChoiceGrid button.isSelected strong { color: var(--fz-accent); }
+.largeChoiceGrid strong{font:520 19px/1.2 var(--font-display),sans-serif}.largeChoiceGrid span{grid-column:1;color:var(--fz-muted);font-size:13px}.largeChoiceGrid>button>svg{grid-column:2;grid-row:1 / span 2;align-self:center;color:var(--fz-accent)}
+.largeChoiceGrid .campaignChoiceState { grid-column:2;grid-row:1 / span 2;align-self:center;display:flex;align-items:center;gap:6px;color:var(--fz-accent);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase; }
+.largeChoiceGrid .campaignChoiceState svg { flex:0 0 auto; }
 .largeChoiceGrid button:disabled,.choiceChip:disabled { cursor: wait; opacity: .55; transform: none; }
 .chipFieldset { margin: 0; padding: 0; border: 0; }.chipFieldset legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 .chipGrid { display: grid; grid-template-columns: 1fr; gap: 9px; }
 .choiceChip { min-height: 56px; padding: 14px 17px; display: flex; align-items: center; justify-content: space-between; gap: 18px; text-align: left; color: var(--fz-ink); background: white; border: 1px solid var(--fz-border); border-radius: 14px; cursor: pointer; transition: .18s var(--ease); }
 .choiceChip:hover,.choiceChip.isSelected { color: var(--fz-accent); border-color: var(--fz-accent); background: var(--fz-accent-tint); }
+.campaignSourceInput { transition: border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease); }
+.campaignSourceInput.isReady { border-color: color-mix(in srgb,var(--fz-success) 58%,var(--fz-border)); background: color-mix(in srgb,var(--fz-success) 4%,white); box-shadow: 0 0 0 3px color-mix(in srgb,var(--fz-success) 8%,transparent); }
+.campaignSourceGuidance { display:flex;margin-top:11px;align-items:center;gap:7px;color:var(--fz-muted);font-size:11px;line-height:1.45; }
+.campaignSourceGuidance.isReady { color:#087443; font-weight:650; }
+.campaignSourceGuidance.is-pending,.campaignSourceGuidance.is-researching,.campaignSourceGuidance.is-queued { color:var(--fz-accent); }
+.campaignSourceGuidance.is-failed { color:#95620b; }
+.campaignSourceGuidance svg { flex:0 0 auto; }
 .sourceTabs { width: max-content; margin-bottom: 20px; padding: 4px; display: flex; border-radius: 999px; background: var(--fz-band); }.sourceTabs button{min-height:44px;padding:9px 15px;border:0;border-radius:999px;background:transparent;color:var(--fz-muted);cursor:pointer;font-size:13px}.sourceTabs button.isActive{background:white;color:var(--fz-ink);box-shadow:0 1px 4px rgba(7,20,40,.08)}
 .sourceForm { display: grid; }.uploadBox { min-height: 190px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 28px; text-align: center; color: var(--fz-body); border: 1.5px dashed #bcc2d2; border-radius: 18px; background: var(--fz-canvas); cursor: pointer; }.uploadBox:hover{border-color:var(--fz-accent);background:var(--fz-accent-tint)}.uploadBox svg{color:var(--fz-accent)}.uploadBox strong{font-family:var(--font-display);font-size:19px}.uploadBox span{font-size:12px;color:var(--fz-muted)}.uploadBox input{position:absolute;width:1px;height:1px;opacity:0}
 .generationCard { padding-top: 18px; }.generationGlyph { width: 56px; height: 56px; margin-bottom: 28px; display: grid; place-items: center; color: var(--fz-accent); background: var(--fz-accent-tint); border-radius: 50%; animation: softPulse 2s ease-in-out infinite; }

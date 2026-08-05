@@ -410,6 +410,7 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
           title: session.campaignOfferSource.title,
           sourceHost: session.campaignOfferSource.sourceHost,
           status: session.campaignOfferSource.status,
+          intelligenceStatus: session.campaignOfferSource.intelligenceStatus,
           confirmedAt: session.campaignOfferSource.confirmedAt
         }
       : undefined,

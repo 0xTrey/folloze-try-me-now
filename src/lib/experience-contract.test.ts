@@ -219,6 +219,7 @@ describe("campaign contract", () => {
       sourceUrl: "https://jitterbit.com/harmony/",
       sourceHost: "jitterbit.com",
       status: "confirmed",
+      intelligenceStatus: "pending",
       confirmedAt: expect.any(String)
     });
   });
@@ -285,6 +286,7 @@ describe("campaign contract", () => {
       title: "Jitterbit Harmony",
       sourceHost: "jitterbit.com",
       status: "confirmed",
+      intelligenceStatus: "pending",
       confirmedAt: expect.any(String)
     });
     expect(projection.experienceSpec).toMatchObject({

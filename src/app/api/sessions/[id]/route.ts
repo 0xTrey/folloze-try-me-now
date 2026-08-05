@@ -72,18 +72,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     let updated;
     let targetDomain: string | undefined;
     let sourceUrl: string | undefined;
+    let offerSourceUrl: string | undefined;
     if (workspaceParse.success) {
       updated = await patchSessionWorkspace(id, workspaceParse.data);
       targetDomain = workspaceParse.data.answers?.targetDomain;
       sourceUrl = workspaceParse.data.answers?.sourceUrl;
+      offerSourceUrl = workspaceParse.data.answers?.offerSourceUrl;
     } else {
       const patch = answersSchema.parse(body);
       updated = await patchSessionAnswers(id, patch);
       targetDomain = patch.targetDomain;
       sourceUrl = patch.sourceUrl;
+      offerSourceUrl = patch.offerSourceUrl;
     }
     if (targetDomain) after(() => runTargetBrandStage(id));
-    if (sourceUrl) after(() => runSourceIntelligenceStage(id));
+    if (sourceUrl || offerSourceUrl) after(() => runSourceIntelligenceStage(id));
     if (updated.shouldGenerate) after(() => runStoryStage(id));
     trace.setTraceId(updated.traceId);
     return NextResponse.json(
