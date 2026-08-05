@@ -21,6 +21,7 @@ import {
   InstantBrandLockStrip,
   MessageDirectionControl,
   PersonalizationQualityReceipt,
+  prepareAnalyticsSignals,
   ProgressiveArtifactStream,
   SavedExperienceCockpit,
   ToneChips
@@ -441,18 +442,30 @@ describe("Try Me Now prospect enhancement components", () => {
     );
 
     expect(screen.getByText("Signal captured")).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "This is what Folloze sees." })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "What Folloze knows about this journey." })).toBeInTheDocument();
     expect(screen.getByText("Your activity in this preview")).toBeInTheDocument();
-    expect(screen.getByText("Placeholder people")).toBeInTheDocument();
-    expect(screen.getByText("Illustrative activity only. These names and actions are not captured leads.")).toBeInTheDocument();
+    expect(screen.getByText("Not captured leads")).toBeInTheDocument();
+    expect(screen.getByText("Simulated activity only. These placeholder names and actions demonstrate what Folloze can report in a live campaign.")).toBeInTheDocument();
+    expect(screen.getByText("Journey path")).toBeInTheDocument();
+    expect(screen.getByText("Buying group")).toBeInTheDocument();
     expect(screen.getByText(/John Smith spent/)).toBeInTheDocument();
     expect(screen.getAllByText(/VP Enterprise Architecture/)).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: /See what Folloze knows/i }));
+    fireEvent.click(screen.getByRole("button", { name: /See the journey/i }));
     fireEvent.click(screen.getByRole("button", { name: "Dismiss signal" }));
     fireEvent.click(screen.getByRole("button", { name: "Close analytics signals" }));
     expect(openPanel).toHaveBeenCalledOnce();
     expect(dismiss).toHaveBeenCalledOnce();
     expect(closePanel).toHaveBeenCalledOnce();
+  });
+
+  it("deduplicates rapid semantic repeats while preserving distinct journey signals", () => {
+    const signals = [
+      { id: "1700000000000-0", occurredAt: 1_700_000_000_000, action: "section_view", context: { sectionId: "decision-path" }, label: "Viewed Decision paths", detail: "First", atLabel: "1:00" },
+      { id: "1700000000400-1", occurredAt: 1_700_000_000_400, action: "section_view", context: { sectionId: "decision-path" }, label: "Viewed Decision paths", detail: "Retry", atLabel: "1:00" },
+      { id: "1700000000600-2", occurredAt: 1_700_000_000_600, action: "section_view", context: { sectionId: "supporting-resources" }, label: "Viewed Supporting proof", detail: "Distinct", atLabel: "1:00" }
+    ];
+
+    expect(prepareAnalyticsSignals(signals)).toEqual([signals[0], signals[2]]);
   });
 
   it("explains enrichment, personalization, and engagement as one Folloze value receipt", () => {

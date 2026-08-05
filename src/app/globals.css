@@ -694,6 +694,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   background: #f8f9fb;
   box-shadow: 0 16px 44px rgba(7,20,40,.055);
 }
+.brandLockStage { margin-bottom: 18px; }
 .guidedThreadHeader {
   min-height: 68px;
   padding: 14px 16px;
@@ -765,6 +766,29 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 }
 .questionCard h2 { font-size: clamp(31px,3vw,48px); }
 .questionCard .buttonPrimary { margin-top: 16px; }
+.questionSequence { width: min(100%,760px); display: grid; gap: 14px; }
+.questionSequence > .questionCard { width: 100%; }
+.sourceInsightCard {
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb,var(--fz-success) 34%,var(--fz-border));
+  border-radius: 18px;
+  background: linear-gradient(145deg,#f4fff9,#fff 58%);
+  box-shadow: 0 14px 38px rgba(7,20,40,.05);
+}
+.sourceInsightCard.is-needs-review { border-color: color-mix(in srgb,#c88816 42%,var(--fz-border)); background: linear-gradient(145deg,#fffaf0,#fff 58%); }
+.sourceInsightHeader { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 10px; }
+.sourceInsightIcon { width: 34px; height: 34px; display: grid; place-items: center; color: #087448; border-radius: 10px; background: #dff8ec; }
+.sourceInsightHeader div > span { display: block; color: var(--fz-muted); font-size: 8px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.sourceInsightHeader h2 { margin: 3px 0 0; font: 650 16px/1.2 var(--font-display),sans-serif; letter-spacing: -.015em; }
+.sourceInsightStatus { padding: 6px 8px; color: #087448; border: 1px solid #bdebd5; border-radius: 999px; background: #effcf6; font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.sourceInsightTitle { display: block; margin-top: 15px; color: var(--fz-ink); font-size: 12px; }
+.sourceInsightCard > p { max-width: 680px; margin: 6px 0 0; color: var(--fz-body); font-size: 11px; line-height: 1.55; }
+.sourceInsightCard ul { margin: 14px 0 0; padding: 0; display: grid; gap: 8px; list-style: none; }
+.sourceInsightCard li { padding: 9px 11px; display: grid; gap: 4px; border: 1px solid var(--fz-border); border-radius: 11px; background: rgba(255,255,255,.76); }
+.sourceInsightCard li span { color: var(--fz-ink); font-size: 10px; line-height: 1.45; }
+.sourceInsightCard li small { color: var(--fz-muted); font-size: 8px; font-weight: 700; }
+.sourceInsightMeta { margin-top: 11px; display: flex; flex-wrap: wrap; gap: 6px; }
+.sourceInsightMeta span { padding: 5px 7px; color: var(--fz-muted); border-radius: 999px; background: #f1f3f7; font-size: 8px; }
 .briefReviewCard { max-width: 720px; }
 .briefReviewList { margin: 0 0 18px; overflow: hidden; border: 1px solid var(--fz-border); border-radius: 14px; background: #fbfbfd; }
 .briefReviewList > div { min-height: 58px; padding: 11px 13px; display: grid; grid-template-columns: 92px minmax(0,1fr); align-items: center; gap: 12px; }

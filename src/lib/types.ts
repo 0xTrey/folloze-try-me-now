@@ -1,3 +1,5 @@
+import type { SourceArtifact } from "@/lib/content-intelligence";
+
 export const USE_CASES = ["abm", "campaign", "content"] as const;
 export const EXPERIENCE_MODES = ["custom", "example"] as const;
 export const CTA_TYPES = [
@@ -353,6 +355,35 @@ export interface SourceConfirmation {
   provenance?: "user-submitted" | "user-confirmed" | "system-extracted";
 }
 
+/**
+ * Editor-safe summary of source understanding. Full extracted text and raw
+ * citation excerpts remain server-side on TryMeSession.sourceArtifact.
+ */
+export interface PublicSourceInsight {
+  status: SourceArtifact["status"];
+  confidence: SourceArtifact["confidence"];
+  title?: string;
+  premise?: string;
+  topics: string[];
+  claims: Array<{
+    id: string;
+    text: string;
+    sourceLabels: string[];
+  }>;
+  extraction: {
+    method: SourceArtifact["extraction"]["method"];
+    status: SourceArtifact["extraction"]["status"];
+    pageCount?: number;
+    extractedPageCount?: number;
+    ocrStatus: SourceArtifact["extraction"]["ocr"]["status"];
+    warnings: string[];
+  };
+  experiencePattern: SourceArtifact["understanding"]["experiencePlan"]["pattern"];
+  moduleKinds: SourceArtifact["understanding"]["experiencePlan"]["modules"][number]["kind"][];
+  assetCount: number;
+  citationCount: number;
+}
+
 export interface SourceGrounding {
   kind: "public-url" | "uploaded-pdf" | "event-context" | "none";
   title?: string;
@@ -481,6 +512,30 @@ export interface CampaignOfferSource {
   confirmedAt?: string;
 }
 
+export interface ExperienceContentItem {
+  id: string;
+  kind: "insight" | "chapter" | "proof" | "resource";
+  eyebrow: string;
+  title: string;
+  summary: string;
+  actionLabel: string;
+  sourceCitationIds: string[];
+  sourceLabel?: string;
+  illustrative?: boolean;
+}
+
+export interface ExperienceSourceIntelligence {
+  artifactId: string;
+  digest: string;
+  status: SourceArtifact["status"];
+  confidence: SourceArtifact["confidence"];
+  title?: string;
+  premise?: string;
+  claimIds: string[];
+  citationCount: number;
+  experiencePattern: SourceArtifact["understanding"]["experiencePlan"]["pattern"];
+}
+
 export type PublicCampaignOfferSource = Omit<CampaignOfferSource, "sourceUrl">;
 
 export interface CuratedSectionControl {
@@ -538,6 +593,9 @@ export interface ExperienceSpecV1 {
     logoUrl?: string;
   };
   draft: Record<string, unknown>;
+  /** Added compatibly to V1 specs; legacy persisted sessions may not include it. */
+  contentItems?: ExperienceContentItem[];
+  sourceIntelligence?: ExperienceSourceIntelligence;
   cta: {
     intent: CtaType;
     style: CtaStyle;
@@ -558,6 +616,8 @@ export type PublicExperienceSpecSummary = Pick<
   "schemaVersion" | "revision" | "sourceBriefRevision" | "artifactDigest" | "renderers"
 > & {
   sectionCount: number;
+  contentItemCount: number;
+  sourceStatus?: ExperienceSourceIntelligence["status"];
 };
 
 export interface ClaimState {
@@ -597,6 +657,8 @@ export interface TryMeSession {
   selectedAudienceRecommendationId?: string;
   evidenceItems?: SessionEvidenceItem[];
   sourceConfirmation?: SourceConfirmation;
+  /** Server-only normalized extraction and understanding artifact. */
+  sourceArtifact?: SourceArtifact;
   /** Internal digest proving source confirmation belongs to the current source. */
   sourceFingerprint?: string;
   availableAssets?: ExperienceAsset[];
@@ -636,6 +698,7 @@ export type PublicTryMeSession = Omit<
   | "targetBrand"
   | "traceId"
   | "sourceFingerprint"
+  | "sourceArtifact"
 > & {
   supportRef: string;
   answers: PublicSessionAnswers;
@@ -645,6 +708,7 @@ export type PublicTryMeSession = Omit<
   experience?: PublicExperienceSummary;
   experienceSpec?: PublicExperienceSpecSummary;
   campaignOfferSource?: PublicCampaignOfferSource;
+  sourceInsight?: PublicSourceInsight;
   claim?: PublicClaimState;
 };
 

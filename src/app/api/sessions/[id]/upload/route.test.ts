@@ -3,9 +3,10 @@ import { handleUpload } from "@vercel/blob/client";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createSourceArtifact } from "@/lib/content-intelligence";
+import { extractPdfSourceArtifact } from "@/lib/content-pdf";
 import { canEditSession, finalizePdfSource } from "@/lib/orchestrator";
 import { supportRefForTraceId } from "@/lib/observability";
-import { extractPdfDocumentTitle } from "@/lib/pdf-title";
 import { getSession, updateSession } from "@/lib/session-store";
 
 vi.mock("@vercel/blob", async (importOriginal) => {
@@ -21,8 +22,11 @@ vi.mock("@/lib/orchestrator", () => ({
   runStoryStage: vi.fn()
 }));
 
+vi.mock("@/lib/content-pdf", () => ({
+  extractPdfSourceArtifact: vi.fn()
+}));
+
 vi.mock("@/lib/pdf-title", () => ({
-  extractPdfDocumentTitle: vi.fn(),
   pdfTitleFallback: vi.fn(() => "Source document")
 }));
 
@@ -49,6 +53,81 @@ const pathname = `try-me/uploads/${sessionId}/${uploadId}.pdf`;
 const statusPathname = `try-me/upload-status/${sessionId}/${uploadId}.json`;
 const payload = JSON.stringify({ sessionId, uploadId, originalName: "brief.pdf" });
 const uploadTraceId = "private-upload-trace";
+const readyPdfArtifact = createSourceArtifact({
+  source: {
+    kind: "uploaded-pdf",
+    displayName: "brief.pdf",
+    mediaType: "application/pdf"
+  },
+  extraction: {
+    method: "pdf-text",
+    status: "complete",
+    truncated: false,
+    pageCount: 3,
+    extractedPageCount: 3,
+    ocr: {
+      status: "not-required",
+      pageNumbers: [],
+      reason: "Every inspected page contains a usable text layer."
+    },
+    warnings: []
+  },
+  content: {
+    title: "The Now Platform Reference Guide",
+    description: "A cited operating guide for connecting workflows, data, and measurable outcomes.",
+    text: [
+      "The Now Platform connects workflows, data, and experiences across the enterprise so teams can understand how operating decisions fit together.",
+      "Research found that 42 percent of transformation teams need a clearer way to connect platform evidence to the next operating question.",
+      "Teams should use the guide to compare capabilities, inspect supporting proof, and choose one governed next action for the buying group."
+    ].join(" "),
+    sections: [
+      {
+        id: "pdf_section_1",
+        title: "Connect the enterprise",
+        level: 1,
+        order: 0,
+        text: "The Now Platform connects workflows, data, and experiences across the enterprise so teams can understand how operating decisions fit together.",
+        citationIds: ["pdf_page_1"]
+      },
+      {
+        id: "pdf_section_2",
+        title: "Inspect the evidence",
+        level: 2,
+        order: 1,
+        text: "Research found that 42 percent of transformation teams need a clearer way to connect platform evidence to the next operating question.",
+        citationIds: ["pdf_page_2"]
+      },
+      {
+        id: "pdf_section_3",
+        title: "Choose the next action",
+        level: 2,
+        order: 2,
+        text: "Teams should use the guide to compare capabilities, inspect supporting proof, and choose one governed next action for the buying group.",
+        citationIds: ["pdf_page_3"]
+      }
+    ],
+    links: [],
+    assets: [],
+    citations: [
+      {
+        id: "pdf_page_1",
+        locator: { kind: "pdf-page", page: 1, label: "Page 1" },
+        excerpt: "The Now Platform connects workflows, data, and experiences across the enterprise."
+      },
+      {
+        id: "pdf_page_2",
+        locator: { kind: "pdf-page", page: 2, label: "Page 2" },
+        excerpt: "Research found that 42 percent of transformation teams need a clearer path."
+      },
+      {
+        id: "pdf_page_3",
+        locator: { kind: "pdf-page", page: 3, label: "Page 3" },
+        excerpt: "Teams should compare capabilities and choose one governed next action."
+      }
+    ]
+  },
+  createdAt: "2026-07-30T00:00:00.000Z"
+});
 let committedEventNames: string[] = [];
 
 function requestFor(body: unknown): NextRequest {
@@ -118,7 +197,7 @@ describe("PDF client upload route", () => {
     });
     vi.mocked(put).mockResolvedValue({} as never);
     vi.mocked(del).mockResolvedValue(undefined);
-    vi.mocked(extractPdfDocumentTitle).mockResolvedValue("The Now Platform Reference Guide");
+    vi.mocked(extractPdfSourceArtifact).mockResolvedValue(readyPdfArtifact);
   });
 
   it("issues a short-lived private PDF-only token without sending PDF bytes through the Function", async () => {
@@ -289,7 +368,8 @@ describe("PDF client upload route", () => {
       uploadId,
       sourceName: "brief.pdf",
       sourceTitle: "The Now Platform Reference Guide",
-      sourceOpenAIFileId: undefined
+      sourceOpenAIFileId: undefined,
+      sourceArtifact: readyPdfArtifact
     });
     expect(put).toHaveBeenCalledWith(
       statusPathname,

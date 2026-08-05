@@ -4,6 +4,10 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { narrativeProfileFor } from "@/lib/brand-intelligence";
 import { config, hasOpenAI } from "@/lib/config";
 import {
+  sourceArtifactToPublicContentEvidence,
+  type SourceArtifact
+} from "@/lib/content-intelligence";
+import {
   cleanSourceTitle,
   compileCampaignContext,
   type CampaignGenerationContext
@@ -95,8 +99,26 @@ function exactSourcePhrase(value: string, maxChars = 116): string | null {
 
 function sourceEvidencePhrases(
   sourceContent: PublicContent | null | undefined,
-  sourceTitle: string | null | undefined
+  sourceTitle: string | null | undefined,
+  sourceArtifact?: SourceArtifact
 ): string[] {
+  const artifactPhrases = sourceArtifact
+    ? [
+        ...sourceArtifact.understanding.claims.map((claim) => claim.text),
+        ...sourceArtifact.understanding.proof.map((proof) => proof.text)
+      ]
+        .map((phrase) => exactSourcePhrase(phrase))
+        .filter((phrase): phrase is string => Boolean(phrase))
+        .filter(
+          (phrase, index, phrases) =>
+            phrases.findIndex(
+              (candidate) =>
+                normalizedIncludes(candidate, phrase) || normalizedIncludes(phrase, candidate)
+            ) === index
+        )
+        .slice(0, 4)
+    : [];
+  if (artifactPhrases.length > 0) return artifactPhrases;
   if (!sourceContent) return [];
   const titleKey = sourceTitle
     ?.toLocaleLowerCase()
@@ -124,6 +146,47 @@ function sourceEvidencePhrases(
     if (phrases.length === 3) break;
   }
   return phrases;
+}
+
+function sourceIntelligenceForPrompt(sourceArtifact: SourceArtifact | undefined) {
+  if (!sourceArtifact) return null;
+  const citationLabel = (citationId: string) => {
+    const citation = sourceArtifact.content.citations.find((item) => item.id === citationId);
+    if (!citation) return undefined;
+    return citation.locator.kind === "pdf-page"
+      ? `Page ${citation.locator.page}`
+      : citation.locator.label;
+  };
+  return {
+    artifactId: sourceArtifact.artifactId,
+    status: sourceArtifact.status,
+    confidence: sourceArtifact.confidence,
+    title: sourceArtifact.content.title ?? null,
+    premise: sourceArtifact.understanding.premise ?? null,
+    summary: sourceArtifact.understanding.summary ?? null,
+    topics: sourceArtifact.understanding.topics,
+    claims: sourceArtifact.understanding.claims.map((claim) => ({
+      id: claim.id,
+      text: claim.text,
+      kind: claim.kind,
+      confidence: claim.confidence,
+      citations: claim.citationIds.map(citationLabel).filter(Boolean)
+    })),
+    proof: sourceArtifact.understanding.proof.map((proof) => ({
+      id: proof.id,
+      text: proof.text,
+      kind: proof.kind,
+      confidence: proof.confidence,
+      citations: proof.citationIds.map(citationLabel).filter(Boolean)
+    })),
+    experiencePlan: sourceArtifact.understanding.experiencePlan,
+    extraction: {
+      method: sourceArtifact.extraction.method,
+      status: sourceArtifact.extraction.status,
+      truncated: sourceArtifact.extraction.truncated,
+      ocrStatus: sourceArtifact.extraction.ocr.status
+    }
+  };
 }
 
 function conciseRolePhrase(value: string): string {
@@ -261,6 +324,7 @@ export function deterministicDraft(input: {
   useCase: UseCase;
   answers: SessionAnswers;
   sourceContent?: Awaited<ReturnType<typeof extractPublicContent>> | null;
+  sourceArtifact?: SourceArtifact;
   context?: CampaignGenerationContext;
 }): ExperienceDraft {
   const { brand, answers, sourceContent } = input;
@@ -446,7 +510,8 @@ export function deterministicDraft(input: {
   if (context.brief.campaignRegister === "content-magic") {
     const [sourceLead, sourceImplication, sourceDetail] = sourceEvidencePhrases(
       sourceContent,
-      sourceTitle
+      sourceTitle,
+      input.sourceArtifact
     );
     const contentSections = profileSections(profile).map((section, index) =>
       index === 0
@@ -615,8 +680,9 @@ export function experienceQualityFailure(input: {
   answers: SessionAnswers;
   context: CampaignGenerationContext;
   sourceContent?: Awaited<ReturnType<typeof extractPublicContent>> | null;
+  sourceArtifact?: SourceArtifact;
 }): string | undefined {
-  const { draft, brand, targetBrand, answers, context, sourceContent } = input;
+  const { draft, brand, targetBrand, answers, context, sourceContent, sourceArtifact } = input;
   const visibleCopy = [
     draft.title,
     draft.eyebrow,
@@ -785,7 +851,11 @@ export function experienceQualityFailure(input: {
     answers.eventSource,
     sourceContent?.title,
     sourceContent?.description,
-    sourceContent?.excerpt
+    sourceContent?.excerpt,
+    sourceArtifact?.understanding.premise,
+    sourceArtifact?.understanding.summary,
+    ...(sourceArtifact?.understanding.claims.map((claim) => claim.text) ?? []),
+    ...(sourceArtifact?.understanding.proof.map((proof) => proof.text) ?? [])
   ]
     .filter(Boolean)
     .join(" ");
@@ -800,7 +870,11 @@ export function experienceQualityFailure(input: {
     return "copy_quality_missing_decision_question";
   }
   if (context.brief.campaignRegister === "content-magic") {
-    const sourceEvidence = sourceEvidencePhrases(sourceContent, context.brief.sourceTitle);
+    const sourceEvidence = sourceEvidencePhrases(
+      sourceContent,
+      context.brief.sourceTitle,
+      sourceArtifact
+    );
     if (sourceEvidence.length > 0) {
       const contentRegions = [
         heroCopy,
@@ -829,14 +903,9 @@ export function isNonBlockingStyleFailure(
   failure: string,
   context: CampaignGenerationContext
 ): boolean {
+  void context;
   if (failure === "copy_quality_em_dash" || failure === "copy_quality_cliche") return true;
-  return (
-    context.brief.campaignRegister === "content-magic" &&
-    new Set([
-      "copy_quality_missing_source_grounding",
-      "copy_quality_source_grounding_not_distributed"
-    ]).has(failure)
-  );
+  return false;
 }
 
 export async function generateExperienceDraft(input: {
@@ -844,6 +913,7 @@ export async function generateExperienceDraft(input: {
   targetBrand?: BrandProfile;
   useCase: UseCase;
   answers: SessionAnswers;
+  sourceArtifact?: SourceArtifact;
 }): Promise<{
   draft: ExperienceDraft;
   source: "openai" | "deterministic-fallback";
@@ -854,9 +924,11 @@ export async function generateExperienceDraft(input: {
   const startedAt = Date.now();
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), config.generationTimeoutMs);
-  let sourceContent: Awaited<ReturnType<typeof extractPublicContent>> | null = null;
+  let sourceContent: Awaited<ReturnType<typeof extractPublicContent>> | null = input.sourceArtifact
+    ? sourceArtifactToPublicContentEvidence(input.sourceArtifact)
+    : null;
   try {
-    if (input.answers.sourceUrl) {
+    if (input.answers.sourceUrl && !sourceContent) {
       try {
         sourceContent = await extractPublicContent(
           input.answers.sourceUrl,
@@ -913,7 +985,12 @@ export async function generateExperienceDraft(input: {
         sourceTitle: input.answers.sourceTitle
       },
       sourceContent,
-      sourceEvidencePhrases: sourceEvidencePhrases(sourceContent, context.brief.sourceTitle)
+      sourceIntelligence: sourceIntelligenceForPrompt(input.sourceArtifact),
+      sourceEvidencePhrases: sourceEvidencePhrases(
+        sourceContent,
+        context.brief.sourceTitle,
+        input.sourceArtifact
+      )
     });
     const responseInput: OpenAI.Responses.ResponseInput = [
       {
@@ -946,6 +1023,7 @@ export async function generateExperienceDraft(input: {
       "For campaign-event when campaignGoal or primaryCta is registration-oriented, sell the reason to attend and use the supplied registration CTA. Do not write post-event follow-up language. For non-registration event goals, continue the conversation without inventing event details. Campaign templates should feel offer-led and resource-led, not like a named-account microsite with the logos swapped.",
       "For ABM and campaign experiences, sourceContent is supplemental factual context only. It must never replace seller or target identity, the explicitly named offer, or the seller-derived visual authority in campaignContext.designContext.",
       "For content-magic, the source asset is content authority and the seller website is visual authority. Lead with the actual source title, buyer problem, and useful takeaway. Build an interactive source companion with findings, chapters, excerpts, and proof from the source. Do not reuse the account-microsite composition, mirror the PDF page by page, or talk about the generation process.",
+      "For content-magic, sourceIntelligence is the authoritative cited extraction when present. Ground the experience in its premise, distinct claims, proof, and recommended module sequence. Preserve citation meaning and never invent a source fact that is absent from sourceIntelligence.",
       "For content-magic, sourceEvidencePhrases are supported factual anchors selected from sourceContent. Preserve their meaning and distinctive terms while turning them into useful buyer language; verbatim repetition is not required. Ground at least two different regions in distinct source facts. The title and eyebrow do not count as source grounding. Build the argument around these facts instead of wrapping generic seller-category copy around the title.",
       "Use only claims supported by seller publicDescription, publicContext, publicTopics, sourceContent, or user answers.",
       "Never add a number, metric, benchmark, named outcome, or comparative claim unless the exact claim appears in the supplied evidence.",

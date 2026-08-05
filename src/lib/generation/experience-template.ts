@@ -5,7 +5,12 @@ import {
   type ExperiencePrimitive
 } from "@/lib/generation/experience-renderers";
 import { isImageDeliveryPath } from "@/lib/image-delivery";
-import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
+import type {
+  BrandProfile,
+  ExperienceContentItem,
+  SessionAnswers,
+  UseCase
+} from "@/lib/types";
 import { brandPresentationFor } from "@/lib/verified-brand-profiles";
 
 const escapeHtml = (value: string) =>
@@ -187,6 +192,7 @@ export function renderExperienceHtml(input: {
   themeUrl?: string;
   fontDeliveryUrls?: { display?: string; body?: string };
   qualityReceipt?: unknown;
+  contentItems?: ExperienceContentItem[];
 }): string {
   const { draft, brand, targetBrand } = input;
   const selectedVariant = "standard";
@@ -300,18 +306,23 @@ export function renderExperienceHtml(input: {
     )
     .join("");
 
-  // Content companions should feel edited, not like a second copy of every
-  // decision lens. Two source-backed highlights keep the source experience
-  // focused while campaign and account experiences retain three proof paths.
-  const resourceSections = template.family === "content-source"
-    ? draft.sections.slice(0, 2)
-    : draft.sections;
-  const resourceCards = resourceSections
+  const resourceItems: ExperienceContentItem[] = input.contentItems?.length
+    ? input.contentItems.slice(0, 3)
+    : draft.sections.map((section, index) => ({
+        id: `resource-${index + 1}`,
+        kind: "insight",
+        eyebrow: section.eyebrow,
+        title: section.proof,
+        summary: section.body,
+        actionLabel: template.resourceAction,
+        sourceCitationIds: []
+      }));
+  const resourceCards = resourceItems
     .map(
-      (section, index) => `<article class="journey-card resource-card" data-source-reference="${escapeHtml(sourceReference)}">
+      (item, index) => `<article class="journey-card resource-card" data-source-reference="${escapeHtml(sourceReference)}" data-content-item-id="${escapeHtml(item.id)}" data-content-item-kind="${escapeHtml(item.kind)}">
         <div class="journey-index" aria-hidden="true">0${index + 1}</div>
-        <div class="journey-copy"><p class="eyebrow" ${editableBlock(`resource.${index}.eyebrow`, "eyebrow")}>${escapeHtml(section.eyebrow)}</p><h3 ${editableBlock(`resource.${index}.headline`, "proof-point")}>${escapeHtml(section.proof)}</h3><p ${editableBlock(`resource.${index}.body`, "body")}>${escapeHtml(section.body)}</p></div>
-        <button type="button" class="journey-action" data-resource-lens-index="${index}" data-flz-cta-id="resource-${index}">${escapeHtml(template.resourceAction)} <span aria-hidden="true">→</span></button>
+        <div class="journey-copy"><p class="eyebrow" ${editableBlock(`resource.${index}.eyebrow`, "eyebrow")}>${escapeHtml(item.eyebrow)}</p><h3 ${editableBlock(`resource.${index}.headline`, "proof-point")}>${escapeHtml(item.title)}</h3><p ${editableBlock(`resource.${index}.body`, "body")}>${escapeHtml(item.summary)}</p>${item.sourceLabel ? `<p class="source-citation">${escapeHtml(item.sourceLabel)}</p>` : ""}</div>
+        <button type="button" class="journey-action" data-resource-lens-index="${index % draft.sections.length}" data-flz-cta-id="resource-${index}">${escapeHtml(item.actionLabel)} <span aria-hidden="true">→</span></button>
       </article>`
     )
     .join("");
@@ -375,10 +386,8 @@ export function renderExperienceHtml(input: {
     .signature{padding:clamp(58px,7vw,104px) clamp(24px,7vw,112px)}.signature-intro h2{max-width:1060px;margin:0;font-family:var(--display);font-size:clamp(38px,4.4vw,66px);line-height:1.03;letter-spacing:-.035em}.signature-intro>p:last-child{margin:22px 0 0;color:var(--muted);font-weight:700}.signature-items button{appearance:none;width:100%;border:0;text-align:left;color:inherit;font:inherit;cursor:pointer}.signature-index{padding-top:5px;font:800 13px/1 var(--body);letter-spacing:.12em}.signature-item-copy{display:grid;gap:8px}.signature-item-copy strong{font-size:13px;letter-spacing:.1em;text-transform:uppercase}.signature-item-copy>span{font-family:var(--display);font-size:clamp(18px,1.7vw,25px);line-height:1.18}.signature-canonical{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(420px,1.08fr);gap:clamp(44px,7vw,110px);align-items:start;background:var(--soft);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.signature-canonical .signature-items{display:grid;border-top:1px solid color-mix(in srgb,var(--brand-ink) 20%,transparent)}.signature-canonical button{display:grid;grid-template-columns:52px 1fr;gap:18px;padding:28px 0;background:transparent;border-bottom:1px solid color-mix(in srgb,var(--brand-ink) 20%,transparent)}.signature-canonical button:hover,.signature-canonical button:focus-visible{color:var(--brand-accent-on-light)}
     .thesis{padding:clamp(72px,8vw,126px) clamp(24px,7vw,112px);background:var(--brand-ink);color:#fff}.thesis h2{max-width:1120px;margin:0;font-family:var(--display);font-size:clamp(42px,5.4vw,78px);font-weight:700;line-height:1.02;letter-spacing:-.04em;overflow-wrap:anywhere}.thesis p{max-width:760px;margin:26px 0 0;color:color-mix(in srgb,#fff 74%,var(--brand-ink));font-size:19px;line-height:1.55}
     .lens-lab{padding:clamp(70px,8vw,118px) clamp(24px,7vw,112px) clamp(76px,8vw,126px);background:var(--soft)}.region-heading{max-width:1060px;margin:0 0 50px}.region-heading h2{margin:0;font-family:var(--display);font-size:clamp(40px,4.8vw,70px);line-height:1.03;letter-spacing:-.04em}.lens-tabs{display:flex;gap:8px;padding:0 0 28px;overflow-x:auto;scrollbar-width:thin}.lens-tabs button{flex:0 0 auto;min-height:46px;padding:10px 16px;border:1px solid color-mix(in srgb,var(--brand-ink) 28%,transparent);background:transparent;color:var(--brand-ink);font-weight:750;cursor:pointer}.lens-tabs button[aria-selected="true"]{border-color:var(--brand-ink);background:var(--brand-ink);color:#fff}.lens-tabs button:focus-visible{outline:3px solid color-mix(in srgb,var(--brand-accent) 45%,transparent);outline-offset:3px}.lens-panel{display:grid;grid-template-columns:120px minmax(0,.94fr) minmax(320px,.78fr);gap:clamp(34px,5vw,76px);align-items:center;min-height:520px}.lens-panel[hidden]{display:none}.lens-number{align-self:start;padding-top:10px;color:color-mix(in srgb,var(--brand-ink) 18%,transparent);font:700 clamp(82px,10vw,150px)/.82 var(--display)}.lens-copy h2{margin:0;font-family:var(--display);font-size:clamp(38px,4.5vw,66px);line-height:1.04;letter-spacing:-.035em}.lens-copy>p:not(.eyebrow){max-width:650px;margin:24px 0;color:var(--text);font-size:19px}.lens-media{min-height:390px;background:var(--brand-surface)}
-    .journey{padding:clamp(68px,7vw,104px) clamp(24px,7vw,112px);background:var(--brand-surface)}.journey-header{max-width:980px;margin-bottom:44px}.journey-header h2{margin:0;font-family:var(--display);font-size:clamp(42px,5vw,68px);line-height:1.03;letter-spacing:-.04em}.source-basis{max-width:680px;margin:18px 0 0;color:var(--muted);font-size:14px}.journey-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.journey-card{min-height:360px;padding:28px;display:flex;flex-direction:column;border:1px solid var(--line);background:var(--soft);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}.journey-card:hover{transform:translateY(-5px);border-color:var(--brand-accent);box-shadow:0 22px 56px color-mix(in srgb,var(--brand-ink) 12%,transparent)}.journey-index{color:var(--brand-accent);font:800 14px/1 var(--body);letter-spacing:.13em}.journey-copy{margin-top:38px}.journey-copy .eyebrow{margin-bottom:12px}.journey-copy h3{margin:0;font-family:var(--display);font-size:clamp(25px,2.2vw,34px);line-height:1.08;letter-spacing:-.025em}.journey-copy>p:not(.eyebrow){margin:18px 0 0;color:var(--text);font-size:15px;line-height:1.55}.journey-action{min-height:44px;margin-top:auto;padding:20px 0 0;display:flex;align-items:center;justify-content:space-between;border:0;border-top:1px solid color-mix(in srgb,var(--brand-ink) 16%,transparent);background:transparent;color:var(--brand-ink);font-weight:750;cursor:pointer}.journey-action:hover,.journey-action:focus-visible{color:var(--brand-accent)}
+    .journey{padding:clamp(68px,7vw,104px) clamp(24px,7vw,112px);background:var(--brand-surface)}.journey-header{max-width:980px;margin-bottom:44px}.journey-header h2{margin:0;font-family:var(--display);font-size:clamp(42px,5vw,68px);line-height:1.03;letter-spacing:-.04em}.source-basis{max-width:680px;margin:18px 0 0;color:var(--muted);font-size:14px}.journey-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.journey-card{min-height:360px;padding:28px;display:flex;flex-direction:column;border:1px solid var(--line);background:var(--soft);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}.journey-card:hover{transform:translateY(-5px);border-color:var(--brand-accent);box-shadow:0 22px 56px color-mix(in srgb,var(--brand-ink) 12%,transparent)}.journey-index{color:var(--brand-accent);font:800 14px/1 var(--body);letter-spacing:.13em}.journey-copy{margin-top:38px}.journey-copy .eyebrow{margin-bottom:12px}.journey-copy h3{margin:0;font-family:var(--display);font-size:clamp(25px,2.2vw,34px);line-height:1.08;letter-spacing:-.025em}.journey-copy>p:not(.eyebrow){margin:18px 0 0;color:var(--text);font-size:15px;line-height:1.55}.journey-copy .source-citation{margin-top:16px;color:var(--muted);font-size:12px;font-weight:750;letter-spacing:.05em}.journey-action{min-height:44px;margin-top:auto;padding:20px 0 0;display:flex;align-items:center;justify-content:space-between;border:0;border-top:1px solid color-mix(in srgb,var(--brand-ink) 16%,transparent);background:transparent;color:var(--brand-ink);font-weight:750;cursor:pointer}.journey-action:hover,.journey-action:focus-visible{color:var(--brand-accent)}
     .close{margin:0 clamp(14px,3vw,46px) clamp(14px,3vw,46px);padding:clamp(66px,8vw,116px);display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:54px;align-items:end;background:radial-gradient(circle at 90% 10%,color-mix(in srgb,var(--brand-accent) 58%,transparent),transparent 30%),var(--brand-ink);color:#fff}.close h2{max-width:980px;margin:0;font-family:var(--display);font-size:clamp(42px,5.2vw,76px);line-height:1.01;letter-spacing:-.04em}.close p{max-width:720px;margin:24px 0 0;color:color-mix(in srgb,#fff 76%,var(--brand-ink));font-size:18px}.close .primary{width:100%;white-space:nowrap}body.cta-outline .primary{background:transparent;color:var(--brand-accent)}body.cta-outline .close .primary{background:transparent;border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.cta-text .primary{min-height:44px;padding:8px 0;border:0;border-bottom:2px solid currentColor;border-radius:0;background:transparent;color:var(--brand-accent)}body.cta-text .close .primary{color:#fff}.footer{padding:26px clamp(24px,6vw,96px);display:flex;justify-content:space-between;gap:24px;color:var(--muted);font-size:12px}.footer a{color:inherit;text-decoration:none}.footer a:hover,.footer a:focus-visible{color:var(--brand-accent)}.experience-region,.close,#next-step,.hero{scroll-margin-top:70px}
-    .signal-toast{position:fixed;left:50%;bottom:max(24px,env(safe-area-inset-bottom));z-index:90;width:min(calc(100vw - 32px),430px);padding:14px 17px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;border:1px solid color-mix(in srgb,var(--brand-accent) 36%,var(--line));border-radius:14px;background:color-mix(in srgb,var(--brand-ink) 94%,#000);box-shadow:0 22px 80px color-mix(in srgb,var(--brand-ink) 30%,transparent);color:#fff;transform:translate(-50%,18px);opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease}.signal-toast.is-visible{transform:translate(-50%,0);opacity:1}.signal-toast-mark{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--brand-accent) 22%,transparent)}.signal-toast-mark>span{width:9px;height:9px;border-radius:50%;background:var(--brand-accent);box-shadow:0 0 0 7px color-mix(in srgb,var(--brand-accent) 18%,transparent)}.signal-toast>span:last-child{display:grid;gap:2px}.signal-toast strong{font-size:12px;letter-spacing:.08em;text-transform:uppercase}.signal-toast [data-signal-copy]{color:color-mix(in srgb,#fff 74%,transparent);font-size:12px}
-    .folloze-invite{position:fixed;right:24px;bottom:max(24px,env(safe-area-inset-bottom));z-index:80;width:min(calc(100vw - 32px),350px);padding:18px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;border:1px solid color-mix(in srgb,var(--brand-accent) 42%,var(--line));border-radius:18px;background:var(--brand-dark);box-shadow:0 24px 80px color-mix(in srgb,var(--brand-ink) 30%,transparent);color:#fff}.folloze-invite strong{display:block;font-family:var(--display);font-size:20px;line-height:1.1}.folloze-invite span{display:block;margin-top:5px;color:color-mix(in srgb,#fff 72%,transparent);font-size:12px}.folloze-invite-action{grid-column:1/-1;min-height:44px;padding:10px 16px;border:1px solid var(--brand-accent);border-radius:var(--button-radius);background:var(--brand-accent);color:var(--brand-on-accent);cursor:pointer;font-weight:800}.folloze-invite-dismiss{align-self:start;width:34px;height:34px;border:0;background:transparent;color:#fff;cursor:pointer;font-size:22px}.folloze-insight{position:fixed;right:24px;bottom:max(24px,env(safe-area-inset-bottom));z-index:85;width:min(calc(100vw - 32px),410px);padding:24px;border:1px solid color-mix(in srgb,var(--brand-accent) 42%,var(--line));border-radius:20px;background:var(--brand-dark);box-shadow:0 28px 90px color-mix(in srgb,var(--brand-ink) 34%,transparent);color:#fff}.folloze-insight .eyebrow{margin-bottom:10px}.folloze-insight h2{margin:0;font-family:var(--display);font-size:28px;line-height:1.08}.folloze-insight>p{margin:14px 0;color:color-mix(in srgb,#fff 76%,transparent);font-size:14px}.folloze-insight ul{margin:18px 0 0;padding:0;display:grid;gap:10px;list-style:none}.folloze-insight li{padding-top:10px;border-top:1px solid color-mix(in srgb,#fff 18%,transparent);font-size:13px}.folloze-insight-close{position:absolute;right:14px;top:14px;width:34px;height:34px;border:0;background:transparent;color:#fff;cursor:pointer;font-size:22px}
     html:fullscreen,html:fullscreen body,html:fullscreen .shell{width:100%;max-width:none;min-height:100%;background:var(--brand-surface)}body.is-fullscreen .shell{max-width:none}body.is-fullscreen .journey-nav{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}body.is-fullscreen .hero{min-height:calc(100dvh - 58px)}
     body.style-editorial .hero h1,body.style-editorial .signature-intro h2,body.style-editorial .thesis h2,body.style-editorial .region-heading h2,body.style-editorial .journey-header h2{letter-spacing:-.025em}body.style-editorial .eyebrow{letter-spacing:.18em}body.style-technical .fullscreen-control{border-radius:4px}body.style-technical .hero{background-image:linear-gradient(color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px);background-size:42px 42px}body.style-minimal .hero{background:var(--brand-surface)}body.style-minimal .hero-media{box-shadow:none}body.style-minimal .signature,body.style-minimal .lens-lab,body.style-minimal .journey{background:var(--brand-surface)}body.style-minimal .journey-card{background:transparent}
     body[data-edit-mode="true"] [data-flz-editable]{cursor:text;outline:1px dashed color-mix(in srgb,var(--brand-accent) 62%,transparent);outline-offset:5px}
@@ -436,23 +445,7 @@ export function renderExperienceHtml(input: {
       <button type="button" class="primary" data-demo-cta="true" data-flz-cta-id="close-primary" ${editableBlock("close.primaryCta", "cta")}>${escapeHtml(draft.primaryCta)}</button>
     </section>
   </main>
-  <footer class="footer"><span>${escapeHtml(contextLabel)}</span><a href="${escapeHtml(vendorUrl)}" target="_blank" rel="noopener">${escapeHtml(brand.domain)}</a></footer>
-</div>
-<aside class="folloze-invite" data-folloze-invite aria-label="Folloze engagement insight" hidden>
-  <span><strong>See what Folloze knows</strong><span>Reveal the engagement signals behind this experience.</span></span>
-  <button type="button" class="folloze-invite-dismiss" data-folloze-invite-dismiss aria-label="Dismiss">×</button>
-  <button type="button" class="folloze-invite-action" data-folloze-invite-open>See the signals</button>
-</aside>
-<aside class="folloze-insight" data-folloze-insight aria-label="Engagement signals captured by Folloze" hidden>
-  <button type="button" class="folloze-insight-close" data-folloze-insight-close aria-label="Close">×</button>
-  <p class="eyebrow">Engagement intelligence</p>
-  <h2>Every interaction becomes a useful signal.</h2>
-  <p>Folloze can show teams how buyers explore the story without interrupting the experience.</p>
-  <ul><li>Which paths and topics earn attention</li><li>How long buyers engage with each section</li><li>Which next step creates intent</li></ul>
-</aside>
-<div class="signal-toast" data-signal-toast role="status" aria-live="polite" aria-atomic="true" hidden>
-  <span class="signal-toast-mark" aria-hidden="true"><span></span></span>
-  <span><strong>Signal captured</strong><span data-signal-copy>Your path is now in focus.</span></span>
+  <footer class="footer"><span>${escapeHtml(contextLabel)}</span><a href="${escapeHtml(vendorUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(brand.domain)}</a></footer>
 </div>
 <script data-flz-runtime>
   (function(){
@@ -499,15 +492,31 @@ export function renderExperienceHtml(input: {
       var envelope={eventId:makeEventId(),sessionId:experienceSessionId,event:action,context:durableContext(payload)};
       sendEvent(envelope,1)
     }
+    var recentSemanticEvents={};
+    function semanticEventKey(action,payload){return [action,payload.ctaId,payload.lensId,payload.sectionId,payload.targetId,payload.area].filter(Boolean).join(':')}
     window.flzAnalytic=function(action,data){
       if(!allowedEvents[action])return;
       var payload=cleanPayload(data);
+      if(action!=='page_heartbeat'&&action!=='section_dwell'){
+        var semanticKey=semanticEventKey(action,payload);
+        var now=Date.now();
+        if(recentSemanticEvents[semanticKey]&&now-recentSemanticEvents[semanticKey]<1200)return;
+        recentSemanticEvents[semanticKey]=now;
+      }
       try{if(window.parent&&window.parent!==window)window.parent.postMessage({source:'folloze-experience',version:1,event:action,action:action,payload:payload,data:payload},parentOrigin)}catch(_messageError){}
       persistEvent(action,payload);
     };
     window.flzAnalytic('experience_view',{});
 
     var previewScrollRoot=document.scrollingElement||document.documentElement;
+    var boundaryWheelDelta=0;
+    var boundaryWheelFrame=0;
+    function flushPreviewWheel(){
+      boundaryWheelFrame=0;
+      var deltaY=Math.max(-1600,Math.min(1600,boundaryWheelDelta));
+      boundaryWheelDelta=0;
+      try{window.parent.postMessage({source:'folloze-experience',version:1,action:'preview_scroll_boundary',deltaY:deltaY},parentOrigin)}catch(_scrollBoundaryError){}
+    }
     function handOffPreviewWheel(event){
       if(window.parent===window||event.ctrlKey||event.metaKey||typeof event.deltaY!=='number'||!Number.isFinite(event.deltaY)||event.deltaY===0)return;
       var maxScroll=Math.max(0,previewScrollRoot.scrollHeight-previewScrollRoot.clientHeight);
@@ -515,8 +524,8 @@ export function renderExperienceHtml(input: {
       var atEnd=previewScrollRoot.scrollTop>=maxScroll-1;
       if(!((event.deltaY<0&&atStart)||(event.deltaY>0&&atEnd)))return;
       event.preventDefault();
-      var deltaY=Math.max(-1600,Math.min(1600,event.deltaY));
-      try{window.parent.postMessage({source:'folloze-experience',version:1,action:'preview_scroll_boundary',deltaY:deltaY},parentOrigin)}catch(_scrollBoundaryError){}
+      boundaryWheelDelta+=event.deltaY;
+      if(!boundaryWheelFrame)boundaryWheelFrame=window.requestAnimationFrame(flushPreviewWheel);
     }
     window.addEventListener('wheel',handOffPreviewWheel,{passive:false});
 
@@ -531,19 +540,6 @@ export function renderExperienceHtml(input: {
     }
     document.querySelectorAll('.wordmark img').forEach(function(image){settleImage(image,'has-image')});
     document.querySelectorAll('.media img').forEach(function(image){settleImage(image,'has-asset')});
-
-    var toast=document.querySelector('[data-signal-toast]');
-    var toastCopy=toast&&toast.querySelector('[data-signal-copy]');
-    var toastTimer;
-    function shortLabel(node){return (node&&node.textContent||'').replace(/\\s+/g,' ').trim().slice(0,64)}
-    function showSignal(message){
-      if(!toast||!toastCopy)return;
-      if(toastTimer)window.clearTimeout(toastTimer);
-      toastCopy.textContent=message;
-      toast.hidden=false;
-      window.requestAnimationFrame(function(){toast.classList.add('is-visible')});
-      toastTimer=window.setTimeout(function(){toast.classList.remove('is-visible');window.setTimeout(function(){toast.hidden=true},reducedMotion?0:240)},4200);
-    }
 
     var journeyLinks=Array.from(document.querySelectorAll('[data-journey-link]'));
     function scrollInlineIntoView(node){
@@ -572,7 +568,6 @@ export function renderExperienceHtml(input: {
         var area=this.closest('.journey-nav')?'journey-nav':this.closest('.nav')?'header':this.classList.contains('skip-link')?'skip-link':'hero';
         window.flzAnalytic('anchor_click',{area:area,targetId:target,ctaId:this.getAttribute('data-flz-cta-id')||undefined});
         if(node){node.scrollIntoView({behavior:reducedMotion?'auto':'smooth',block:'start'});setActiveSection(target);if(this.classList.contains('skip-link'))node.focus({preventScroll:true})}
-        showSignal(this.classList.contains('skip-link')?'Experience content is in focus.':'Now viewing '+shortLabel(this)+'.');
       });
     });
 
@@ -582,14 +577,12 @@ export function renderExperienceHtml(input: {
         var hrefHost;
         try{hrefHost=new URL(this.href).hostname}catch(_urlError){}
         window.flzAnalytic('cta_click',{area:area,ctaId:this.getAttribute('data-flz-cta-id')||'external-link',hrefHost:hrefHost});
-        showSignal('Next step opened in a new tab.');
       });
     });
     document.querySelectorAll('[data-demo-cta]').forEach(function(control){
       control.addEventListener('click',function(){
         var area=this.closest('.hero')?'hero':'close';
         window.flzAnalytic('cta_click',{area:area,ctaId:this.getAttribute('data-flz-cta-id')||'cta-style-preview'});
-        showSignal('CTA style preview — no destination is connected.');
       });
     });
 
@@ -599,7 +592,7 @@ export function renderExperienceHtml(input: {
       tabs.forEach(function(item){var selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;var panel=document.getElementById(item.getAttribute('aria-controls'));if(panel)panel.hidden=!selected});
       scrollInlineIntoView(tab);
       if(focus)tab.focus();
-      if(announce){window.flzAnalytic('topic_select',{area:'decision-lenses',lensIndex:lensIndex,lensId:'lens-'+lensIndex});showSignal('Now exploring '+shortLabel(tab)+'.')}
+      if(announce)window.flzAnalytic('topic_select',{area:'decision-lenses',lensIndex:lensIndex,lensId:'lens-'+lensIndex})
     }
     tabs.forEach(function(tab,index){
       tab.addEventListener('click',function(){selectLens(tab,false,true)});
@@ -613,37 +606,9 @@ export function renderExperienceHtml(input: {
         var path=document.getElementById('decision-path');
         if(tab)selectLens(tab,false,false);
         window.flzAnalytic(attribute==='data-resource-lens-index'?'topic_select':'signature_select',{area:attribute==='data-resource-lens-index'?'resources':'signature',lensIndex:index,lensId:'lens-'+index,ctaId:this.getAttribute('data-flz-cta-id')||undefined});
-        showSignal('Your path now favors '+shortLabel(tab||this)+'.');
         if(path){path.scrollIntoView({behavior:reducedMotion?'auto':'smooth',block:'start'});setActiveSection('decision-path')}
       });
     });
-
-    var invite=document.querySelector('[data-folloze-invite]');
-    var insight=document.querySelector('[data-folloze-insight]');
-    var inviteTimer;
-    var inviteShown=false;
-    function showFollozeInvite(){
-      if(inviteShown||window.parent!==window||!invite)return;
-      inviteShown=true;
-      invite.hidden=false;
-      window.removeEventListener('scroll',checkInviteDepth);
-    }
-    function checkInviteDepth(){
-      var root=document.scrollingElement||document.documentElement;
-      var progress=(root.scrollTop+window.innerHeight)/Math.max(root.scrollHeight,1);
-      if(progress>=.5)showFollozeInvite();
-    }
-    if(window.parent===window&&invite){
-      inviteTimer=window.setTimeout(showFollozeInvite,18000);
-      window.addEventListener('scroll',checkInviteDepth,{passive:true});
-      checkInviteDepth();
-      var inviteOpen=invite.querySelector('[data-folloze-invite-open]');
-      var inviteDismiss=invite.querySelector('[data-folloze-invite-dismiss]');
-      var insightClose=insight&&insight.querySelector('[data-folloze-insight-close]');
-      if(inviteOpen)inviteOpen.addEventListener('click',function(){invite.hidden=true;if(insight)insight.hidden=false;window.flzAnalytic('cta_click',{area:'analytics-invite',ctaId:'see-what-folloze-knows'});showSignal('Engagement intelligence is now in view.')});
-      if(inviteDismiss)inviteDismiss.addEventListener('click',function(){invite.hidden=true;window.flzAnalytic('cta_click',{area:'analytics-invite',ctaId:'dismiss-insight-invite'})});
-      if(insightClose)insightClose.addEventListener('click',function(){if(insight)insight.hidden=true});
-    }
 
     document.querySelectorAll('[data-flz-editable]').forEach(function(block){
       block.addEventListener('click',function(){
@@ -725,18 +690,17 @@ export function renderExperienceHtml(input: {
       var label=fullscreenControl.querySelector('[data-fullscreen-label]');
       if(label)label.textContent=active?'Exit full screen':'Full screen';
       window.flzAnalytic('fullscreen_change',{state:active?'entered':'exited'});
-      if(active)showSignal('Fullscreen view enabled.');
     }
     if(fullscreenControl&&document.documentElement.requestFullscreen&&document.exitFullscreen){
       fullscreenControl.hidden=false;
       fullscreenControl.addEventListener('click',function(){
         var request=document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();
-        if(request&&request.catch)request.catch(function(){window.flzAnalytic('fullscreen_change',{state:'unavailable'});showSignal('Fullscreen is unavailable in this browser.')});
+        if(request&&request.catch)request.catch(function(){window.flzAnalytic('fullscreen_change',{state:'unavailable'})});
       });
       document.addEventListener('fullscreenchange',syncFullscreen);
       document.addEventListener('fullscreenerror',function(){window.flzAnalytic('fullscreen_change',{state:'unavailable'})});
     }
-    window.addEventListener('pagehide',function(){if(toastTimer)window.clearTimeout(toastTimer);if(inviteTimer)window.clearTimeout(inviteTimer);window.removeEventListener('scroll',checkInviteDepth);window.removeEventListener('wheel',handOffPreviewWheel);engagementCleanup()},{once:true});
+    window.addEventListener('pagehide',function(){if(boundaryWheelFrame)window.cancelAnimationFrame(boundaryWheelFrame);window.removeEventListener('wheel',handOffPreviewWheel);engagementCleanup()},{once:true});
   })();
 </script>
 </body>

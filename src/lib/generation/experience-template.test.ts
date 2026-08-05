@@ -99,6 +99,8 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("html{scroll-behavior:auto;");
     expect(html).toContain("scrollIntoView({behavior:reducedMotion?'auto':'smooth'");
     expect(html).toContain("function handOffPreviewWheel(event)");
+    expect(html).toContain("boundaryWheelDelta+=event.deltaY");
+    expect(html).toContain("window.requestAnimationFrame(flushPreviewWheel)");
     expect(html).toContain("action:'preview_scroll_boundary'");
     expect(html).toContain("function scrollInlineIntoView(node)");
     expect(html).toContain("if(active)scrollInlineIntoView(link)");
@@ -312,6 +314,12 @@ describe("renderExperienceHtml", () => {
     expect(html).not.toContain("url:this.href");
   });
 
+  it("keeps the generated analytics runtime syntactically valid", () => {
+    const runtime = html.match(/<script data-flz-runtime>([\s\S]*?)<\/script>/)?.[1];
+    expect(runtime).toBeTruthy();
+    expect(() => new Function(runtime ?? "")).not.toThrow();
+  });
+
   it("captures visibility-aware engagement depth through the non-blocking API sink", () => {
     expect(html).toContain("section_dwell:true");
     expect(html).toContain("page_heartbeat:true");
@@ -332,25 +340,21 @@ describe("renderExperienceHtml", () => {
     expect(html).not.toContain("email:");
   });
 
-  it("shows a reusable polite interaction signal and honors motion preferences", () => {
-    expect(html).toContain('data-signal-toast role="status" aria-live="polite" aria-atomic="true" hidden');
-    expect(html).not.toContain("var signalShown=false");
-    expect(html).toContain("if(toastTimer)window.clearTimeout(toastTimer)");
-    expect(html).toContain("toastCopy.textContent=message");
+  it("delegates interaction feedback to the host so the preview has one notification system", () => {
+    expect(html).not.toContain('data-signal-toast role="status"');
+    expect(html).not.toContain('data-folloze-invite aria-label="Folloze engagement insight"');
+    expect(html).not.toContain('data-folloze-insight aria-label="Engagement signals captured by Folloze"');
+    expect(html).toContain("window.parent.postMessage");
     expect(html).toContain("@media(prefers-reduced-motion:reduce)");
     expect(html).toContain("transition:none!important");
     expect(html).toContain("@media(forced-colors:active)");
   });
 
-  it("offers standalone buyers a timed or halfway engagement-intelligence reveal", () => {
-    expect(html).toContain('data-folloze-invite aria-label="Folloze engagement insight" hidden');
-    expect(html).toContain("See what Folloze knows");
-    expect(html).toContain("window.setTimeout(showFollozeInvite,18000)");
-    expect(html).toContain("if(progress>=.5)showFollozeInvite()");
-    expect(html).toContain("if(inviteShown||window.parent!==window||!invite)return");
-    expect(html).toContain("ctaId:'see-what-folloze-knows'");
-    expect(html).toContain("Which paths and topics earn attention");
-    expect(html).toContain("How long buyers engage with each section");
+  it("deduplicates rapid semantic events without suppressing dwell or heartbeat depth", () => {
+    expect(html).toContain("var recentSemanticEvents={}");
+    expect(html).toContain("function semanticEventKey(action,payload)");
+    expect(html).toContain("now-recentSemanticEvents[semanticKey]<1200");
+    expect(html).toContain("action!=='page_heartbeat'&&action!=='section_dwell'");
   });
 
   it("uses content provenance without turning the preview into a live source CTA", () => {
@@ -372,7 +376,7 @@ describe("renderExperienceHtml", () => {
     expect(content).toContain('data-template-family="content-source"');
     expect(content).toContain('data-source-reference="Automation guide"');
     expect(content).toContain("Built from Automation guide.");
-    expect(content.match(/<article class="journey-card resource-card/g)).toHaveLength(2);
+    expect(content.match(/<article class="journey-card resource-card/g)).toHaveLength(3);
     expect(content).not.toContain('href="https://example.com/guides/automation"');
     expect(content.match(/class="actions"/g)).toHaveLength(1);
     expect(content.match(/class="primary" data-demo-cta/g)).toHaveLength(2);
@@ -614,7 +618,7 @@ describe("renderExperienceHtml", () => {
       expect(candidate.liveHeroLinks).toBe(0);
       expect(candidate.lensTabs).toBe(3);
       expect(candidate.lensPanels).toBe(3);
-      expect(candidate.resourceCards).toBe(candidate.family === "content-source" ? 2 : 3);
+      expect(candidate.resourceCards).toBe(3);
     }
     expect(productFingerprint).toMatchObject({
       wireframe: "product-launch-landing-page",
@@ -745,7 +749,7 @@ describe("renderExperienceHtml", () => {
       expect(fingerprint.layout).toBe("standard");
       expect(fingerprint.signatureButtons).toBe(3);
       expect(fingerprint.lensPanels).toBe(3);
-      expect(fingerprint.resourceCards).toBe(fingerprint.family === "content-source" ? 2 : 3);
+      expect(fingerprint.resourceCards).toBe(3);
       expect(fingerprint.heroActions).toBe(1);
       expect(output).not.toContain("Experience receipt");
       expect(output).not.toContain('id="guided-questions"');
@@ -762,7 +766,7 @@ describe("renderExperienceHtml", () => {
     expect(anchors.length).toBeGreaterThan(0);
     for (const anchor of anchors) {
       expect(anchor).toContain('target="_blank"');
-      expect(anchor).toContain('rel="noopener"');
+      expect(anchor).toContain('rel="noopener noreferrer"');
       expect(anchor).not.toMatch(/href="#/);
     }
   });
@@ -808,7 +812,8 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain('data-demo-cta="true" data-flz-cta-id="close-primary"');
     expect(html).not.toMatch(/data-scroll-target="[^"]+"[^>]+data-flz-cta-id="hero-primary"/);
     expect(html).not.toMatch(/<a class="primary"[^>]+data-flz-cta-id="close-primary"/);
-    expect(html).not.toContain("if(signalShown||!toast||!toastCopy)return");
-    expect(html).toContain("CTA style preview — no destination is connected.");
+    expect(html).not.toContain("window.location=");
+    expect(html).not.toContain("showSignal(");
+    expect(html).toContain("window.flzAnalytic('cta_click'");
   });
 });

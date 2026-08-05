@@ -6,7 +6,8 @@ import {
   duplicateSession,
   patchSessionAnswers,
   patchSessionWorkspace,
-  recordPreviewInteraction
+  recordPreviewInteraction,
+  runSourceIntelligenceStage
 } from "@/lib/orchestrator";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { supportRefForTraceId } from "@/lib/observability";
@@ -24,6 +25,7 @@ vi.mock("@/lib/orchestrator", () => ({
   patchSessionWorkspace: vi.fn(),
   recordPreviewInteraction: vi.fn(),
   recoverSessionWork: vi.fn(),
+  runSourceIntelligenceStage: vi.fn(),
   runStoryStage: vi.fn(),
   runTargetBrandStage: vi.fn()
 }));
@@ -117,6 +119,19 @@ describe("session workspace API", () => {
       objective: "Book a meeting"
     });
     expect(patchSessionWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("starts source intelligence as soon as a public content URL is submitted", async () => {
+    const sourceUrl = "https://example.com/reports/automation-guide";
+    const response = await PATCH(request("PATCH", { sourceUrl }), context);
+
+    expect(response.status).toBe(200);
+    const sourceCallback = vi.mocked(after).mock.calls
+      .map(([callback]) => callback)
+      .find((callback) => typeof callback === "function");
+    expect(sourceCallback).toBeTypeOf("function");
+    await (sourceCallback as () => Promise<void>)();
+    expect(runSourceIntelligenceStage).toHaveBeenCalledWith(sessionId);
   });
 
   it("accepts one coherent workspace mutation for creative controls", async () => {

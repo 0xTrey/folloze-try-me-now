@@ -126,7 +126,8 @@ function session(input: {
     answers: {
       audience: "Enterprise architects and platform owners",
       objective: "Book a meeting",
-      campaignType: "product"
+      campaignType: "product",
+      promotedOffer: "Jitterbit Harmony"
     },
     brand,
     audienceSuggestions: [],

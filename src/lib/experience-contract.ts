@@ -11,6 +11,7 @@ import {
   type CampaignBrief,
   type CampaignBriefField,
   type CampaignOfferSource,
+  type ExperienceContentItem,
   type ExperienceDependency,
   type ExperienceSpecV1,
   type TryMeSession
@@ -37,6 +38,79 @@ function publicHost(value: string | undefined): string | undefined {
   const citation = publicCitation(value);
   if (!citation) return undefined;
   return new URL(citation).hostname.replace(/^www\./, "");
+}
+
+function boundedText(value: string, max: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= max) return normalized;
+  const clipped = normalized.slice(0, max + 1);
+  const boundary = clipped.lastIndexOf(" ");
+  return `${clipped.slice(0, boundary > max * 0.55 ? boundary : max).trim()}…`;
+}
+
+function contentItemsFor(session: TryMeSession, draft: ExperienceDraft): ExperienceContentItem[] {
+  const artifact = session.sourceArtifact;
+  if (artifact && artifact.status !== "failed" && artifact.status !== "unreadable") {
+    const citationById = new Map(
+      artifact.content.citations.map((citation) => [citation.id, citation])
+    );
+    const sourceSections = artifact.content.sections
+      .filter((section) => section.text.trim().length >= 24 && section.citationIds.length > 0)
+      .slice(0, 3)
+      .map((section, index): ExperienceContentItem => {
+        const sourceLabel = section.citationIds
+          .map((citationId) => citationById.get(citationId))
+          .filter((citation) => Boolean(citation))
+          .map((citation) =>
+            citation!.locator.kind === "pdf-page"
+              ? `Page ${citation!.locator.page}`
+              : citation!.locator.label
+          )[0];
+        return {
+          id: section.id,
+          kind: "chapter",
+          eyebrow: `Source chapter ${String(index + 1).padStart(2, "0")}`,
+          title: boundedText(section.title, 96),
+          summary: boundedText(section.text, 260),
+          actionLabel: "Explore this chapter",
+          sourceCitationIds: section.citationIds.slice(0, 8),
+          ...(sourceLabel ? { sourceLabel } : {})
+        };
+      });
+    if (sourceSections.length >= 2) return sourceSections;
+
+    const claimItems = artifact.understanding.claims.slice(0, 3).map(
+      (claim, index): ExperienceContentItem => ({
+        id: claim.id,
+        kind: claim.kind === "metric" ? "proof" : "insight",
+        eyebrow:
+          claim.kind === "metric"
+            ? "Source proof"
+            : claim.kind === "recommendation"
+              ? "Recommended action"
+              : "Core finding",
+        title: boundedText(claim.text, 96),
+        summary: boundedText(
+          artifact.understanding.summary ?? artifact.understanding.premise ?? claim.text,
+          260
+        ),
+        actionLabel: index === 0 ? "Explore the finding" : "See why it matters",
+        sourceCitationIds: claim.citationIds.slice(0, 8)
+      })
+    );
+    if (claimItems.length > 0) return claimItems;
+  }
+
+  return draft.sections.map((section, index) => ({
+    id: `journey-${index + 1}`,
+    kind: index === 2 ? "resource" : "insight",
+    eyebrow: section.eyebrow,
+    title: section.headline,
+    summary: section.body,
+    actionLabel: index === 2 ? "Choose this next step" : "Explore this signal",
+    sourceCitationIds: [],
+    illustrative: true
+  }));
 }
 
 function field(
@@ -258,6 +332,7 @@ export function buildExperienceSpec(
     session.answers.offerSourceTitle ??
     session.answers.promotedOffer ??
     session.answers.sourceName;
+  const contentItems = contentItemsFor(session, canonicalDraft);
   const payload = {
     schemaVersion: "1.0" as const,
     revision:
@@ -323,6 +398,26 @@ export function buildExperienceSpec(
       ...(brand.logoUrl ? { logoUrl: brand.logoUrl } : {})
     },
     draft: canonicalDraft as Record<string, unknown>,
+    contentItems,
+    ...(session.sourceArtifact
+      ? {
+          sourceIntelligence: {
+            artifactId: session.sourceArtifact.artifactId,
+            digest: session.sourceArtifact.digest,
+            status: session.sourceArtifact.status,
+            confidence: session.sourceArtifact.confidence,
+            ...(session.sourceArtifact.content.title
+              ? { title: session.sourceArtifact.content.title }
+              : {}),
+            ...(session.sourceArtifact.understanding.premise
+              ? { premise: session.sourceArtifact.understanding.premise }
+              : {}),
+            claimIds: session.sourceArtifact.understanding.claims.map((claim) => claim.id),
+            citationCount: session.sourceArtifact.diagnostics.citationCount,
+            experiencePattern: session.sourceArtifact.understanding.experiencePlan.pattern
+          }
+        }
+      : {}),
     cta: {
       intent: session.answers.ctaType ?? "explore",
       style: session.answers.ctaStyle ?? "solid",

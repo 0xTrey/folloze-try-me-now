@@ -741,7 +741,9 @@ export function compileCampaignContext(input: {
     ? `The visitor supplied ${eventContext} as the event context.`
     : sourceTitle
       ? `The approved source is ${sourceTitle}.`
-      : null;
+      : useCase === "campaign" && answers.promotedOffer
+        ? `The visitor named ${offerName} as the promoted offer for this ${register.replace("campaign-", "")} campaign.`
+        : null;
 
   return {
     brief: {
@@ -799,6 +801,8 @@ export function compileCampaignContext(input: {
           ? `${targetBrand.companyName} and ${audience}`
           : sourceTitle
             ? `${sourceTitle} for ${audience}`
+            : useCase === "campaign" && answers.promotedOffer
+              ? `${offerName} for ${audience}`
             : audience,
         whyChange:
           register === "content-magic"
@@ -808,6 +812,8 @@ export function compileCampaignContext(input: {
         sellerPromise:
           register === "content-magic"
             ? `Help ${audience} explore the supported ideas in ${sourceTitle ?? "the source"} without adding unrelated product-category claims.`
+            : useCase === "campaign" && answers.promotedOffer
+              ? `Make ${offerName} relevant to ${audience} without adding unsupported product claims.`
             : profile.capabilitySentence,
         proofPolicy:
           proofMode === "source-content"
@@ -836,6 +842,10 @@ export function compileCampaignContext(input: {
             ? sourceTitle
               ? `Approved source asset: ${sourceTitle}`
               : "The uploaded or linked source asset"
+            : useCase === "campaign" && answers.promotedOffer
+              ? answers.offerSourceUrl
+                ? `Visitor-confirmed offer and public source: ${offerName}`
+                : `Visitor-confirmed promoted offer: ${offerName}`
             : "Explicit visitor inputs and harvested public seller context",
         design: `Harvested public brand system from ${brand.sourceUrl}`
       },

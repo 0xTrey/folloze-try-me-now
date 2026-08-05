@@ -293,8 +293,11 @@ function extractLogo(
       if (companyNameSignal) score += 35;
       if (/mainnav|site[-_ ]?logo|navbar.*logo|header.*logo/.test(descriptor)) score += 45;
       if (/favicon|apple-touch|lang-picker|customer|partner|testimonial/.test(descriptor)) score -= 90;
-      if (width && height && width <= 96 && height <= 96 && Math.abs(width - height) < 20) score -= 35;
-      if (width > height * 1.6) score += 15;
+      // A small square mark is often an app icon or favicon-sized symbol. Keep
+      // it as a last-resort candidate, but prefer a deliverable wordmark when a
+      // verified provider can resolve one.
+      if (width && height && width <= 96 && height <= 96 && Math.abs(width - height) < 20) score -= 65;
+      if (width > height * 1.6) score += 25;
       return { source, score };
     })
     .filter((candidate): candidate is { source: string; score: number } => Boolean(candidate))
@@ -1260,11 +1263,34 @@ function profileWithBrandfetchLogo(
   result: BrandfetchLogoResult
 ): BrandProfile {
   const base = profile ?? fallbackBrand(domain);
-  const colors = profile
-    ? base.colors
-    : result.colors.length
-      ? result.colors
-      : base.colors;
+  const currentPalette = base.diagnostics?.palette;
+  const brandfetchSurface = result.colors.find((color) => luminance(color) > 0.88);
+  const brandfetchPrimary = [...result.colors]
+    .filter((color) => color !== brandfetchSurface)
+    .sort((left, right) => luminance(left) - luminance(right))[0];
+  const brandfetchAccent = [...result.colors]
+    .filter((color) => color !== brandfetchSurface && color !== brandfetchPrimary)
+    .sort((left, right) => saturation(right) - saturation(left))[0];
+  const brandfetchPaletteReady = Boolean(
+    brandfetchSurface &&
+      brandfetchPrimary &&
+      brandfetchAccent &&
+      luminance(brandfetchPrimary) < 0.55 &&
+      saturation(brandfetchAccent) > 0.2
+  );
+  const useBrandfetchPalette = brandfetchPaletteReady && Boolean(
+    !profile ||
+      !currentPalette ||
+      currentPalette.strategy === "fallback" ||
+      currentPalette.confidence === "low" ||
+      base.colors.length < 3
+  );
+  const colors = useBrandfetchPalette
+    ? [brandfetchPrimary, brandfetchAccent, brandfetchSurface, ...result.colors]
+        .filter((color): color is string => Boolean(color))
+        .filter((color, index, values) => values.indexOf(color) === index)
+        .slice(0, 8)
+    : base.colors;
   return {
     ...base,
     companyName: profile?.companyName ?? result.companyName ?? base.companyName,
@@ -1272,8 +1298,9 @@ function profileWithBrandfetchLogo(
     logoSourceUrl: undefined,
     portableLogo: result.portableLogo,
     colors,
-    primaryColor: profile ? base.primaryColor : colors[0] ?? base.primaryColor,
-    accentColor: profile ? base.accentColor : colors[1] ?? base.accentColor,
+    primaryColor: useBrandfetchPalette ? brandfetchPrimary ?? colors[0] ?? base.primaryColor : base.primaryColor,
+    accentColor: useBrandfetchPalette ? brandfetchAccent ?? colors[1] ?? base.accentColor : base.accentColor,
+    surfaceColor: useBrandfetchPalette ? brandfetchSurface ?? base.surfaceColor : base.surfaceColor,
     source: "brand-harvester",
     diagnostics: {
       ...base.diagnostics,
@@ -1283,14 +1310,23 @@ function profileWithBrandfetchLogo(
         rejectedImageCount: base.diagnostics?.logo.rejectedImageCount ?? 0,
         inlineSvgCandidateCount: base.diagnostics?.logo.inlineSvgCandidateCount ?? 0
       },
-      palette: profile?.diagnostics?.palette ?? {
-        strategy: "brandfetch",
-        confidence: result.colors.length >= 3 ? "high" : result.colors.length >= 2 ? "medium" : "low",
-        candidateCount: result.colors.length,
-        semanticCandidateCount: result.colors.length,
-        rejectedCandidateCount: 0,
-        gradientCandidateCount: 0
-      }
+      palette: useBrandfetchPalette
+        ? {
+            strategy: "brandfetch",
+            confidence: "high",
+            candidateCount: result.colors.length,
+            semanticCandidateCount: result.colors.length,
+            rejectedCandidateCount: 0,
+            gradientCandidateCount: 0
+          }
+        : profile?.diagnostics?.palette ?? {
+            strategy: "brandfetch",
+            confidence: result.colors.length >= 3 ? "high" : result.colors.length >= 2 ? "medium" : "low",
+            candidateCount: result.colors.length,
+            semanticCandidateCount: result.colors.length,
+            rejectedCandidateCount: 0,
+            gradientCandidateCount: 0
+          }
     }
   };
 }
@@ -1305,7 +1341,7 @@ function logoEvidenceScore(profile: BrandProfile): number {
     case "verified-profile":
       return 5;
     case "semantic-image":
-      return 4;
+      return (profile.diagnostics?.logo.selectedScore ?? 0) >= 75 ? 4 : 2;
     case "remote-profile":
       return 3;
     case "favicon":
@@ -1313,6 +1349,16 @@ function logoEvidenceScore(profile: BrandProfile): number {
     default:
       return profile.logoUrl ? 2 : 0;
   }
+}
+
+function needsBrandfetchLogo(profile: BrandProfile | undefined): boolean {
+  if (!profile) return true;
+  if (profile.diagnostics?.logo.strategy === "verified-profile") return false;
+  if (profile.portableLogo) return false;
+  if (["none", "favicon", "inline-svg-unportable", "remote-profile"].includes(
+    profile.diagnostics?.logo.strategy ?? "none"
+  )) return true;
+  return logoEvidenceScore(profile) <= 2;
 }
 
 function mergePublicBrandEvidence(
@@ -1502,7 +1548,7 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     candidate ??= verified;
   }
 
-  if (!candidate?.logoUrl && !candidate?.portableLogo) {
+  if (needsBrandfetchLogo(candidate)) {
     const brandfetch = await fetchBrandfetchLogo(domain);
     if (brandfetch) candidate = profileWithBrandfetchLogo(domain, candidate, brandfetch);
   }

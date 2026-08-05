@@ -6,17 +6,22 @@ import {
   Check,
   Clock,
   Copy,
+  Eye,
   ExternalLink,
   FileText,
   Gauge,
   Globe2,
   ImageIcon,
+  Layers3,
   Lock,
   Mail,
+  MousePointerClick,
   Pencil,
   Pin,
   RefreshCw,
+  Route,
   Target,
+  Users,
   WandSparkles,
   X
 } from "lucide-react";
@@ -766,22 +771,76 @@ export interface AnalyticsSignal {
   detail: string;
   atLabel: string;
   type?: "view" | "choice" | "cta";
+  action?: string;
+  occurredAt?: number;
+  context?: {
+    sectionId?: string;
+    targetId?: string;
+    ctaId?: string;
+    lensId?: string;
+    area?: string;
+  };
   actorLabel?: string;
   roleLabel?: string;
   isExample?: boolean;
 }
 
+function analyticsSignalTime(signal: AnalyticsSignal): number | undefined {
+  if (typeof signal.occurredAt === "number" && Number.isFinite(signal.occurredAt)) return signal.occurredAt;
+  const idTimestamp = Number(signal.id.split("-", 1)[0]);
+  return Number.isFinite(idTimestamp) && idTimestamp > 1_000_000_000_000 ? idTimestamp : undefined;
+}
+
+function analyticsSignalKey(signal: AnalyticsSignal): string {
+  const context = signal.context;
+  const subject = context?.ctaId
+    ?? context?.lensId
+    ?? context?.sectionId
+    ?? context?.targetId
+    ?? context?.area
+    ?? signal.label;
+  return `${signal.action ?? signal.type ?? "interaction"}:${subject}`.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+export function prepareAnalyticsSignals(
+  signals: AnalyticsSignal[],
+  dedupeWindowMs = 1_200
+): AnalyticsSignal[] {
+  const latestByKey = new Map<string, number>();
+  const seenIds = new Set<string>();
+  return signals.filter((signal) => {
+    if (seenIds.has(signal.id)) return false;
+    seenIds.add(signal.id);
+    const occurredAt = analyticsSignalTime(signal);
+    if (occurredAt === undefined) return true;
+    const key = analyticsSignalKey(signal);
+    const previous = latestByKey.get(key);
+    latestByKey.set(key, occurredAt);
+    return previous === undefined || occurredAt - previous >= dedupeWindowMs;
+  });
+}
+
 export function AnalyticsSignalToast({ signal, open, onDismiss, onOpenPanel }: { signal?: AnalyticsSignal; open: boolean; onDismiss: () => void; onOpenPanel: () => void }) {
   if (!open || !signal) return null;
   return (
-    <aside className={styles.signalToast} role="status" aria-live="polite">
+    <aside className={styles.signalToast} aria-label="Latest engagement signal">
+      <span className={styles.signalAnnouncement} role="status" aria-live="polite" aria-atomic="true">Signal captured: {signal.label}</span>
       <span className={styles.signalPulse}><Gauge size={17} /></span>
-      <div><span>Signal captured</span><strong>{signal.label}</strong><small>{signal.detail}</small></div>
-      <button type="button" className={styles.signalOpen} onClick={onOpenPanel}>See what Folloze knows<ArrowRight size={14} /></button>
+      <div><span>Signal captured</span><strong>{signal.label}</strong></div>
+      <button type="button" className={styles.signalOpen} onClick={onOpenPanel}>See the journey<ArrowRight size={14} /></button>
       <button type="button" className={styles.signalDismiss} onClick={onDismiss} aria-label="Dismiss signal"><X size={16} /></button>
     </aside>
   );
 }
+
+const ANALYTICS_CAPABILITIES = [
+  { id: "attention", label: "Attention", detail: "Views, dwell time, and return visits", icon: Eye },
+  { id: "journey", label: "Journey path", detail: "Sections and sequences buyers explore", icon: Route },
+  { id: "topics", label: "Topics", detail: "Decision lenses and questions selected", icon: Layers3 },
+  { id: "content", label: "Content", detail: "Resources and proof opened", icon: FileText },
+  { id: "intent", label: "Intent", detail: "Next-step and CTA interactions", icon: MousePointerClick },
+  { id: "group", label: "Buying group", detail: "Account-level engagement across people", icon: Users }
+] as const;
 
 export interface AnalyticsSignalPanelProps {
   open: boolean;
@@ -805,32 +864,44 @@ export function AnalyticsSignalPanel({
   onClose
 }: AnalyticsSignalPanelProps) {
   const ref = useModalAccess(open, onClose);
+  const liveSignals = prepareAnalyticsSignals(signals).slice(-24);
   const buyingGroupSignals = exampleSignals ?? (sessionId
     ? buildSimulatedEngagement({ sessionId, audienceLabel })
     : []);
   if (!open) return null;
   return (
-    <div className={styles.modalBackdrop} onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
+    <div className={classes(styles.modalBackdrop, styles.signalBackdrop)} onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
       <aside ref={ref} className={styles.signalPanel} role="dialog" aria-modal="true" aria-labelledby="signal-panel-title" onKeyDown={(event) => trapModalFocus(event, ref.current)}>
-        <div className={styles.drawerHeader}><div><span>Live engagement</span><h2 id="signal-panel-title">This is what Folloze sees.</h2></div><button type="button" onClick={onClose} aria-label="Close analytics signals"><X size={20} /></button></div>
-        <div className={styles.signalStats}><div><strong>1</strong><span>{visitorLabel}</span></div><div><strong>{signals.length}</strong><span>interactions</span></div><div><strong>{engagedSeconds}s</strong><span>engaged</span></div></div>
-        <section className={styles.realSignalSection} aria-labelledby="real-signal-title">
-          <div className={styles.signalSectionHeading}><div><span>Real-time proof</span><h3 id="real-signal-title">Your activity in this preview</h3></div><b>Live</b></div>
-          <div className={styles.signalTimeline}>
-            {signals.map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel}</span><strong>{signal.label}</strong><p>{signal.detail}</p></div></article>)}
-            {!signals.length && <p className={styles.signalEmpty}>Explore the preview to see your first live signal arrive here.</p>}
+        <div className={styles.drawerHeader}><div><span>Live engagement</span><h2 id="signal-panel-title">What Folloze knows about this journey.</h2><p>Every meaningful interaction can become context for campaign and sales follow-up.</p></div><button type="button" onClick={onClose} aria-label="Close analytics signals"><X size={20} /></button></div>
+        <div className={styles.signalStats}><div><strong>1</strong><span>{visitorLabel}</span></div><div><strong>{liveSignals.length}</strong><span>meaningful interactions</span></div><div><strong>{engagedSeconds}s</strong><span>engaged</span></div></div>
+        <section className={styles.signalCapabilitySection} aria-labelledby="signal-capability-title">
+          <div className={styles.signalSectionHeading}><div><span>Folloze engagement intelligence</span><h3 id="signal-capability-title">From attention to account-level intent</h3></div><b>Available</b></div>
+          <div className={styles.signalCapabilityGrid}>
+            {ANALYTICS_CAPABILITIES.map((capability) => {
+              const Icon = capability.icon;
+              return <article key={capability.id}><span><Icon size={17} /></span><div><strong>{capability.label}</strong><p>{capability.detail}</p></div></article>;
+            })}
           </div>
         </section>
-        {buyingGroupSignals.length > 0 && (
-          <section className={styles.exampleSignalSection} aria-labelledby="example-signal-title">
-            <div className={styles.exampleSignalLabel}><span>Example analytics</span><strong>Placeholder people</strong></div>
-            <div className={styles.signalSectionHeading}><div><span>Buying-group view</span><h3 id="example-signal-title">What account-level depth could look like</h3></div></div>
-            <p className={styles.exampleSignalDisclosure}>Illustrative activity only. These names and actions are not captured leads.</p>
-            <div className={classes(styles.signalTimeline, styles.exampleTimeline)}>
-              {buyingGroupSignals.map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel} · {signal.roleLabel}</span><strong>{signal.label}</strong><p>{signal.detail}</p></div></article>)}
+        <div className={styles.signalColumns}>
+          <section className={styles.realSignalSection} aria-labelledby="real-signal-title">
+            <div className={styles.signalSectionHeading}><div><span>Real-time proof</span><h3 id="real-signal-title">Your activity in this preview</h3></div><b>Live</b></div>
+            <div className={styles.signalTimeline}>
+              {[...liveSignals].reverse().map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel}</span><strong>{signal.label}</strong><p>{signal.detail}</p></div></article>)}
+              {!liveSignals.length && <p className={styles.signalEmpty}>Explore the preview to see your first live signal arrive here.</p>}
             </div>
           </section>
-        )}
+          {buyingGroupSignals.length > 0 && (
+            <section className={styles.exampleSignalSection} aria-labelledby="example-signal-title">
+              <div className={styles.exampleSignalLabel}><span>Illustrative examples</span><strong>Not captured leads</strong></div>
+              <div className={styles.signalSectionHeading}><div><span>Buying-group view</span><h3 id="example-signal-title">What account-level depth could look like</h3></div></div>
+              <p className={styles.exampleSignalDisclosure}>Simulated activity only. These placeholder names and actions demonstrate what Folloze can report in a live campaign.</p>
+              <div className={classes(styles.signalTimeline, styles.exampleTimeline)}>
+                {buyingGroupSignals.map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel} · {signal.roleLabel}</span><strong>{signal.label}</strong><p>{signal.detail}</p></div></article>)}
+              </div>
+            </section>
+          )}
+        </div>
         <div className={styles.signalValue}><BarChart3 size={20} /><p>In a live campaign, these signals can route to campaign and sales systems so the next move starts with context.</p></div>
       </aside>
     </div>

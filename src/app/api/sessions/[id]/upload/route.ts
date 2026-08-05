@@ -7,6 +7,7 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { config, hasBlob, hasOpenAI } from "@/lib/config";
+import { extractPdfSourceArtifact } from "@/lib/content-pdf";
 import {
   apiError,
   type ErrorContext,
@@ -17,7 +18,7 @@ import {
 } from "@/lib/http";
 import { canEditSession, finalizePdfSource, runStoryStage } from "@/lib/orchestrator";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
-import { extractPdfDocumentTitle, pdfTitleFallback } from "@/lib/pdf-title";
+import { pdfTitleFallback } from "@/lib/pdf-title";
 import { getSession, sessionStoreMode, updateSession } from "@/lib/session-store";
 import { appendEvent } from "@/lib/telemetry";
 import { traceIdForSession } from "@/lib/trace-store";
@@ -492,8 +493,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
             throw new HttpError(400, "invalid_pdf_signature", "That file is not a valid PDF.");
           }
 
-          const sourceTitle =
-            (await extractPdfDocumentTitle(bytes, payload.originalName)) ?? pdfTitleFallback(payload.originalName);
+          const sourceArtifact = await extractPdfSourceArtifact(bytes, payload.originalName);
+          if (
+            sourceArtifact.status === "failed" ||
+            sourceArtifact.status === "unreadable" ||
+            sourceArtifact.extraction.ocr.status === "required"
+          ) {
+            throw new HttpError(
+              422,
+              "pdf_source_unreadable",
+              "That PDF does not contain enough readable text yet. Upload a searchable PDF or use a public URL."
+            );
+          }
+          const sourceTitle = sourceArtifact.content.title ?? pdfTitleFallback(payload.originalName);
 
           let sourceOpenAIFileId = hasOpenAI ? processingStatus.openAIFileId : undefined;
           if (hasOpenAI && !sourceOpenAIFileId) {
@@ -512,7 +524,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
             uploadId: payload.uploadId,
             sourceName: payload.originalName,
             sourceTitle,
-            sourceOpenAIFileId
+            sourceOpenAIFileId,
+            sourceArtifact
           });
           processingSucceeded = true;
           await writeOwnedUploadStatus(
@@ -539,7 +552,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
                   : metadata.size < 5_000_000
                     ? "1mb-to-5mb"
                     : "5mb-to-limit",
-              mode: sourceOpenAIFileId ? "openai-file" : "fixture-metadata"
+              mode: sourceOpenAIFileId ? "openai-file" : "fixture-metadata",
+              extractionStatus: sourceArtifact.extraction.status,
+              extractionMethod: sourceArtifact.extraction.method,
+              extractionConfidence: sourceArtifact.confidence,
+              claimCount: sourceArtifact.diagnostics.claimCount,
+              citationCount: sourceArtifact.diagnostics.citationCount
             },
             trace.errorContext()
           );

@@ -8,6 +8,8 @@ import {
 } from "@/lib/brand-intelligence";
 import { assessBrandReadiness } from "@/lib/brand-readiness";
 import { config } from "@/lib/config";
+import type { SourceArtifact } from "@/lib/content-intelligence";
+import { fetchPublicUrlSourceArtifact } from "@/lib/content-url";
 import {
   buildExperienceSpec,
   draftFromExperienceSpec,
@@ -449,6 +451,13 @@ function storyInputFingerprint(session: TryMeSession): string {
         brand: session.brand,
         targetBrand: session.targetBrand,
         answers: session.answers,
+        sourceArtifact: session.sourceArtifact
+          ? {
+              digest: session.sourceArtifact.digest,
+              status: session.sourceArtifact.status,
+              confidence: session.sourceArtifact.confidence
+            }
+          : null,
         evidence: session.evidenceItems?.map(({ id, disposition }) => ({ id, disposition })),
         sourceConfirmation: session.sourceConfirmation?.status,
         selectedAudienceRecommendationId: session.selectedAudienceRecommendationId,
@@ -528,7 +537,9 @@ function qualityReceiptFor(
   );
   const sourceConfirmed = session.useCase === "abm"
     ? usableEvidence > 0
-    : session.sourceConfirmation?.status === "confirmed";
+    : session.useCase === "content" && session.sourceArtifact
+      ? session.sourceArtifact.status === "ready" || session.sourceArtifact.status === "needs-review"
+      : session.sourceConfirmation?.status === "confirmed";
   const checks: QualityReceipt["checks"] = [
     {
       id: "copy",
@@ -588,13 +599,18 @@ function qualityReceiptFor(
       status:
         session.useCase !== "content"
           ? "not-applicable"
-          : sourceGroundingFor({ answers: session.answers }).confidence === "low"
+          : !session.sourceArtifact ||
+              session.sourceArtifact.status === "failed" ||
+              session.sourceArtifact.status === "unreadable" ||
+              session.sourceArtifact.understanding.claims.length < 2
             ? "warning"
             : "passed",
       detail:
         session.useCase !== "content"
           ? "A source asset is not required for this experience type."
-          : sourceGroundingFor({ answers: session.answers }).reason
+          : session.sourceArtifact
+            ? `${session.sourceArtifact.diagnostics.claimCount} cited source claims were extracted with ${session.sourceArtifact.confidence} confidence.`
+            : sourceGroundingFor({ answers: session.answers }).reason
     },
     {
       id: "claims",
@@ -664,7 +680,11 @@ export function isGenerationReady(useCase: UseCase, answers: SessionAnswers): bo
   if (!common) return false;
   if (useCase === "abm") return Boolean(answers.targetDomain);
   if (useCase === "campaign") {
-    return Boolean(answers.campaignType && (answers.campaignType !== "event" || answers.eventSource));
+    return Boolean(
+      answers.campaignType &&
+      answers.promotedOffer?.trim() &&
+      (answers.campaignType !== "event" || answers.eventSource)
+    );
   }
   return Boolean(answers.sourceUrl || answers.sourceName);
 }
@@ -872,7 +892,11 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
         return session;
       }
       session.brand = profile;
-      session.audienceSuggestions = audienceSuggestionsFor(profile, session.targetBrand);
+      session.audienceSuggestions = audienceSuggestionsFor(profile, session.targetBrand, {
+        promotedOffer: session.answers.promotedOffer,
+        campaignType: session.answers.campaignType,
+        objective: session.answers.objective
+      });
       syncExperienceFoundation(session);
       session.stages.brand = {
         status: trusted.usedFallback || readiness.status !== "ready" ? "fallback" : "complete",
@@ -931,7 +955,11 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
       session.brand = session.brand
         ? completedLogoResolution(session.brand)
         : withBrandIdentity(fallbackBrand(expectedDomain), expectedDomain);
-      session.audienceSuggestions = audienceSuggestionsFor(session.brand, session.targetBrand);
+      session.audienceSuggestions = audienceSuggestionsFor(session.brand, session.targetBrand, {
+        promotedOffer: session.answers.promotedOffer,
+        campaignType: session.answers.campaignType,
+        objective: session.answers.objective
+      });
       syncExperienceFoundation(session);
       session.stages.brand = {
         status: "fallback",
@@ -1026,7 +1054,11 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       }
       session.targetBrand = profile;
       if (session.brand) {
-        session.audienceSuggestions = audienceSuggestionsFor(session.brand, profile);
+        session.audienceSuggestions = audienceSuggestionsFor(session.brand, profile, {
+          promotedOffer: session.answers.promotedOffer,
+          campaignType: session.answers.campaignType,
+          objective: session.answers.objective
+        });
       }
       syncExperienceFoundation(session);
       session.stages.audience = {
@@ -1095,7 +1127,11 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
         ? completedLogoResolution(session.targetBrand)
         : withBrandIdentity(fallbackBrand(expectedDomain), expectedDomain);
       if (session.brand) {
-        session.audienceSuggestions = audienceSuggestionsFor(session.brand, session.targetBrand);
+        session.audienceSuggestions = audienceSuggestionsFor(session.brand, session.targetBrand, {
+          promotedOffer: session.answers.promotedOffer,
+          campaignType: session.answers.campaignType,
+          objective: session.answers.objective
+        });
       }
       syncExperienceFoundation(session);
       appendEvent(session, "target_harvest_failed", {
@@ -1109,6 +1145,63 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
     });
   }
   await resumeStoryAfterBrandStage(id);
+}
+
+export async function runSourceIntelligenceStage(id: string): Promise<void> {
+  const preflight = await getSession(id);
+  const sourceUrl = preflight?.useCase === "content" ? preflight.answers.sourceUrl : undefined;
+  if (!preflight || !sourceUrl || preflight.sourceArtifact) return;
+
+  const lease = await acquireSessionLease(id, `source-intelligence:${sourceUrl}`, 30);
+  if (!lease) return;
+  const attemptId = opaqueId();
+  try {
+    await updateSession(id, (session) => {
+      if (session.useCase !== "content" || session.answers.sourceUrl !== sourceUrl || session.sourceArtifact) {
+        return session;
+      }
+      appendEvent(session, "source_intelligence_started", { attemptId, kind: "public-url" });
+      return session;
+    });
+    const sourceArtifact = await fetchPublicUrlSourceArtifact(sourceUrl, {
+      timeoutMs: 12_000,
+      maxBytes: 2_000_000
+    });
+    await updateSession(id, (session) => {
+      if (session.useCase !== "content" || session.answers.sourceUrl !== sourceUrl || session.sourceArtifact) {
+        return session;
+      }
+      session.sourceArtifact = sourceArtifact;
+      if (sourceArtifact.content.title) session.answers.sourceTitle = sourceArtifact.content.title;
+      const rejected = sourceArtifact.status === "failed" || sourceArtifact.status === "unreadable";
+      session.sourceConfirmation = {
+        status: rejected ? "rejected" : "confirmed",
+        confirmedAt: rejected ? undefined : new Date().toISOString(),
+        sourceKind: "public-url",
+        provenance: "system-extracted"
+      };
+      appendEvent(session, "source_intelligence_completed", {
+        attemptId,
+        status: sourceArtifact.status,
+        confidence: sourceArtifact.confidence,
+        extractionMethod: sourceArtifact.extraction.method,
+        claimCount: sourceArtifact.diagnostics.claimCount,
+        citationCount: sourceArtifact.diagnostics.citationCount
+      });
+      return session;
+    });
+  } catch (error) {
+    const failedSession = await getSession(id);
+    logServerError(error, {
+      sessionId: id,
+      traceId: failedSession ? traceIdForSession(failedSession) : undefined,
+      operation: "source_intelligence",
+      code: "source_intelligence_failed",
+      details: { attemptId }
+    });
+  } finally {
+    await releaseLeaseSafely(lease, id, "source_intelligence");
+  }
 }
 
 function sourceKindFor(session: TryMeSession): NonNullable<TryMeSession["sourceConfirmation"]>["sourceKind"] {
@@ -1212,6 +1305,7 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   if (eventSourceWasSupplied && !patch.eventSource) delete session.answers.eventSource;
   const currentSourceFingerprint = sourceFingerprintForAnswers(session.answers);
   const sourceChanged = sourceWasSupplied && currentSourceFingerprint !== previousSourceFingerprint;
+  if (sourceChanged) session.sourceArtifact = undefined;
   if (offerSourceUrlWasSupplied && !patch.offerSourceUrl) {
     delete session.answers.offerSourceUrl;
     delete session.answers.offerSourceTitle;
@@ -1255,14 +1349,10 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
     (sourceChanged || (targetChanged && session.useCase === "abm")) &&
     patch.sourceConfirmed === undefined
   ) {
-    const submittedContentSource =
-      session.useCase === "content" && sourceChanged && Boolean(currentSourceFingerprint);
-    if (submittedContentSource) session.answers.sourceConfirmed = true;
-    else delete session.answers.sourceConfirmed;
+    delete session.answers.sourceConfirmed;
     delete session.answers.sourceTopicConfirmed;
     session.sourceConfirmation = {
-      status: submittedContentSource ? "confirmed" : "unconfirmed",
-      confirmedAt: submittedContentSource ? new Date().toISOString() : undefined,
+      status: "unconfirmed",
       sourceKind: sourceKindFor(session),
       provenance: "user-submitted"
     };
@@ -1625,7 +1715,13 @@ export async function duplicateSession(
 
 export async function finalizePdfSource(
   id: string,
-  input: { uploadId: string; sourceName: string; sourceTitle?: string; sourceOpenAIFileId?: string }
+  input: {
+    uploadId: string;
+    sourceName: string;
+    sourceTitle?: string;
+    sourceOpenAIFileId?: string;
+    sourceArtifact?: SourceArtifact;
+  }
 ): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean }> {
   assertProductionSessionStore();
   const updated = await updateSession(id, (session) => {
@@ -1645,6 +1741,7 @@ export async function finalizePdfSource(
     if (input.sourceTitle) session.answers.sourceTitle = input.sourceTitle;
     else delete session.answers.sourceTitle;
     session.answers.sourceOpenAIFileId = input.sourceOpenAIFileId;
+    session.sourceArtifact = input.sourceArtifact;
     session.answers.sourceConfirmed = true;
     session.sourceConfirmation = {
       status: "confirmed",
@@ -1685,6 +1782,11 @@ export async function runStoryStage(id: string): Promise<void> {
       hasTerminalStoryFailure(refreshed) ||
       needsTargetBrandRefresh(refreshed, preflight.answers.targetDomain)
     ) return;
+  }
+  if (preflight?.useCase === "content" && preflight.answers.sourceUrl && !preflight.sourceArtifact) {
+    await runSourceIntelligenceStage(id);
+    preflight = await getSession(id);
+    if (!preflight || hasTerminalStoryFailure(preflight)) return;
   }
 
   const lease = await acquireSessionLease(id, "generation", STORY_GENERATION_LEASE_SECONDS);
@@ -1745,7 +1847,77 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
 
   let staleGeneration = false;
   try {
-    const latest = (await getSession(id)) ?? started;
+    let latest = (await getSession(id)) ?? started;
+    if (
+      latest.useCase === "content" &&
+      latest.sourceArtifact &&
+      (latest.sourceArtifact.status === "failed" || latest.sourceArtifact.status === "unreadable")
+    ) {
+      throw new SourceFetchError(
+        new Error(latest.sourceArtifact.diagnostics.failureCode ?? "source_unreadable")
+      );
+    }
+    if (
+      latest.useCase === "content" &&
+      latest.answers.sourceUrl &&
+      !latest.sourceArtifact
+    ) {
+      const submittedSourceUrl = latest.answers.sourceUrl;
+      const sourceArtifact = await fetchPublicUrlSourceArtifact(submittedSourceUrl, {
+        timeoutMs: 12_000,
+        maxBytes: 2_000_000
+      });
+      await updateSession(id, (session) => {
+        if (
+          session.stages.story.attemptId !== attemptId ||
+          session.answers.sourceUrl !== submittedSourceUrl
+        ) {
+          return session;
+        }
+        session.sourceArtifact = sourceArtifact;
+        if (sourceArtifact.content.title) {
+          session.answers.sourceTitle = sourceArtifact.content.title;
+        }
+        session.sourceConfirmation = {
+          status:
+            sourceArtifact.status === "failed" || sourceArtifact.status === "unreadable"
+              ? "rejected"
+              : "confirmed",
+          confirmedAt:
+            sourceArtifact.status === "failed" || sourceArtifact.status === "unreadable"
+              ? undefined
+              : new Date().toISOString(),
+          sourceKind: "public-url",
+          provenance: "system-extracted"
+        };
+        expectedFingerprint = storyInputFingerprint(session);
+        session.stages.story.inputFingerprint = expectedFingerprint;
+        session.stages.story.detail =
+          sourceArtifact.status === "ready"
+            ? "Source premise and cited claims extracted. Composing the buyer journey."
+            : sourceArtifact.status === "needs-review"
+              ? "Source extracted with a few caveats. Composing only from supported claims."
+              : "The source could not be understood well enough to generate safely.";
+        appendEvent(session, "source_intelligence_completed", {
+          attemptId,
+          status: sourceArtifact.status,
+          confidence: sourceArtifact.confidence,
+          extractionMethod: sourceArtifact.extraction.method,
+          claimCount: sourceArtifact.diagnostics.claimCount,
+          citationCount: sourceArtifact.diagnostics.citationCount
+        });
+        return session;
+      });
+      latest = (await getSession(id)) ?? latest;
+      if (
+        sourceArtifact.status === "failed" ||
+        sourceArtifact.status === "unreadable"
+      ) {
+        throw new SourceFetchError(
+          new Error(sourceArtifact.diagnostics.failureCode ?? "source_unreadable")
+        );
+      }
+    }
     const brand = latest.brand ?? fallbackBrand(latest.companyDomain);
     const targetBrand =
       latest.targetBrand ??
@@ -1758,7 +1930,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       brand: selectedBrands.brand,
       targetBrand: selectedBrands.targetBrand,
       useCase: latest.useCase,
-      answers: latest.answers
+      answers: latest.answers,
+      sourceArtifact: latest.sourceArtifact
     });
     const trustFallbackReason = generationTrustFailureFor({
       draft: generated.draft,
@@ -1773,7 +1946,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           brand: selectedBrands.brand,
           targetBrand: selectedBrands.targetBrand,
           useCase: latest.useCase,
-          answers: latest.answers
+          answers: latest.answers,
+          sourceArtifact: latest.sourceArtifact
         }),
         source: "deterministic-fallback",
         durationMs: generated.durationMs,
@@ -1818,7 +1992,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       answers: latest.answers,
       themeUrl: process.env.FOLLOZE_THEME_URL,
       fontDeliveryUrls: fontDeliveryUrls(id, selectedBrands.brand),
-      qualityReceipt: generationQualityReceipt
+      qualityReceipt: generationQualityReceipt,
+      contentItems: experienceSpec.contentItems
     });
     const renderDurationMs = Date.now() - renderStartedAt;
     if (generated.error) {

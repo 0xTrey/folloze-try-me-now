@@ -15,13 +15,27 @@ describe("isGenerationReady", () => {
     expect(isGenerationReady("abm", { ...common, targetDomain: "target.com" })).toBe(true);
   });
 
-  it("keeps events inside the campaign path and requires event facts", () => {
-    expect(isGenerationReady("campaign", { ...common, campaignType: "product" })).toBe(true);
-    expect(isGenerationReady("campaign", { ...common, campaignType: "event" })).toBe(false);
+  it("requires a named campaign offer and keeps events inside the campaign path", () => {
+    expect(isGenerationReady("campaign", { ...common, campaignType: "product" })).toBe(false);
+    expect(
+      isGenerationReady("campaign", {
+        ...common,
+        campaignType: "product",
+        promotedOffer: "Automation Cloud"
+      })
+    ).toBe(true);
     expect(
       isGenerationReady("campaign", {
         ...common,
         campaignType: "event",
+        promotedOffer: "Automation Summit"
+      })
+    ).toBe(false);
+    expect(
+      isGenerationReady("campaign", {
+        ...common,
+        campaignType: "event",
+        promotedOffer: "Automation Summit",
         eventSource: "September 12 webinar for revenue leaders"
       })
     ).toBe(true);

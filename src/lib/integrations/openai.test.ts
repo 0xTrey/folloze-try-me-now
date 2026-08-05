@@ -26,6 +26,7 @@ vi.mock("@/lib/integrations/brand-harvester", () => ({
 }));
 
 import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
+import { createSourceArtifact } from "@/lib/content-intelligence";
 import {
   CANONICAL_EXPERIENCE_STRUCTURE,
   compileCampaignContext
@@ -91,6 +92,42 @@ const governedAutomationSource = {
     "The Governed Automation Field Guide. Approval checkpoints keep automated workflows accountable before high-impact actions run. Reusable integration patterns reduce duplicate business logic across teams. Clear exception ownership gives operations teams an escalation path when automation needs human review."
 };
 
+const governedAutomationArtifact = createSourceArtifact({
+  source: {
+    kind: "public-url",
+    sourceUrl: governedAutomationSource.sourceUrl,
+    finalUrl: governedAutomationSource.sourceUrl,
+    mediaType: "text/html"
+  },
+  extraction: {
+    method: "html-static",
+    status: "complete",
+    truncated: false,
+    ocr: { status: "not-required", pageNumbers: [], reason: "HTML source" },
+    warnings: []
+  },
+  content: {
+    title: governedAutomationSource.title,
+    description: governedAutomationSource.description,
+    text: governedAutomationSource.excerpt,
+    sections: [{
+      id: "section-1",
+      title: "Governed automation",
+      level: 1,
+      order: 0,
+      text: governedAutomationSource.excerpt,
+      citationIds: ["citation-1", "citation-2", "citation-3"]
+    }],
+    links: [],
+    assets: [],
+    citations: [
+      { id: "citation-1", locator: { kind: "url-block", block: 1, label: "Governed automation, block 1", sourceUrl: governedAutomationSource.sourceUrl }, excerpt: governedAutomationSource.description },
+      { id: "citation-2", locator: { kind: "url-block", block: 2, label: "Governed automation, block 2", sourceUrl: governedAutomationSource.sourceUrl }, excerpt: "Reusable integration patterns reduce duplicate business logic across teams." },
+      { id: "citation-3", locator: { kind: "url-block", block: 3, label: "Governed automation, block 3", sourceUrl: governedAutomationSource.sourceUrl }, excerpt: "Clear exception ownership gives operations teams an escalation path when automation needs human review." }
+    ]
+  }
+});
+
 function draftFor(useCase: UseCase, answers: SessionAnswers, targetBrand?: BrandProfile) {
   const context = compileCampaignContext({ brand: jitterbit, targetBrand, useCase, answers });
   const draft = deterministicDraft({ brand: jitterbit, targetBrand, useCase, answers, context });
@@ -101,6 +138,43 @@ describe("supplemental public source ingestion", () => {
   beforeEach(() => {
     parseResponse.mockReset();
     vi.mocked(extractPublicContent).mockReset();
+  });
+
+  it("uses normalized source intelligence without fetching the same URL a second time", async () => {
+    const answers: SessionAnswers = {
+      sourceUrl: governedAutomationSource.sourceUrl,
+      sourceTitle: governedAutomationSource.title,
+      audience: "Automation leaders",
+      objective: "Educate buyers"
+    };
+    parseResponse.mockResolvedValue({
+      output_parsed: deterministicDraft({
+        brand: jitterbit,
+        useCase: "content",
+        answers,
+        sourceArtifact: governedAutomationArtifact
+      })
+    });
+
+    await generateExperienceDraft({
+      brand: jitterbit,
+      useCase: "content",
+      answers,
+      sourceArtifact: governedAutomationArtifact
+    });
+
+    expect(extractPublicContent).not.toHaveBeenCalled();
+    const request = parseResponse.mock.calls[0]?.[0] as {
+      input: Array<{ content: Array<{ type: string; text?: string }> }>;
+    };
+    const brief = JSON.parse(request.input[0]?.content[0]?.text ?? "{}") as {
+      sourceIntelligence: { artifactId: string; claims: Array<{ citations: string[] }> };
+      sourceEvidencePhrases: string[];
+    };
+    expect(brief.sourceIntelligence.artifactId).toBe(governedAutomationArtifact.artifactId);
+    expect(brief.sourceIntelligence.claims.length).toBeGreaterThanOrEqual(2);
+    expect(brief.sourceIntelligence.claims.some((claim) => claim.citations.length > 0)).toBe(true);
+    expect(brief.sourceEvidencePhrases.length).toBeGreaterThanOrEqual(2);
   });
 
   it.each([
@@ -269,7 +343,7 @@ describe("deterministic experience copy", () => {
     ).toBeUndefined();
   });
 
-  it("keeps repaired content drafts when only token-distribution grounding is imperfect", () => {
+  it("blocks content drafts when source grounding is missing or poorly distributed", () => {
     const contentContext = compileCampaignContext({
       brand: jitterbit,
       useCase: "content",
@@ -292,13 +366,13 @@ describe("deterministic experience copy", () => {
 
     expect(
       isNonBlockingStyleFailure("copy_quality_missing_source_grounding", contentContext)
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isNonBlockingStyleFailure(
         "copy_quality_source_grounding_not_distributed",
         contentContext
       )
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isNonBlockingStyleFailure("copy_quality_unsupported_number", contentContext)
     ).toBe(false);

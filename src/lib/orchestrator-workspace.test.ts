@@ -497,9 +497,9 @@ describe("session workspace foundation", () => {
     expect(stored?.answers.sourceTitle).toBe("New Report");
     expect(stored?.answers.sourceUploadId).toBeUndefined();
     expect(stored?.answers.sourceOpenAIFileId).toBeUndefined();
-    expect(stored?.answers.sourceConfirmed).toBe(true);
+    expect(stored?.answers.sourceConfirmed).toBeUndefined();
     expect(stored?.sourceConfirmation).toMatchObject({
-      status: "confirmed",
+      status: "unconfirmed",
       sourceKind: "public-url",
       provenance: "user-submitted"
     });

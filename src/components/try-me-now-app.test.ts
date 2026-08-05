@@ -3,13 +3,17 @@ import { describe, expect, it } from "vitest";
 import type { PublicBrandProfile, PublicTryMeSession, StageStatus, UseCase } from "@/lib/types";
 import {
   buildMoments,
+  audienceRecommendationCopy,
+  campaignIntakeComplete,
   ctaValueForSession,
+  describePreviewAnalyticsEvent,
   entryPathOptions,
   getAssemblyPreviewKey,
   getBuildPanelCopy,
   getGuidedQuestionCopy,
   getRevealCopy,
   getRevealShellHeadline,
+  objectiveContextPrompt,
   preservePreviewDuringRegeneration,
   previewBoundaryScrollDelta,
   recommendedObjectiveFor,
@@ -64,18 +68,41 @@ describe("Try Me Now experience copy", () => {
     expect(recommendedObjectiveFor(session("content"))).toBe("Increase content engagement");
   });
 
-  it("auto-confirms only high-confidence content sources", () => {
-    expect(shouldAutoConfirmSource(session("content", { answers: { sourceUrl: "https://jitterbit.com/report" } }))).toBe(true);
-    expect(shouldAutoConfirmSource(session("content", { answers: { sourceName: "report.pdf", sourceTitle: "Integration Report" } }))).toBe(true);
-    expect(shouldAutoConfirmSource(session("content", { answers: { sourceName: "report.pdf" } }))).toBe(true);
+  it("auto-confirms only after source intelligence has grounded the submitted content", () => {
+    expect(shouldAutoConfirmSource(session("content", { answers: { sourceUrl: "https://jitterbit.com/report" } }))).toBe(false);
+    const sourceInsight: NonNullable<PublicTryMeSession["sourceInsight"]> = {
+      status: "ready",
+      confidence: "high",
+      title: "Integration Report",
+      premise: "A cited report about integration operations.",
+      topics: ["integration"],
+      claims: [],
+      extraction: {
+        method: "html-static",
+        status: "complete",
+        ocrStatus: "not-required",
+        warnings: []
+      },
+      experiencePattern: "guided-brief",
+      moduleKinds: ["hero"],
+      assetCount: 0,
+      citationCount: 2
+    };
     expect(shouldAutoConfirmSource(session("content", {
       answers: { sourceUrl: "https://jitterbit.com/report" },
+      sourceInsight
+    }))).toBe(true);
+    expect(shouldAutoConfirmSource(session("content", {
+      answers: { sourceUrl: "https://jitterbit.com/report" },
+      sourceInsight,
       sourceConfirmation: { status: "confirmed" }
     }))).toBe(false);
   });
 
   it("routes each watch-example action to a verified public Folloze board", () => {
     expect(entryPathOptions.abm).toMatchObject({
+      title: "Build an ABM campaign",
+      actionLabel: "Build an ABM campaign",
       exampleLabel: "Watch the NVIDIA 1:1 experience",
       exampleUrl: "https://experience.folloze.com/folloze-for-nvidia"
     });
@@ -88,6 +115,66 @@ describe("Try Me Now experience copy", () => {
       exampleLabel: "Watch Cisco HMF become an experience",
       exampleUrl: "https://engage.folloze.com/cisco-hmf-example"
     });
+  });
+
+  it("keeps the campaign intake open until the campaign shape and named offer are available", () => {
+    expect(campaignIntakeComplete(session("campaign"))).toBe(false);
+    expect(campaignIntakeComplete(session("campaign", {
+      answers: { campaignType: "product" }
+    }))).toBe(false);
+    expect(campaignIntakeComplete(session("campaign", {
+      answers: { campaignType: "product", promotedOffer: "Ford Pro Intelligence" }
+    }))).toBe(true);
+    expect(campaignIntakeComplete(session("campaign", {
+      answers: { campaignType: "event", promotedOffer: "Enterprise Automation Summit" }
+    }))).toBe(false);
+    expect(campaignIntakeComplete(session("campaign", {
+      answers: {
+        campaignType: "event",
+        promotedOffer: "Enterprise Automation Summit",
+        eventSource: "September 12 live webinar"
+      }
+    }))).toBe(true);
+  });
+
+  it("asks one objective-dependent question without adding another mandatory setup stage", () => {
+    expect(objectiveContextPrompt("Launch or announce", "Ford Pro Intelligence").label).toContain(
+      "Ford Pro Intelligence"
+    );
+    expect(objectiveContextPrompt("Drive registrations", "Enterprise Automation Summit").label).toMatch(
+      /attendees/i
+    );
+    expect(objectiveContextPrompt("Book meetings").label).toMatch(/conversation/i);
+  });
+
+  it("never presents an unsupported audience hypothesis as evidence-backed", () => {
+    const recommendation = {
+      id: "audience-1",
+      label: "Fleet operations leaders",
+      rationale: "A useful role hypothesis.",
+      evidenceItemIds: [],
+      confidence: "hypothesis" as const,
+      source: "seller-category-fallback" as const
+    };
+    expect(audienceRecommendationCopy({
+      recommendation,
+      evidenceCount: 0,
+      companyName: "Ford",
+      offer: "Ford Pro Intelligence",
+      isPrimary: true
+    })).toMatch(/Suggested starting point.*no supporting public signal/i);
+    expect(audienceRecommendationCopy({
+      recommendation: {
+        ...recommendation,
+        source: "seller-public-evidence",
+        confidence: "medium",
+        evidenceItemIds: ["evidence-1"]
+      },
+      evidenceCount: 1,
+      companyName: "Ford",
+      offer: "Ford Pro Intelligence",
+      isPrimary: true
+    })).toMatch(/Best-supported fit/i);
   });
 
   it("uses the generated ABM headline and names the seller, account, buyer, and objective", () => {
@@ -201,6 +288,11 @@ describe("Try Me Now experience copy", () => {
       targetBrand: brand("cisco.com", "Cisco")
     }, { audience: "complete" }));
     expect(needsObjective.headline).toBe("The buyer is set. Give the experience one job.");
+
+    const needsOffer = getBuildPanelCopy(session("campaign", {
+      answers: { campaignType: "product" }
+    }));
+    expect(needsOffer.headline).toBe("The campaign shape is ready. Name the offer.");
   });
 
   it("never presents incomplete brand evidence as ready", () => {
@@ -238,6 +330,12 @@ describe("Try Me Now experience copy", () => {
     }));
     expect(content.audienceTitle).toContain("API Transformation Playbook");
     expect(content.objectiveTitle).toContain("API Transformation Playbook");
+
+    const campaign = getGuidedQuestionCopy(session("campaign", {
+      answers: { campaignType: "product", promotedOffer: "Ford Pro Intelligence" }
+    }));
+    expect(campaign.audienceTitle).toContain("Ford Pro Intelligence");
+    expect(campaign.objectiveTitle).toContain("Ford Pro Intelligence");
   });
 
   // Regression: QA ISSUE-001. Analytics writes increment the session revision,
@@ -314,5 +412,19 @@ describe("Try Me Now experience copy", () => {
       action: "preview_scroll_boundary",
       deltaY: Number.NaN
     })).toBeUndefined();
+  });
+
+  it("turns bounded preview context into semantic engagement labels", () => {
+    expect(describePreviewAnalyticsEvent("section_view", { sectionId: "supporting-resources" })).toEqual({
+      label: "Viewed Supporting proof",
+      detail: "The visitor reached a new part of the buyer journey."
+    });
+    expect(describePreviewAnalyticsEvent("topic_select", { lensId: "lens-2" }).label).toBe(
+      "Selected decision lens 3"
+    );
+    expect(describePreviewAnalyticsEvent("cta_click", { ctaId: "close-primary" })).toEqual({
+      label: "Tested the closing CTA",
+      detail: "This preview captured next-step intent without leaving or losing the experience."
+    });
   });
 });

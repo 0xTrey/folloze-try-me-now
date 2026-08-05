@@ -13,6 +13,7 @@ import {
   patchSessionWorkspace,
   recordPreviewInteraction,
   recoverSessionWork,
+  runSourceIntelligenceStage,
   runStoryStage,
   runTargetBrandStage
 } from "@/lib/orchestrator";
@@ -70,15 +71,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const workspaceParse = sessionWorkspacePatchSchema.safeParse(body);
     let updated;
     let targetDomain: string | undefined;
+    let sourceUrl: string | undefined;
     if (workspaceParse.success) {
       updated = await patchSessionWorkspace(id, workspaceParse.data);
       targetDomain = workspaceParse.data.answers?.targetDomain;
+      sourceUrl = workspaceParse.data.answers?.sourceUrl;
     } else {
       const patch = answersSchema.parse(body);
       updated = await patchSessionAnswers(id, patch);
       targetDomain = patch.targetDomain;
+      sourceUrl = patch.sourceUrl;
     }
     if (targetDomain) after(() => runTargetBrandStage(id));
+    if (sourceUrl) after(() => runSourceIntelligenceStage(id));
     if (updated.shouldGenerate) after(() => runStoryStage(id));
     trace.setTraceId(updated.traceId);
     return NextResponse.json(

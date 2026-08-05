@@ -57,6 +57,7 @@ import {
 } from "@/components/try-me-now-enhancements";
 
 import type {
+  AudienceRecommendation,
   ExperienceBlockControl as SessionExperienceBlockControl,
   PublicTryMeSession,
   SessionEvidenceItem,
@@ -74,7 +75,83 @@ import {
 import { primaryActionFor } from "@/lib/cta-presentation";
 import { imageDeliveryPath } from "@/lib/image-delivery";
 
-type ClientEvent = { action: string; label: string; at: number };
+type AnalyticsEventContext = {
+  sectionId?: string;
+  targetId?: string;
+  ctaId?: string;
+  lensId?: string;
+  area?: string;
+};
+
+type ClientEvent = {
+  action: string;
+  label: string;
+  detail: string;
+  at: number;
+  context?: AnalyticsEventContext;
+};
+
+const ANALYTICS_SECTION_LABELS: Record<string, string> = {
+  "experience-overview": "Overview",
+  "experience-thesis": "Why it matters",
+  "decision-path": "Decision paths",
+  "supporting-resources": "Supporting proof",
+  "next-step": "Next step"
+};
+
+function analyticsSectionLabel(value: string | undefined): string {
+  return value ? ANALYTICS_SECTION_LABELS[value] ?? value.replaceAll("-", " ") : "the experience";
+}
+
+function analyticsLensLabel(value: string | undefined): string {
+  const match = value?.match(/^lens-(\d{1,2})$/);
+  return match ? `decision lens ${Number(match[1]) + 1}` : "a decision lens";
+}
+
+export function describePreviewAnalyticsEvent(
+  action: string,
+  context: AnalyticsEventContext
+): Pick<ClientEvent, "label" | "detail"> {
+  if (action === "preview_viewed") return {
+    label: "Opened the experience",
+    detail: "The private buyer experience entered the viewport."
+  };
+  if (action === "section_view") return {
+    label: `Viewed ${analyticsSectionLabel(context.sectionId)}`,
+    detail: "The visitor reached a new part of the buyer journey."
+  };
+  if (action === "anchor_click") return {
+    label: `Navigated to ${analyticsSectionLabel(context.targetId)}`,
+    detail: "The visitor used the guided journey navigation."
+  };
+  if (action === "topic_select") return {
+    label: `Selected ${analyticsLensLabel(context.lensId)}`,
+    detail: "The visitor revealed which topic deserved a deeper look."
+  };
+  if (action === "signature_select") return {
+    label: "Chose a recommended starting point",
+    detail: "The visitor moved from a highlighted signal into the decision path."
+  };
+  if (action === "question_select") return {
+    label: "Explored a meeting question",
+    detail: "The visitor opened a guided question for the next conversation."
+  };
+  if (action === "cta_click") {
+    const closingCta = context.ctaId === "close-primary";
+    return {
+      label: closingCta ? "Tested the closing CTA" : "Tested the primary CTA",
+      detail: "This preview captured next-step intent without leaving or losing the experience."
+    };
+  }
+  if (action === "fullscreen_change") return {
+    label: "Changed the preview view",
+    detail: "The visitor expanded or restored the experience view."
+  };
+  return {
+    label: "Explored the experience",
+    detail: "The visitor revealed interest inside the guided path."
+  };
+}
 
 type WorkspacePatch = {
   answers?: SessionAnswers;
@@ -114,9 +191,9 @@ const useCaseContent: Record<
   abm: {
     number: "01",
     kicker: "1:1 ABM",
-    title: "Personalize for one account",
-    description: "Build a buyer-ready page around one target company.",
-    cta: "Personalize for one account",
+    title: "Build an ABM campaign",
+    description: "Build a buyer-ready campaign around one target company.",
+    cta: "Build an ABM campaign",
     domainTitle: "What is your company domain?",
     domainBody: "Add the seller domain. We will verify the identity and start the brand scan immediately.",
     icon: Target,
@@ -160,9 +237,13 @@ export function recommendedObjectiveFor(session: Pick<PublicTryMeSession, "useCa
   return "Generate demand";
 }
 
-export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCase" | "answers" | "sourceConfirmation">): boolean {
+export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCase" | "answers" | "sourceConfirmation" | "sourceInsight">): boolean {
   if (session.useCase !== "content" || session.sourceConfirmation?.status === "confirmed") return false;
-  return Boolean(session.answers.sourceUrl || session.answers.sourceName);
+  return Boolean(
+    (session.answers.sourceUrl || session.answers.sourceName) &&
+    session.sourceInsight &&
+    ["ready", "needs-review"].includes(session.sourceInsight.status)
+  );
 }
 
 const NVIDIA_ONE_TO_ONE_EXAMPLE_URL = "https://experience.folloze.com/folloze-for-nvidia";
@@ -172,9 +253,9 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     id: "abm",
     index: "01",
     eyebrow: "1:1 ABM",
-    title: "Personalize for one account",
-    description: "Tell us who you sell for and who you want to reach. We will shape the page around that account.",
-    actionLabel: "Personalize for an account",
+    title: "Build an ABM campaign",
+    description: "Tell us who you sell for and which account you want to reach. We will shape the campaign around that account.",
+    actionLabel: "Build an ABM campaign",
     exampleLabel: "Watch the NVIDIA 1:1 experience",
     exampleUrl: NVIDIA_ONE_TO_ONE_EXAMPLE_URL,
     demoSteps: ["Seller", "Account evidence", "1:1 experience"],
@@ -325,6 +406,97 @@ function campaignTypeFor(session: PublicTryMeSession): string {
   return "Campaign experience";
 }
 
+function campaignOfferFor(session: Pick<PublicTryMeSession, "answers" | "campaignOfferSource">): string | undefined {
+  return session.answers.promotedOffer?.trim() || session.campaignOfferSource?.title?.trim() || undefined;
+}
+
+export function campaignIntakeComplete(
+  session: Pick<PublicTryMeSession, "useCase" | "answers" | "campaignOfferSource">
+): boolean {
+  if (session.useCase !== "campaign") return true;
+  if (!session.answers.campaignType || !campaignOfferFor(session)) return false;
+  return session.answers.campaignType !== "event" || Boolean(session.answers.eventSource);
+}
+
+function campaignOfferPrompt(type: SessionAnswers["campaignType"]): {
+  label: string;
+  placeholder: string;
+  sourceLabel: string;
+  sourcePlaceholder: string;
+} {
+  if (type === "event") {
+    return {
+      label: "Event or webinar name",
+      placeholder: "Your event or webinar",
+      sourceLabel: "Event URL or details",
+      sourcePlaceholder: "https://... or September 12 live webinar"
+    };
+  }
+  if (type === "demand") {
+    return {
+      label: "Offer, report, or initiative",
+      placeholder: "Your report, guide, offer, or initiative",
+      sourceLabel: "Offer page or source URL (optional)",
+      sourcePlaceholder: "https://yourcompany.com/report"
+    };
+  }
+  return {
+    label: "Product or solution name",
+    placeholder: "Your product or solution",
+    sourceLabel: "Product page or source URL (optional)",
+    sourcePlaceholder: "https://yourcompany.com/product"
+  };
+}
+
+export function objectiveContextPrompt(
+  objective: string,
+  offer?: string
+): { label: string; placeholder: string } {
+  const subject = offer?.trim() || "this campaign";
+  const normalized = objective.toLocaleLowerCase();
+  if (/launch|announce|introduce/.test(normalized)) {
+    return {
+      label: `What is new or worth noticing about ${subject}?`,
+      placeholder: "Add one sentence that separates this offer from the status quo."
+    };
+  }
+  if (/registr|attend/.test(normalized)) {
+    return {
+      label: "What should attendees leave knowing or able to do?",
+      placeholder: "Add the practical payoff for attending."
+    };
+  }
+  if (/meeting|conversation|book/.test(normalized)) {
+    return {
+      label: "What should make the conversation worth their time?",
+      placeholder: "Name the first useful question or outcome for the meeting."
+    };
+  }
+  return {
+    label: `Which buyer problem should ${subject} help them recognize?`,
+    placeholder: "Add one sentence of context if the public offer page will not make it obvious."
+  };
+}
+
+export function audienceRecommendationCopy(input: {
+  recommendation: AudienceRecommendation;
+  evidenceCount: number;
+  companyName: string;
+  offer?: string;
+  isPrimary: boolean;
+}): string {
+  const { recommendation, evidenceCount, companyName, offer, isPrimary } = input;
+  const context = offer ? `${offer} from ${companyName}` : companyName;
+  if (evidenceCount > 0 && recommendation.source !== "seller-category-fallback") {
+    return isPrimary
+      ? `Best-supported fit for ${context}. ${recommendation.rationale}`
+      : recommendation.rationale;
+  }
+  return isPrimary
+    ? `Suggested starting point for ${context}; no supporting public signal is attached yet. ${recommendation.rationale}`
+    : `Working hypothesis for ${context}; confirm it before using it. ${recommendation.rationale}`;
+}
+
 function sourceNameFor(session: PublicTryMeSession): string {
   const brandName = brandNameFor(session);
   const sourceTitle = session.answers.sourceTitle?.trim();
@@ -466,6 +638,15 @@ export function getBuildPanelCopy(session: PublicTryMeSession): BuildPanelCopy {
     };
   }
 
+  if (session.useCase === "campaign" && !campaignOfferFor(session)) {
+    return {
+      ...common,
+      kicker: `${brandName} · campaign selected`,
+      headline: "The campaign shape is ready. Name the offer.",
+      supporting: "The product, event, report, or initiative will now drive the audience, message, proof, and CTA treatment."
+    };
+  }
+
   if (session.useCase === "content" && !session.answers.sourceUrl && !session.answers.sourceName) {
     return {
       ...common,
@@ -554,11 +735,11 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
     campaignBody: "Choose the campaign format. It will change the message, proof emphasis, and conversion path.",
     sourceTitle: "Which content should do more work?",
     sourceBody: "Give us a public URL or PDF. We will preserve the facts and reshape the way buyers explore them.",
-    audienceLoadingTitle: `Finding the buyers this ${brandName} campaign should move.`,
-    audienceLoadingBody: `We are reading ${brandName}'s public product and market context now.`,
-    audienceTitle: `Which buyer persona should ${brandName}'s campaign move?`,
-    audienceBody: "Choose the buyer who should recognize the problem, trust the proof, and care about the next step.",
-    objectiveTitle: "Choose the outcome this campaign should drive.",
+    audienceLoadingTitle: `Finding the buyers who should care about ${campaignOfferFor(session) || `${brandName}'s offer`}.`,
+    audienceLoadingBody: `We are pairing ${brandName}'s public company and industry context with the promoted offer now.`,
+    audienceTitle: `Who should care most about ${campaignOfferFor(session) || `${brandName}'s campaign`}?`,
+    audienceBody: "Choose the buyer who should recognize the problem, trust the proof, and care about the next step. Evidence-backed options cite the public signals behind them; the rest stay labeled as hypotheses.",
+    objectiveTitle: `What should ${campaignOfferFor(session) || "this campaign"} help them do?`,
     objectiveBody: "Choose one outcome. It will keep the promise, proof, and visual CTA treatment pointed in the same direction.",
     completeTitle: `${campaignTypeFor(session)} brief locked.`,
     completeBody: "Folloze is composing the campaign promise, proof sequence, interaction, and conversion path now."
@@ -904,11 +1085,7 @@ function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
     || (session.answers.sourceUrl ? "Public content URL" : undefined);
   const offerValue = briefFields?.offer?.value
     || session.answers.promotedOffer
-    || (session.useCase === "content"
-      ? sourceValue
-      : session.useCase === "campaign" && session.answers.campaignType
-        ? campaignTypeFor(session)
-        : undefined);
+    || (session.useCase === "content" ? sourceValue : undefined);
   const rows: Record<OverviewFieldKey, OverviewRow> = {
     seller: {
       key: "seller",
@@ -1094,15 +1271,15 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
   const contextComplete = session.useCase === "abm"
     ? Boolean(session.answers.targetDomain)
     : session.useCase === "campaign"
-      ? Boolean(session.answers.campaignType)
+      ? campaignIntakeComplete(session)
       : Boolean(session.answers.sourceUrl || session.answers.sourceName);
   const audienceComplete = Boolean(session.answers.audience && (session.answers.audience !== "Other" || session.answers.customAudience));
   const objectiveComplete = Boolean(session.answers.objective);
-  const contextLabel = session.useCase === "abm" ? "Target account" : session.useCase === "campaign" ? "Campaign shape" : "Source content";
+  const contextLabel = session.useCase === "abm" ? "Target account" : session.useCase === "campaign" ? "Campaign offer" : "Source content";
   const contextValue = session.useCase === "abm"
     ? targetName
     : session.useCase === "campaign"
-      ? campaignTypeFor(session)
+      ? `${campaignOfferFor(session) || campaignTypeFor(session)} · ${campaignTypeFor(session)}`
       : sourceNameFor(session);
   const decisions = [
     { label: contextLabel, complete: contextComplete },
@@ -1111,7 +1288,8 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
   ];
   const currentIndex = Math.min(decisions.findIndex((decision) => !decision.complete), 2);
   const activeIndex = currentIndex < 0 ? 2 : currentIndex;
-  const brandReady = ["complete", "fallback"].includes(session.stages.brand.status);
+  const brandResolved = ["complete", "fallback"].includes(session.stages.brand.status);
+  const brandVerified = brandResolved && session.stages.brand.status !== "fallback" && session.brand?.readiness?.status !== "incomplete";
 
   return (
     <section className="guidedThread" aria-labelledby="guided-thread-title">
@@ -1133,8 +1311,8 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
             <span className="identityLogo">
               {previewLogoUrl(session) ? <Image src={previewLogoUrl(session) ?? ""} alt={`${brandName} logo`} width={92} height={28} unoptimized /> : <Building2 size={18} />}
             </span>
-            <div><strong>{brandReady ? brandName : `Checking ${brandName}`}</strong><small>{session.companyDomain} · {brandReady ? session.brand?.source === "fallback" ? "Identity found; brand needs verification" : "Matched to the public company site" : "Enrichment in progress"}</small></div>
-            {brandReady && <CircleCheck size={18} className="identityCheck" aria-label="Seller identity matched" />}
+            <div><strong>{brandResolved ? brandName : `Checking ${brandName}`}</strong><small>{session.companyDomain} · {brandVerified ? "Brand evidence matched to the public company site" : brandResolved ? "Identity found; logo, palette, or source evidence needs review" : "Enrichment in progress"}</small></div>
+            {brandVerified && <CircleCheck size={18} className="identityCheck" aria-label="Seller brand evidence verified" />}
           </div>
         </article>
         {contextComplete && (
@@ -1157,7 +1335,7 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
         )}
         {audienceComplete && <article className="prospectBubble"><span>You chose</span><strong>Buyer persona: {audienceFor(session)}</strong></article>}
       </div>
-      <button type="button" className="identityReset" onClick={onRestart}>Something look wrong? Start over</button>
+      <button type="button" className="identityReset" onClick={onRestart}>{brandResolved && !brandVerified ? "Brand evidence looks wrong? Try another domain" : "Something look wrong? Start over"}</button>
     </section>
   );
 }
@@ -1323,6 +1501,44 @@ export function OptionalContextComposer({
   );
 }
 
+export function SourceUnderstandingSummary({
+  insight
+}: {
+  insight: NonNullable<PublicTryMeSession["sourceInsight"]>;
+}) {
+  const ready = insight.status === "ready";
+  const pages = insight.extraction.extractedPageCount ?? insight.extraction.pageCount;
+  return (
+    <section className={`sourceInsightCard is-${insight.status}`} aria-labelledby="source-insight-title">
+      <div className="sourceInsightHeader">
+        <span className="sourceInsightIcon" aria-hidden="true"><ShieldCheck size={18} /></span>
+        <div>
+          <span>Source understanding</span>
+          <h2 id="source-insight-title">Here&apos;s what we understood.</h2>
+        </div>
+        <span className="sourceInsightStatus">{ready ? "Grounded" : "Reviewing"}</span>
+      </div>
+      {insight.title && <strong className="sourceInsightTitle">{insight.title}</strong>}
+      {insight.premise && <p>{insight.premise}</p>}
+      {insight.claims.length > 0 && (
+        <ul>
+          {insight.claims.slice(0, 2).map((claim) => (
+            <li key={claim.id}>
+              <span>{claim.text}</span>
+              {claim.sourceLabels.length > 0 && <small>{claim.sourceLabels.join(" · ")}</small>}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="sourceInsightMeta">
+        <span>{insight.citationCount} cited source block{insight.citationCount === 1 ? "" : "s"}</span>
+        {pages ? <span>{pages} page{pages === 1 ? "" : "s"} read</span> : null}
+        <span>{insight.confidence} confidence</span>
+      </div>
+    </section>
+  );
+}
+
 export function ProgressiveQuestions({
   session,
   answers,
@@ -1361,6 +1577,9 @@ export function ProgressiveQuestions({
   const setSourceUrlValue = (value: string) =>
     setFieldValues((current) => ({ ...current, "content-source-url": value }));
   const questionCopy = getGuidedQuestionCopy(session);
+  const sourceInsight = session.useCase === "content" && session.sourceInsight
+    ? <SourceUnderstandingSummary insight={session.sourceInsight} />
+    : null;
 
   if (session.useCase === "abm" && !answers.targetDomain) {
     return (
@@ -1380,8 +1599,14 @@ export function ProgressiveQuestions({
     );
   }
 
-  if (session.useCase === "campaign" && (!answers.campaignType || (answers.campaignType === "event" && !answers.eventSource))) {
+  if (session.useCase === "campaign" && !campaignIntakeComplete(session)) {
     const choice = campaignChoice ?? answers.campaignType;
+    const offerPrompt = campaignOfferPrompt(choice);
+    const offerValue = fieldValues["campaign-offer"] ?? answers.promotedOffer ?? "";
+    const offerSourceValue = fieldValues["campaign-offer-source"] ?? "";
+    const eventContextValue = fieldValues.eventSource ?? "";
+    const hasExistingEventContext = Boolean(answers.eventSource);
+    const validOfferSource = !offerSourceValue.trim() || /^https:\/\//i.test(offerSourceValue.trim());
     return (
       <div className="questionCard">
         <span className="questionCount">Next signal · campaign</span>
@@ -1398,14 +1623,24 @@ export function ProgressiveQuestions({
             </button>
           ))}
         </div>
-        {choice === "event" && (
-          <label className="lineInput"><span>Event URL or details</span><div><FileText size={19} /><input value={fieldValues.eventSource ?? ""} onChange={(event) => setFieldValues((current) => ({ ...current, eventSource: event.target.value }))} placeholder="https://... or September 12 webinar" /></div></label>
-        )}
+        {choice && <label className="lineInput"><span>{offerPrompt.label}</span><div><Megaphone size={19} /><input value={offerValue} onChange={(event) => setFieldValues((current) => ({ ...current, "campaign-offer": event.target.value }))} placeholder={offerPrompt.placeholder} /></div></label>}
+        {choice === "event" ? (
+          <label className="lineInput"><span>{offerPrompt.sourceLabel}</span><div><FileText size={19} /><input value={eventContextValue} onChange={(event) => setFieldValues((current) => ({ ...current, eventSource: event.target.value }))} placeholder={hasExistingEventContext ? "Event details already added; enter new details only to replace them" : offerPrompt.sourcePlaceholder} /></div></label>
+        ) : choice ? (
+          <label className="lineInput"><span>{offerPrompt.sourceLabel}</span><div><ExternalLink size={19} /><input value={offerSourceValue} onChange={(event) => setFieldValues((current) => ({ ...current, "campaign-offer-source": event.target.value }))} placeholder={offerPrompt.sourcePlaceholder} /></div>{offerSourceValue.trim() && !validOfferSource && <small className="fieldError">Use a public HTTPS URL.</small>}</label>
+        ) : null}
         <button
           className="buttonPrimary"
           type="button"
-          disabled={!choice || (choice === "event" && (fieldValues.eventSource ?? answers.eventSource ?? "").trim().length < 8) || isSaving}
-          onClick={() => void onPatch({ campaignType: choice, eventSource: choice === "event" ? (fieldValues.eventSource ?? answers.eventSource)?.trim() : undefined })}
+          disabled={!choice || offerValue.trim().length < 2 || !validOfferSource || (choice === "event" && !hasExistingEventContext && eventContextValue.trim().length < 8) || isSaving}
+          onClick={() => void onPatch({
+            campaignType: choice,
+            promotedOffer: offerValue.trim(),
+            promotedOfferConfirmed: true,
+            offerSourceUrl: choice !== "event" && offerSourceValue.trim() ? offerSourceValue.trim() : undefined,
+            offerSourceConfirmed: choice !== "event" && Boolean(offerSourceValue.trim()),
+            eventSource: choice === "event" && eventContextValue.trim() ? eventContextValue.trim() : undefined
+          })}
         >
           Continue<ArrowRight size={17} />
         </button>
@@ -1455,11 +1690,14 @@ export function ProgressiveQuestions({
   if (!answers.audience || (answers.audience === "Other" && !answers.customAudience)) {
     if (session.audienceSuggestions.length === 0) {
       return (
-        <div className="questionCard generationCard" role="status" aria-live="polite">
-          <span className="generationGlyph"><LoaderCircle className="spin" size={24} /></span>
-          <span className="questionCount">Next signal · buyer persona</span>
-          <h2>{questionCopy.audienceLoadingTitle}</h2>
-          <p>{questionCopy.audienceLoadingBody}</p>
+        <div className="questionSequence">
+          {sourceInsight}
+          <div className="questionCard generationCard" role="status" aria-live="polite">
+            <span className="generationGlyph"><LoaderCircle className="spin" size={24} /></span>
+            <span className="questionCount">Next signal · buyer persona</span>
+            <h2>{questionCopy.audienceLoadingTitle}</h2>
+            <p>{questionCopy.audienceLoadingBody}</p>
+          </div>
         </div>
       );
     }
@@ -1471,7 +1709,9 @@ export function ProgressiveQuestions({
         ? undefined
         : selectedAudienceId ?? session.selectedAudienceRecommendationId ?? recommended.id;
       return (
-        <div className="questionCard audienceEvidenceStep">
+        <div className="questionSequence">
+          {sourceInsight}
+          <div className="questionCard audienceEvidenceStep">
           <span className="questionCount">Next signal · buyer persona</span>
           <h2>{questionCopy.audienceTitle}</h2>
           <p>{questionCopy.audienceBody}</p>
@@ -1486,9 +1726,13 @@ export function ProgressiveQuestions({
               return {
                 id: recommendation.id,
                 label: recommendation.label,
-                rationale: index === 0
-                  ? `Recommended for ${session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session)}. ${recommendation.rationale}`
-                  : recommendation.rationale,
+                rationale: audienceRecommendationCopy({
+                  recommendation,
+                  evidenceCount: supporting.length,
+                  companyName: session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session),
+                  offer: session.useCase === "campaign" ? campaignOfferFor(session) : undefined,
+                  isPrimary: index === 0
+                }),
                 pinned: supporting.some((item) => item.disposition === "pinned"),
                 excluded: supporting.length > 0 && supporting.every((item) => item.disposition === "excluded"),
                 evidence: supporting.map((item) => ({
@@ -1543,23 +1787,27 @@ export function ProgressiveQuestions({
           >
             Continue<ArrowRight size={17} />
           </button>
+          </div>
         </div>
       );
     }
     const recommendedAudience = session.audienceSuggestions[0] ?? "Other";
     const chosenAudience = selectedAudience ?? recommendedAudience;
     return (
-      <div className="questionCard">
-        <span className="questionCount">Next signal · buyer persona</span>
-        <h2>{questionCopy.audienceTitle}</h2>
-        <p>{questionCopy.audienceBody}</p>
-        <ChipGroup label="Choose a buyer persona" options={[...session.audienceSuggestions, "Other"]} value={chosenAudience} recommendedOption={recommendedAudience} disabled={isSaving} onChange={setSelectedAudience} />
-        {chosenAudience === "Other" && (
-          <label className="lineInput"><span>Audience</span><div><Users size={19} /><input value={customAudience} onChange={(event) => setCustomAudience(event.target.value)} placeholder="Regional field marketing leaders" /></div></label>
-        )}
-        <button className="buttonPrimary" type="button" disabled={isSaving || (chosenAudience === "Other" && customAudience.trim().length < 3)} onClick={() => void onPatch({ audience: chosenAudience, customAudience: chosenAudience === "Other" ? customAudience.trim() : undefined })}>
-          Continue<ArrowRight size={17} />
-        </button>
+      <div className="questionSequence">
+        {sourceInsight}
+        <div className="questionCard">
+          <span className="questionCount">Next signal · buyer persona</span>
+          <h2>{questionCopy.audienceTitle}</h2>
+          <p>{questionCopy.audienceBody}</p>
+          <ChipGroup label="Choose a buyer persona" options={[...session.audienceSuggestions, "Other"]} value={chosenAudience} disabled={isSaving} onChange={setSelectedAudience} />
+          {chosenAudience === "Other" && (
+            <label className="lineInput"><span>Audience</span><div><Users size={19} /><input value={customAudience} onChange={(event) => setCustomAudience(event.target.value)} placeholder="Regional field marketing leaders" /></div></label>
+          )}
+          <button className="buttonPrimary" type="button" disabled={isSaving || (chosenAudience === "Other" && customAudience.trim().length < 3)} onClick={() => void onPatch({ audience: chosenAudience, customAudience: chosenAudience === "Other" ? customAudience.trim() : undefined })}>
+            Continue<ArrowRight size={17} />
+          </button>
+        </div>
       </div>
     );
   }
@@ -1568,13 +1816,22 @@ export function ProgressiveQuestions({
     const recommended = recommendedObjectiveFor(session);
     const orderedObjectives = [recommended, ...objectives[session.useCase].filter((objective) => objective !== recommended)];
     const chosenObjective = selectedObjective ?? recommended;
+    const contextPrompt = objectiveContextPrompt(chosenObjective, session.useCase === "campaign" ? campaignOfferFor(session) : undefined);
+    const objectiveContext = fieldValues["objective-context"] ?? answers.messageBelief ?? "";
     return (
       <div className="questionCard">
         <span className="questionCount">Final signal · outcome</span>
         <h2>{questionCopy.objectiveTitle}</h2>
         <p>{questionCopy.objectiveBody}</p>
         <ChipGroup label="Choose an outcome" options={orderedObjectives} value={chosenObjective} recommendedOption={recommended} disabled={isSaving} onChange={setSelectedObjective} />
-        <button className="buttonPrimary" type="button" disabled={isSaving} onClick={() => void onPatch({ objective: chosenObjective })}>
+        {session.useCase === "campaign" && (
+          <label className="briefPromptField">
+            <span><MessageSquareText size={15} />{contextPrompt.label}</span>
+            <textarea value={objectiveContext} onChange={(event) => setFieldValues((current) => ({ ...current, "objective-context": event.target.value }))} placeholder={contextPrompt.placeholder} maxLength={320} />
+            <small>Optional. This sharpens the promise without adding another setup step.</small>
+          </label>
+        )}
+        <button className="buttonPrimary" type="button" disabled={isSaving} onClick={() => void onPatch({ objective: chosenObjective, messageBelief: objectiveContext.trim() || undefined })}>
           {isSaving ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}Build my experience
         </button>
         <p className="buildExpectationInline"><Clock3 size={15} />Usually takes 30–60 seconds. Your brief stays safe if a stage needs to retry.</p>
@@ -1881,6 +2138,7 @@ export function TryMeNowApp() {
   const startedDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
   const analyticsPromptedSession = useRef<string | undefined>(undefined);
+  const endJourneyRevealSession = useRef<string | undefined>(undefined);
   const ctaSessionSignature = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const patchRequestRef = useRef(0);
@@ -1906,6 +2164,7 @@ export function TryMeNowApp() {
     startedDomain.current = undefined;
     revealTracked.current = false;
     analyticsPromptedSession.current = undefined;
+    endJourneyRevealSession.current = undefined;
     ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
     track("use_case_selected", { useCase: selected });
@@ -1933,6 +2192,7 @@ export function TryMeNowApp() {
     startedDomain.current = undefined;
     revealTracked.current = false;
     analyticsPromptedSession.current = undefined;
+    endJourneyRevealSession.current = undefined;
     ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
   }, []);
@@ -2023,7 +2283,11 @@ export function TryMeNowApp() {
     const revealTime = Date.now();
     setRevealedAt(revealTime);
     track("experience_revealed", { useCase: session.useCase });
-    setClientEvents([{ action: "preview_viewed", label: "You opened the experience", at: revealTime }]);
+    setClientEvents([{
+      action: "preview_viewed",
+      ...describePreviewAnalyticsEvent("preview_viewed", {}),
+      at: revealTime
+    }]);
     // Preview analytics updates the server-side aggregate, not the rendered artifact.
     // Keeping that response out of session state prevents analytics-only revisions
     // from remounting the iframe that emitted the signal.
@@ -2069,20 +2333,46 @@ export function TryMeNowApp() {
         : event.data.data && typeof event.data.data === "object"
           ? event.data.data as Record<string, unknown>
           : {};
-      const labels: Record<string, string> = {
-        anchor_click: "You followed the experience path",
-        cta_click: "You clicked the next step",
-        topic_select: "You chose a decision lens",
-        signature_select: "You selected a starting point",
-        question_select: "You explored a meeting question",
-        section_view: "You reached a new section",
-        fullscreen_change: "You changed the preview view"
+      const safeContextValue = (key: keyof AnalyticsEventContext) => {
+        const value = payload[key];
+        return typeof value === "string" && value.length <= 96 ? value : undefined;
       };
-      const label = labels[event.data.action] || "You explored the experience";
-      const next = { action: event.data.action, label, at: Date.now() };
+      const context: AnalyticsEventContext = {
+        sectionId: safeContextValue("sectionId"),
+        targetId: safeContextValue("targetId"),
+        ctaId: safeContextValue("ctaId"),
+        lensId: safeContextValue("lensId"),
+        area: safeContextValue("area")
+      };
+      const next: ClientEvent = {
+        action: event.data.action,
+        ...describePreviewAnalyticsEvent(event.data.action, context),
+        context,
+        at: Date.now()
+      };
+      const semanticKey = [next.action, context.ctaId, context.lensId, context.sectionId, context.targetId, context.area]
+        .filter(Boolean)
+        .join(":");
+      if (
+        event.data.action === "section_view"
+        && context.sectionId === "next-step"
+        && endJourneyRevealSession.current !== session.id
+      ) {
+        endJourneyRevealSession.current = session.id;
+        analyticsPromptedSession.current = session.id;
+        setShowAnalyticsToast(false);
+        setShowAnalyticsPanel(true);
+        track("analytics_panel_opened", { useCase: session.useCase, source: "end-of-journey" });
+      }
       setClientEvents((current) => {
-        const last = current[current.length - 1];
-        if (last && last.action === next.action && last.label === next.label && next.at - last.at < 500) return current;
+        const duplicate = current.some((candidate) => {
+          const candidateContext = candidate.context ?? {};
+          const candidateKey = [candidate.action, candidateContext.ctaId, candidateContext.lensId, candidateContext.sectionId, candidateContext.targetId, candidateContext.area]
+            .filter(Boolean)
+            .join(":");
+          return candidateKey === semanticKey && next.at - candidate.at < 1_200;
+        });
+        if (duplicate) return current;
         if (event.data.action !== "section_view") {
           analyticsPromptedSession.current = session.id;
           setShowAnalyticsToast(true);
@@ -2287,13 +2577,12 @@ export function TryMeNowApp() {
   const analyticsSignals: AnalyticsSignal[] = clientEvents.map((event, index) => ({
     id: `${event.at}-${index}`,
     label: event.label,
-    detail: event.action === "cta_click"
-      ? "A conversion signal is now available for follow-up."
-      : event.action === "preview_viewed"
-        ? "The private experience entered the viewport."
-        : "The buyer revealed interest inside the guided path.",
+    detail: event.detail,
     atLabel: new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(event.at),
-    type: event.action === "cta_click" ? "cta" : event.action === "preview_viewed" ? "view" : "choice"
+    type: ["preview_viewed", "section_view"].includes(event.action) ? "view" : event.action === "cta_click" ? "cta" : "choice",
+    action: event.action,
+    occurredAt: event.at,
+    context: event.context
   }));
   const latestAnalyticsSignal = [...analyticsSignals].reverse().find((signal) => signal.type !== "view")
     ?? analyticsSignals.at(-1);
@@ -2352,22 +2641,24 @@ export function TryMeNowApp() {
           <div className="briefPanel">
             <div className="guidedWorkspaceInner">
               <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
-              <InstantBrandLockStrip
-                status={!session.brand ? "scanning" : session.stages.brand.status === "fallback" || session.brand.readiness?.status === "incomplete" ? "fallback" : "locked"}
-                brand={session.brand ? {
-                  companyName: session.brand.companyName,
-                  domain: session.brand.domain,
-                  logoUrl: previewLogoUrl(session),
-                  colors: session.brand.colors,
-                  primaryColor: session.brand.primaryColor,
-                  accentColor: session.brand.accentColor,
-                  surfaceColor: session.brand.surfaceColor,
-                  source: session.brand.source,
-                  readiness: session.brand.readiness
-                } : { companyName: displayNameFromDomain(session.companyDomain), domain: session.companyDomain }}
-                onInspect={() => setShowProcess(true)}
-              />
               <ConversationThread session={session} onRestart={resetExperience} />
+              <div className="brandLockStage">
+                <InstantBrandLockStrip
+                  status={!session.brand ? "scanning" : session.stages.brand.status === "fallback" || session.brand.readiness?.status === "incomplete" ? "fallback" : "locked"}
+                  brand={session.brand ? {
+                    companyName: session.brand.companyName,
+                    domain: session.brand.domain,
+                    logoUrl: previewLogoUrl(session),
+                    colors: session.brand.colors,
+                    primaryColor: session.brand.primaryColor,
+                    accentColor: session.brand.accentColor,
+                    surfaceColor: session.brand.surfaceColor,
+                    source: session.brand.source,
+                    readiness: session.brand.readiness
+                  } : { companyName: displayNameFromDomain(session.companyDomain), domain: session.companyDomain }}
+                  onInspect={() => setShowProcess(true)}
+                />
+              </div>
               <ProgressiveQuestions
                 session={session}
                 answers={answers}

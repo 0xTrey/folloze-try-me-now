@@ -13,7 +13,8 @@ import {
   OptionalContextComposer,
   PreviewUpdateNotice,
   ProgressiveQuestions,
-  SaveExperienceDialog
+  SaveExperienceDialog,
+  SourceUnderstandingSummary
 } from "./try-me-now-app";
 
 afterEach(() => cleanup());
@@ -87,6 +88,44 @@ describe("AssemblyPreview", () => {
       "src",
       "/api/sessions/desktop-preview-session/image/seller-logo"
     );
+  });
+});
+
+describe("SourceUnderstandingSummary", () => {
+  it("shows a compact cited understanding receipt without exposing raw source text", () => {
+    render(
+      <SourceUnderstandingSummary
+        insight={{
+          status: "ready",
+          confidence: "high",
+          title: "Enterprise Automation Guide",
+          premise: "The guide explains how teams connect governed automation to operating decisions.",
+          topics: ["automation", "governance"],
+          claims: [{
+            id: "claim-1",
+            text: "Governance must stay visible as automation expands.",
+            sourceLabels: ["Page 4"]
+          }],
+          extraction: {
+            method: "pdf-text",
+            status: "complete",
+            pageCount: 8,
+            extractedPageCount: 8,
+            ocrStatus: "not-required",
+            warnings: []
+          },
+          experiencePattern: "guided-brief",
+          moduleKinds: ["hero", "key-findings"],
+          assetCount: 2,
+          citationCount: 12
+        }}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Here's what we understood." })).toBeInTheDocument();
+    expect(screen.getByText("Enterprise Automation Guide")).toBeInTheDocument();
+    expect(screen.getByText("Page 4")).toBeInTheDocument();
+    expect(screen.getByText("12 cited source blocks")).toBeInTheDocument();
   });
 });
 
@@ -169,7 +208,11 @@ describe("guided campaign workspace", () => {
           ...readySession,
           status: "collecting",
           experience: undefined,
-          answers: { campaignType: "product", audience: "Enterprise architects" },
+          answers: {
+            campaignType: "product",
+            promotedOffer: "Jitterbit Harmony",
+            audience: "Enterprise architects"
+          },
           stages: {
             brand: { status: "complete" },
             audience: { status: "complete" },
@@ -211,9 +254,104 @@ describe("guided campaign workspace", () => {
     expect(screen.getByRole("heading", { name: "Campaign Overview" })).toBeInTheDocument();
     expect(screen.getByLabelText("3 of 4 details collected")).toBeInTheDocument();
     expect(screen.getByText("Jitterbit")).toBeInTheDocument();
-    expect(screen.getByText("Product campaign")).toBeInTheDocument();
+    expect(screen.getByText("Jitterbit Harmony")).toBeInTheDocument();
     expect(screen.getByText("Enterprise architects")).toBeInTheDocument();
     expect(document.querySelector('[data-overview-field="target"]')).not.toBeInTheDocument();
+  });
+
+  it("keeps the campaign offer incomplete when only a campaign type is selected", () => {
+    render(
+      <CampaignOverviewRail
+        session={{
+          ...readySession,
+          status: "collecting",
+          experience: undefined,
+          answers: { campaignType: "product", audience: "Enterprise architects" },
+          stages: {
+            brand: { status: "complete" },
+            audience: { status: "complete" },
+            story: { status: "pending" }
+          }
+        }}
+      />
+    );
+
+    expect(screen.getByLabelText("2 of 4 details collected")).toBeInTheDocument();
+    expect(document.querySelector('[data-overview-field="offer"]')).toHaveTextContent("Campaign offer");
+    expect(screen.queryByText("Product campaign")).not.toBeInTheDocument();
+  });
+
+  it("collects a named campaign offer and optional public source before audience selection", () => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const campaignSession = {
+      ...readySession,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {}
+    };
+    render(
+      <ProgressiveQuestions
+        session={campaignSession}
+        answers={campaignSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Product or solution/i }));
+    fireEvent.change(screen.getByLabelText("Product or solution name"), {
+      target: { value: "Ford Pro Intelligence" }
+    });
+    fireEvent.change(screen.getByLabelText("Product page or source URL (optional)"), {
+      target: { value: "https://www.fordpro.com/en-us/intelligence/" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(onPatch).toHaveBeenCalledWith({
+      campaignType: "product",
+      promotedOffer: "Ford Pro Intelligence",
+      promotedOfferConfirmed: true,
+      offerSourceUrl: "https://www.fordpro.com/en-us/intelligence/",
+      offerSourceConfirmed: true,
+      eventSource: undefined
+    });
+  });
+
+  it("adds optional outcome context in the same final campaign step", () => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const campaignSession = {
+      ...readySession,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {
+        campaignType: "product" as const,
+        promotedOffer: "Ford Pro Intelligence",
+        audience: "Fleet operations leaders"
+      }
+    };
+    render(
+      <ProgressiveQuestions
+        session={campaignSession}
+        answers={campaignSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    const context = screen.getByLabelText(/What is new or worth noticing about Ford Pro Intelligence/i);
+    fireEvent.change(context, {
+      target: { value: "Disconnected fleet data makes it harder to act before downtime compounds." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Build my experience/i }));
+
+    expect(onPatch).toHaveBeenCalledWith({
+      objective: "Launch or announce",
+      messageBelief: "Disconnected fleet data makes it harder to act before downtime compounds."
+    });
   });
 
   it("accepts one optional URL or PDF source across paths without changing the path", () => {
@@ -374,6 +512,7 @@ describe("guided campaign workspace", () => {
       experience: undefined,
       answers: {
         campaignType: "product" as const,
+        promotedOffer: "Governed automation",
         audience: "Enterprise architects",
         objective: "Generate demand"
       },

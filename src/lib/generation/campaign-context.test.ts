@@ -246,6 +246,45 @@ describe("compileCampaignContext", () => {
     expect(event.wireframe.finalCtaPattern).toMatch(/registration action/i);
   });
 
+  it("keeps a promoted campaign offer first-class in the brief and message spine", () => {
+    const ford: BrandProfile = {
+      ...seller,
+      domain: "ford.com",
+      companyName: "Ford",
+      description: "Vehicles, commercial fleets, connected services, and electric mobility.",
+      publicContext: "Ford supports commercial fleet operations with vehicles and connected services.",
+      publicTopics: ["Commercial fleets", "Connected services", "Electric vehicles"],
+      sourceUrl: "https://www.ford.com/",
+      imageUrls: []
+    };
+    const context = compileCampaignContext({
+      brand: ford,
+      useCase: "campaign",
+      answers: {
+        campaignType: "product",
+        promotedOffer: "Ford Pro Intelligence",
+        promotedOfferConfirmed: true,
+        offerSourceUrl: "https://www.fordpro.com/en-us/intelligence/",
+        offerSourceConfirmed: true,
+        audience: "Fleet operations leaders evaluating Ford Pro Intelligence",
+        objective: "Launch or announce"
+      }
+    });
+
+    expect(context.brief.offerOrSource).toMatchObject({
+      kind: "offer",
+      name: "Ford Pro Intelligence",
+      sourceHost: "fordpro.com",
+      confirmationStatus: "confirmed"
+    });
+    expect(context.brief.messageSpine.recognizableContext).toContain("Ford Pro Intelligence");
+    expect(context.brief.messageSpine.sellerPromise).toContain("Ford Pro Intelligence");
+    expect(context.brief.messageSpine.sellerPromise).toContain("without adding unsupported product claims");
+    expect(context.brief.messageSpine.whyNow).toContain("promoted offer");
+    expect(context.brief.authority.content).toContain("public source");
+    expect(JSON.stringify(context.brief)).not.toMatch(/software platform/i);
+  });
+
   it("treats the content as message authority and the seller brand as design authority", () => {
     const resource = compileCampaignContext({
       brand: seller,

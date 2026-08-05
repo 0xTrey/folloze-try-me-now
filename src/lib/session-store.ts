@@ -315,6 +315,52 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
     artifact: stage.artifact,
     errorCode: stage.errorCode
   });
+  const sourceInsight = session.sourceArtifact
+    ? {
+        status: session.sourceArtifact.status,
+        confidence: session.sourceArtifact.confidence,
+        ...(session.sourceArtifact.content.title
+          ? { title: session.sourceArtifact.content.title }
+          : {}),
+        ...(session.sourceArtifact.understanding.premise
+          ? { premise: session.sourceArtifact.understanding.premise }
+          : {}),
+        topics: session.sourceArtifact.understanding.topics.slice(0, 6),
+        claims: session.sourceArtifact.understanding.claims.slice(0, 3).map((claim) => ({
+          id: claim.id,
+          text: claim.text,
+          sourceLabels: claim.citationIds.flatMap((citationId) => {
+            const citation = session.sourceArtifact?.content.citations.find(
+              (candidate) => candidate.id === citationId
+            );
+            if (!citation) return [];
+            return [
+              citation.locator.kind === "pdf-page"
+                ? `Page ${citation.locator.page}`
+                : citation.locator.label
+            ];
+          })
+        })),
+        extraction: {
+          method: session.sourceArtifact.extraction.method,
+          status: session.sourceArtifact.extraction.status,
+          ...(session.sourceArtifact.extraction.pageCount
+            ? { pageCount: session.sourceArtifact.extraction.pageCount }
+            : {}),
+          ...(session.sourceArtifact.extraction.extractedPageCount !== undefined
+            ? { extractedPageCount: session.sourceArtifact.extraction.extractedPageCount }
+            : {}),
+          ocrStatus: session.sourceArtifact.extraction.ocr.status,
+          warnings: session.sourceArtifact.extraction.warnings.slice(0, 3)
+        },
+        experiencePattern: session.sourceArtifact.understanding.experiencePlan.pattern,
+        moduleKinds: session.sourceArtifact.understanding.experiencePlan.modules.map(
+          (module) => module.kind
+        ),
+        assetCount: session.sourceArtifact.diagnostics.assetCount,
+        citationCount: session.sourceArtifact.diagnostics.citationCount
+      }
+    : undefined;
 
   return {
     id: session.id,
@@ -348,6 +394,7 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
     sourceConfirmation: session.sourceConfirmation
       ? structuredClone(session.sourceConfirmation)
       : undefined,
+    sourceInsight,
     availableAssets: session.availableAssets ? structuredClone(session.availableAssets) : undefined,
     blockControls: session.blockControls ? structuredClone(session.blockControls) : undefined,
     previewAnalytics: session.previewAnalytics
@@ -379,7 +426,11 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
           sectionCount:
             (Array.isArray(session.experienceSpec.draft.sections)
               ? session.experienceSpec.draft.sections.length
-              : 0)
+              : 0),
+          contentItemCount: session.experienceSpec.contentItems?.length ?? 0,
+          ...(session.experienceSpec.sourceIntelligence
+            ? { sourceStatus: session.experienceSpec.sourceIntelligence.status }
+            : {})
         }
       : undefined,
     experience: session.experience

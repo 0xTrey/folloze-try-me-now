@@ -1,7 +1,8 @@
 import type {
   BrandProfile,
   EntityIdentity,
-  IntelligenceConfidence
+  IntelligenceConfidence,
+  SessionAnswers
 } from "@/lib/types";
 import { withBrandReadiness } from "@/lib/brand-readiness";
 
@@ -15,6 +16,12 @@ export type BrandCategory =
   | "finance-operations"
   | "people-operations"
   | "business-software";
+
+export interface AudienceSuggestionContext {
+  promotedOffer?: string;
+  campaignType?: SessionAnswers["campaignType"];
+  objective?: string;
+}
 
 interface CategoryProfile {
   signals: RegExp;
@@ -845,15 +852,82 @@ function boundedAudience(value: string): string {
   return normalized.slice(0, boundary > 72 ? boundary : 120).trim();
 }
 
+function safeAudienceContext(value: string | undefined, max = 72): string | undefined {
+  if (!value || unsafeIntelligenceText.test(value)) return undefined;
+  const normalized = value
+    .replace(/[<>\[\]{}]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length < 2) return undefined;
+  if (normalized.length <= max) return normalized;
+  return normalized.slice(0, max).replace(/\s+\S*$/, "").trim() || normalized.slice(0, max);
+}
+
+function possessiveCompanyName(value: string): string {
+  return /s$/i.test(value.trim()) ? `${value.trim()}'` : `${value.trim()}'s`;
+}
+
+export function audienceOfferContextLabel(
+  brand: BrandProfile,
+  context: AudienceSuggestionContext = {}
+): string | undefined {
+  const promotedOffer = safeAudienceContext(context.promotedOffer);
+  if (!promotedOffer) return undefined;
+  const companyName = safeAudienceContext(brand.companyName, 48);
+  if (!companyName || promotedOffer.toLocaleLowerCase().includes(companyName.toLocaleLowerCase())) {
+    return promotedOffer;
+  }
+  return `${possessiveCompanyName(companyName)} ${promotedOffer}`;
+}
+
+function contextualAudienceSuffix(context: AudienceSuggestionContext, offerLabel: string): string {
+  const objective = context.objective?.toLocaleLowerCase() ?? "";
+  if (context.campaignType === "event" || /registr|attend|rsvp/.test(objective)) {
+    return `considering ${offerLabel}`;
+  }
+  if (context.campaignType === "demand" || /demand|educat|awareness/.test(objective)) {
+    return `exploring ${offerLabel}`;
+  }
+  return `evaluating ${offerLabel}`;
+}
+
+function contextualizeAudienceSuggestions(
+  suggestions: string[],
+  brand: BrandProfile,
+  context: AudienceSuggestionContext
+): string[] {
+  const offerLabel = audienceOfferContextLabel(brand, context);
+  if (!offerLabel) return suggestions;
+  const suffix = contextualAudienceSuffix(context, offerLabel);
+  return suggestions
+    .map((suggestion) => {
+      if (suggestion.toLocaleLowerCase().includes(offerLabel.toLocaleLowerCase())) {
+        return boundedAudience(suggestion);
+      }
+      const maxPrefixLength = Math.max(32, 119 - suffix.length);
+      const normalized = suggestion.replace(/\s+/g, " ").trim();
+      const boundary = normalized.slice(0, maxPrefixLength + 1).lastIndexOf(" ");
+      const prefix = normalized.length <= maxPrefixLength
+        ? normalized
+        : normalized.slice(0, boundary > 24 ? boundary : maxPrefixLength).trim();
+      return boundedAudience(`${prefix} ${suffix}`);
+    })
+    .filter((suggestion, index, values) => values.indexOf(suggestion) === index);
+}
+
 /**
  * Before a target is known, category roles are a useful seller-side fallback.
  * Once public target context is harvested, each option is recomposed from the
  * seller's offer category and a public target operating theme.
  */
-export function audienceSuggestionsFor(brand: BrandProfile, target?: BrandProfile): string[] {
+export function audienceSuggestionsFor(
+  brand: BrandProfile,
+  target?: BrandProfile,
+  context: AudienceSuggestionContext = {}
+): string[] {
   const sellerCategory = identifyBrandCategory(brand);
   if (!target) {
-    return [...profiles[sellerCategory].audiences];
+    return contextualizeAudienceSuggestions([...profiles[sellerCategory].audiences], brand, context);
   }
   const targetCategory = identifyBrandCategory(target);
   const hasPublicTargetContext = Boolean(
@@ -862,14 +936,18 @@ export function audienceSuggestionsFor(brand: BrandProfile, target?: BrandProfil
     )
   );
   if (!hasPublicTargetContext && targetCategory === "business-software") {
-    return [...profiles[sellerCategory].audiences];
+    return contextualizeAudienceSuggestions([...profiles[sellerCategory].audiences], brand, context);
   }
 
   const lenses = targetLensesFor(target);
   const suggestions = targetAwareAudienceRecipes[sellerCategory].map((recipe, index) =>
     boundedAudience(recipe(lenses[index]))
   );
-  return suggestions.filter((suggestion, index) => suggestions.indexOf(suggestion) === index);
+  return contextualizeAudienceSuggestions(
+    suggestions.filter((suggestion, index) => suggestions.indexOf(suggestion) === index),
+    brand,
+    context
+  );
 }
 
 export function narrativeProfileFor(brand: BrandProfile): Omit<CategoryProfile, "signals" | "audiences"> {
