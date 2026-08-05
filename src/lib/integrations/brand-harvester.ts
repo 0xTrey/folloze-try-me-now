@@ -8,7 +8,11 @@ import sharp from "sharp";
 import { brandfetchLogoApiUrl, isBrandfetchLogoApiUrl } from "@/lib/brandfetch-logo";
 import { withBrandReadiness } from "@/lib/brand-readiness";
 import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
-import { companyDomainStem, registrableCompanyDomain } from "@/lib/domain-identity";
+import {
+  companyDomainStem,
+  registrableCompanyDomain,
+  sharesRegistrableCompanyDomain
+} from "@/lib/domain-identity";
 import { logServerError } from "@/lib/http";
 import {
   portableBrandLogoFromBytes,
@@ -1598,7 +1602,22 @@ async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchLookup> {
     const returnedDomain = typeof payload.domain === "string"
       ? normalizeDomain(payload.domain)
       : undefined;
-    if (!returnedDomain || returnedDomain !== requestedDomain) {
+    if (!returnedDomain) {
+      logServerError(new Error("Brandfetch returned a different domain."), {
+        operation: "brandfetch_brand_lookup",
+        code: "brandfetch_domain_mismatch",
+        details: { domain }
+      });
+      return { status: "invalid_response" };
+    }
+    if (returnedDomain !== requestedDomain) {
+      // Regional hosts are sometimes canonicalized to their registrable parent
+      // by Brandfetch. Treat that as an exact-host miss so the caller can retry
+      // the parent deliberately, without polluting error telemetry. Unrelated
+      // domain mismatches remain a hard provider-contract failure.
+      if (sharesRegistrableCompanyDomain(returnedDomain, requestedDomain)) {
+        return { status: "not_found" };
+      }
       logServerError(new Error("Brandfetch returned a different domain."), {
         operation: "brandfetch_brand_lookup",
         code: "brandfetch_domain_mismatch",

@@ -260,7 +260,11 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input: string | URL | Request) => {
       const url = String(input);
       if (url.includes("/domain/usa.philips.com")) {
-        return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+        return new Response(JSON.stringify({
+          name: "Philips",
+          domain: "philips.com",
+          colors: []
+        }), { status: 200, headers: { "content-type": "application/json" } });
       }
       expect(url).toContain("/domain/philips.com");
       return new Response(JSON.stringify({
