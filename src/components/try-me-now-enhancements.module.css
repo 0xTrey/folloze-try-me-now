@@ -356,7 +356,7 @@ fieldset.controlCard { min-inline-size:0 }
 .assetCheck { width:20px;height:20px;display:grid;place-items:center;color:#fff;background:var(--accent);border-radius:50%;font-style:normal }
 
 /* Analytics proof. */
-.signalToast { width:min(390px,calc(100vw - 28px));min-height:70px;padding:10px 10px 10px 12px;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:9px;position:fixed;z-index:210;right:20px;bottom:20px;color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:15px;background:radial-gradient(circle at 15% 10%,rgba(91,91,255,.28),transparent 35%),linear-gradient(145deg,#0b1932,#070b1f);box-shadow:0 18px 54px rgba(7,20,40,.28);animation:toastIn .32s var(--ease) both }
+.signalToast { width:min(390px,calc(100vw - 28px));min-height:70px;padding:10px 10px 10px 12px;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:9px;position:fixed;z-index:210;top:96px;right:20px;color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:15px;background:radial-gradient(circle at 15% 10%,rgba(91,91,255,.28),transparent 35%),linear-gradient(145deg,#0b1932,#070b1f);box-shadow:0 18px 54px rgba(7,20,40,.28);animation:toastIn .32s var(--ease) both }
 .signalAnnouncement { width:1px;height:1px;margin:-1px;padding:0;position:absolute;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0 }
 @keyframes toastIn { from{opacity:0;transform:translateY(20px) scale(.97)} }
 .signalPulse { width:34px;height:34px;display:grid;place-items:center;color:#bfbfff;background:rgba(91,91,255,.18);border-radius:10px;box-shadow:0 0 0 0 rgba(91,91,255,.2);animation:signalRing 2.2s ease-out infinite }
@@ -550,7 +550,7 @@ fieldset.controlCard { min-inline-size:0 }
   .variantGrid,.assetGrid { grid-template-columns:1fr }
   .variantCard { min-height:205px }
   .assetCard { min-height:64px }
-  .signalToast { right:14px;bottom:14px;grid-template-columns:auto minmax(0,1fr) auto }
+  .signalToast { top:auto;right:14px;bottom:14px;grid-template-columns:auto minmax(0,1fr) auto }
   .signalOpen { grid-column:1 / -1;width:100%;justify-content:center }
   .signalDismiss { grid-column:3;grid-row:1 }
   .briefDrawer,.signalPanel { padding:26px 18px }

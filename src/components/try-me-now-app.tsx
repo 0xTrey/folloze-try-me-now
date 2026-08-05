@@ -2533,12 +2533,15 @@ export function TryMeNowApp() {
   const [claimError, setClaimError] = useState("");
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([]);
   const [revealedAt, setRevealedAt] = useState<number>();
+  const [previewClockNow, setPreviewClockNow] = useState(() => Date.now());
+  const [tuneOpen, setTuneOpen] = useState(false);
   const startedDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
   const analyticsPromptedSession = useRef<string | undefined>(undefined);
   const endJourneyRevealSession = useRef<string | undefined>(undefined);
   const ctaSessionSignature = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const tunedSession = useRef<string | undefined>(undefined);
   const patchRequestRef = useRef(0);
   const persistedSectionSignals = useRef(new Set<string>());
   const lastTrackedStatus = useRef<string | undefined>(undefined);
@@ -2571,6 +2574,7 @@ export function TryMeNowApp() {
     setConnectionError("");
     setClientEvents([]);
     setRevealedAt(undefined);
+    setTuneOpen(false);
     setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
     setShowAnalyticsToast(false);
@@ -2608,6 +2612,7 @@ export function TryMeNowApp() {
     setClaimError("");
     setClientEvents([]);
     setRevealedAt(undefined);
+    setTuneOpen(false);
     startedDomain.current = undefined;
     revealTracked.current = false;
     analyticsPromptedSession.current = undefined;
@@ -2719,6 +2724,20 @@ export function TryMeNowApp() {
     // from remounting the iframe that emitted the signal.
     void recordPreviewSignal(session.id, "preview-opened", "experience-preview").catch(() => undefined);
   }, [session]);
+
+  useEffect(() => {
+    if (!session?.experience || session.status === "claimed" || tunedSession.current === session.id) return;
+    tunedSession.current = session.id;
+    setTuneOpen(window.matchMedia("(min-width: 821px)").matches);
+  }, [session?.experience, session?.id, session?.status]);
+
+  useEffect(() => {
+    if (session?.status !== "preview_ready_unclaimed" || !session.expiresAt) return;
+    const expiresAt = Date.parse(session.expiresAt);
+    if (!Number.isFinite(expiresAt)) return;
+    const timer = window.setInterval(() => setPreviewClockNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [session?.expiresAt, session?.status]);
 
   useEffect(() => {
     if (!session?.experience || analyticsPromptedSession.current === session.id) return;
@@ -3056,6 +3075,10 @@ export function TryMeNowApp() {
   const expiresLabel = session?.expiresAt
     ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(session.expiresAt))
     : "in 30 minutes";
+  const previewSecondsRemaining = session?.expiresAt
+    ? Math.max(0, Math.ceil((Date.parse(session.expiresAt) - previewClockNow) / 1_000))
+    : 30 * 60;
+  const previewCountdown = `${String(Math.floor(previewSecondsRemaining / 60)).padStart(2, "0")}:${String(previewSecondsRemaining % 60).padStart(2, "0")}`;
   const engagementSeconds = revealedAt
     ? Math.max(1, Math.round((((clientEvents.at(-1)?.at ?? revealedAt) - revealedAt) / 1000)))
     : 0;
@@ -3195,9 +3218,14 @@ export function TryMeNowApp() {
               {session.status === "claimed" ? (
                 <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
               ) : (
-                <button className="buttonSecondary" type="button" onClick={() => setShowSavePrompt(true)}><Mail size={16} />Save this preview</button>
+                <button className="buttonPrimary" type="button" onClick={() => setShowSavePrompt(true)}><Mail size={16} />Save this preview</button>
               )}
-              <a className="buttonPrimary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
+              <a className="buttonSecondary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
+              {session.status === "claimed" ? (
+                <span className="previewExpiryChip isSaved"><Check size={15} />Saved</span>
+              ) : (
+                <span className={`previewExpiryChip ${previewSecondsRemaining <= 300 ? "isWarning" : ""}`}><Clock3 size={15} />Private preview · expires in {previewCountdown}</span>
+              )}
             </div>
           </div>
           <PreviewUpdateNotice
@@ -3237,8 +3265,12 @@ export function TryMeNowApp() {
                 }}
               />
               {session.status !== "claimed" && (
-                <details className="experienceControlDeck">
-                  <summary><span><Sparkles size={17} />Tune this experience</span><small>Tone, visual direction, and CTA treatment</small><ChevronDown size={16} /></summary>
+                <details className="experienceControlDeck" open={tuneOpen} onToggle={(event) => setTuneOpen(event.currentTarget.open)}>
+                  <summary>
+                    <span className="tuneSummaryTitle"><Sparkles size={17} />Tune this experience</span>
+                    <span className="tuneSummaryChips" aria-hidden="true"><i>Shorter</i><i>Business value</i><i>Technical</i><i>Bolder</i></span>
+                    <ChevronDown size={16} />
+                  </summary>
                   <div className="experienceControlBody">
                     <ToneChips
                       label="Rewrite the message"
