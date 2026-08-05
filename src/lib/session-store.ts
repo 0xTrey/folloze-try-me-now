@@ -4,7 +4,8 @@ import { Redis } from "@upstash/redis";
 import { BlobPreconditionFailedError, del, get, put } from "@vercel/blob";
 
 import { config, hasBlob, hasRedis } from "@/lib/config";
-import { supportRefForTraceId } from "@/lib/observability";
+import { emitObservabilityLog, supportRefForTraceId } from "@/lib/observability";
+import { recordProductSessionSnapshot } from "@/lib/product-analytics";
 import { recordCommittedSessionEvents, traceIdForSession } from "@/lib/trace-store";
 import type { PublicTryMeSession, SessionAnswers, TryMeSession } from "@/lib/types";
 
@@ -32,6 +33,26 @@ const keyFor = (id: string) => `try-me:session:${id}`;
 const blobPathFor = (id: string) => `try-me/sessions/${id}.json`;
 const leaseKeyFor = (id: string, operation: string) => `try-me:lease:${operation}:${id}`;
 const strongEtag = (etag: string) => etag.replace(/^W\//, "");
+
+async function recordProductSnapshotBestEffort(session: TryMeSession): Promise<void> {
+  try {
+    await Promise.race([
+      recordProductSessionSnapshot(session),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Product analytics snapshot timed out.")), 750);
+      })
+    ]);
+  } catch (error) {
+    emitObservabilityLog("error", {
+      type: "try_me_error",
+      event: "product_session_snapshot_failed",
+      traceId: traceIdForSession(session),
+      supportRef: supportRefForTraceId(traceIdForSession(session)),
+      code: "product_session_snapshot_failed",
+      errorName: error instanceof Error ? error.name : "Error"
+    });
+  }
+}
 
 export type SessionStoreMode = "vercel-blob" | "upstash-redis" | "memory-demo";
 
@@ -194,7 +215,10 @@ export async function putSession(
   options: { persist?: boolean; ttlSeconds?: number } = {}
 ): Promise<void> {
   await writeSession(session, options);
-  await recordCommittedSessionEvents(session);
+  await Promise.all([
+    recordCommittedSessionEvents(session),
+    recordProductSnapshotBestEffort(session)
+  ]);
 }
 
 export async function getSession(id: string): Promise<TryMeSession | null> {
@@ -240,7 +264,10 @@ export async function updateSession(
       next.revision += 1;
       try {
         await writeBlobEntry(id, storedEntry(next, options), { ifMatch: snapshot.etag });
-        await recordCommittedSessionEvents(next, snapshot.entry.value.events);
+        await Promise.all([
+          recordCommittedSessionEvents(next, snapshot.entry.value.events),
+          recordProductSnapshotBestEffort(next)
+        ]);
         return next;
       } catch (error) {
         if (error instanceof BlobPreconditionFailedError) continue;
@@ -257,7 +284,10 @@ export async function updateSession(
   next.updatedAt = new Date().toISOString();
   next.revision += 1;
   await writeSession(next, options);
-  await recordCommittedSessionEvents(next, previousEvents);
+  await Promise.all([
+    recordCommittedSessionEvents(next, previousEvents),
+    recordProductSnapshotBestEffort(next)
+  ]);
   return next;
 }
 

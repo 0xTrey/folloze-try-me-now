@@ -22,6 +22,7 @@
     "db:migrate:leads": "node scripts/migrate-leads.mjs",
     "db:export:leads": "node scripts/export-leads.mjs",
     "trace:inspect": "node scripts/inspect-trace.mjs",
+    "analytics:inspect": "node scripts/inspect-product-session.mjs",
     "qa:claim-ledger": "node scripts/verify-claim-ledger.mjs",
     "qa": "npm run lint && npm run typecheck && npm run test && npm run build && npm run build:webpack"
   },
@@ -34,6 +35,7 @@
     "next": "16.2.12",
     "openai": "7.2.0",
     "pdfjs-dist": "6.2.108",
+    "posthog-js": "1.280.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "resend": "6.18.1",

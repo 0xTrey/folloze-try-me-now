@@ -8,6 +8,10 @@ import {
   startServerOperation
 } from "@/lib/http";
 import { purgeExpiredTraceEvents, traceStoreMode } from "@/lib/trace-store";
+import {
+  productAnalyticsStoreMode,
+  purgeExpiredProductAnalytics
+} from "@/lib/product-analytics";
 
 export const maxDuration = 300;
 
@@ -27,9 +31,17 @@ export async function GET(request: NextRequest) {
     }
 
     const deleted = await purgeExpiredTraceEvents();
+    const analytics = productAnalyticsStoreMode === "neon-postgres"
+      ? await purgeExpiredProductAnalytics()
+      : { eventsDeleted: 0, sessionsDeleted: 0, browserSessionsDeleted: 0, visitorsDeleted: 0 };
+    const totalDeleted = deleted
+      + analytics.eventsDeleted
+      + analytics.sessionsDeleted
+      + analytics.browserSessionsDeleted
+      + analytics.visitorsDeleted;
     return NextResponse.json(
       { ok: true, deleted },
-      { headers: { ...noStoreHeaders, ...trace.complete(200, { deleted }) } }
+      { headers: { ...noStoreHeaders, ...trace.complete(200, { deleted: totalDeleted }) } }
     );
   } catch (error) {
     return apiError(error, trace.errorContext());

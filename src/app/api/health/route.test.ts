@@ -23,6 +23,11 @@ describe("health production capability", () => {
     });
     expect(health.readiness.required.distributedRateLimits).toBe(false);
     expect(health.readiness.blockers).toContain("distributedRateLimits");
+    expect(health.services.productAnalytics).toEqual({
+      firstParty: "memory-test",
+      posthogConfigured: false,
+      sessionReplayEnabled: false
+    });
   });
 
   it("accepts the Blob CAS session store when every required service is connected", () => {

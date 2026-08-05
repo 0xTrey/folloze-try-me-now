@@ -633,10 +633,17 @@ export interface ClaimState {
   designerUrl?: string;
 }
 
+export interface SessionAnalyticsIdentity {
+  visitorId: string;
+  browserSessionId: string;
+}
+
 export interface TryMeSession {
   id: string;
   /** Server-only correlation ID. Never expose the public session URL as an ops identifier. */
   traceId?: string;
+  /** Server-only first-party product analytics correlation. It grants no session access. */
+  analytics?: SessionAnalyticsIdentity;
   editorTokenHash: string;
   useCase: UseCase;
   companyDomain: string;
@@ -699,6 +706,7 @@ export type PublicTryMeSession = Omit<
   | "stages"
   | "targetBrand"
   | "traceId"
+  | "analytics"
   | "sourceFingerprint"
   | "sourceArtifact"
 > & {
@@ -719,6 +727,7 @@ export interface CreateSessionInput {
   companyDomain: string;
   exampleMode?: boolean;
   exampleKey?: string;
+  analytics?: SessionAnalyticsIdentity;
 }
 
 export interface SessionWorkspacePatch {

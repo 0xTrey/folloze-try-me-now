@@ -9,6 +9,7 @@ import {
   hasResend
 } from "@/lib/config";
 import { isDurableLeadStoreMode, leadStoreMode } from "@/lib/lead-store";
+import { productAnalyticsStoreMode } from "@/lib/product-analytics";
 import { noStoreHeaders } from "@/lib/http";
 import {
   isDistributedRateLimitStoreMode,
@@ -52,6 +53,13 @@ export function GET() {
       sessionStore: sessionStoreMode,
       sessionStoreProductionSafe: sessionStoreIsProductionSafe,
       leadLedger: leadStoreMode,
+      productAnalytics: {
+        firstParty: productAnalyticsStoreMode,
+        posthogConfigured: Boolean(
+          process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST
+        ),
+        sessionReplayEnabled: process.env.NEXT_PUBLIC_POSTHOG_SESSION_REPLAY === "true"
+      },
       rateLimiter: { mode: rateLimitStoreMode, distributed: distributedRateLimits },
       generation: { mode: config.generationMode, connected: hasOpenAI },
       brandHarvester: hasRemoteBrandHarvester ? "remote" : "safe-fast-extractor",

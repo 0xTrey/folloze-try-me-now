@@ -2,6 +2,7 @@ import { after, NextRequest, NextResponse } from "next/server";
 
 import { apiError, noStoreHeaders, startServerOperation } from "@/lib/http";
 import { createSession, runBrandStage } from "@/lib/orchestrator";
+import { analyticsIdentityFromRequest } from "@/lib/product-analytics";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { createSessionSchema } from "@/lib/validation";
 
@@ -17,7 +18,10 @@ export async function POST(request: NextRequest) {
   try {
     await enforceRateLimit(`create:${anonymousClientKey(request)}`, 5, 60);
     const input = createSessionSchema.parse(await request.json());
-    const created = await createSession(input);
+    const created = await createSession({
+      ...input,
+      analytics: analyticsIdentityFromRequest(request)
+    });
     trace.setSessionId(created.session.id);
     trace.setTraceId(created.traceId);
     after(() => runBrandStage(created.session.id));

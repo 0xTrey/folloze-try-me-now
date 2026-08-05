@@ -702,6 +702,7 @@ export async function createSession(
     {
       id,
       traceId: opaqueId(),
+      analytics: input.analytics,
       editorTokenHash: createHash("sha256").update(editorToken).digest("hex"),
       useCase: input.useCase,
       companyDomain,

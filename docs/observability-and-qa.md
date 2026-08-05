@@ -17,7 +17,9 @@ The observability layer has two complementary outputs:
 
 The trace table is an operations aid, not an analytics event store and not a
 source of visitor or lead data. `try_me_events` must not be treated as the
-authoritative execution trace.
+authoritative execution trace. Prospect behavior, submitted-input snapshots,
+browser sessions, and optional PostHog forwarding are defined separately in
+[`docs/product-analytics-and-tracing.md`](product-analytics-and-tracing.md).
 
 ## Correlation model
 
@@ -118,7 +120,9 @@ it as a controlled deployment step with the intended environment selected and
 record migration state separately from application deployment state.
 
 Trace rows default to expiry 30 days after their event timestamp. The private
-cron-authenticated route `/api/maintenance/trace-cleanup` deletes expired rows.
+cron-authenticated route `/api/maintenance/trace-cleanup` deletes expired rows
+and also enforces the product-analytics retention timestamps introduced by
+migration 009.
 `vercel.json` schedules it daily with `17 3 * * *`. It requires `CRON_SECRET`
 through the existing cron authorization contract and returns 503 when durable
 trace storage is unavailable.

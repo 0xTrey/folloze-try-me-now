@@ -74,6 +74,14 @@ import {
 } from "@/lib/client-response";
 import { primaryActionFor } from "@/lib/cta-presentation";
 import { imageDeliveryPath } from "@/lib/image-delivery";
+import {
+  captureProductEvent,
+  identifyProductVisitor,
+  initializeProductAnalytics,
+  productAnalyticsHeaders,
+  setProductAnalyticsSessionId
+} from "@/lib/product-analytics-client";
+import type { ProductEventName } from "@/lib/product-analytics";
 
 type AnalyticsEventContext = {
   sectionId?: string;
@@ -894,17 +902,68 @@ function getWhyCopy(session: PublicTryMeSession): { key: string; title: string; 
   };
 }
 
-function track(action: string, detail: Record<string, string | number | boolean> = {}) {
+function track(action: ProductEventName, detail: Record<string, string | number | boolean> = {}) {
   if (typeof window === "undefined") return;
+  captureProductEvent(action, {
+    category: ["domain_submitted", "field_interacted", "campaign_type_selected"].includes(action)
+      ? "input"
+      : ["experience_claimed", "claim_started", "claim_completed", "claim_failed"].includes(action)
+        ? "conversion"
+        : action.endsWith("_failed")
+          ? "error"
+          : "interaction",
+    properties: detail
+  });
   window.dispatchEvent(new CustomEvent("try-me-track", { detail: { action, ...detail } }));
 }
 
+const apiSuccessCaptureAt = new Map<string, number>();
+
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }
-  });
-  return readJsonResponse<T>(response);
+  const startedAt = performance.now();
+  const method = init?.method ?? "GET";
+  const route = url
+    .split("?")[0]
+    .replace(/\/api\/sessions\/[^/]+/, "/api/sessions/[id]");
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...productAnalyticsHeaders(),
+        ...(init?.headers ?? {})
+      }
+    });
+    const result = await readJsonResponse<T>(response);
+    const isPollingRead = method === "GET" && route === "/api/sessions/[id]";
+    const now = Date.now();
+    const lastCaptured = apiSuccessCaptureAt.get(`${method}:${route}`) ?? 0;
+    if (!isPollingRead || now - lastCaptured >= 10_000) {
+      apiSuccessCaptureAt.set(`${method}:${route}`, now);
+      captureProductEvent("api_request_completed", {
+        category: "performance",
+        outcome: "success",
+        durationMs: Math.round(performance.now() - startedAt),
+        properties: { route, method, status: response.status }
+      });
+    }
+    return result;
+  } catch (error) {
+    const apiError = error instanceof ApiResponseError ? error : undefined;
+    captureProductEvent("api_request_failed", {
+      category: "error",
+      outcome: "failure",
+      durationMs: Math.round(performance.now() - startedAt),
+      properties: {
+        route,
+        method,
+        status: apiError?.status ?? 0,
+        code: apiError?.code ?? "network_or_parse_error"
+      },
+      immediate: true
+    });
+    throw error;
+  }
 }
 
 async function confirmHighConfidenceSource(session: PublicTryMeSession): Promise<PublicTryMeSession> {
@@ -1700,7 +1759,11 @@ export function ProgressiveQuestions({
                 className={isSelected ? "isSelected" : ""}
                 aria-pressed={isSelected}
                 data-selected={isSelected || undefined}
-                onClick={() => setCampaignChoice(value as SessionAnswers["campaignType"])}
+                onClick={() => {
+                  const nextChoice = value as SessionAnswers["campaignType"];
+                  setCampaignChoice(nextChoice);
+                  if (nextChoice) track("campaign_type_selected", { campaignType: nextChoice });
+                }}
               >
                 <strong>{title}</strong>
                 <span>{body}</span>
@@ -2231,6 +2294,26 @@ export function TryMeNowApp() {
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const patchRequestRef = useRef(0);
   const persistedSectionSignals = useRef(new Set<string>());
+  const lastTrackedStatus = useRef<string | undefined>(undefined);
+
+  useEffect(() => initializeProductAnalytics(), []);
+
+  useEffect(() => {
+    setProductAnalyticsSessionId(session?.id);
+  }, [session?.id]);
+
+  useEffect(() => {
+    if (!session || lastTrackedStatus.current === session.status) return;
+    lastTrackedStatus.current = session.status;
+    captureProductEvent("session_status_changed", {
+      category: "workflow",
+      outcome: ["generation_failed", "claim_failed", "expired"].includes(session.status)
+        ? "failure"
+        : "info",
+      sessionId: session.id,
+      properties: { status: session.status, use_case: session.useCase }
+    });
+  }, [session]);
 
   const selectUseCase = useCallback((selected: UseCase) => {
     setUseCase(selected);
@@ -2306,6 +2389,13 @@ export function TryMeNowApp() {
       });
       setSession(result.session);
       setAnswers(result.session.answers);
+      setProductAnalyticsSessionId(result.session.id);
+      captureProductEvent("session_created", {
+        category: "workflow",
+        outcome: "success",
+        sessionId: result.session.id,
+        properties: { use_case: result.session.useCase }
+      });
       track("domain_submitted", { useCase: selectedUseCase });
     } catch (startError) {
       startedDomain.current = undefined;
@@ -2495,6 +2585,11 @@ export function TryMeNowApp() {
     setIsSaving(true);
     setError("");
     try {
+      if (patch.sourceUrl || patch.offerSourceUrl) {
+        track("research_started", {
+          sourceType: patch.offerSourceUrl ? "offer-url" : "content-url"
+        });
+      }
       const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}`, {
         method: "PATCH",
         body: JSON.stringify(patch)
@@ -2514,6 +2609,11 @@ export function TryMeNowApp() {
   const patchAnswersInBackground = useCallback(async (patch: SessionAnswers) => {
     if (!backgroundSessionId) return;
     try {
+      if (patch.offerSourceUrl || patch.sourceUrl) {
+        track("research_started", {
+          sourceType: patch.offerSourceUrl ? "offer-url" : "content-url"
+        });
+      }
       await api<{ session: PublicTryMeSession }>(`/api/sessions/${backgroundSessionId}`, {
         method: "PATCH",
         body: JSON.stringify(patch)
@@ -2659,6 +2759,7 @@ export function TryMeNowApp() {
     if (!session) return;
     setClaimStatus("saving");
     setClaimError("");
+    track("claim_started", { useCase: session.useCase });
     try {
       const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}/claim`, {
         method: "POST",
@@ -2667,11 +2768,17 @@ export function TryMeNowApp() {
       setSession(result.session);
       setClaimStatus("saved");
       setShowSavePrompt(false);
+      identifyProductVisitor(email);
+      track("claim_completed", { useCase: result.session.useCase });
       track("experience_claimed", { useCase: result.session.useCase });
     } catch (claimFailure) {
       const message = claimFailure instanceof Error ? claimFailure.message : "We could not save this experience.";
       setClaimStatus("error");
       setClaimError(message);
+      track("claim_failed", {
+        useCase: session.useCase,
+        code: claimFailure instanceof ApiResponseError ? claimFailure.code ?? "claim_failed" : "claim_failed"
+      });
     }
   };
 
@@ -2723,7 +2830,7 @@ export function TryMeNowApp() {
             </div>
           </div>
           <UseCasePortals onSelect={selectUseCase} />
-          <div className="entryFooter"><span>Enrichment starts with the first domain.</span><span>Add your email only after you decide the experience is worth keeping.</span></div>
+          <div className="entryFooter"><span>Enrichment starts with the first domain. Session activity is logged to improve this demo.</span><span>Add your email only after you decide the experience is worth keeping.</span></div>
         </section>
       )}
 
