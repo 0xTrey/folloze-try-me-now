@@ -50,24 +50,19 @@
 .exampleAction:hover,.tertiaryAction:hover { color:var(--accent) }
 .eyebrow { color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase }
 
-/* Entry path: a compact four-second transformation, not a generic feature card. */
-.pathCard { --enh-accent:var(--accent);min-height:430px;padding:24px;display:flex;flex-direction:column;overflow:hidden;position:relative;isolation:isolate;border:1px solid var(--border);border-radius:24px;background:#f4eee1;box-shadow:0 16px 55px rgba(12,24,50,.06);transition:transform .3s var(--ease),box-shadow .3s var(--ease),border-color .25s var(--ease) }
+/* Entry path: real generated outcomes, framed as three equal product paths. */
+.pathCard { --enh-accent:var(--accent);min-height:470px;padding:24px;display:flex;flex-direction:column;overflow:hidden;position:relative;isolation:isolate;border:1px solid var(--border);border-radius:24px;background:#f4eee1;box-shadow:0 16px 55px rgba(12,24,50,.06);transition:transform .3s var(--ease),box-shadow .3s var(--ease),border-color .25s var(--ease) }
 .pathCard:hover,.pathCard:focus-within { transform:translateY(-5px);box-shadow:0 24px 72px rgba(12,24,50,.13);border-color:color-mix(in srgb,var(--enh-accent) 38%,var(--border)) }
 .tonecobalt { color:#fff;border-color:rgba(255,255,255,.22);background:radial-gradient(circle at 84% 12%,rgba(255,255,255,.2),transparent 22%),linear-gradient(145deg,#165ef4,#082cbf 62%,#071a79) }
 .toneink { color:#f7f6ff;border-color:#27273a;background:radial-gradient(circle at 84% 11%,color-mix(in srgb,var(--enh-accent) 24%,transparent),transparent 30%),#090a12 }
 .isSelected { border-color:var(--enh-accent,var(--accent));box-shadow:0 0 0 3px color-mix(in srgb,var(--enh-accent,var(--accent)) 12%,transparent),0 22px 68px rgba(12,24,50,.12) }
 .pathTopline { display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;opacity:.72 }
-.microDemo { height:178px;margin:28px 0 23px;padding:21px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);grid-template-rows:1fr auto;align-items:center;gap:10px;overflow:hidden;position:relative;border:1px solid color-mix(in srgb,currentColor 13%,transparent);border-radius:17px;background:color-mix(in srgb,currentColor 6%,transparent) }
-.demoOrigin,.demoResult { min-width:0;min-height:45px;padding:10px;display:grid;place-items:center;position:relative;z-index:2;overflow:hidden;text-align:center;text-overflow:ellipsis;color:var(--ink);border:1px solid rgba(28,41,63,.12);border-radius:12px;background:#fff;font-size:11px;font-weight:800;animation:demoOrigin var(--demo-duration,4s) var(--ease) infinite }
-.demoResult { color:#fff;border-color:transparent;background:var(--enh-accent);animation-name:demoResult }
-.demoConnector { width:46px;display:flex;align-items:center;gap:4px;color:var(--enh-accent) }
-.demoConnector i { height:1px;flex:1;background:currentColor;opacity:.38 }
-.demoSignal { grid-column:1 / -1;justify-self:center;padding:7px 11px;color:inherit;border:1px solid color-mix(in srgb,currentColor 14%,transparent);border-radius:999px;background:color-mix(in srgb,currentColor 7%,transparent);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;animation:demoSignal var(--demo-duration,4s) var(--ease) infinite }
-.demoPulse { width:110px;height:110px;position:absolute;z-index:-1;right:13px;top:25px;border:1px solid color-mix(in srgb,var(--enh-accent) 40%,transparent);border-radius:50%;animation:demoPulse var(--demo-duration,4s) ease-out infinite }
-@keyframes demoOrigin { 0%,8%{transform:translateY(8px);opacity:.35}18%,100%{transform:none;opacity:1} }
-@keyframes demoResult { 0%,35%{transform:scale(.88);opacity:.1}48%,100%{transform:none;opacity:1} }
-@keyframes demoSignal { 0%,58%{transform:translateY(8px);opacity:0}72%,100%{transform:none;opacity:1} }
-@keyframes demoPulse { 0%,48%{transform:scale(.3);opacity:0}62%{opacity:.5}86%,100%{transform:scale(1.45);opacity:0} }
+.productPreview { height:202px;margin:25px 0 22px;overflow:hidden;position:relative;border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:17px;background:#fff;box-shadow:0 14px 36px rgba(7,20,40,.12) }
+.previewChrome { height:22px;padding:0 9px;display:flex;align-items:center;gap:5px;position:relative;z-index:1;border-bottom:1px solid #e5e7ed;background:#f3f4f7 }
+.previewChrome i { width:6px;height:6px;border-radius:50%;background:#ff8378 }
+.previewChrome i:nth-child(2) { background:#efc35b }.previewChrome i:nth-child(3) { background:#65c98b }
+.productPreview img { width:100%;height:calc(100% - 22px);display:block;object-fit:cover;object-position:top;transition:transform .45s var(--ease) }
+.pathCard:hover .productPreview img,.pathCard:focus-within .productPreview img { transform:scale(1.025) }
 .pathCopy { margin-top:auto }
 .pathCopy h3 { margin:0 0 10px;font:540 clamp(28px,2.5vw,38px)/.98 var(--font-display),"Iowan Old Style",Georgia,serif;letter-spacing:-.035em }
 .pathCopy p { min-height:44px;margin:0;color:inherit;font-size:13px;line-height:1.5;opacity:.72 }
@@ -517,8 +512,8 @@ fieldset.controlCard { min-inline-size:0 }
 }
 
 @media (max-width: 430px) {
-  .pathCard { min-height:340px;padding:18px;border-radius:19px }
-  .microDemo { height:135px;margin:20px 0;padding:14px }
+  .pathCard { min-height:290px;padding:18px;border-radius:19px }
+  .productPreview { display:none }
   .pathCopy h3 { font-size:29px }
   .pathActions { align-items:stretch;flex-direction:column }
   .pathActions>* { width:100% }
@@ -593,9 +588,7 @@ fieldset.controlCard { min-inline-size:0 }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pathCard,.brandStrip,.brandLogoSkeleton,.brandPaletteSkeleton i,.briefDrawer,.signalPanel,.signalToast,.demoOrigin,.demoResult,.demoSignal,.demoPulse,.orbit,.artifactrunning .artifactGlyph i,.signalPulse,.buildSignal i,.buildCore,.buildVisual::after,.buildCadence i { animation:none!important;transition-duration:.001ms!important }
-  .demoOrigin,.demoResult,.demoSignal { opacity:1;transform:none }
-  .demoPulse { display:none }
+  .pathCard,.productPreview img,.brandStrip,.brandLogoSkeleton,.brandPaletteSkeleton i,.briefDrawer,.signalPanel,.signalToast,.orbit,.artifactrunning .artifactGlyph i,.signalPulse,.buildSignal i,.buildCore,.buildVisual::after,.buildCadence i { animation:none!important;transition-duration:.001ms!important }
 }
 
 /* Approved shell polish: compact proof, a visible build ceremony, and quieter save UI. */
@@ -611,10 +604,11 @@ fieldset.controlCard { min-inline-size:0 }
 }
 
 .pathActions .exampleAction {
-  min-height: 38px;
-  padding: 7px 2px 0;
+  min-height: 42px;
+  padding: 8px 2px 0;
   justify-content: flex-start;
   border-radius: 0;
+  font-size: 12px;
 }
 
 .brandStrip {

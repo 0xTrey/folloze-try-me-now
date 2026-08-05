@@ -44,7 +44,9 @@ describe("Try Me Now prospect enhancement components", () => {
           actionLabel: "Build a 1:1 experience",
           exampleLabel: "See a Cisco example",
           exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
-          demoSteps: ["Seller", "Account signal", "1:1 experience"]
+          demoSteps: ["Seller", "Account signal", "1:1 experience"],
+          previewImage: "/entry/abm-preview.webp",
+          previewAlt: "Generated one-to-one account experience"
         }}
         onSelect={onSelect}
         onExampleOpen={onExampleOpen}

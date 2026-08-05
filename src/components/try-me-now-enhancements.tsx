@@ -57,6 +57,8 @@ export interface EntryPathOption {
   exampleLabel: string;
   exampleUrl: string;
   demoSteps: [string, string, string];
+  previewImage: string;
+  previewAlt: string;
   accent?: string;
   tone?: "paper" | "cobalt" | "ink";
 }
@@ -72,13 +74,11 @@ export interface EntryPathMicroDemoProps {
 export function EntryPathMicroDemo({
   option,
   selected = false,
-  demoDurationMs = 4_000,
   onSelect,
   onExampleOpen
 }: EntryPathMicroDemoProps) {
   const style = {
-    "--enh-accent": option.accent ?? "#5b5bff",
-    "--demo-duration": `${demoDurationMs}ms`
+    "--enh-accent": option.accent ?? "#5b5bff"
   } as CSSProperties;
 
   return (
@@ -88,12 +88,9 @@ export function EntryPathMicroDemo({
       aria-label={`${option.eyebrow}: ${option.title}`}
     >
       <div className={styles.pathTopline}><span>{option.index}</span><span>{option.eyebrow}</span></div>
-      <div className={styles.microDemo} aria-hidden="true">
-        <span className={styles.demoOrigin}>{option.demoSteps[0]}</span>
-        <span className={styles.demoConnector}><i /><ArrowRight size={14} /><i /></span>
-        <span className={styles.demoResult}>{option.demoSteps[2]}</span>
-        <span className={styles.demoSignal}>{option.demoSteps[1]}</span>
-        <span className={styles.demoPulse} />
+      <div className={styles.productPreview}>
+        <span className={styles.previewChrome} aria-hidden="true"><i /><i /><i /></span>
+        <Image src={option.previewImage} alt={option.previewAlt} width={720} height={380} loading="lazy" />
       </div>
       <div className={styles.pathCopy}>
         <h3>{option.title}</h3>

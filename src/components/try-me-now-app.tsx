@@ -275,6 +275,8 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     exampleLabel: "Watch the NVIDIA 1:1 experience",
     exampleUrl: NVIDIA_ONE_TO_ONE_EXAMPLE_URL,
     demoSteps: ["Seller", "Account evidence", "1:1 experience"],
+    previewImage: "/entry/abm-preview.webp",
+    previewAlt: "Generated one-to-one account experience for Cisco",
     accent: "#645cff",
     tone: "paper"
   },
@@ -288,6 +290,8 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     exampleLabel: "Watch Folloze + Claude launch",
     exampleUrl: "https://experience.folloze.com/folloze-claude-launch",
     demoSteps: ["Offer", "Buyer objective", "Live campaign"],
+    previewImage: "/entry/campaign-preview.webp",
+    previewAlt: "Generated campaign experience for ServiceNow",
     accent: "#5865ff",
     tone: "cobalt"
   },
@@ -301,6 +305,8 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     exampleLabel: "Watch Cisco HMF become an experience",
     exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
     demoSteps: ["Source", "Buyer lens", "Magic experience"],
+    previewImage: "/entry/content-preview.webp",
+    previewAlt: "Generated interactive content experience for Cisco Secure Firewall",
     accent: "#67e8c5",
     tone: "ink"
   }
@@ -3115,7 +3121,7 @@ export function TryMeNowApp() {
             </div>
           </div>
           <UseCasePortals onSelect={selectUseCase} />
-          <div className="entryFooter"><span>Enrichment starts with the first domain. Session activity is logged to improve this demo.</span><span>Add your email only after you decide the experience is worth keeping.</span></div>
+          <div className="entryFooter">Enrichment starts with the first domain. Session activity is logged to improve this demo; add your email only after the experience is worth keeping.</div>
         </section>
       )}
 
