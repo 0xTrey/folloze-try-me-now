@@ -933,6 +933,14 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
         brandPublicPageAttempts: profile.diagnostics?.providers?.publicPageAttempts ?? 0,
         brandRemoteBrowserProvider: profile.diagnostics?.providers?.remoteBrowser ?? "unknown",
         brandfetchProvider: profile.diagnostics?.providers?.brandfetch ?? "unknown",
+        brandfetchLogoApiProvider: profile.diagnostics?.providers?.brandfetchLogoApi ?? "unknown",
+        brandfetchBrandApiProvider: profile.diagnostics?.providers?.brandfetchBrandApi ?? "unknown",
+        brandfetchQualityTier: profile.diagnostics?.brandfetch?.qualityTier ?? "unknown",
+        brandfetchClaimed: profile.diagnostics?.brandfetch?.claimed ?? false,
+        brandfetchColorCount: profile.diagnostics?.brandfetch?.colorCount ?? 0,
+        brandfetchFontCount: profile.diagnostics?.brandfetch?.fontCount ?? 0,
+        brandfetchImageCount: profile.diagnostics?.brandfetch?.imageCount ?? 0,
+        brandfetchIndustryCount: profile.diagnostics?.brandfetch?.industryCount ?? 0,
         verifiedBrandFallback: profile.diagnostics?.providers?.verifiedFallback ?? false,
         stylesheetAttempted: profile.diagnostics?.stylesheetAttempted ?? 0,
         stylesheetSucceeded: profile.diagnostics?.stylesheetSucceeded ?? 0,
@@ -1000,6 +1008,7 @@ export async function runTargetBrandStage(id: string): Promise<void> {
   const expectedDomain = current?.answers.targetDomain;
   if (
     !current ||
+    current.useCase !== "abm" ||
     !expectedDomain ||
     !needsTargetBrandRefresh(current, expectedDomain)
   ) return;
@@ -1110,6 +1119,14 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
         brandPublicPageAttempts: profile.diagnostics?.providers?.publicPageAttempts ?? 0,
         brandRemoteBrowserProvider: profile.diagnostics?.providers?.remoteBrowser ?? "unknown",
         brandfetchProvider: profile.diagnostics?.providers?.brandfetch ?? "unknown",
+        brandfetchLogoApiProvider: profile.diagnostics?.providers?.brandfetchLogoApi ?? "unknown",
+        brandfetchBrandApiProvider: profile.diagnostics?.providers?.brandfetchBrandApi ?? "unknown",
+        brandfetchQualityTier: profile.diagnostics?.brandfetch?.qualityTier ?? "unknown",
+        brandfetchClaimed: profile.diagnostics?.brandfetch?.claimed ?? false,
+        brandfetchColorCount: profile.diagnostics?.brandfetch?.colorCount ?? 0,
+        brandfetchFontCount: profile.diagnostics?.brandfetch?.fontCount ?? 0,
+        brandfetchImageCount: profile.diagnostics?.brandfetch?.imageCount ?? 0,
+        brandfetchIndustryCount: profile.diagnostics?.brandfetch?.industryCount ?? 0,
         verifiedBrandFallback: profile.diagnostics?.providers?.verifiedFallback ?? false,
         stylesheetAttempted: profile.diagnostics?.stylesheetAttempted ?? 0,
         stylesheetSucceeded: profile.diagnostics?.stylesheetSucceeded ?? 0,
@@ -1378,6 +1395,11 @@ export function inferCampaignOfferTitle(
 function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const patch = { ...input };
   const targetWasSupplied = Object.hasOwn(patch, "targetDomain");
+  const targetAllowed = targetWasSupplied && session.useCase === "abm";
+  if (targetWasSupplied && !targetAllowed) {
+    delete patch.targetDomain;
+    delete session.answers.targetDomain;
+  }
   const sourceUrlWasSupplied = Object.hasOwn(patch, "sourceUrl");
   const sourceNameWasSupplied = Object.hasOwn(patch, "sourceName");
   const sourceTitleWasSupplied = Object.hasOwn(patch, "sourceTitle");
@@ -1436,9 +1458,9 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
     delete session.answers.sourceUrl;
   }
   const targetChanged =
-    targetWasSupplied && patch.targetDomain !== session.answers.targetDomain;
+    targetAllowed && patch.targetDomain !== session.answers.targetDomain;
   session.answers = { ...session.answers, ...patch };
-  if (targetWasSupplied && !patch.targetDomain) delete session.answers.targetDomain;
+  if (targetAllowed && !patch.targetDomain) delete session.answers.targetDomain;
   if (sourceUrlWasSupplied && !patch.sourceUrl) delete session.answers.sourceUrl;
   if (sourceNameWasSupplied && !patch.sourceName) {
     delete session.answers.sourceName;

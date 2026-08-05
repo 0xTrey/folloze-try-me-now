@@ -398,7 +398,8 @@ export function buildExperienceSpec(
       primaryColor: brand.primaryColor,
       accentColor: brand.accentColor,
       surfaceColor: brand.surfaceColor,
-      ...(brand.logoUrl ? { logoUrl: brand.logoUrl } : {})
+      ...(brand.logoUrl ? { logoUrl: brand.logoUrl } : {}),
+      ...(brand.logoUrlOnDark ? { logoUrlOnDark: brand.logoUrlOnDark } : {})
     },
     draft: canonicalDraft as Record<string, unknown>,
     contentItems,

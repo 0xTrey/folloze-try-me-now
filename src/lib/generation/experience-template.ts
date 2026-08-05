@@ -133,8 +133,8 @@ function fontFace(
   return `@font-face{font-family:"${name}";src:url("${safeDelivery.replace(/["\\]/g, "")}") format("${format}");font-style:normal;font-weight:${weight};font-display:swap}`;
 }
 
-function wordmark(profile: BrandProfile, className: string): string {
-  const logo = safeAssetUrl(profile.logoUrl);
+function wordmark(profile: BrandProfile, className: string, darkSurface = false): string {
+  const logo = safeAssetUrl(darkSurface ? profile.logoUrlOnDark ?? profile.logoUrl : profile.logoUrl);
   return `<span class="wordmark ${className}" role="img" aria-label="${escapeHtml(profile.companyName)}">
     ${logo ? `<img src="${escapeHtml(logo)}" alt="" aria-hidden="true">` : ""}
     <span class="wordmark-fallback" aria-hidden="true">${escapeHtml(profile.companyName)}</span>
@@ -409,8 +409,8 @@ export function renderExperienceHtml(input: {
 <div class="shell">
   <header class="nav">
     <div class="brand-lockup">
-      ${wordmark(brand, "seller-wordmark")}
-      ${targetBrand ? `<span class="lockup-divider">for</span>${wordmark(targetBrand, "target-wordmark")}` : ""}
+      ${wordmark(brand, "seller-wordmark", heroTheme === "dark")}
+      ${targetBrand ? `<span class="lockup-divider">for</span>${wordmark(targetBrand, "target-wordmark", heroTheme === "dark")}` : ""}
     </div>
     <button type="button" class="nav-action" data-scroll-target="next-step" data-flz-cta-id="header-next-step">${escapeHtml(draft.sectionLabels.close)}</button>
   </header>

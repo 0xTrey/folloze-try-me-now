@@ -232,6 +232,8 @@ Production configuration is server-only unless prefixed `NEXT_PUBLIC_`. Secrets 
 | `NEXT_PUBLIC_APP_URL` | Yes | Canonical HTTPS origin used for app URLs and origin validation. |
 | `GENERATION_MODE` | Yes | Explicitly set `openai`; a key alone must not activate generation. |
 | `BRAND_MODE` | Yes | Explicitly select `remote` or approve `fast` as degraded production behavior. |
+| `BRANDFETCH_MODE` | Recommended | `disabled`, `logo`, `fallback`, or `enrich`. A credential alone never activates the integration. |
+| `BRANDFETCH_CLIENT_ID` | Recommended | Client-side Logo API identifier used only in exact `cdn.brandfetch.io` hotlinks. |
 | `FOLLOZE_MODE` | Yes | Set `publish` for the production claim path; `draft` and `disabled` cannot satisfy public publication. |
 | `EMAIL_MODE` | Yes | Explicitly set `resend`; ambient credentials must not activate delivery. |
 | `OPENAI_API_KEY` | Yes | Project-scoped key with budget and rotation policy. Never exposed to the browser. |
@@ -240,7 +242,7 @@ Production configuration is server-only unless prefixed `NEXT_PUBLIC_`. Secrets 
 | `BLOB_READ_WRITE_TOKEN` | Yes | Private upload and versioned artifact storage. |
 | `DATABASE_URL` | Yes | Postgres connection for claimed records, publish ledger, and delivery state. |
 | `BRAND_HARVESTER_URL`, `BRAND_HARVESTER_TOKEN` | Yes for full-fidelity launch | Authenticated controlled-egress brand service. The fast extractor may remain an explicit degraded mode. |
-| `BRANDFETCH_API_KEY` | Recommended recovery layer | Server-only Brand API access for validated logo and palette recovery when the source site blocks static harvesting. |
+| `BRANDFETCH_API_KEY` | Recommended after paid quota activation | Server-only Brand API access for bounded palette, typography, imagery, description, and firmographic enrichment. |
 | `FOLLOZE_MCP_SERVER_URL`, `FOLLOZE_MCP_AUTH_TOKEN` | Yes | Remote narrow gateway and service credential. |
 | `FOLLOZE_MCP_TOOL_NAME` | Yes | Deployment allowlist value; expected `create_try_me_experience`. |
 | `FOLLOZE_THEME_ID`, `FOLLOZE_THEME_URL` | Yes when a fixed theme is required | Gateway theme identity and trusted template asset URL; validate consistency at startup. |

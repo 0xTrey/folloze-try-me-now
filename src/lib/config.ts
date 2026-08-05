@@ -25,6 +25,11 @@ export const config = {
   appUrl: nonEmptyFromEnv(process.env.NEXT_PUBLIC_APP_URL, inferredAppUrl).replace(/\/$/, ""),
   generationMode: oneOf(process.env.GENERATION_MODE, ["fixture", "openai"] as const, "fixture"),
   brandMode: oneOf(process.env.BRAND_MODE, ["fast", "remote"] as const, "fast"),
+  brandfetchMode: oneOf(
+    process.env.BRANDFETCH_MODE,
+    ["disabled", "logo", "fallback", "enrich"] as const,
+    "disabled"
+  ),
   follozeMode: oneOf(process.env.FOLLOZE_MODE, ["disabled", "draft", "publish"] as const, "disabled"),
   emailMode: oneOf(process.env.EMAIL_MODE, ["console", "resend"] as const, "console"),
   openAIModel: nonEmptyFromEnv(process.env.OPENAI_MODEL, "gpt-5.6-terra"),
@@ -56,6 +61,11 @@ export const hasOpenAIKey = Boolean(process.env.OPENAI_API_KEY);
 export const hasOpenAI = config.generationMode === "openai" && hasOpenAIKey;
 export const hasRemoteBrandHarvester =
   config.brandMode === "remote" && Boolean(process.env.BRAND_HARVESTER_URL);
+export const hasBrandfetchLogoApi =
+  config.brandfetchMode !== "disabled" && Boolean(process.env.BRANDFETCH_CLIENT_ID);
+export const hasBrandfetchBrandApi =
+  ["fallback", "enrich"].includes(config.brandfetchMode) &&
+  Boolean(process.env.BRANDFETCH_API_KEY);
 export const hasRemoteFolloze =
   config.follozeMode !== "disabled" && Boolean(process.env.FOLLOZE_MCP_SERVER_URL);
 export const canPublishFolloze =

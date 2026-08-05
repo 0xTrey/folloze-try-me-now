@@ -162,6 +162,8 @@ export interface BrandProfile {
   publicContext?: string;
   publicTopics: string[];
   logoUrl?: string;
+  /** Alternate logo artwork intended for dark surfaces. */
+  logoUrlOnDark?: string;
   /** Original HTTPS logo source retained only for the server-side image proxy. */
   logoSourceUrl?: string;
   /** Validated logo bytes retained only in the server-side session record. */
@@ -189,6 +191,7 @@ export interface BrandProfile {
         | "inline-svg-unportable"
         | "official-remote-portable"
         | "brandfetch-portable"
+        | "brandfetch-logo-api"
         | "remote-profile"
         | "verified-profile"
         | "none";
@@ -234,12 +237,26 @@ export interface BrandProfile {
     };
     stylesheetAttempted?: number;
     stylesheetSucceeded?: number;
+    /** Bounded Brandfetch enrichment receipt. Raw provider payloads and URLs are excluded. */
+    brandfetch?: {
+      qualityTier: "high" | "medium" | "low" | "unknown";
+      claimed?: boolean;
+      logoCandidateCount: number;
+      logoValidationAttempted: number;
+      logoValidationRejected: number;
+      colorCount: number;
+      fontCount: number;
+      imageCount: number;
+      industryCount: number;
+    };
     /** Aggregate provider receipt. No page text, credentials, or asset URLs. */
     providers?: {
       publicPage: "succeeded" | "failed";
       publicPageAttempts: number;
       remoteBrowser: "succeeded" | "failed" | "not_configured";
       brandfetch: "succeeded" | "failed" | "not_configured" | "not_needed";
+      brandfetchLogoApi?: "succeeded" | "not_configured";
+      brandfetchBrandApi?: "succeeded" | "failed" | "not_configured" | "not_needed";
       verifiedFallback: boolean;
     };
   };
@@ -297,6 +314,7 @@ export type PublicBrandProfile = Pick<
   | "domain"
   | "companyName"
   | "logoUrl"
+  | "logoUrlOnDark"
   | "colors"
   | "primaryColor"
   | "accentColor"
@@ -616,6 +634,7 @@ export interface ExperienceSpecV1 {
     accentColor: string;
     surfaceColor: string;
     logoUrl?: string;
+    logoUrlOnDark?: string;
   };
   draft: Record<string, unknown>;
   /** Added compatibly to V1 specs; legacy persisted sessions may not include it. */

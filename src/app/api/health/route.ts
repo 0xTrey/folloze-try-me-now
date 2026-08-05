@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import {
   canPublishFolloze,
   config,
+  hasBrandfetchBrandApi,
+  hasBrandfetchLogoApi,
   hasOpenAI,
   hasRemoteBrandHarvester,
   hasRemoteFolloze,
@@ -65,7 +67,9 @@ export function GET() {
       brandHarvester: {
         mode: hasRemoteBrandHarvester ? "remote" : "safe-fast-extractor",
         remoteBrowserConfigured: hasRemoteBrandHarvester,
-        brandfetchConfigured: Boolean(process.env.BRANDFETCH_API_KEY),
+        brandfetchMode: config.brandfetchMode,
+        brandfetchLogoApiConfigured: hasBrandfetchLogoApi,
+        brandfetchBrandApiConfigured: hasBrandfetchBrandApi,
         validationFirstCandidateSelection: true
       },
       follozeMcp: {

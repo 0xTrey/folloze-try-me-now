@@ -1,6 +1,6 @@
 # Brand harvesting and recovery
 
-The application treats a logo as usable only after it has deliverable image bytes. A URL, an HTML `alt` value, or a successful company-name match is evidence, not proof that the asset can render.
+The application treats a logo as usable only after it has a validated first-party copy or an exact Brandfetch Logo API hotlink. A generic URL, an HTML `alt` value, or a successful company-name match is evidence, not proof that the asset can render.
 
 ## Resolution pipeline
 
@@ -8,9 +8,10 @@ The application treats a logo as usable only after it has deliverable image byte
 2. It gathers a bounded logo candidate pool from semantic images, responsive `picture` and `srcset` sources, Organization/Brand JSON-LD, `itemprop=logo`, logo metadata, company-matched CSS background or mask images, inline SVG, and document icons.
 3. Candidates are ranked by ownership and structural evidence. Wordmarks and header/navigation marks outrank small icons, customer logos, badges, and photography.
 4. Remote candidates are fetched in score order. Each candidate must return supported image bytes and pass the inert-SVG or raster signature validator. A rejected winner does not suppress the runner-up.
-5. When no strong official candidate survives, the server may call the authenticated remote browser harvester and then the server-only Brandfetch Brand API recovery layer.
-6. A manually reviewed profile is the final emergency cache for a small number of known domains. It is not the generic recovery mechanism.
-7. The selected image is copied into the private session boundary and served from a session-scoped first-party image route.
+5. When Logo API mode is enabled, the final seller and ABM target wordmarks use Brandfetch's direct, always-current Logo API hotlink. Light- and dark-surface variants are stored separately; a 404 fallback prevents generic vendor marks.
+6. In `fallback` or `enrich` mode, the server-only Brand API can add bounded colors, font-family names, imagery, description, industry, and quality metadata. The key is never sent to the browser.
+7. A manually reviewed profile is the final emergency cache for a small number of known domains. It is not the generic recovery mechanism.
+8. Official-site images use the session-scoped first-party image route. Logo API URLs are never proxied or cached because Brandfetch requires browser hotlinking.
 
 ## Why 6sense originally failed
 
@@ -25,7 +26,8 @@ Every completed seller and target harvest records aggregate, privacy-safe fields
 - public-page provider result;
 - public-page attempt count;
 - remote-browser provider result;
-- Brandfetch provider result;
+- separate Logo API and Brand API provider results;
+- Brand API quality tier and bounded color, font, image, and industry counts;
 - whether a reviewed profile was the final fallback;
 - selected evidence layer;
 - logo candidates discovered;
@@ -50,13 +52,21 @@ BRAND_HARVESTER_URL=https://<approved-harvester>/harvest
 BRAND_HARVESTER_TOKEN=<server-only-token>
 ```
 
-Until that service is deployed, configure the server-only Brandfetch Brand API key as the blocked-site recovery layer:
+Logo API can be enabled independently and works before Brand API quota is active:
 
 ```bash
+BRANDFETCH_MODE=logo
+BRANDFETCH_CLIENT_ID=<client-side-logo-api-id>
+```
+
+After paid Brand API quota is active, add the server-only key and select the desired behavior:
+
+```bash
+BRANDFETCH_MODE=enrich # or fallback
 BRANDFETCH_API_KEY=<server-only-brand-api-key>
 ```
 
-Do not use a public browser token for the Brand API and do not expose either credential through a `NEXT_PUBLIC_*` variable.
+The Logo API client ID is intentionally present in browser image URLs. The Brand API key is not: do not expose it through a `NEXT_PUBLIC_*` variable or log it. The MCP token is not used by the running application.
 
 ## Remaining boundary
 

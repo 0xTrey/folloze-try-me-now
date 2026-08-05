@@ -49,17 +49,20 @@ npm run dev
 
 Open <http://localhost:3000>. Integrations activate only through explicit modes, so ambient machine credentials cannot silently change behavior:
 
-For fresh AI generation without saving the project key in `.env.local`, keep
-the key in macOS Keychain under service
-`com.0xtrey.folloze-try-me-now.openai` for your macOS account and run:
+For fresh AI generation without saving project credentials in `.env.local`, keep
+the OpenAI key under `com.0xtrey.folloze-try-me-now.openai`, the optional Brand
+API key under `com.0xtrey.folloze-try-me-now.brandfetch`, and the Logo API client
+ID under `com.0xtrey.folloze-try-me-now.brandfetch-client` in macOS Keychain, then run:
 
 ```bash
 npm run dev:openai
 ```
 
-That launcher reads the secret directly into the server process, forces
-`GENERATION_MODE=openai`, and never prints or persists it. Regular `npm run dev`
-retains the explicit mode configured in your environment.
+That launcher reads credentials directly into the server process, forces
+`GENERATION_MODE=openai`, defaults Brandfetch to logo-only mode when a client ID
+exists, and never prints or persists credential values. Set
+`BRANDFETCH_MODE=enrich` only after Brand API quota is active. Regular
+`npm run dev` retains the explicit modes configured in your environment.
 
 ```text
 GENERATION_MODE=fixture|openai

@@ -85,6 +85,8 @@ describe("validation-first logo recovery", () => {
       publicPageAttempts: 1,
       remoteBrowser: "not_configured",
       brandfetch: "not_configured",
+      brandfetchLogoApi: "not_configured",
+      brandfetchBrandApi: "not_configured",
       verifiedFallback: false
     });
   });

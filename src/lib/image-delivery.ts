@@ -1,4 +1,5 @@
 import type { BrandProfile, ExperienceAsset, TryMeSession } from "@/lib/types";
+import { isBrandfetchLogoApiUrl } from "@/lib/brandfetch-logo";
 
 const SAFE_SESSION_ID = /^[a-z0-9_-]{1,128}$/i;
 const IMAGE_SLOT = /^(seller|target)-(logo|image-([0-5]))$/;
@@ -106,6 +107,14 @@ export function imageDeliverySources(
   const selectedTargetLogo = selected.find((asset) => asset.kind === "target-logo")?.url;
   const logoSource = (profile: BrandProfile | undefined, selectedUrl: string | undefined) => {
     if (!profile) return selectedUrl;
+    if (
+      isBrandfetchLogoApiUrl(selectedUrl, profile.domain) ||
+      isBrandfetchLogoApiUrl(profile.logoUrl, profile.domain)
+    ) {
+      // Logo API terms require browser hotlinking. Never send this URL through
+      // the server-side image proxy.
+      return undefined;
+    }
     if (!selectedUrl || selectedUrl === profile.logoUrl || isImageDeliveryPath(selectedUrl)) {
       return profile.logoSourceUrl ??
         (isImageDeliveryPath(profile.logoUrl ?? "")
@@ -139,6 +148,9 @@ export function brandWithSessionLogoDelivery(
   role: "seller" | "target",
   profile: BrandProfile
 ): BrandProfile {
+  if (isBrandfetchLogoApiUrl(profile.logoUrl, profile.domain)) {
+    return { ...profile, logoSourceUrl: undefined };
+  }
   const originalSource = profile.logoSourceUrl ??
     (isImageDeliveryPath(profile.logoUrl ?? "") ? undefined : profile.logoUrl);
   const hasDeliverableLogo = Boolean(originalSource || profile.portableLogo);
@@ -180,8 +192,14 @@ export function brandWithFirstPartyImages(
   sources: ImageDeliverySources,
   version?: number
 ): BrandProfile {
-  const logoSlot = slotForSourceUrl(profile.logoSourceUrl ?? profile.logoUrl, sources);
-  const logoUrl = logoSlot ? imageDeliveryPath(sessionId, logoSlot, version) : undefined;
+  const directBrandfetchLogo = isBrandfetchLogoApiUrl(profile.logoUrl, profile.domain)
+    ? profile.logoUrl
+    : undefined;
+  const logoSlot = directBrandfetchLogo
+    ? undefined
+    : slotForSourceUrl(profile.logoSourceUrl ?? profile.logoUrl, sources);
+  const logoUrl = directBrandfetchLogo ??
+    (logoSlot ? imageDeliveryPath(sessionId, logoSlot, version) : undefined);
   const imageUrls = profile.imageUrls
     .map((value) => slotForSourceUrl(value, sources))
     .filter((slot): slot is ImageSlot => Boolean(slot))
@@ -192,6 +210,7 @@ export function brandWithFirstPartyImages(
   return {
     ...profile,
     logoUrl,
+    logoUrlOnDark: directBrandfetchLogo ? profile.logoUrlOnDark : undefined,
     imageUrls
   };
 }

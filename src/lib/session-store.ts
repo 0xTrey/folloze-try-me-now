@@ -323,6 +323,7 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
           domain: brand.domain,
           companyName: brand.companyName,
           logoUrl: brand.logoUrl,
+          logoUrlOnDark: brand.logoUrlOnDark,
           colors: brand.colors,
           primaryColor: brand.primaryColor,
           accentColor: brand.accentColor,

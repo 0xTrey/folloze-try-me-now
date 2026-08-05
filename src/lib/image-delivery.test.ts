@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   brandWithFirstPartyImages,
+  brandWithSessionLogoDelivery,
   imageDeliverySources,
   imageDeliveryPath,
   isImageDeliveryPath,
@@ -86,6 +87,22 @@ describe("session-bound image delivery slots", () => {
     expect(sourceImageUrlForSlot(session, "seller-image-1")).toBe(seller.imageUrls[1]);
     expect(sourceImageUrlForSlot(session, "target-image-0")).toBe(target.imageUrls[0]);
     expect(sourceImageUrlForSlot(session, "target-image-5")).toBeUndefined();
+  });
+
+  it("keeps Logo API hotlinks in the browser and out of the server proxy", () => {
+    const logoUrl = "https://cdn.brandfetch.io/domain/6sense.com/w/320/h/96/theme/dark/fallback/404/type/logo?c=client_123456";
+    const logoUrlOnDark = "https://cdn.brandfetch.io/domain/6sense.com/w/320/h/96/theme/light/fallback/404/type/logo?c=client_123456";
+    const harvested = { ...seller, domain: "6sense.com", logoUrl, logoUrlOnDark };
+    const stored = brandWithSessionLogoDelivery("session_123", "seller", harvested);
+    const sources = imageDeliverySources({ answers: {}, brand: stored });
+    const rendered = brandWithFirstPartyImages("session_123", stored, sources, 9);
+
+    expect(stored.logoUrl).toBe(logoUrl);
+    expect(stored.logoUrlOnDark).toBe(logoUrlOnDark);
+    expect(sources.sellerLogo).toBeUndefined();
+    expect(sourceImageUrlForSlot({ answers: {}, brand: stored }, "seller-logo")).toBeUndefined();
+    expect(rendered.logoUrl).toBe(logoUrl);
+    expect(rendered.logoUrlOnDark).toBe(logoUrlOnDark);
   });
 
   it("accepts only bounded revision queries, not generic paths, queries, fragments, or extra slots", () => {

@@ -65,6 +65,8 @@ These names already exist in `.env.example`. The â€œcurrent behavior if missingâ
 | `NEXT_PUBLIC_APP_URL` | Session URL minting | Infers the Vercel production/deployment host when available, otherwise uses `http://localhost:3000`. | Pin to <https://folloze-try-me-now.vercel.app> in production and validate origin. |
 | `GENERATION_MODE` | Copy and PDF integration selection | Defaults to `fixture`; an ambient OpenAI key alone does not activate generation. | Set `openai` only with the dedicated project key. |
 | `BRAND_MODE` | Brand integration selection | Defaults to `fast`; an ambient remote URL alone does not activate the service. | Set `remote` for full fidelity or approve `fast` as degraded production behavior. |
+| `BRANDFETCH_MODE` | Brandfetch integration selection | Defaults to `disabled`; ambient credentials alone do nothing. | Use `logo` now; switch to `enrich` after paid Brand API quota is active. |
+| `BRANDFETCH_CLIENT_ID` | Direct Logo API wordmarks | No direct Brandfetch logo delivery. | Safe client identifier; Logo API hotlinks remain browser-direct and are never proxied. |
 | `FOLLOZE_MODE` | Folloze integration selection | Defaults to `disabled`; an ambient gateway URL/key alone does not activate it. | Set `publish` for production; `draft` is not anonymous publication. |
 | `EMAIL_MODE` | Email integration selection | Defaults to `console`; an ambient Resend key alone does not activate delivery. | Set `resend` with a verified sender. |
 | `OPENAI_API_KEY` | Copy generation, PDF upload, MCP invocation | The selected integration is not connected; fixture generation remains deterministic. | Required server secret for OpenAI generation and remote MCP invocation. |
@@ -74,7 +76,7 @@ These names already exist in `.env.example`. The â€œcurrent behavior if missingâ
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Rate limiting and Redis-only session compatibility | Blob remains the session store when connected; Redis still provides distributed rate limits. Redis-only sessions do not satisfy production readiness. | Both required for distributed rate limits; an eventual Redis session store must add atomic revision/CAS writes before it can replace Blob. |
 | `BRAND_HARVESTER_URL` | Company/target brand | Remote mode is not connected. Fast mode does not require it. | Required for `BRAND_MODE=remote`. |
 | `BRAND_HARVESTER_TOKEN` | Remote Brand Harvester authorization | Sends no authorization header. | Required whenever remote service is configured. |
-| `BRANDFETCH_API_KEY` | Server-side Brandfetch Brand API recovery | Blocked or JS-only sites cannot use Brandfetch as a generic final provider. | Recommended until the authenticated browser harvester is deployed; never expose as `NEXT_PUBLIC_*`. |
+| `BRANDFETCH_API_KEY` | Server-side Brandfetch Brand API enrichment | In `logo` mode the stored key is dormant. | Switch to `fallback` or `enrich` only after quota is active; never expose as `NEXT_PUBLIC_*`. |
 | `FOLLOZE_MCP_SERVER_URL` | Remote MCP tool | Remote mode is not connected; disabled mode remains preview-only. | Required and HTTPS for `FOLLOZE_MODE=draft` or `FOLLOZE_MODE=publish`. |
 | `FOLLOZE_MCP_AUTH_TOKEN` | Remote MCP authorization | Sends no gateway authorization header. | Required until replaced with short-lived workload identity. |
 | `FOLLOZE_MCP_TOOL_NAME` | Remote MCP allowlist | Defaults to `create_try_me_experience`. | Pin to the gateway's only public tool. |

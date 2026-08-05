@@ -2,6 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+vi.hoisted(() => {
+  process.env.BRANDFETCH_MODE = "enrich";
+  process.env.BRANDFETCH_CLIENT_ID = "testClient_12345";
+  process.env.BRANDFETCH_API_KEY = "server-only-test-key";
+});
+
 const safeFetchMocks = vi.hoisted(() => ({
   fetchPinnedPublicBytes: vi.fn(),
   fetchPinnedPublicText: vi.fn()
@@ -28,8 +34,10 @@ const validWordmarkPng = new Uint8Array(readFileSync(join(
   "homepage-header-logo.png"
 )));
 
-describe("credentialed Brandfetch logo fallback", () => {
+describe("Brandfetch Logo API and Brand API enrichment", () => {
   beforeEach(() => {
+    vi.stubEnv("BRANDFETCH_MODE", "enrich");
+    vi.stubEnv("BRANDFETCH_CLIENT_ID", "testClient_12345");
     vi.stubEnv("BRANDFETCH_API_KEY", "server-only-test-key");
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     safeFetchMocks.fetchPinnedPublicText.mockRejectedValue(new Error("Official site blocked"));
@@ -42,6 +50,7 @@ describe("credentialed Brandfetch logo fallback", () => {
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       name: "Cisco",
+      domain: "cisco.com",
       colors: [{ hex: "#07182D" }, { hex: "#1BA0D7" }],
       logos: [{
         type: "logo",
@@ -58,42 +67,41 @@ describe("credentialed Brandfetch logo fallback", () => {
     safeFetchMocks.fetchPinnedPublicText.mockReset();
   });
 
-  it("copies a validated logo into the server profile without returning a Brandfetch hotlink or secret", async () => {
+  it("hotlinks the Logo API in the browser while keeping the Brand API key server-only", async () => {
     const profile = await harvestBrand("cisco.com");
 
     expect(fetch).toHaveBeenCalledWith(
-      "https://api.brandfetch.io/v2/brands/cisco.com",
+      "https://api.brandfetch.io/v2/brands/domain/cisco.com?allowNsfw=false",
       expect.objectContaining({
-        headers: { Authorization: "Bearer server-only-test-key" },
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer server-only-test-key"
+        },
         redirect: "error"
       })
     );
-    expect(safeFetchMocks.fetchPinnedPublicBytes).toHaveBeenCalledWith(
-      "https://cdn.brandfetch.io/cisco/logo.svg",
-      expect.objectContaining({
-        headers: expect.not.objectContaining({ Authorization: expect.anything() })
-      })
-    );
+    expect(safeFetchMocks.fetchPinnedPublicBytes).not.toHaveBeenCalled();
     expect(profile).toMatchObject({
       companyName: "Cisco",
-      logoUrl: undefined,
-      portableLogo: {
-        mediaType: "image/svg+xml",
-        source: "brandfetch"
-      },
+      logoUrl: expect.stringContaining("cdn.brandfetch.io/domain/cisco.com"),
+      logoUrlOnDark: expect.stringContaining("theme/light"),
       source: "brand-harvester",
       diagnostics: {
         logo: {
-          strategy: "brandfetch-portable",
+          strategy: "brandfetch-logo-api",
           resolutionComplete: true
+        },
+        providers: {
+          brandfetchLogoApi: "succeeded",
+          brandfetchBrandApi: "succeeded"
         }
       }
     });
     expect(JSON.stringify(profile)).not.toContain("server-only-test-key");
-    expect(JSON.stringify(profile)).not.toContain("cdn.brandfetch.io");
+    expect(profile.logoUrl).toContain("type/logo?c=testClient_12345");
   });
 
-  it("upgrades a small Samsung icon to the Brandfetch wordmark", async () => {
+  it("uses the Logo API wordmark and retains validated first-party bytes as fallback evidence", async () => {
     safeFetchMocks.fetchPinnedPublicText.mockResolvedValue({
       status: 200,
       headers: { "content-type": "text/html" },
@@ -116,6 +124,7 @@ describe("credentialed Brandfetch logo fallback", () => {
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       name: "Samsung",
+      domain: "samsung.com",
       colors: [{ hex: "#1428A0" }, { hex: "#000000" }, { hex: "#FFFFFF" }],
       logos: [{
         type: "logo",
@@ -127,11 +136,11 @@ describe("credentialed Brandfetch logo fallback", () => {
 
     expect(profile).toMatchObject({
       companyName: "Samsung",
-      portableLogo: { source: "brandfetch" },
-      diagnostics: { logo: { strategy: "brandfetch-portable" } }
+      logoUrl: expect.stringContaining("/domain/samsung.com/"),
+      portableLogo: { source: "official-remote-asset" },
+      diagnostics: { logo: { strategy: "brandfetch-logo-api" } }
     });
     expect(profile.logoSourceUrl).toBeUndefined();
-    expect(profile.logoUrl).toBeUndefined();
   });
 
   it("uses a validated Brandfetch palette when Ford's public page yields only low-confidence colors", async () => {
@@ -155,6 +164,7 @@ describe("credentialed Brandfetch logo fallback", () => {
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       name: "Ford",
+      domain: "ford.com",
       colors: [{ hex: "#00095B" }, { hex: "#066FEF" }, { hex: "#FFFFFF" }],
       logos: [{
         type: "logo",
@@ -170,15 +180,16 @@ describe("credentialed Brandfetch logo fallback", () => {
       accentColor: "#066FEF",
       surfaceColor: "#FFFFFF",
       colors: ["#00095B", "#066FEF", "#FFFFFF"],
-      portableLogo: { source: "brandfetch" },
       diagnostics: {
-        logo: { strategy: "brandfetch-portable" },
+        logo: { strategy: "brandfetch-logo-api" },
         palette: { strategy: "brandfetch", confidence: "high" }
       }
     });
   });
 
   it("copies TechTarget's semantic navigation wordmark for reliable first-party delivery", async () => {
+    vi.stubEnv("BRANDFETCH_MODE", "disabled");
+    vi.stubEnv("BRANDFETCH_CLIENT_ID", "");
     vi.stubEnv("BRANDFETCH_API_KEY", "");
     safeFetchMocks.fetchPinnedPublicText.mockResolvedValue({
       status: 200,

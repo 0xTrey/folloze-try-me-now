@@ -13,10 +13,10 @@ describe("generated experience security headers", () => {
     expect(policy).toContain("script-src 'nonce-qa-nonce'");
     expect(policy).not.toContain("script-src 'unsafe-inline'");
     expect(policy).toContain("connect-src 'self'");
-    expect(policy).toContain("img-src 'self' data:");
+    expect(policy).toContain("img-src 'self' data: https://cdn.brandfetch.io");
     expect(policy).not.toContain("img-src 'self' https:");
     expect(policy).toContain("form-action 'none'");
-    expect(headers["Referrer-Policy"]).toBe("no-referrer");
+    expect(headers["Referrer-Policy"]).toBe("strict-origin-when-cross-origin");
     expect(headers["Permissions-Policy"]).toContain("camera=()");
   });
 

@@ -119,6 +119,7 @@ export interface BrandLockProfile {
   companyName: string;
   domain: string;
   logoUrl?: string;
+  logoUrlOnDark?: string;
   colors?: string[];
   primaryColor?: string;
   accentColor?: string;
@@ -185,7 +186,8 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
   const companyName = brand?.companyName || brand?.domain || "Your brand";
   const [failedLogoUrl, setFailedLogoUrl] = useState<string>();
   const palette = brandPaletteTokens(brand);
-  const hasLogo = Boolean(brand?.logoUrl) && failedLogoUrl !== brand?.logoUrl;
+  const logoUrl = brand?.logoUrlOnDark ?? brand?.logoUrl;
+  const hasLogo = Boolean(logoUrl) && failedLogoUrl !== logoUrl;
   const isCaptured = status === "locked";
   const needsReview = status === "fallback" || brand?.readiness?.status === "incomplete";
   const paletteKind = status === "scanning"
@@ -229,13 +231,13 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
         ) : hasLogo ? (
           <Image
             className={styles.brandLogo}
-            src={brand?.logoUrl ?? ""}
+            src={logoUrl ?? ""}
             alt={`${companyName} logo`}
             width={164}
             height={38}
             style={{ width: "auto", height: "auto" }}
             unoptimized
-            onError={() => setFailedLogoUrl(brand?.logoUrl)}
+            onError={() => setFailedLogoUrl(logoUrl)}
           />
         ) : (
           <span className={styles.brandLogoUnavailable} aria-label={`${companyName} logo unavailable`}>

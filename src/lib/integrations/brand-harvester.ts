@@ -1,5 +1,11 @@
-import { hasRemoteBrandHarvester } from "@/lib/config";
+import {
+  config,
+  hasBrandfetchBrandApi,
+  hasBrandfetchLogoApi,
+  hasRemoteBrandHarvester
+} from "@/lib/config";
 import sharp from "sharp";
+import { brandfetchLogoApiUrl, isBrandfetchLogoApiUrl } from "@/lib/brandfetch-logo";
 import { withBrandReadiness } from "@/lib/brand-readiness";
 import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
 import { logServerError } from "@/lib/http";
@@ -9,6 +15,7 @@ import {
 } from "@/lib/portable-brand-logo";
 import { fetchPinnedPublicBytes, fetchPinnedPublicText } from "@/lib/safe-fetch";
 import type { BrandProfile } from "@/lib/types";
+import { normalizeDomain } from "@/lib/validation";
 import {
   brandPresentationFor,
   type PresentedBrandProfile,
@@ -1318,7 +1325,9 @@ function cachedBrandProfile(domain: string): BrandProfile | undefined {
 function cacheBrandProfile(domain: string, profile: BrandProfile): BrandProfile {
   const completed = withBrandReadiness({
     ...profile,
-    logoSourceUrl: profile.logoSourceUrl ?? profile.logoUrl,
+    logoSourceUrl: isBrandfetchLogoApiUrl(profile.logoUrl, domain)
+      ? undefined
+      : profile.logoSourceUrl ?? profile.logoUrl,
     diagnostics: {
       ...profile.diagnostics,
       logo: {
@@ -1358,10 +1367,27 @@ function cacheBrandProfile(domain: string, profile: BrandProfile): BrandProfile 
   return completed;
 }
 
-interface BrandfetchLogoResult {
+interface BrandfetchColor {
+  hex: string;
+  type?: string;
+}
+
+interface BrandfetchResult {
   companyName?: string;
-  colors: string[];
-  portableLogo: NonNullable<BrandProfile["portableLogo"]>;
+  description?: string;
+  publicContext?: string;
+  publicTopics: string[];
+  colors: BrandfetchColor[];
+  displayFontFamily?: string;
+  bodyFontFamily?: string;
+  imageUrls: string[];
+  qualityTier: "high" | "medium" | "low" | "unknown";
+  claimed?: boolean;
+  logoCandidateCount: number;
+  logoValidationAttempted: number;
+  logoValidationRejected: number;
+  fontCount: number;
+  industryCount: number;
 }
 
 async function validatedPortableRemoteLogo(
@@ -1391,48 +1417,129 @@ async function validatedPortableRemoteLogo(
   }
 }
 
+function brandfetchHttpsUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      !url.port &&
+      !url.username &&
+      !url.password &&
+      (url.hostname === "brandfetch.io" || url.hostname.endsWith(".brandfetch.io"))
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function brandfetchLogoFormats(payload: Record<string, unknown>): string[] {
   const logos = Array.isArray(payload.logos) ? payload.logos : [];
   return logos
     .filter((logo): logo is Record<string, unknown> => Boolean(logo && typeof logo === "object"))
     .flatMap((logo) => {
       const logoType = typeof logo.type === "string" ? logo.type.toLowerCase() : "";
-      const typeScore = logoType === "logo" ? 100 : logoType === "symbol" ? 40 : 0;
+      const theme = typeof logo.theme === "string" ? logo.theme.toLowerCase() : "";
+      const typeScore = logoType === "logo" ? 200 : logoType === "symbol" ? 80 : 10;
       const formats = Array.isArray(logo.formats) ? logo.formats : [];
       return formats
         .filter((format): format is Record<string, unknown> => Boolean(format && typeof format === "object"))
         .map((format) => ({
-          src: typeof format.src === "string" ? format.src : "",
+          src: brandfetchHttpsUrl(format.src) ?? "",
           score:
             typeScore +
-            (format.format === "svg" ? 30 : format.format === "png" ? 20 : format.format === "webp" ? 10 : 0)
+            (format.format === "svg" ? 40 : format.format === "webp" ? 30 : format.format === "png" ? 25 : 10) +
+            (theme === "light" || theme === "dark" ? 5 : 0) +
+            (typeof format.width === "number" && typeof format.height === "number" && format.height > 0
+              ? Math.min(20, format.width / format.height > 1.5 ? 20 : 5)
+              : 0)
         }));
     })
-    .filter(({ src }) => {
-      try {
-        const url = new URL(src);
-        return url.protocol === "https:" && !url.username && !url.password;
-      } catch {
-        return false;
-      }
-    })
+    .filter(({ src }) => Boolean(src))
     .sort((a, b) => b.score - a.score)
     .map(({ src }) => src)
     .filter((src, index, values) => values.indexOf(src) === index)
     .slice(0, 6);
 }
 
-async function fetchBrandfetchLogo(domain: string): Promise<BrandfetchLogoResult | undefined> {
+function brandfetchImageUrls(payload: Record<string, unknown>): string[] {
+  const images = Array.isArray(payload.images) ? payload.images : [];
+  return images
+    .filter((image): image is Record<string, unknown> => Boolean(image && typeof image === "object"))
+    .flatMap((image) => {
+      const imageType = typeof image.type === "string" ? image.type.toLowerCase() : "";
+      const formats = Array.isArray(image.formats) ? image.formats : [];
+      return formats
+        .filter((format): format is Record<string, unknown> => Boolean(format && typeof format === "object"))
+        .map((format) => ({
+          src: brandfetchHttpsUrl(format.src),
+          score:
+            (imageType === "banner" ? 40 : imageType === "background" ? 30 : 10) +
+            (format.format === "webp" ? 20 : format.format === "png" ? 15 : format.format === "jpeg" || format.format === "jpg" ? 10 : 0) +
+            (typeof format.width === "number" && format.width >= 800 ? 10 : 0)
+        }));
+    })
+    .filter((candidate): candidate is { src: string; score: number } => Boolean(candidate.src))
+    .sort((left, right) => right.score - left.score)
+    .map(({ src }) => src)
+    .filter((src, index, values) => values.indexOf(src) === index)
+    .slice(0, 4);
+}
+
+function boundedBrandfetchText(value: unknown, maximum: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = stripTags(value)
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[<>\[\]{}]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned ? cleaned.slice(0, maximum) : undefined;
+}
+
+function brandfetchQualityTier(value: unknown): BrandfetchResult["qualityTier"] {
+  return typeof value !== "number" || !Number.isFinite(value)
+    ? "unknown"
+    : value >= 2 / 3
+      ? "high"
+      : value >= 1 / 3
+        ? "medium"
+        : "low";
+}
+
+function brandfetchFonts(payload: Record<string, unknown>): {
+  displayFontFamily?: string;
+  bodyFontFamily?: string;
+  count: number;
+} {
+  const fonts = (Array.isArray(payload.fonts) ? payload.fonts : [])
+    .filter((font): font is Record<string, unknown> => Boolean(font && typeof font === "object"))
+    .map((font) => ({
+      name: boundedBrandfetchText(font.name, 80),
+      type: typeof font.type === "string" ? font.type.toLowerCase() : ""
+    }))
+    .filter((font): font is { name: string; type: string } => Boolean(font.name))
+    .slice(0, 8);
+  return {
+    displayFontFamily: fonts.find((font) => font.type === "title")?.name ?? fonts[0]?.name,
+    bodyFontFamily: fonts.find((font) => font.type === "body")?.name ?? fonts[1]?.name ?? fonts[0]?.name,
+    count: fonts.length
+  };
+}
+
+async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchResult | undefined> {
   const token = process.env.BRANDFETCH_API_KEY;
-  if (!token) return undefined;
+  if (!token || !hasBrandfetchBrandApi) return undefined;
   try {
     // The authenticated request is fixed to Brandfetch's API and stays
-    // server-side. Returned CDN assets are fetched anonymously through the
-    // pinned public-address boundary, validated, and copied into the session.
+    // server-side. The response contributes only bounded brand metadata;
+    // logos are delivered through Brandfetch's required browser hotlink.
     const response = await fetch(
-      `https://api.brandfetch.io/v2/brands/${encodeURIComponent(domain)}`,
+      `https://api.brandfetch.io/v2/brands/domain/${encodeURIComponent(domain)}?allowNsfw=false`,
       {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`
+        },
         redirect: "error",
         signal: AbortSignal.timeout(8_000)
       }
@@ -1446,40 +1553,99 @@ async function fetchBrandfetchLogo(domain: string): Promise<BrandfetchLogoResult
       });
       return undefined;
     }
-    const payload = await response.json() as Record<string, unknown>;
+    const contentLength = Number.parseInt(response.headers.get("content-length") ?? "", 10);
+    if (Number.isFinite(contentLength) && contentLength > 1_000_000) {
+      throw new Error("Brandfetch response exceeded the allowed size.");
+    }
+    if (!(response.headers.get("content-type") ?? "").toLowerCase().includes("application/json")) {
+      throw new Error("Brandfetch response was not JSON.");
+    }
+    const rawPayload = await readBoundedResponseText(response, 1_000_000);
+    const parsed = JSON.parse(rawPayload) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Brandfetch response did not contain a brand object.");
+    }
+    const payload = parsed as Record<string, unknown>;
+    const requestedDomain = normalizeDomain(domain);
+    const returnedDomain = typeof payload.domain === "string"
+      ? normalizeDomain(payload.domain)
+      : undefined;
+    if (!returnedDomain || returnedDomain !== requestedDomain) {
+      logServerError(new Error("Brandfetch returned a different domain."), {
+        operation: "brandfetch_brand_lookup",
+        code: "brandfetch_domain_mismatch",
+        details: { domain }
+      });
+      return undefined;
+    }
+    if (payload.isNsfw === true) {
+      logServerError(new Error("Brandfetch marked the brand as unsafe."), {
+        operation: "brandfetch_brand_lookup",
+        code: "brandfetch_unsafe_brand",
+        details: { domain }
+      });
+      return undefined;
+    }
     const colors = (Array.isArray(payload.colors) ? payload.colors : [])
       .filter((color): color is Record<string, unknown> => Boolean(color && typeof color === "object"))
-      .map((color) => normalizeHex(typeof color.hex === "string" ? color.hex : ""))
-      .filter((color): color is string => Boolean(color))
-      .filter((color, index, values) => values.indexOf(color) === index)
+      .map((color): BrandfetchColor | undefined => {
+        const hex = normalizeHex(typeof color.hex === "string" ? color.hex : "");
+        return hex
+          ? {
+              hex,
+              type: typeof color.type === "string" ? color.type.toLowerCase() : undefined
+            }
+          : undefined;
+      })
+      .filter((color): color is BrandfetchColor => Boolean(color))
+      .filter((color, index, values) => values.findIndex((candidate) => candidate.hex === color.hex) === index)
       .slice(0, 8);
-    for (const sourceUrl of brandfetchLogoFormats(payload)) {
-      try {
-        const asset = await fetchPinnedPublicBytes(sourceUrl, {
-          timeoutMs: 5_000,
-          maxBytes: 350_000,
-          maxRedirects: 2,
-          headers: {
-            Accept: "image/svg+xml,image/png,image/webp,image/jpeg,image/avif,image/gif;q=0.8,*/*;q=0.1"
-          }
-        });
-        if (asset.status !== 200 || asset.truncated) continue;
-        const portableLogo = await validatedPortableRemoteLogo(asset.bytes, "brandfetch");
-        if (portableLogo) {
-          return {
-            companyName: typeof payload.name === "string" ? payload.name : undefined,
-            colors,
-            portableLogo
-          };
-        }
-      } catch {
-        // Try the next bounded Brandfetch format without logging its CDN URL.
-      }
-    }
-    return undefined;
+    const logoFormats = brandfetchLogoFormats(payload);
+    const company = payload.company && typeof payload.company === "object"
+      ? payload.company as Record<string, unknown>
+      : undefined;
+    const industries = (Array.isArray(company?.industries) ? company.industries : [])
+      .filter((industry): industry is Record<string, unknown> => Boolean(industry && typeof industry === "object"))
+      .map((industry) => boundedBrandfetchText(industry.name, 80))
+      .filter((name): name is string => Boolean(name))
+      .filter((name, index, values) => values.indexOf(name) === index)
+      .slice(0, 6);
+    const location = company?.location && typeof company.location === "object"
+      ? company.location as Record<string, unknown>
+      : undefined;
+    const locationParts = [location?.city, location?.region, location?.country]
+      .map((value) => boundedBrandfetchText(value, 80))
+      .filter((value): value is string => Boolean(value));
+    const description = boundedBrandfetchText(payload.description, 500) ??
+      boundedBrandfetchText(payload.longDescription, 500);
+    const contextParts = [
+      description,
+      industries.length ? `Industries: ${industries.join(", ")}.` : undefined,
+      typeof company?.foundedYear === "number" ? `Founded in ${company.foundedYear}.` : undefined,
+      typeof company?.employees === "number" ? `${company.employees} employees.` : undefined,
+      locationParts.length ? `Location: ${locationParts.join(", ")}.` : undefined
+    ].filter((value): value is string => Boolean(value));
+    const fonts = brandfetchFonts(payload);
+    return {
+      companyName: boundedBrandfetchText(payload.name, 120),
+      description,
+      publicContext: contextParts.join(" ").slice(0, 1600) || undefined,
+      publicTopics: industries,
+      colors,
+      displayFontFamily: fonts.displayFontFamily,
+      bodyFontFamily: fonts.bodyFontFamily,
+      imageUrls: brandfetchImageUrls(payload),
+      qualityTier: brandfetchQualityTier(payload.qualityScore),
+      claimed: typeof payload.claimed === "boolean" ? payload.claimed : undefined,
+      logoCandidateCount: logoFormats.length,
+      logoValidationAttempted: 0,
+      logoValidationRejected: 0,
+      fontCount: fonts.count,
+      industryCount: industries.length
+    };
   } catch (error) {
     logServerError(error, {
-      operation: "brandfetch_logo_lookup",
+      operation: "brandfetch_brand_lookup",
       code: "brandfetch_lookup_failed",
       details: { domain }
     });
@@ -1487,20 +1653,55 @@ async function fetchBrandfetchLogo(domain: string): Promise<BrandfetchLogoResult
   }
 }
 
-function profileWithBrandfetchLogo(
+async function readBoundedResponseText(response: Response, maximumBytes: number): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maximumBytes) {
+      await reader.cancel();
+      throw new Error("Brandfetch response exceeded the allowed size.");
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))));
+}
+
+const brandfetchRequests = new Map<string, Promise<BrandfetchResult | undefined>>();
+
+function fetchBrandfetchBrandSingleflight(domain: string): Promise<BrandfetchResult | undefined> {
+  const normalized = normalizeDomain(domain);
+  const existing = brandfetchRequests.get(normalized);
+  if (existing) return existing;
+  const request = fetchBrandfetchBrand(normalized).finally(() => {
+    if (brandfetchRequests.get(normalized) === request) brandfetchRequests.delete(normalized);
+  });
+  brandfetchRequests.set(normalized, request);
+  return request;
+}
+
+function profileWithBrandfetchEnrichment(
   domain: string,
   profile: BrandProfile | undefined,
-  result: BrandfetchLogoResult
+  result: BrandfetchResult
 ): BrandProfile {
   const base = profile ?? fallbackBrand(domain);
   const currentPalette = base.diagnostics?.palette;
-  const brandfetchSurface = result.colors.find((color) => luminance(color) > 0.88);
-  const brandfetchPrimary = [...result.colors]
-    .filter((color) => color !== brandfetchSurface)
-    .sort((left, right) => luminance(left) - luminance(right))[0];
-  const brandfetchAccent = [...result.colors]
-    .filter((color) => color !== brandfetchSurface && color !== brandfetchPrimary)
-    .sort((left, right) => saturation(right) - saturation(left))[0];
+  const colorValues = result.colors.map((color) => color.hex);
+  const brandfetchSurface = result.colors.find((color) => color.type === "light")?.hex ??
+    colorValues.find((color) => luminance(color) > 0.88);
+  const brandfetchPrimary = result.colors.find((color) => color.type === "dark")?.hex ??
+    [...colorValues]
+      .filter((color) => color !== brandfetchSurface)
+      .sort((left, right) => luminance(left) - luminance(right))[0];
+  const brandfetchAccent = result.colors.find((color) => color.type === "accent")?.hex ??
+    [...colorValues]
+      .filter((color) => color !== brandfetchSurface && color !== brandfetchPrimary)
+      .sort((left, right) => saturation(right) - saturation(left))[0];
   const brandfetchPaletteReady = Boolean(
     brandfetchSurface &&
       brandfetchPrimary &&
@@ -1516,47 +1717,90 @@ function profileWithBrandfetchLogo(
       base.colors.length < 3
   );
   const colors = useBrandfetchPalette
-    ? [brandfetchPrimary, brandfetchAccent, brandfetchSurface, ...result.colors]
+    ? [brandfetchPrimary, brandfetchAccent, brandfetchSurface, ...colorValues]
         .filter((color): color is string => Boolean(color))
         .filter((color, index, values) => values.indexOf(color) === index)
         .slice(0, 8)
     : base.colors;
   return {
     ...base,
-    companyName: profile?.companyName ?? result.companyName ?? base.companyName,
-    logoUrl: undefined,
-    logoSourceUrl: undefined,
-    portableLogo: result.portableLogo,
+    companyName: profile && profile.source !== "fallback"
+      ? profile.companyName
+      : result.companyName ?? base.companyName,
+    description: profile?.description ?? result.description ?? base.description,
+    publicContext: profile?.publicContext ?? result.publicContext ?? base.publicContext,
+    publicTopics: [...new Set([...base.publicTopics, ...result.publicTopics])].slice(0, 12),
+    imageUrls: [...new Set([...base.imageUrls, ...result.imageUrls])].slice(0, 6),
     colors,
     primaryColor: useBrandfetchPalette ? brandfetchPrimary ?? colors[0] ?? base.primaryColor : base.primaryColor,
     accentColor: useBrandfetchPalette ? brandfetchAccent ?? colors[1] ?? base.accentColor : base.accentColor,
     surfaceColor: useBrandfetchPalette ? brandfetchSurface ?? base.surfaceColor : base.surfaceColor,
+    displayFontFamily: base.displayFontFamily ?? result.displayFontFamily,
+    bodyFontFamily: base.bodyFontFamily ?? result.bodyFontFamily,
     source: "brand-harvester",
     diagnostics: {
       ...base.diagnostics,
-      logo: {
-        strategy: "brandfetch-portable",
-        imageCandidateCount: base.diagnostics?.logo.imageCandidateCount ?? 0,
-        rejectedImageCount: base.diagnostics?.logo.rejectedImageCount ?? 0,
-        inlineSvgCandidateCount: base.diagnostics?.logo.inlineSvgCandidateCount ?? 0
-      },
+      logo: base.diagnostics?.logo ?? {
+            strategy: "none",
+            imageCandidateCount: 0,
+            rejectedImageCount: 0,
+            inlineSvgCandidateCount: 0
+          },
       palette: useBrandfetchPalette
         ? {
             strategy: "brandfetch",
             confidence: "high",
-            candidateCount: result.colors.length,
-            semanticCandidateCount: result.colors.length,
+            candidateCount: colorValues.length,
+            semanticCandidateCount: colorValues.length,
             rejectedCandidateCount: 0,
             gradientCandidateCount: 0
           }
         : profile?.diagnostics?.palette ?? {
             strategy: "brandfetch",
-            confidence: result.colors.length >= 3 ? "high" : result.colors.length >= 2 ? "medium" : "low",
-            candidateCount: result.colors.length,
-            semanticCandidateCount: result.colors.length,
+            confidence: colorValues.length >= 3 ? "high" : colorValues.length >= 2 ? "medium" : "low",
+            candidateCount: colorValues.length,
+            semanticCandidateCount: colorValues.length,
             rejectedCandidateCount: 0,
             gradientCandidateCount: 0
-          }
+          },
+      brandfetch: {
+        qualityTier: result.qualityTier,
+        claimed: result.claimed,
+        logoCandidateCount: result.logoCandidateCount,
+        logoValidationAttempted: result.logoValidationAttempted,
+        logoValidationRejected: result.logoValidationRejected,
+        colorCount: colorValues.length,
+        fontCount: result.fontCount,
+        imageCount: result.imageUrls.length,
+        industryCount: result.industryCount
+      }
+    }
+  };
+}
+
+function profileWithBrandfetchLogoApi(domain: string, profile: BrandProfile): BrandProfile {
+  const logoUrl = brandfetchLogoApiUrl(domain, process.env.BRANDFETCH_CLIENT_ID, "dark");
+  const logoUrlOnDark = brandfetchLogoApiUrl(domain, process.env.BRANDFETCH_CLIENT_ID, "light");
+  if (!hasBrandfetchLogoApi || !logoUrl || !logoUrlOnDark) return profile;
+  const receipt = profile.diagnostics?.logo;
+  return {
+    ...profile,
+    logoUrl,
+    logoUrlOnDark,
+    logoSourceUrl: undefined,
+    diagnostics: {
+      ...profile.diagnostics,
+      logo: {
+        strategy: "brandfetch-logo-api",
+        imageCandidateCount: receipt?.imageCandidateCount ?? 0,
+        rejectedImageCount: receipt?.rejectedImageCount ?? 0,
+        inlineSvgCandidateCount: receipt?.inlineSvgCandidateCount ?? 0,
+        selectedScore: 100,
+        selectedSource: "brandfetch",
+        validationAttempted: receipt?.validationAttempted ?? 0,
+        validationRejected: receipt?.validationRejected ?? 0,
+        resolutionComplete: true
+      }
     }
   };
 }
@@ -1579,21 +1823,6 @@ function logoEvidenceScore(profile: BrandProfile): number {
     default:
       return profile.logoUrl ? 2 : 0;
   }
-}
-
-function needsBrandfetchLogo(profile: BrandProfile | undefined): boolean {
-  if (!profile) return true;
-  if (profile.diagnostics?.logo.strategy === "verified-profile") return false;
-  if (profile.portableLogo) {
-    // A validated file can still be a tiny square navigation icon. Keep it as
-    // a safe fallback, but ask the configured provider for a true wordmark.
-    return profile.diagnostics?.logo.strategy === "official-remote-portable" &&
-      (profile.diagnostics.logo.selectedScore ?? 0) < 75;
-  }
-  if (["none", "favicon", "inline-svg-unportable", "remote-profile"].includes(
-    profile.diagnostics?.logo.strategy ?? "none"
-  )) return true;
-  return logoEvidenceScore(profile) <= 2;
 }
 
 function mergePublicBrandEvidence(
@@ -1772,8 +2001,13 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     hasRemoteBrandHarvester && process.env.BRAND_HARVESTER_URL
       ? "failed"
       : "not_configured";
-  let brandfetchStatus: "succeeded" | "failed" | "not_configured" | "not_needed" =
-    process.env.BRANDFETCH_API_KEY ? "not_needed" : "not_configured";
+  let brandfetchBrandStatus: "succeeded" | "failed" | "not_configured" | "not_needed" =
+    hasBrandfetchBrandApi ? "not_needed" : "not_configured";
+  const brandfetchLogoStatus: "succeeded" | "not_configured" =
+    hasBrandfetchLogoApi ? "succeeded" : "not_configured";
+  const eagerBrandfetchPromise = config.brandfetchMode === "enrich" && hasBrandfetchBrandApi
+    ? fetchBrandfetchBrandSingleflight(domain)
+    : undefined;
   // Run the deterministic public-page pass alongside an optional browser
   // harvester. This keeps richer semantic color evidence inside the existing
   // experience-generation window instead of stacking two network budgets.
@@ -1873,45 +2107,58 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
       details: {
         domain,
         remoteBrowserConfigured: hasRemoteBrandHarvester,
-        brandfetchConfigured: Boolean(process.env.BRANDFETCH_API_KEY),
+        brandfetchConfigured: hasBrandfetchBrandApi || hasBrandfetchLogoApi,
         verifiedFallbackAvailable: Boolean(verified)
       }
     });
   }
 
   if (candidate) candidate = await copyOfficialRemoteLogo(candidate);
-  if (needsBrandfetchLogo(candidate)) {
-    const brandfetch = await fetchBrandfetchLogo(domain);
+  const shouldFetchBrandData = hasBrandfetchBrandApi && (
+    config.brandfetchMode === "enrich" ||
+      !candidate ||
+      candidate.diagnostics?.palette?.confidence === "low" ||
+      candidate.colors.length < 3
+  );
+  if (shouldFetchBrandData) {
+    const brandfetch = await (eagerBrandfetchPromise ?? fetchBrandfetchBrandSingleflight(domain));
     if (brandfetch) {
-      candidate = profileWithBrandfetchLogo(domain, candidate, brandfetch);
-      brandfetchStatus = "succeeded";
-    } else if (process.env.BRANDFETCH_API_KEY) {
-      brandfetchStatus = "failed";
+      candidate = profileWithBrandfetchEnrichment(domain, candidate, brandfetch);
+      brandfetchBrandStatus = "succeeded";
+    } else {
+      brandfetchBrandStatus = "failed";
     }
   }
 
   candidate ??= verified;
+  if (!candidate && hasBrandfetchLogoApi) candidate = fallbackBrand(domain);
   if (candidate) {
     const mergedCandidate = mergeVerifiedDesign(candidate, verified);
     const resolvedCandidate = await copyOfficialRemoteLogo(mergedCandidate);
-    const finalLogoReceipt = resolvedCandidate.diagnostics?.logo ?? {
-      strategy: resolvedCandidate.logoUrl ? "remote-profile" as const : "none" as const,
+    const usedVerifiedFallback = resolvedCandidate.diagnostics?.logo.strategy === "verified-profile";
+    const logoApiCandidate = profileWithBrandfetchLogoApi(domain, resolvedCandidate);
+    const finalLogoReceipt = logoApiCandidate.diagnostics?.logo ?? {
+      strategy: logoApiCandidate.logoUrl ? "remote-profile" as const : "none" as const,
       imageCandidateCount: 0,
       rejectedImageCount: 0,
       inlineSvgCandidateCount: 0,
       resolutionComplete: true
     };
     const finalCandidate: BrandProfile = {
-      ...resolvedCandidate,
+      ...logoApiCandidate,
       diagnostics: {
-        ...resolvedCandidate.diagnostics,
+        ...logoApiCandidate.diagnostics,
         logo: finalLogoReceipt,
         providers: {
           publicPage: publicPageStatus,
           publicPageAttempts,
           remoteBrowser: remoteBrowserStatus,
-          brandfetch: brandfetchStatus,
-          verifiedFallback: finalLogoReceipt.strategy === "verified-profile"
+          brandfetch: brandfetchLogoStatus === "succeeded" || brandfetchBrandStatus === "succeeded"
+            ? "succeeded"
+            : brandfetchBrandStatus,
+          brandfetchLogoApi: brandfetchLogoStatus,
+          brandfetchBrandApi: brandfetchBrandStatus,
+          verifiedFallback: usedVerifiedFallback
         }
       }
     };

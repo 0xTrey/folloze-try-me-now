@@ -31,7 +31,9 @@ describe("health production capability", () => {
     expect(health.services.brandHarvester).toEqual({
       mode: "safe-fast-extractor",
       remoteBrowserConfigured: false,
-      brandfetchConfigured: false,
+      brandfetchMode: "disabled",
+      brandfetchLogoApiConfigured: false,
+      brandfetchBrandApiConfigured: false,
       validationFirstCandidateSelection: true
     });
   });

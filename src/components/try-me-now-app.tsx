@@ -73,6 +73,7 @@ import {
   validatePdfFile
 } from "@/lib/client-response";
 import { primaryActionFor } from "@/lib/cta-presentation";
+import { isBrandfetchLogoApiUrl } from "@/lib/brandfetch-logo";
 import { imageDeliveryPath } from "@/lib/image-delivery";
 import {
   captureProductEvent,
@@ -1373,6 +1374,9 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
   const activeIndex = currentIndex < 0 ? 2 : currentIndex;
   const brandResolved = ["complete", "fallback"].includes(session.stages.brand.status);
   const brandVerified = brandResolved && session.stages.brand.status !== "fallback" && session.brand?.readiness?.status !== "incomplete";
+  const targetVerified = Boolean(
+    session.targetBrand && session.targetBrand.readiness?.status !== "incomplete"
+  );
 
   return (
     <section className="guidedThread" aria-labelledby="guided-thread-title">
@@ -1411,8 +1415,8 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
               <span className="identityLogo">
                 {previewLogoUrl(session, "target") ? <Image src={previewLogoUrl(session, "target") ?? ""} alt={`${targetName} logo`} width={92} height={28} unoptimized /> : <Target size={18} />}
               </span>
-              <div><strong>{session.targetBrand ? targetName : `Researching ${targetName}`}</strong><small>{session.answers.targetDomain} · {session.targetBrand ? "Target identity matched" : "Public account signals are loading"}</small></div>
-              {session.targetBrand && <CircleCheck size={18} className="identityCheck" aria-label="Target identity matched" />}
+              <div><strong>{session.targetBrand ? targetName : `Researching ${targetName}`}</strong><small>{session.answers.targetDomain} · {targetVerified ? "Target identity and brand matched" : session.targetBrand ? "Identity found; brand evidence needs review" : "Public account signals are loading"}</small></div>
+              {targetVerified && <CircleCheck size={18} className="identityCheck" aria-label="Target identity and brand matched" />}
             </div>
           </article>
         )}
@@ -2029,10 +2033,13 @@ function WhyItMatters({ session }: { session: PublicTryMeSession }) {
 
 function previewLogoUrl(
   session: PublicTryMeSession,
-  owner: "seller" | "target" = "seller"
+  owner: "seller" | "target" = "seller",
+  surface: "light" | "dark" = "light"
 ): string | undefined {
   const profile = owner === "seller" ? session.brand : session.targetBrand;
   if (!profile?.logoUrl) return undefined;
+  const candidate = surface === "dark" ? profile.logoUrlOnDark ?? profile.logoUrl : profile.logoUrl;
+  if (isBrandfetchLogoApiUrl(candidate, profile.domain)) return candidate;
   return imageDeliveryPath(
     session.id,
     `${owner}-logo`,
