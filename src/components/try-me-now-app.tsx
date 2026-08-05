@@ -1368,7 +1368,7 @@ function DomainStart({
   const portal = useCaseContent[useCase];
   return (
     <section className="domainStage">
-      <button className="textBack" type="button" onClick={onBack}><ArrowLeft size={16} />Choose another path</button>
+      <button className="textBack buttonTertiary" type="button" onClick={onBack}><ArrowLeft size={16} />Choose another path</button>
       <div className="domainStageGrid">
         <div className="domainPrompt">
           <span className="guideIdentity"><MessageSquareText size={15} />Folloze guide · first signal</span>
@@ -1478,7 +1478,7 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
         )}
         {audienceComplete && <article className="prospectBubble"><span>You chose</span><strong>Buyer persona: {audienceFor(session)}</strong></article>}
       </div>
-      <button type="button" className="identityReset" onClick={onRestart}>{brandResolved && !brandVerified ? "Brand evidence looks wrong? Try another domain" : "Something look wrong? Start over"}</button>
+      <button type="button" className="identityReset buttonTertiary" onClick={onRestart}>{brandResolved && !brandVerified ? "Brand evidence looks wrong? Try another domain" : "Something look wrong? Start over"}</button>
     </section>
   );
 }
