@@ -275,8 +275,8 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     exampleLabel: "Watch the NVIDIA 1:1 experience",
     exampleUrl: NVIDIA_ONE_TO_ONE_EXAMPLE_URL,
     demoSteps: ["Seller", "Account evidence", "1:1 experience"],
-    previewImage: "/entry/abm-preview.webp",
-    previewAlt: "Generated one-to-one account experience for Cisco",
+    previewImage: "/entry/aprio-georgia-pacific-preview.webp",
+    previewAlt: "Aprio account experience tailored for Georgia-Pacific",
     accent: "#645cff",
     tone: "paper"
   },

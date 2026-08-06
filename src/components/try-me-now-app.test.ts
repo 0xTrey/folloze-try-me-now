@@ -105,7 +105,9 @@ describe("Try Me Now experience copy", () => {
       title: "Build an ABM campaign",
       actionLabel: "Build an ABM campaign",
       exampleLabel: "Watch the NVIDIA 1:1 experience",
-      exampleUrl: "https://experience.folloze.com/folloze-for-nvidia"
+      exampleUrl: "https://experience.folloze.com/folloze-for-nvidia",
+      previewImage: "/entry/aprio-georgia-pacific-preview.webp",
+      previewAlt: "Aprio account experience tailored for Georgia-Pacific"
     });
     expect(entryPathOptions.campaign).toMatchObject({
       title: "Launch a campaign",
