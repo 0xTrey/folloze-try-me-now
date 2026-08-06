@@ -1372,12 +1372,14 @@ function DomainStart({
   error?: string;
 }) {
   const portal = useCaseContent[useCase];
+  const normalizedDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+  const domainReady = likelyDomain.test(normalizedDomain);
   return (
     <section className="domainStage">
       <button className="textBack buttonTertiary" type="button" onClick={onBack}><ArrowLeft size={16} />Choose another path</button>
       <div className="domainStageGrid">
         <div className="domainPrompt">
-          <span className="guideIdentity"><MessageSquareText size={15} />Folloze guide · first signal</span>
+          <span className="sectionKicker">Folloze guide · first signal</span>
           <h2>{portal.domainTitle}</h2>
           <p>{portal.domainBody}</p>
           <div className="domainPromise"><ShieldCheck size={18} /><span><strong>We confirm before we compose.</strong> You will see the company name, logo, and color evidence before choosing an audience.</span></div>
@@ -1399,8 +1401,15 @@ function DomainStart({
             />
             {isStarting && <LoaderCircle className="spin" size={19} />}
           </div>
+          {(domainReady || isStarting) && (
+            <div className={`domainScanStrip ${isStarting ? "isScanning" : "isReady"}`} role="status" aria-live="polite">
+              <span className="domainScanDot" aria-hidden="true"><i /></span>
+              <div><strong>{normalizedDomain}</strong><small>{isStarting ? `Scanning ${normalizedDomain}` : `Ready to scan ${normalizedDomain}`}</small></div>
+              {isStarting ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />}
+            </div>
+          )}
           <small id={error ? "domain-error" : "domain-help"} className={error ? "fieldError" : ""}>
-            {error || (isStarting ? "Matching the company and harvesting the public brand now…" : "Enrichment starts as soon as the domain is recognized.")}
+            {error || (isStarting ? "Matching the company and harvesting the public brand now…" : domainReady ? "Confirm to begin the public brand scan." : "Enter a company domain to prepare the scan.")}
           </small>
           <button className="buttonPrimary domainContinue" type="submit" disabled={!likelyDomain.test(domain.trim()) || isStarting}>
             {isStarting ? "Confirming the company" : "Confirm this company"}{isStarting ? <LoaderCircle className="spin" size={17} /> : <ArrowRight size={17} />}
@@ -2678,12 +2687,6 @@ export function TryMeNowApp() {
     ctaSessionSignature.current = signature;
     setCtaValue(next);
   }, [session]);
-
-  useEffect(() => {
-    if (!useCase || session || !likelyDomain.test(domain.trim())) return;
-    const timer = window.setTimeout(() => void startSession(useCase, domain), 700);
-    return () => window.clearTimeout(timer);
-  }, [domain, session, startSession, useCase]);
 
   const pollSessionId = session?.id;
   const pollSessionStatus = session?.status;

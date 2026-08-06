@@ -583,44 +583,21 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .entryPromise svg { color: var(--fz-success); }
 
 .domainStage {
+  padding: clamp(38px,5vw,72px) clamp(22px,7vw,112px) 64px;
   position: relative;
   isolation: isolate;
   background:
-    linear-gradient(rgba(28,41,63,.035) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(28,41,63,.035) 1px,transparent 1px),
-    radial-gradient(circle at 88% 15%,rgba(91,91,255,.12),transparent 30%),
-    #f8f7f2;
-  background-size: 46px 46px,46px 46px,auto,auto;
+    radial-gradient(circle at 88% 12%,rgba(91,91,255,.1),transparent 30%),
+    linear-gradient(135deg,#fff 0%,#fbfbfe 66%,#f2f2ff 100%);
 }
+.domainStage .textBack { margin-bottom:clamp(36px,4vw,58px); }
 .domainStage::before {
-  content: "";
-  width: 220px;
-  height: 220px;
-  position: absolute;
-  z-index: -1;
-  left: -110px;
-  bottom: 9%;
-  border: 1px solid rgba(28,41,63,.08);
-  border-radius: 50%;
-  box-shadow: 0 0 0 42px rgba(28,41,63,.025),0 0 0 84px rgba(28,41,63,.018);
+  display: none;
 }
-.domainPrompt { max-width: 760px; }
-.guideIdentity {
-  width: max-content;
-  min-height: 34px;
-  padding: 7px 11px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #fff;
-  border-radius: 999px;
-  background: var(--fz-deep-ink);
-  font-size:11px;
-  font-weight: 750;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-}
-.guideIdentity svg { color: #8bf2bf; }
+.domainStageGrid { grid-template-columns:minmax(0,1fr) minmax(390px,.78fr);gap:clamp(34px,5vw,78px);align-items:start; }
+.domainPrompt { max-width: 650px; }
+.domainStageGrid h2 { max-width:650px;font-size:clamp(46px,5.2vw,70px); }
+.domainInput { margin-top: 34px; }
 .domainPromise {
   max-width: 620px;
   margin-top: 28px;
@@ -648,6 +625,15 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   text-transform: uppercase;
 }
 .domainContinue { width: 100%; margin-top: 19px; }
+.domainScanStrip { min-height:58px;margin-top:14px;padding:10px 12px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;color:var(--fz-body);border:1px solid var(--fz-border);border-radius:13px;background:#f8f9fc; }
+.domainScanStrip.isReady { color:#087448;border-color:#bde8d1;background:#f3fcf7; }
+.domainScanStrip.isScanning { color:var(--fz-accent);border-color:#dadaff;background:var(--fz-accent-tint); }
+.domainScanDot { width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:#fff;box-shadow:inset 0 0 0 1px color-mix(in srgb,currentColor 18%,transparent); }
+.domainScanDot i { width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 0 5px color-mix(in srgb,currentColor 12%,transparent); }
+.domainScanStrip strong,.domainScanStrip small { display:block; }
+.domainScanStrip strong { font-size:12px; }
+.domainScanStrip small { margin-top:3px;color:inherit;font-size:11px; }
+.domainScanStrip>svg { color:currentColor; }
 
 .guidedThread {
   margin: 14px 0 18px;
@@ -921,6 +907,8 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 
 @media (max-width: 820px) {
   .entryPromise { justify-content: flex-start; }
+  .domainStageGrid { grid-template-columns:1fr;gap:32px; }
+  .domainInput { margin-top:0; }
   .domainPromise { margin-top: 20px; }
   .guidedThread { margin-top: 0; }
   .questionCard { border-right: 0; border-left: 0; border-radius: 0; box-shadow: none; }
@@ -931,6 +919,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 }
 
 @media (max-width: 430px) {
+  .domainStageGrid h2 { font-size:44px; }
   .decisionRail { padding-inline: 8px; }
   .decisionRail li { padding-inline: 4px; }
   .decisionRail strong { font-size:11px; }
