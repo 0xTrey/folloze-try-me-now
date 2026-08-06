@@ -2454,6 +2454,10 @@ function useDialogBehavior(onClose: () => void) {
 export function SaveExperienceDialog({
   open,
   expiresLabel,
+  url,
+  sellerName,
+  targetName,
+  headline,
   email,
   status,
   error,
@@ -2463,6 +2467,10 @@ export function SaveExperienceDialog({
 }: {
   open: boolean;
   expiresLabel: string;
+  url: string;
+  sellerName: string;
+  targetName?: string;
+  headline: string;
   email: string;
   status: "idle" | "saving" | "saved" | "error";
   error?: string;
@@ -2478,6 +2486,10 @@ export function SaveExperienceDialog({
         <button className="drawerClose" type="button" onClick={onClose} disabled={status === "saving"} aria-label="Close save experience"><X size={20} /></button>
         <ExpirySaveValuePanel
           expiresLabel={expiresLabel}
+          url={url}
+          sellerName={sellerName}
+          targetName={targetName}
+          headline={headline}
           email={email}
           status={status}
           error={error}
@@ -3089,9 +3101,6 @@ export function TryMeNowApp() {
   }));
   const latestAnalyticsSignal = [...analyticsSignals].reverse().find((signal) => signal.type !== "view")
     ?? analyticsSignals.at(-1);
-  const expiresLabel = session?.expiresAt
-    ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(session.expiresAt))
-    : "in 30 minutes";
   const previewSecondsRemaining = session?.expiresAt
     ? Math.max(0, Math.ceil((Date.parse(session.expiresAt) - previewClockNow) / 1_000))
     : 30 * 60;
@@ -3332,7 +3341,11 @@ export function TryMeNowApp() {
     {showSavePrompt && session && session.status !== "claimed" && (
       <SaveExperienceDialog
         open
-        expiresLabel={expiresLabel}
+        expiresLabel={previewCountdown}
+        url={session.liveUrl || session.temporaryUrl}
+        sellerName={brandNameFor(session)}
+        targetName={session.useCase === "abm" ? targetNameFor(session) : undefined}
+        headline={session.experience?.headline || `${brandNameFor(session)} experience`}
         email={claimEmail}
         status={claimStatus}
         error={claimError}

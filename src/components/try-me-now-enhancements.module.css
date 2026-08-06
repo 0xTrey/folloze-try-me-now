@@ -907,10 +907,250 @@ fieldset.controlCard { min-inline-size:0 }
   .cockpitMetrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }
 
+/* Workstream 7: value-first engagement and save surfaces. */
+.sparseSignalSummary {
+  margin: 24px 0 28px;
+  padding: 15px 17px;
+  color: var(--body);
+  border: 1px solid #d8dafd;
+  border-radius: 14px;
+  background: linear-gradient(100deg,#f2f2ff,#fff 72%);
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 1.45;
+}
+
+.signalColumns {
+  grid-template-columns: minmax(0,1fr);
+  gap: 24px;
+}
+
+.realSignalSection {
+  margin-top: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 14px 42px rgba(10,22,48,.055);
+}
+
+.signalSectionIntro {
+  max-width: 760px;
+  margin: -2px 0 15px;
+  color: var(--body);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.exampleSignalSection {
+  margin-top: 0;
+}
+
+.signalCapabilitySection {
+  margin: 28px 0 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.signalCapabilityGrid {
+  grid-template-columns: repeat(6,minmax(0,1fr));
+  gap: 8px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.signalCapabilityGrid article,
+.signalCapabilityGrid article:nth-child(n) {
+  min-height: 46px;
+  padding: 8px 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.signalCapabilityGrid article > span {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+}
+
+.signalCapabilityGrid strong {
+  line-height: 1.2;
+}
+
+.saveCopy {
+  padding-right: 38px;
+}
+
+.saveCopy h3 {
+  margin-top: 5px;
+  font-size: 24px;
+}
+
+.saveCopy > p {
+  margin: 8px 0 0;
+  color: var(--body);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.saveExperiencePreview {
+  min-width: 0;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr);
+  align-items: center;
+  gap: 14px;
+  overflow: hidden;
+  position: relative;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 15px;
+  background:
+    radial-gradient(circle at 96% 0,rgba(91,91,255,.3),transparent 38%),
+    linear-gradient(145deg,#102640,#071428 72%);
+}
+
+.saveExperiencePreview::after {
+  content: "";
+  width: 118px;
+  height: 118px;
+  position: absolute;
+  right: -58px;
+  bottom: -80px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 50%;
+  box-shadow: 0 0 0 24px rgba(255,255,255,.018);
+  pointer-events: none;
+}
+
+.saveBrandLockup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.saveBrandLockup > span {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 12px;
+  background: rgba(255,255,255,.1);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .05em;
+}
+
+.saveBrandLockup > i {
+  color: #9d9dff;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.saveExperiencePreview > div:last-child {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.saveExperiencePreview small,
+.saveExperiencePreview strong {
+  display: block;
+}
+
+.saveExperiencePreview small {
+  color: #82efb8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.saveExperiencePreview strong {
+  margin-top: 6px;
+  display: -webkit-box;
+  overflow: hidden;
+  font: 580 17px/1.12 var(--font-display),Georgia,serif;
+  letter-spacing: -.02em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.saveUrlRow {
+  min-width: 0;
+  min-height: 44px;
+  padding: 5px 6px 5px 12px;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8f9fb;
+}
+
+.saveUrlRow code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--body);
+  font: 11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+
+.saveUrlRow .tertiaryAction {
+  min-height: 34px;
+  padding: 5px 8px;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.expiryClock {
+  width: max-content;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 8px 11px;
+  color: var(--body);
+  border: 1px solid #d8dafd;
+  border-radius: 999px;
+  background: var(--accent-tint);
+}
+
+.expiryClock svg {
+  color: var(--accent);
+}
+
+.expiryClock span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--body);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 @media (max-width: 430px) {
   .valueReceipt { padding: 18px; }
   .valueReceiptHeader h3 { font-size: 21px; }
   .blockActions { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .sparseSignalSummary { margin: 18px 0 21px; }
+  .realSignalSection { padding: 16px; }
+  .signalCapabilityGrid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .signalCapabilityGrid article:nth-child(n) { border: 1px solid var(--border); }
+  .saveCopy { padding-right: 30px; }
+  .saveCopy h3 { font-size: 22px; }
+  .saveExperiencePreview { padding: 14px;grid-template-columns:1fr;gap:10px; }
+  .saveBrandLockup > span { width: 34px;height:34px;border-radius:10px; }
+  .saveUrlRow { grid-template-columns:minmax(0,1fr);padding:8px; }
+  .saveUrlRow .tertiaryAction { width:100%;justify-content:center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

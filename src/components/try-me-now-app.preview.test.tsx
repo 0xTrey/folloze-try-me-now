@@ -271,7 +271,11 @@ describe("SaveExperienceDialog", () => {
     render(
       <SaveExperienceDialog
         open
-        expiresLabel="11:30 AM"
+        expiresLabel="24:00"
+        url="https://experience.example/jitterbit-for-cisco"
+        sellerName="Jitterbit"
+        targetName="Cisco"
+        headline="Connect Cisco workflows without losing control."
         email=""
         status="idle"
         onEmailChange={vi.fn()}
@@ -280,7 +284,10 @@ describe("SaveExperienceDialog", () => {
       />
     );
 
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Save the URL before the preview disappears.");
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("Keep this experience live.");
+    expect(screen.getByText("Jitterbit for Cisco")).toBeInTheDocument();
+    expect(screen.getByText("https://experience.example/jitterbit-for-cisco")).toBeInTheDocument();
+    expect(screen.getByText("Private preview · expires in 24:00")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Business email" })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();

@@ -454,6 +454,7 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByText("Signal captured")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "What Folloze knows about this journey." })).toBeInTheDocument();
     expect(screen.getByText("Your activity in this preview")).toBeInTheDocument();
+    expect(screen.getByText("You've spent 18 seconds here — that's already a signal.")).toBeInTheDocument();
     expect(screen.getByText("Not captured leads")).toBeInTheDocument();
     expect(screen.getByText("Simulated activity only. These placeholder names and actions demonstrate what Folloze can report in a live campaign.")).toBeInTheDocument();
     expect(screen.getByText("Journey path")).toBeInTheDocument();
@@ -510,13 +511,25 @@ describe("Try Me Now prospect enhancement components", () => {
           { id: "account", label: "Account context", detail: "Cisco signals mapped", status: "strong" },
           { id: "source", label: "Source grounding", detail: "Not required for this path", status: "not-applicable" }
         ]} />
-        <ExpirySaveValuePanel expiresLabel="in 24 minutes" email="" onEmailChange={onEmail} onSave={onSave} />
+        <ExpirySaveValuePanel
+          expiresLabel="24:00"
+          url="https://experience.example/jitterbit-for-cisco"
+          sellerName="Jitterbit"
+          targetName="Cisco"
+          headline="Connect Cisco workflows without losing control."
+          email=""
+          onEmailChange={onEmail}
+          onSave={onSave}
+        />
         <SavedExperienceCockpit title="Jitterbit for Cisco" url="https://experience.example/cisco" updatedLabel="Updated now" metrics={[{ label: "Visitors", value: 1 }]} onOpen={onOpen} onCopy={onCopy} />
       </>
     );
 
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "88");
     expect(screen.getByText("Not required for this path")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Keep this experience live." })).toBeInTheDocument();
+    expect(screen.getByLabelText("Preview of Connect Cisco workflows without losing control.")).toHaveTextContent("Jitterbit for Cisco");
+    expect(screen.getByText("https://experience.example/jitterbit-for-cisco")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Business email"), { target: { value: "buyer@company.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Save and email my link" }).closest("form")!);
     fireEvent.click(screen.getByRole("button", { name: "Open experience" }));
