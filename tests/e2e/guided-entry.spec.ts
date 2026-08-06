@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test.describe("guided first-run experience", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "Try Me Now V1 is a desktop-first experience.");
-    await page.goto("/", { waitUntil: "networkidle" });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
   });
 
   test("starts with three plain-language paths and no premature email gate", async ({ page }) => {
