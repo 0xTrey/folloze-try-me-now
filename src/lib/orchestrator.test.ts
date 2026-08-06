@@ -144,6 +144,7 @@ describe("public session projection", () => {
           identityReady: true,
           logoReady: true,
           paletteReady: true,
+          designReady: true,
           sourceEvidenceReady: true,
           reasons: []
         }
@@ -227,6 +228,7 @@ describe("public session projection", () => {
         identityReady: true,
         logoReady: true,
         paletteReady: true,
+        designReady: true,
         sourceEvidenceReady: true,
         reasons: []
       }

@@ -26,6 +26,15 @@ const seller: BrandProfile = {
   primaryColor: "#123B4A",
   accentColor: "#F4512C",
   surfaceColor: "#FFFFFF",
+  designDna: {
+    version: 1,
+    source: "remote-harvester",
+    confidence: "high",
+    theme: { hero: "dark", motif: "technical-grid" },
+    buttons: { radiusPx: 12, heightPx: 48 },
+    cards: { radiusPx: 18, shadow: "soft" },
+    spacing: { contentMaxWidthPx: 1320, sectionBlockPx: 92, gridGapPx: 20 }
+  },
   sourceUrl: "https://jitterbit.com/?tracking=removed",
   source: "fast-extractor"
 };
@@ -271,6 +280,18 @@ describe("campaign contract", () => {
       }
     });
     expect(spec.artifactDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(spec.brandTokens.designDna).toEqual(seller.designDna);
+    expect(spec.brandTokens.designDna).not.toBe(seller.designDna);
+    expect(spec.brandTokens.designReceipt).toMatchObject({
+      source: "remote-harvester",
+      confidence: "high",
+      appliedFields: expect.arrayContaining([
+        "theme.hero",
+        "buttons.radiusPx",
+        "cards.shadow",
+        "spacing.contentMaxWidthPx"
+      ])
+    });
     expect(spec.curatedSections).toHaveLength(1);
     expect(spec.draft).toMatchObject({
       wireframeName: "abm-account-microsite",

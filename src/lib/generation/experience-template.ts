@@ -14,7 +14,10 @@ import type {
   SessionAnswers,
   UseCase
 } from "@/lib/types";
-import { brandPresentationFor } from "@/lib/verified-brand-profiles";
+import {
+  brandDesignDNAFor,
+  brandPresentationFor
+} from "@/lib/verified-brand-profiles";
 
 const escapeHtml = (value: string) =>
   value.replace(
@@ -29,6 +32,25 @@ const safePixelValue = (value: number | undefined, fallback: number, min: number
   typeof value === "number" && Number.isFinite(value)
     ? Math.min(max, Math.max(min, Math.round(value)))
     : fallback;
+
+const safeNumericValue = (value: number | undefined, fallback: number, min: number, max: number) =>
+  typeof value === "number" && Number.isFinite(value)
+    ? Math.min(max, Math.max(min, Math.round(value * 1000) / 1000))
+    : fallback;
+
+function appliedDesignDnaFields(value: ReturnType<typeof brandDesignDNAFor>): string[] {
+  if (!value) return [];
+  return Object.entries(value)
+    .filter(([key]) => !["version", "source", "confidence"].includes(key))
+    .flatMap(([group, fields]) =>
+      fields && typeof fields === "object"
+        ? Object.entries(fields)
+            .filter(([, fieldValue]) => fieldValue !== undefined)
+            .map(([field]) => `${group}.${field}`)
+        : []
+    )
+    .slice(0, 32);
+}
 
 function safeAssetUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -243,38 +265,86 @@ export function renderExperienceHtml(input: {
   const selectedVariant = "standard";
   const selectedStyle = styleVariant(input.answers);
   const selectedCtaStyle = ctaStyle(input.answers);
+  const designDna = brandDesignDNAFor(brand);
   const presentation = brandPresentationFor(brand);
-  const heroTheme = presentation?.heroTheme ?? "light";
+  const heroTheme = designDna?.theme?.hero ?? presentation?.heroTheme ?? "light";
   const candidatePrimary = safeColor(brand.primaryColor, "#1C293F");
   const primary = colorLuminance(candidatePrimary) < 0.42 ? candidatePrimary : "#1C293F";
   const accent = safeColor(brand.accentColor, "#5B5BFF");
   const surface = safeColor(brand.surfaceColor, "#FFFFFF");
   const onAccent = colorLuminance(accent) > 0.42 ? "#071428" : "#FFFFFF";
-  const darkSurface = safeColor(presentation?.darkSurfaceColor ?? primary, primary);
-  const softSurface = safeColor(presentation?.softSurfaceColor ?? surface, surface);
-  const supportingAccent = safeColor(presentation?.supportingAccentColor ?? accent, accent);
+  const darkSurface = safeColor(designDna?.colors?.darkSurface ?? presentation?.darkSurfaceColor ?? primary, primary);
+  const softSurface = safeColor(designDna?.colors?.softSurface ?? presentation?.softSurfaceColor ?? surface, surface);
+  const supportingAccent = safeColor(designDna?.colors?.supportingAccent ?? presentation?.supportingAccentColor ?? accent, accent);
   const lightSurfaceAccent = safeColor(
-    presentation?.lightSurfaceAccentColor ?? accent,
+    designDna?.colors?.lightSurfaceAccent ?? presentation?.lightSurfaceAccentColor ?? accent,
     accent
   );
-  const lightText = safeColor(presentation?.lightTextColor ?? "#20324B", "#20324B");
-  const mutedText = safeColor(presentation?.mutedTextColor ?? "#66778D", "#66778D");
-  const dividerColor = safeColor(presentation?.dividerColor ?? "#DCE3E9", "#DCE3E9");
-  const buttonBackground = safeColor(presentation?.primaryButtonBackground ?? accent, accent);
-  const buttonText = safeColor(presentation?.primaryButtonText ?? onAccent, onAccent);
-  const buttonHover = safeColor(presentation?.primaryButtonHover ?? accent, accent);
-  const buttonActive = safeColor(presentation?.primaryButtonActive ?? buttonHover, buttonHover);
-  const secondaryButtonBorder = safeColor(presentation?.secondaryButtonBorder ?? accent, accent);
-  const secondaryButtonText = safeColor(presentation?.secondaryButtonText ?? primary, primary);
-  const focusColor = safeColor(presentation?.focusColor ?? accent, accent);
-  const buttonRadius = safePixelValue(presentation?.buttonRadiusPx, 999, 0, 999);
-  const buttonHeight = safePixelValue(presentation?.buttonHeightPx, 52, 40, 80);
-  const buttonBorderWidth = safePixelValue(presentation?.buttonBorderWidthPx, 1, 1, 4);
-  const cardRadius = safePixelValue(presentation?.cardRadiusPx, 0, 0, 64);
+  const lightText = safeColor(designDna?.colors?.lightText ?? presentation?.lightTextColor ?? "#20324B", "#20324B");
+  const mutedText = safeColor(designDna?.colors?.mutedText ?? presentation?.mutedTextColor ?? "#66778D", "#66778D");
+  const dividerColor = safeColor(designDna?.colors?.divider ?? presentation?.dividerColor ?? "#DCE3E9", "#DCE3E9");
+  const buttonBackground = safeColor(designDna?.buttons?.primaryBackground ?? presentation?.primaryButtonBackground ?? accent, accent);
+  const buttonText = safeColor(designDna?.buttons?.primaryText ?? presentation?.primaryButtonText ?? onAccent, onAccent);
+  const buttonHover = safeColor(designDna?.buttons?.primaryHover ?? presentation?.primaryButtonHover ?? accent, accent);
+  const buttonActive = safeColor(designDna?.buttons?.primaryActive ?? presentation?.primaryButtonActive ?? buttonHover, buttonHover);
+  const secondaryButtonBorder = safeColor(designDna?.buttons?.secondaryBorder ?? presentation?.secondaryButtonBorder ?? accent, accent);
+  const secondaryButtonText = safeColor(designDna?.buttons?.secondaryText ?? presentation?.secondaryButtonText ?? primary, primary);
+  const focusColor = safeColor(designDna?.colors?.focus ?? presentation?.focusColor ?? accent, accent);
+  const buttonRadius = safePixelValue(designDna?.buttons?.radiusPx ?? presentation?.buttonRadiusPx, 999, 0, 999);
+  const buttonHeight = safePixelValue(designDna?.buttons?.heightPx ?? presentation?.buttonHeightPx, 52, 36, 80);
+  const buttonBorderWidth = safePixelValue(designDna?.buttons?.borderWidthPx ?? presentation?.buttonBorderWidthPx, 1, 0, 4);
+  const cardRadius = safePixelValue(designDna?.cards?.radiusPx ?? presentation?.cardRadiusPx, 0, 0, 64);
+  const cardBorderWidth = safePixelValue(designDna?.cards?.borderWidthPx, 1, 0, 4);
+  const contentMaxWidth = safePixelValue(designDna?.spacing?.contentMaxWidthPx, 1600, 960, 1800);
+  const sectionBlock = safePixelValue(designDna?.spacing?.sectionBlockPx, 104, 52, 160);
+  const gridGap = safePixelValue(designDna?.spacing?.gridGapPx, 12, 4, 64);
+  const headingWeight = safePixelValue(designDna?.typography?.headingWeight, 800, 300, 900);
+  const bodyWeight = safePixelValue(designDna?.typography?.bodyWeight, 400, 300, 800);
+  const headingTracking = safeNumericValue(designDna?.typography?.headingLetterSpacingEm, -0.035, -0.1, 0.12);
+  const headingLineHeight = safeNumericValue(designDna?.typography?.headingLineHeight, 1.03, 0.85, 1.45);
+  const motif = designDna?.theme?.motif ?? "none";
+  const cardShadow = designDna?.cards?.shadow === "none"
+    ? "none"
+    : designDna?.cards?.shadow === "strong"
+      ? "0 30px 88px color-mix(in srgb,var(--brand-ink) 20%,transparent)"
+      : designDna?.cards?.shadow === "soft"
+        ? "0 18px 52px color-mix(in srgb,var(--brand-ink) 12%,transparent)"
+        : "none";
+  const designDnaFields = appliedDesignDnaFields(designDna);
+  const headingDnaDeclarations = [
+    designDna?.typography?.headingWeight !== undefined ? "font-weight:var(--heading-weight)" : "",
+    designDna?.typography?.headingLetterSpacingEm !== undefined ? "letter-spacing:var(--heading-tracking)" : "",
+    designDna?.typography?.headingLineHeight !== undefined ? "line-height:var(--heading-line-height)" : ""
+  ].filter(Boolean).join(";");
+  const cardDnaDeclarations = [
+    designDna?.cards?.radiusPx !== undefined ? "border-radius:var(--card-radius)" : "",
+    designDna?.cards?.borderWidthPx !== undefined ? "border-width:var(--card-border-width)" : "",
+    designDna?.cards?.shadow !== undefined ? "box-shadow:var(--brand-card-shadow)" : ""
+  ].filter(Boolean).join(";");
+  const designDnaCss = [
+    designDna?.typography?.bodyWeight !== undefined
+      ? "body.brand-design-dna{font-weight:var(--body-weight)}"
+      : "",
+    designDna?.spacing?.contentMaxWidthPx !== undefined
+      ? "body.brand-design-dna .shell{max-width:var(--content-max-width)}"
+      : "",
+    headingDnaDeclarations
+      ? `body.brand-design-dna .hero h1,body.brand-design-dna .signature-intro h2,body.brand-design-dna .thesis h2,body.brand-design-dna .region-heading h2,body.brand-design-dna .journey-header h2,body.brand-design-dna .framework-section h2,body.brand-design-dna .close h2{${headingDnaDeclarations}}`
+      : "",
+    designDna?.spacing?.sectionBlockPx !== undefined
+      ? "body.brand-design-dna .signature,body.brand-design-dna .thesis,body.brand-design-dna .lens-lab,body.brand-design-dna .journey,body.brand-design-dna .framework-section{padding-top:var(--section-block);padding-bottom:var(--section-block)}"
+      : "",
+    designDna?.spacing?.gridGapPx !== undefined
+      ? "body.brand-design-dna .journey-grid,body.brand-design-dna .role-grid{gap:var(--grid-gap)}"
+      : "",
+    cardDnaDeclarations
+      ? `body.brand-design-dna .hero-media,body.brand-design-dna .framework-media,body.brand-design-dna .journey-card,body.brand-design-dna .role-grid article{${cardDnaDeclarations}}`
+      : ""
+  ].filter(Boolean).join("");
   const displayFontName = safeFontName(brand.displayFontFamily, "Brand Display");
   const bodyFontName = safeFontName(brand.bodyFontFamily, "Brand Sans");
   const displayFallback =
-    presentation?.fontFallback === "sans"
+    (designDna?.typography?.fallback ?? presentation?.fontFallback) === "sans"
       ? '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif'
       : "ui-serif,Georgia,serif";
   const displayFont = safeFontFamily(brand.displayFontFamily, displayFallback);
@@ -514,7 +584,7 @@ export function renderExperienceHtml(input: {
   <style>
     ${fontFace(displayFontName, brand.displayFontUrl, input.fontDeliveryUrls?.display, "400 800")}
     ${fontFace(bodyFontName, brand.bodyFontUrl, input.fontDeliveryUrls?.body, "300 800")}
-    :root{color-scheme:light;--brand-ink:${primary};--brand-accent:${accent};--brand-accent-on-light:${lightSurfaceAccent};--brand-surface:${surface};--brand-on-accent:${onAccent};--brand-dark:${darkSurface};--brand-soft-surface:${softSurface};--brand-support:${supportingAccent};--brand-button-bg:${buttonBackground};--brand-button-text:${buttonText};--brand-button-hover:${buttonHover};--brand-button-active:${buttonActive};--brand-secondary-border:${secondaryButtonBorder};--brand-secondary-text:${secondaryButtonText};--brand-focus:${focusColor};--button-radius:${buttonRadius}px;--button-height:${buttonHeight}px;--button-border-width:${buttonBorderWidth}px;--card-radius:${cardRadius}px;--text:${lightText};--muted:${mutedText};--line:${dividerColor};--soft:color-mix(in srgb,var(--brand-soft-surface) 68%,var(--brand-surface));--display:${displayFont};--body:${bodyFont}}
+    :root{color-scheme:light;--brand-ink:${primary};--brand-accent:${accent};--brand-accent-on-light:${lightSurfaceAccent};--brand-surface:${surface};--brand-on-accent:${onAccent};--brand-dark:${darkSurface};--brand-soft-surface:${softSurface};--brand-support:${supportingAccent};--brand-button-bg:${buttonBackground};--brand-button-text:${buttonText};--brand-button-hover:${buttonHover};--brand-button-active:${buttonActive};--brand-secondary-border:${secondaryButtonBorder};--brand-secondary-text:${secondaryButtonText};--brand-focus:${focusColor};--button-radius:${buttonRadius}px;--button-height:${buttonHeight}px;--button-border-width:${buttonBorderWidth}px;--card-radius:${cardRadius}px;--card-border-width:${cardBorderWidth}px;--brand-card-shadow:${cardShadow};--content-max-width:${contentMaxWidth}px;--section-block:${sectionBlock}px;--grid-gap:${gridGap}px;--heading-weight:${headingWeight};--body-weight:${bodyWeight};--heading-tracking:${headingTracking}em;--heading-line-height:${headingLineHeight};--text:${lightText};--muted:${mutedText};--line:${dividerColor};--soft:color-mix(in srgb,var(--brand-soft-surface) 68%,var(--brand-surface));--display:${displayFont};--body:${bodyFont}}
     .media.media .media-fallback{padding:clamp(24px,5vw,54px);display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:22px;background:linear-gradient(145deg,color-mix(in srgb,var(--brand-accent) 12%,var(--brand-surface)),var(--brand-surface) 58%,color-mix(in srgb,var(--brand-ink) 10%,var(--brand-surface)));color:var(--brand-ink);text-align:left}
     .media.media .media-fallback:before,.media.media .media-fallback:after{display:none}
     .media.media .media-fallback>span{position:static;width:auto;height:auto;border:0;border-radius:0;transform:none}
@@ -537,6 +607,7 @@ export function renderExperienceHtml(input: {
     body[data-edit-mode="true"] [data-flz-editable]{cursor:text;outline:1px dashed color-mix(in srgb,var(--brand-accent) 62%,transparent);outline-offset:5px}
     body.design-source-brand-technical .lens-tabs button{border-radius:6px}body.design-source-brand-editorial .hero h1,body.design-source-brand-editorial .thesis h2,body.design-source-brand-editorial .region-heading h2{letter-spacing:-.028em}body.design-neutral-fallback .hero-media{box-shadow:none}
     body.brand-hero-dark .nav{border-color:color-mix(in srgb,#fff 15%,transparent);background:var(--brand-dark)}body.brand-hero-dark .wordmark,body.brand-hero-dark .nav-action{color:#fff}body.brand-hero-dark .lockup-divider{color:color-mix(in srgb,#fff 64%,transparent)}body.brand-hero-dark .journey-nav{border-color:color-mix(in srgb,#fff 14%,transparent);background:color-mix(in srgb,var(--brand-dark) 94%,transparent);box-shadow:0 12px 34px color-mix(in srgb,#000 24%,transparent)}body.brand-hero-dark .journey-nav-title,body.brand-hero-dark .journey-links button,body.brand-hero-dark .fullscreen-control{color:color-mix(in srgb,#fff 72%,transparent)}body.brand-hero-dark .journey-links button:hover,body.brand-hero-dark .journey-links button:focus-visible,body.brand-hero-dark .journey-links button[aria-current="location"]{color:#fff}body.brand-hero-dark .fullscreen-control{border-color:color-mix(in srgb,#fff 30%,transparent);background:transparent}body.brand-hero-dark .hero{background:radial-gradient(ellipse 80% 48% at 3% 100%,color-mix(in srgb,var(--brand-accent) 48%,transparent) 0,transparent 72%),radial-gradient(ellipse 72% 60% at 100% 0,color-mix(in srgb,var(--brand-support) 46%,transparent) 0,transparent 72%),var(--brand-dark);color:#fff}body.brand-hero-dark .hero h1{background:none;-webkit-text-fill-color:currentColor;color:#fff}body.brand-hero-dark .hero h1::first-line{-webkit-text-fill-color:var(--brand-accent);color:var(--brand-accent)}body.brand-hero-dark .hero .subhead{color:color-mix(in srgb,#fff 84%,transparent)}body.brand-hero-dark .hero .eyebrow{color:var(--brand-accent)}body.brand-hero-dark .hero .context-note{border-color:color-mix(in srgb,#fff 30%,transparent);color:color-mix(in srgb,#fff 78%,transparent)}body.brand-hero-dark .hero-media{border-color:color-mix(in srgb,#fff 20%,transparent);background:color-mix(in srgb,#fff 7%,transparent);box-shadow:0 36px 110px color-mix(in srgb,#000 34%,transparent)}body.brand-hero-dark .media.media .media-fallback{background:linear-gradient(145deg,color-mix(in srgb,var(--brand-accent) 22%,var(--brand-dark)),var(--brand-dark) 58%,color-mix(in srgb,var(--brand-support) 22%,var(--brand-dark)));color:#fff}body.brand-hero-dark .close{background:radial-gradient(circle at 90% 10%,color-mix(in srgb,var(--brand-support) 44%,transparent),transparent 32%),var(--brand-dark)}body.brand-hero-dark.cta-outline .hero .primary{border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.brand-hero-dark.cta-text .hero .primary{color:var(--brand-accent)}
+    ${designDnaCss}body.brand-motif-soft-gradient .hero{background-image:linear-gradient(132deg,color-mix(in srgb,var(--brand-accent) 12%,var(--brand-surface)),var(--brand-surface) 58%,var(--brand-soft-surface))}body.brand-motif-radial-glow .hero{background-image:radial-gradient(circle at 85% 12%,color-mix(in srgb,var(--brand-support) 28%,transparent),transparent 46%),radial-gradient(circle at 4% 96%,color-mix(in srgb,var(--brand-accent) 22%,transparent),transparent 42%)}body.brand-motif-technical-grid .hero{background-image:linear-gradient(color-mix(in srgb,var(--brand-ink) 6%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--brand-ink) 6%,transparent) 1px,transparent 1px);background-size:42px 42px}
     button:focus-visible,a:focus-visible{outline:3px solid color-mix(in srgb,var(--brand-focus) 68%,transparent);outline-offset:4px}
     @media(max-width:980px){.hero{grid-template-columns:1fr;min-height:auto}.hero-media{height:clamp(380px,58vw,540px)}.signature-canonical{grid-template-columns:1fr}.lens-panel{grid-template-columns:90px 1fr}.lens-media{grid-column:2}.journey-grid{grid-template-columns:1fr}.journey-card{min-height:230px}.journey-copy{margin-top:30px}.close{grid-template-columns:1fr;align-items:start}.journey-nav-inner{grid-template-columns:minmax(0,1fr) auto;gap:12px}.journey-nav-title{display:none}.journey-links{justify-content:flex-start}.credibility-anchor,.mechanism-section{grid-template-columns:1fr}.fact-implication,.argument-sequence,.role-grid{grid-template-columns:1fr}.argument-sequence article{min-height:0;border-right:0;border-bottom:1px solid color-mix(in srgb,#fff 20%,transparent)}.role-grid h3{min-height:0}.framework-close{grid-template-columns:1fr}.framework-media{min-height:360px}}
     @media(max-width:620px){.nav{height:68px;padding:0 20px}.brand-lockup{gap:10px}.seller-wordmark{max-width:116px}.seller-wordmark img{height:27px;max-width:116px}.target-wordmark,.lockup-divider{display:none}.nav-action{font-size:13px}.hero{padding:50px 22px 42px;background:var(--brand-surface)}.hero h1{font-size:clamp(38px,10.5vw,46px);line-height:1.02}.hero .subhead{font-size:17px}.actions{align-items:stretch;flex-direction:column}.actions>*{width:100%}.hero-media{height:auto;min-height:280px;margin-top:12px;box-shadow:0 18px 48px color-mix(in srgb,var(--brand-ink) 14%,transparent)}.context-note{border-radius:14px;align-items:flex-start}.signature{padding:54px 22px}.signature-intro h2{font-size:36px}.signature-canonical button{grid-template-columns:40px 1fr}.thesis{padding:58px 22px}.thesis h2{font-size:clamp(34px,9.6vw,46px)}.thesis p{font-size:17px}.lens-lab{padding:54px 22px 64px}.lens-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;overflow:visible}.lens-tabs button{min-width:0;padding:9px 7px;white-space:normal;font-size:12px;line-height:1.2}.lens-panel{grid-template-columns:1fr;min-height:0;gap:28px}.lens-number{font-size:68px}.lens-media{grid-column:1;min-height:270px}.lens-copy h2{font-size:37px}.lens-copy>p:not(.eyebrow){font-size:17px}.journey{padding:58px 22px}.journey-header{margin-bottom:34px}.journey-card{min-height:260px;padding:24px}.journey-copy h3{font-size:28px}.close{margin:0 10px 10px;padding:56px 24px;gap:32px}.close h2{font-size:40px}.close .primary{width:100%}.footer{padding:26px 22px;flex-direction:column;gap:8px}html{scroll-padding-top:58px}.journey-nav,.journey-nav-inner{min-height:54px}.journey-nav-inner{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}.journey-links{gap:2px;scroll-snap-type:x proximity}.journey-links button{min-height:50px;padding:0 8px;scroll-snap-align:start;font-size:11px}.journey-links button:after{left:8px;right:8px}.fullscreen-control{width:40px;height:40px;padding:0}.fullscreen-control [data-fullscreen-label]{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.signal-toast{bottom:max(14px,env(safe-area-inset-bottom));border-radius:12px}.folloze-invite,.folloze-insight{right:16px;bottom:max(16px,env(safe-area-inset-bottom))}body.is-fullscreen .nav{display:none}body.is-fullscreen .hero{min-height:auto}.experience-region,.close,#next-step,.hero{scroll-margin-top:62px}}
@@ -548,7 +619,7 @@ export function renderExperienceHtml(input: {
     body.brand-hero-dark .hero .eyebrow,.close .eyebrow{color:var(--brand-accent)}
   </style>
 </head>
-<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${framework ? " framework-seven" : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}">
+<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}"${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
 <button class="skip-link" type="button" data-scroll-target="main-content">Skip to experience</button>
 <div class="shell">
   <header class="nav">

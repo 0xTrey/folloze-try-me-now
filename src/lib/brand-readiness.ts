@@ -39,6 +39,14 @@ export function assessBrandReadiness(profile: BrandProfile): BrandReadiness {
     ? profile.identity.confirmationStatus === "confirmed" && profile.identity.confidence !== "low"
     : false;
   const sourceEvidenceReady = profile.source !== "fallback" && sourceMatchesDomain(profile);
+  const designFidelity = profile.diagnostics?.designFidelity;
+  const designReady = Boolean(
+    profile.designDna &&
+      profile.designDna.confidence !== "low" &&
+      (designFidelity
+        ? designFidelity.designReady
+        : ["verified-profile", "legacy-presentation"].includes(profile.designDna.source))
+  );
   const reasons: string[] = [];
   if (!identityReady) {
     reasons.push(
@@ -61,15 +69,24 @@ export function assessBrandReadiness(profile: BrandProfile): BrandReadiness {
       reasons.push("Source-owned semantic colors are incomplete.");
     }
   }
+  if (!designReady) {
+    const missing = designFidelity?.missing.slice(0, 4).join(", ");
+    reasons.push(
+      missing
+        ? `Browser-backed design evidence is incomplete: ${missing}.`
+        : "Browser-backed design evidence for components, typography, and layout is incomplete."
+    );
+  }
   if (!sourceEvidenceReady) reasons.push("First-party source evidence is incomplete.");
   return {
     status:
-      identityReady && logoReady && paletteReady && sourceEvidenceReady
+      identityReady && logoReady && paletteReady && designReady && sourceEvidenceReady
         ? "ready"
         : "incomplete",
     identityReady,
     logoReady,
     paletteReady,
+    designReady,
     sourceEvidenceReady,
     reasons
   };

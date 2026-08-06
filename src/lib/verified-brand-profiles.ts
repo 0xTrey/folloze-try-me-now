@@ -5,7 +5,7 @@ import lillyProfile from "../../research/brand-harvest/lilly-home-2026-07-31/ver
 import medidataProfile from "../../research/brand-harvest/medidata-logo-2026-07-31/verified-runtime-profile.json" with { type: "json" };
 import serviceNowProfile from "../../research/brand-harvest/servicenow-home-2026-07-31/verified-runtime-profile.json" with { type: "json" };
 
-import type { BrandProfile } from "@/lib/types";
+import type { BrandDesignDNA, BrandProfile } from "@/lib/types";
 
 export interface BrandPresentation {
   heroTheme: "light" | "dark";
@@ -33,6 +33,41 @@ export interface BrandPresentation {
 export type PresentedBrandProfile = BrandProfile & {
   presentation?: BrandPresentation;
 };
+
+function designDnaFromPresentation(
+  presentation: BrandPresentation,
+  source: BrandDesignDNA["source"]
+): BrandDesignDNA {
+  return {
+    version: 1,
+    source,
+    confidence: "high",
+    theme: { hero: presentation.heroTheme },
+    colors: {
+      darkSurface: presentation.darkSurfaceColor,
+      softSurface: presentation.softSurfaceColor,
+      supportingAccent: presentation.supportingAccentColor,
+      lightSurfaceAccent: presentation.lightSurfaceAccentColor,
+      lightText: presentation.lightTextColor,
+      mutedText: presentation.mutedTextColor,
+      divider: presentation.dividerColor,
+      focus: presentation.focusColor
+    },
+    typography: { fallback: presentation.fontFallback },
+    buttons: {
+      primaryBackground: presentation.primaryButtonBackground,
+      primaryText: presentation.primaryButtonText,
+      primaryHover: presentation.primaryButtonHover,
+      primaryActive: presentation.primaryButtonActive,
+      secondaryBorder: presentation.secondaryButtonBorder,
+      secondaryText: presentation.secondaryButtonText,
+      radiusPx: presentation.buttonRadiusPx,
+      heightPx: presentation.buttonHeightPx,
+      borderWidthPx: presentation.buttonBorderWidthPx
+    },
+    cards: { radiusPx: presentation.cardRadiusPx }
+  };
+}
 
 interface VerifiedRuntimeProfile {
   domain: string;
@@ -149,8 +184,21 @@ export function verifiedBrandProfileFor(domain: string): PresentedBrandProfile |
         resolutionComplete: true
       }
     },
-    ...(profile.presentation ? { presentation: { ...profile.presentation } } : {})
+    ...(profile.presentation
+      ? {
+          designDna: designDnaFromPresentation(profile.presentation, "verified-profile"),
+          presentation: { ...profile.presentation }
+        }
+      : {})
   };
+}
+
+export function brandDesignDNAFor(profile: BrandProfile): BrandDesignDNA | undefined {
+  if (profile.designDna?.version === 1) return profile.designDna;
+  const presentation = (profile as PresentedBrandProfile).presentation;
+  return presentation
+    ? designDnaFromPresentation(presentation, "legacy-presentation")
+    : undefined;
 }
 
 export function brandPresentationFor(profile: BrandProfile): BrandPresentation | undefined {

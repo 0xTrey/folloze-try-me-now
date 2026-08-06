@@ -67,6 +67,7 @@ export interface EntryPathOption {
 export interface EntryPathMicroDemoProps {
   option: EntryPathOption;
   selected?: boolean;
+  disabled?: boolean;
   demoDurationMs?: number;
   onSelect: (id: ProspectPath) => void;
   onExampleOpen?: (id: ProspectPath) => void;
@@ -75,6 +76,7 @@ export interface EntryPathMicroDemoProps {
 export function EntryPathMicroDemo({
   option,
   selected = false,
+  disabled = false,
   onSelect,
   onExampleOpen
 }: EntryPathMicroDemoProps) {
@@ -113,7 +115,7 @@ export function EntryPathMicroDemo({
         <p>{option.description}</p>
       </div>
       <div className={styles.pathActions}>
-        <button type="button" className={styles.primaryAction} onClick={() => onSelect(option.id)}>
+        <button type="button" className={styles.primaryAction} disabled={disabled} onClick={() => onSelect(option.id)}>
           {option.actionLabel}<ArrowRight size={16} />
         </button>
         <ExampleModeCta label={option.exampleLabel} href={option.exampleUrl} onClick={() => onExampleOpen?.(option.id)} />

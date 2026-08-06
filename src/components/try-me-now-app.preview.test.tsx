@@ -170,6 +170,7 @@ describe("guided build state", () => {
           identityReady: false,
           logoReady: false,
           paletteReady: false,
+          designReady: false,
           sourceEvidenceReady: false,
           reasons: ["Company identity still needs confirmation."]
         }

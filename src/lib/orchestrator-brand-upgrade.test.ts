@@ -84,7 +84,7 @@ describe("verified fallback brand recovery", () => {
     ]));
   });
 
-  it("upgrades a completed Folloze no-logo fallback to the reviewed local wordmark", async () => {
+  it("upgrades a Folloze no-logo fallback while keeping design readiness incomplete", async () => {
     const id = `folloze-brand-upgrade-${Date.now()}`;
     const verified = verifiedBrandProfileFor("folloze.com");
     expect(verified).toBeDefined();
@@ -125,9 +125,15 @@ describe("verified fallback brand recovery", () => {
       logoSourceUrl: expect.stringContaining("_folloze-logo.svg"),
       primaryColor: "#1C293F",
       accentColor: "#5B5BFF",
-      source: "brand-harvester"
+      source: "brand-harvester",
+      readiness: {
+        status: "incomplete",
+        logoReady: true,
+        paletteReady: true,
+        designReady: false
+      }
     });
-    expect(stored?.stages.brand.status).toBe("complete");
+    expect(stored?.stages.brand.status).toBe("fallback");
   });
 
   it("does not relabel an unknown fallback profile as verified evidence", async () => {

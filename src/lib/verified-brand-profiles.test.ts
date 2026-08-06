@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  brandDesignDNAFor,
   brandPresentationFor,
   verifiedBrandLogoFallbackFor,
   verifiedBrandProfileFor
@@ -35,6 +36,14 @@ describe("verified browser-backed brand profiles", () => {
       buttonHeightPx: 56,
       buttonBorderWidthPx: 2,
       fontFallback: "sans"
+    });
+    expect(profile && brandDesignDNAFor(profile)).toMatchObject({
+      version: 1,
+      source: "verified-profile",
+      confidence: "high",
+      theme: { hero: "dark" },
+      buttons: { radiusPx: 500, heightPx: 56, borderWidthPx: 2 },
+      cards: { radiusPx: 32 }
     });
   });
 

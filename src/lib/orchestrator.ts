@@ -151,7 +151,13 @@ function brandEvidenceTrace(profile: BrandProfile) {
     stylesheetAttempted: profile.diagnostics?.stylesheetAttempted ?? 0,
     stylesheetSucceeded: profile.diagnostics?.stylesheetSucceeded ?? 0,
     harvestedColorCount: profile.colors.length,
-    paletteConfidence: profile.diagnostics?.palette?.confidence ?? "unknown"
+    paletteConfidence: profile.diagnostics?.palette?.confidence ?? "unknown",
+    brandDesignReady: profile.readiness?.designReady ?? false,
+    brandDesignFidelityScore: profile.diagnostics?.designFidelity?.score ?? 0,
+    brandDesignMissing: profile.diagnostics?.designFidelity?.missing.join(",") ?? "unknown",
+    brandHarvestRequestId: profile.diagnostics?.designFidelity?.harvestRequestId ?? "unknown",
+    brandDesignSource: profile.designDna?.source ?? "none",
+    brandDesignConfidence: profile.designDna?.confidence ?? "unknown"
   };
 }
 
@@ -814,6 +820,13 @@ function brandProfileNeedsRefresh(
 ): boolean {
   if (!profile) return true;
   if (hasExperience) return false;
+  const remoteBrowserStatus = profile.diagnostics?.providers?.remoteBrowser;
+  if (
+    config.brandMode === "remote" &&
+    (!profile.designDna || profile.readiness?.designReady === false) &&
+    remoteBrowserStatus !== "succeeded" &&
+    remoteBrowserStatus !== "failed"
+  ) return true;
   if (profile.logoUrl || profile.portableLogo) return false;
   if (verifiedBrandProfileFor(expectedDomain)?.logoUrl) return true;
   if (profile.source === "fallback") return false;
@@ -1983,17 +1996,27 @@ export async function runStoryStage(id: string): Promise<void> {
     if (!preflight?.brand || hasTerminalStoryFailure(preflight)) return;
   }
   const preflightBrandReadiness = preflight?.brand?.readiness;
+  const requiresBrowserDesignEvidence = config.brandMode === "remote";
   if (
     preflight?.brand &&
     !preflight.experience &&
     preflightBrandReadiness &&
-    (!preflightBrandReadiness.paletteReady || !preflightBrandReadiness.identityReady)
+    (
+      !preflightBrandReadiness.paletteReady ||
+      !preflightBrandReadiness.identityReady ||
+      !preflightBrandReadiness.logoReady ||
+      (requiresBrowserDesignEvidence && !preflightBrandReadiness.designReady)
+    )
   ) {
     await updateSession(id, (session) => {
       const readiness = session.brand ? assessBrandReadiness(session.brand) : undefined;
       const reason = readiness?.paletteReady === false
         ? "brand_palette_unavailable"
-        : "brand_identity_confirmation_required";
+        : readiness?.identityReady === false
+          ? "brand_identity_confirmation_required"
+          : readiness?.logoReady === false
+            ? "brand_logo_unavailable"
+            : "brand_design_evidence_unavailable";
       session.status = "collecting";
       session.stages.story = {
         status: "failed",
@@ -2002,16 +2025,27 @@ export async function runStoryStage(id: string): Promise<void> {
         detail: readiness?.reasons.find((message) =>
           reason === "brand_palette_unavailable"
             ? /color|palette|Brandfetch/i.test(message)
-            : /identity|alias|domain|confirmation/i.test(message)
+            : reason === "brand_identity_confirmation_required"
+              ? /identity|alias|domain|confirmation/i.test(message)
+              : reason === "brand_logo_unavailable"
+                ? /logo|wordmark/i.test(message)
+                : /design|component|typography|layout/i.test(message)
         ) ?? (reason === "brand_palette_unavailable"
           ? "Verified brand colors could not be resolved. No generic palette was applied."
-          : "The resolved brand identity needs confirmation before generation can continue.")
+          : reason === "brand_identity_confirmation_required"
+            ? "The resolved brand identity needs confirmation before generation can continue."
+            : reason === "brand_logo_unavailable"
+              ? "An official logo could not be resolved. No text-only logo substitute was applied."
+              : "Browser-backed design evidence is incomplete. No generic presentation was applied.")
       };
       appendEvent(session, "generation_blocked", {
         reason,
         brandfetchBrandApiProvider:
           session.brand?.diagnostics?.providers?.brandfetchBrandApi ?? "unknown",
-        colorCount: session.brand?.colors.length ?? 0
+        colorCount: session.brand?.colors.length ?? 0,
+        designReady: readiness?.designReady ?? false,
+        designFidelityScore: session.brand?.diagnostics?.designFidelity?.score ?? 0,
+        designMissing: session.brand?.diagnostics?.designFidelity?.missing.join(",") ?? "unknown"
       });
       return session;
     });

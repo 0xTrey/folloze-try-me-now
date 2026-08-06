@@ -48,6 +48,20 @@ function boundedText(value: string, max: number): string {
   return `${clipped.slice(0, boundary > max * 0.55 ? boundary : max).trim()}…`;
 }
 
+function designDnaFieldPaths(value: NonNullable<TryMeSession["brand"]>["designDna"]): string[] {
+  if (!value) return [];
+  return Object.entries(value)
+    .filter(([key]) => !["version", "source", "confidence"].includes(key))
+    .flatMap(([group, fields]) =>
+      fields && typeof fields === "object"
+        ? Object.entries(fields)
+            .filter(([, fieldValue]) => fieldValue !== undefined)
+            .map(([field]) => `${group}.${field}`)
+        : []
+    )
+    .slice(0, 32);
+}
+
 function contentItemsFor(session: TryMeSession, draft: ExperienceDraft): ExperienceContentItem[] {
   const artifact = session.sourceArtifact;
   if (artifact && artifact.status !== "failed" && artifact.status !== "unreadable") {
@@ -399,7 +413,17 @@ export function buildExperienceSpec(
       accentColor: brand.accentColor,
       surfaceColor: brand.surfaceColor,
       ...(brand.logoUrl ? { logoUrl: brand.logoUrl } : {}),
-      ...(brand.logoUrlOnDark ? { logoUrlOnDark: brand.logoUrlOnDark } : {})
+      ...(brand.logoUrlOnDark ? { logoUrlOnDark: brand.logoUrlOnDark } : {}),
+      ...(brand.designDna
+        ? {
+            designDna: structuredClone(brand.designDna),
+            designReceipt: {
+              source: brand.designDna.source,
+              confidence: brand.designDna.confidence,
+              appliedFields: designDnaFieldPaths(brand.designDna)
+            }
+          }
+        : {})
     },
     draft: canonicalDraft as Record<string, unknown>,
     contentItems,

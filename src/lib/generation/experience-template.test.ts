@@ -6,6 +6,7 @@ import {
 } from "@/lib/generation/campaign-context";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
+import { normalizeRemoteBrandProfile } from "@/lib/integrations/brand-harvester";
 import { deterministicDraft } from "@/lib/integrations/openai";
 import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
@@ -146,6 +147,66 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain('--display:"Roboto Slab"');
     expect(html).toContain("Jitterbit-logo-2.svg");
     expect(html).toContain("HarmonyTitle-HeroImage-Ring.jpg");
+  });
+
+  it("applies normalized remote design DNA and emits an auditable renderer receipt", () => {
+    const normalizedBrand = normalizeRemoteBrandProfile({
+      ...brand,
+      designDna: {
+        version: 1,
+        source: "remote-harvester",
+        confidence: "high",
+        theme: { hero: "dark", motif: "technical-grid" },
+        colors: {
+          darkSurface: "#10243A",
+          softSurface: "#EEF6F5",
+          lightText: "#24384B",
+          mutedText: "#607083",
+          divider: "#C9D6D4",
+          focus: "#28C6B7"
+        },
+        typography: {
+          fallback: "sans",
+          headingWeight: 700,
+          bodyWeight: 400,
+          headingLetterSpacingEm: -0.02,
+          headingLineHeight: 1.06
+        },
+        buttons: {
+          primaryBackground: "#28C6B7",
+          primaryText: "#10243A",
+          radiusPx: 14,
+          heightPx: 48,
+          borderWidthPx: 2
+        },
+        cards: { radiusPx: 22, borderWidthPx: 1, shadow: "soft" },
+        spacing: { contentMaxWidthPx: 1280, sectionBlockPx: 96, gridGapPx: 24 }
+      }
+    }, brand.domain);
+    expect(normalizedBrand).toBeDefined();
+    const dnaHtml = renderExperienceHtml({
+      draft,
+      brand: normalizedBrand!,
+      useCase: "campaign",
+      answers: {}
+    });
+
+    expect(dnaHtml).toContain("brand-design-dna brand-motif-technical-grid");
+    expect(dnaHtml).toContain('data-brand-design-source="remote-harvester"');
+    expect(dnaHtml).toContain('data-brand-design-confidence="high"');
+    expect(dnaHtml).toContain("data-brand-design-fields=");
+    expect(dnaHtml).toContain("buttons.radiusPx");
+    expect(dnaHtml).toContain("spacing.sectionBlockPx");
+    expect(dnaHtml).toContain("--brand-button-bg:#28C6B7");
+    expect(dnaHtml).toContain("--button-radius:14px");
+    expect(dnaHtml).toContain("--button-height:48px");
+    expect(dnaHtml).toContain("--card-radius:22px");
+    expect(dnaHtml).toContain("--content-max-width:1280px");
+    expect(dnaHtml).toContain("--section-block:96px");
+    expect(dnaHtml).toContain("--grid-gap:24px");
+    expect(dnaHtml).toContain("--heading-weight:700");
+    expect(dnaHtml).toContain("--heading-tracking:-0.02em");
+    expect(dnaHtml).toContain("body.brand-motif-technical-grid .hero{background-image:");
   });
 
   it("renders the reviewed ServiceNow design DNA instead of the generic indigo and serif fallback", () => {

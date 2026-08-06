@@ -192,6 +192,62 @@ test.describe("generated 1:1 experience", () => {
     expect(new Set(visibleHeadlines).size).toBe(3);
   });
 
+  test("applies harvested design DNA to the rendered desktop experience", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await fulfillFixtureAssets(page);
+    await loadGeneratedExperience(page, generatedExperienceHtml({
+      seller: {
+        ...sellerBrand,
+        designDna: {
+          version: 1,
+          source: "remote-harvester",
+          confidence: "high",
+          theme: { hero: "dark", motif: "technical-grid" },
+          typography: {
+            fallback: "sans",
+            headingWeight: 720,
+            bodyWeight: 410,
+            headingLetterSpacingEm: -0.025,
+            headingLineHeight: 1.04
+          },
+          buttons: { radiusPx: 13, heightPx: 50, borderWidthPx: 2 },
+          cards: { radiusPx: 19, borderWidthPx: 1, shadow: "soft" },
+          spacing: { contentMaxWidthPx: 1260, sectionBlockPx: 88, gridGapPx: 27 }
+        }
+      }
+    }));
+
+    await expect(page.locator("body")).toHaveAttribute("data-brand-design-source", "remote-harvester");
+    await expect(page.locator("body")).toHaveAttribute("data-brand-design-confidence", "high");
+    const applied = await page.evaluate(() => {
+      const primary = getComputedStyle(document.querySelector<HTMLElement>(".primary")!);
+      const card = getComputedStyle(document.querySelector<HTMLElement>(".journey-card")!);
+      const shell = getComputedStyle(document.querySelector<HTMLElement>(".shell")!);
+      const section = getComputedStyle(document.querySelector<HTMLElement>(".journey")!);
+      return {
+        buttonRadius: primary.borderRadius,
+        buttonHeight: primary.minHeight,
+        buttonBorderWidth: primary.borderTopWidth,
+        cardRadius: card.borderRadius,
+        cardBorderWidth: card.borderTopWidth,
+        contentWidth: shell.maxWidth,
+        sectionPaddingTop: section.paddingTop,
+        gridGap: getComputedStyle(document.querySelector<HTMLElement>(".journey-grid")!).gap
+      };
+    });
+    expect(applied).toEqual({
+      buttonRadius: "13px",
+      buttonHeight: "50px",
+      buttonBorderWidth: "2px",
+      cardRadius: "19px",
+      cardBorderWidth: "1px",
+      contentWidth: "1260px",
+      sectionPaddingTop: "88px",
+      gridGap: "27px"
+    });
+    expect(await majorLayoutOverflow(page)).toEqual([]);
+  });
+
   for (const viewport of viewports) {
     test(`contains its major layout at ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport);

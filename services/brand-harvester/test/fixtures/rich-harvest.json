@@ -1,0 +1,45 @@
+{
+  "browserStatus": "ok",
+  "rawPageText": "THIS BODY COPY MUST NEVER LEAVE THE SERVICE",
+  "identity": { "siteName": "Acme" },
+  "brandfetch": {
+    "status": "ok",
+    "name": "Acme",
+    "colors": ["#101820", "#00A7E1"],
+    "fonts": ["Acme Sans"],
+    "logos": [{ "url": "https://cdn.example.com/logo.svg?token=secret", "score": 100, "source": "brandfetch", "reasons": ["Brandfetch identity asset"] }]
+  },
+  "desktop": {
+    "status": "ok",
+    "metrics": { "width": 1440, "height": 1000, "scrollHeight": 7200, "bodyBackground": "rgb(255, 255, 255)" },
+    "lazyLoad": { "completed": true, "steps": 10, "finalScrollHeight": 7200, "capped": false },
+    "excludedSignals": { "count": 2, "consent": 1, "vendorShell": 1 },
+    "colors": [{ "value": "rgb(16, 24, 32)", "count": 80 }, { "value": "rgb(0, 167, 225)", "count": 30 }, { "value": "rgb(255, 255, 255)", "count": 100 }],
+    "typography": [
+      { "tag": "h1", "role": "display", "rect": { "width": 720, "height": 120 }, "style": { "fontFamily": "Acme Display", "fontSize": "72px", "fontWeight": "700", "lineHeight": "76px", "color": "rgb(16, 24, 32)" }, "text": "Private headline" },
+      { "tag": "p", "role": "body", "rect": { "width": 600, "height": 60 }, "style": { "fontFamily": "Acme Sans", "fontSize": "18px", "fontWeight": "400", "lineHeight": "28px", "color": "rgb(16, 24, 32)" }, "text": "Private paragraph" }
+    ],
+    "buttons": [{ "kind": "primary", "label": "Private CTA", "labelLength": 11, "rect": { "width": 168, "height": 48 }, "style": { "backgroundColor": "rgb(0, 167, 225)", "color": "rgb(255, 255, 255)", "borderRadius": "4px", "padding": "12px 20px", "fontFamily": "Acme Sans", "fontSize": "16px", "fontWeight": "700" }, "confidence": "high", "evidence": "desktop" }],
+    "layouts": [
+      { "rect": { "width": 1280, "height": 700 }, "style": { "display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "48px", "maxWidth": "1280px", "padding": "80px 32px" }, "confidence": "high", "evidence": "desktop", "selector": ".private-hero" },
+      { "rect": { "width": 1280, "height": 500 }, "style": { "display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "24px", "maxWidth": "1280px" }, "confidence": "high", "evidence": "desktop" }
+    ],
+    "cards": [{ "rect": { "width": 360, "height": 280 }, "style": { "borderRadius": "12px", "boxShadow": "rgba(0, 0, 0, 0.12) 0px 8px 24px", "padding": "24px" }, "confidence": "high", "evidence": "desktop" }],
+    "pseudoElements": [{ "rect": { "width": 480, "height": 480 }, "pattern": "radial-gradient", "style": { "backgroundColor": "rgb(0, 167, 225)", "borderRadius": "999px", "position": "absolute" }, "content": "PRIVATE", "confidence": "high", "evidence": "desktop" }],
+    "logos": [{ "url": "https://www.example.com/logo.svg?cache=123", "score": 90, "reasons": ["visible header identity", "semantic logo marker"] }],
+    "images": [{ "url": "https://www.example.com/hero.webp?width=1600", "width": 1200, "height": 700, "role": "editorial", "alt": "Private image caption" }],
+    "header": { "rect": { "width": 1440, "height": 72 }, "style": { "backgroundColor": "rgb(255, 255, 255)", "position": "sticky", "fontFamily": "Acme Sans" }, "confidence": "high", "evidence": "desktop" }
+  },
+  "mobile": {
+    "status": "ok",
+    "metrics": { "width": 390, "height": 844, "scrollHeight": 9800, "bodyBackground": "rgb(255, 255, 255)" },
+    "lazyLoad": { "completed": true, "steps": 18, "finalScrollHeight": 9800, "capped": false },
+    "excludedSignals": { "count": 1, "consent": 1, "vendorShell": 0 },
+    "typography": [{ "tag": "h1", "role": "display", "rect": { "width": 350, "height": 120 }, "style": { "fontFamily": "Acme Display", "fontSize": "44px", "lineHeight": "46px", "color": "rgb(16, 24, 32)" }, "evidence": "mobile" }],
+    "buttons": [{ "labelLength": 11, "rect": { "width": 350, "height": 52 }, "style": { "backgroundColor": "rgb(0, 167, 225)", "borderRadius": "4px", "padding": "14px 20px" }, "confidence": "high", "evidence": "mobile" }]
+  },
+  "screenshots": {
+    "desktop": { "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": 456789, "width": 1440, "height": 7200, "clipped": false, "path": "/tmp/private-desktop.png" },
+    "mobile": { "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "bytes": 345678, "width": 390, "height": 9800, "clipped": false, "path": "/tmp/private-mobile.png" }
+  }
+}

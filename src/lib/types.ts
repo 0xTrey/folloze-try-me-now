@@ -150,8 +150,63 @@ export interface BrandReadiness {
   identityReady: boolean;
   logoReady: boolean;
   paletteReady: boolean;
+  designReady: boolean;
   sourceEvidenceReady: boolean;
   reasons: string[];
+}
+
+/**
+ * Public-site design evidence reduced to a small, renderer-safe vocabulary.
+ * The browser harvester may observe arbitrary CSS, but only these bounded
+ * semantic tokens cross the runtime contract. Raw selectors, CSS strings,
+ * pseudo-element content, and source markup never reach the renderer.
+ */
+export interface BrandDesignDNA {
+  version: 1;
+  source: "remote-harvester" | "verified-profile" | "legacy-presentation";
+  confidence: IntelligenceConfidence;
+  theme?: {
+    hero: "light" | "dark";
+    motif?: "none" | "soft-gradient" | "radial-glow" | "technical-grid";
+  };
+  colors?: {
+    darkSurface?: string;
+    softSurface?: string;
+    supportingAccent?: string;
+    lightSurfaceAccent?: string;
+    lightText?: string;
+    mutedText?: string;
+    divider?: string;
+    focus?: string;
+  };
+  typography?: {
+    fallback?: "sans" | "serif";
+    headingWeight?: number;
+    bodyWeight?: number;
+    headingLetterSpacingEm?: number;
+    headingLineHeight?: number;
+  };
+  buttons?: {
+    primaryBackground?: string;
+    primaryText?: string;
+    primaryHover?: string;
+    primaryActive?: string;
+    secondaryBorder?: string;
+    secondaryText?: string;
+    radiusPx?: number;
+    heightPx?: number;
+    borderWidthPx?: number;
+  };
+  cards?: {
+    radiusPx?: number;
+    borderWidthPx?: number;
+    shadow?: "none" | "soft" | "strong";
+  };
+  spacing?: {
+    contentMaxWidthPx?: number;
+    sectionBlockPx?: number;
+    gridGapPx?: number;
+  };
 }
 
 export interface BrandProfile {
@@ -183,6 +238,8 @@ export interface BrandProfile {
   bodyFontUrl?: string;
   sourceUrl: string;
   source: "brand-harvester" | "fast-extractor" | "fallback";
+  /** Bounded design-system evidence used by standardized experience renderers. */
+  designDna?: BrandDesignDNA;
   identity?: EntityIdentity;
   readiness?: BrandReadiness;
   /** Server-only receipt explaining bounded brand and logo extraction decisions. */
@@ -253,6 +310,18 @@ export interface BrandProfile {
       fontCount: number;
       imageCount: number;
       industryCount: number;
+    };
+    /** Public-safe completeness receipt from the browser-backed design pass. */
+    designFidelity?: {
+      designReady: boolean;
+      score: number;
+      missing: string[];
+      harvestRequestId?: string;
+      desktopRendered?: boolean;
+      mobileRendered?: boolean;
+      screenshotEvidenceCount?: number;
+      buttonVariantCount?: number;
+      layoutCandidateCount?: number;
     };
     /** Aggregate provider receipt. No page text, credentials, or asset URLs. */
     providers?: {
@@ -651,6 +720,14 @@ export interface ExperienceSpecV1 {
     surfaceColor: string;
     logoUrl?: string;
     logoUrlOnDark?: string;
+    /** Added compatibly to V1 specs; legacy persisted specs may omit it. */
+    designDna?: BrandDesignDNA;
+    /** Renderer-facing receipt for deterministic QA of harvested token use. */
+    designReceipt?: {
+      source: BrandDesignDNA["source"];
+      confidence: BrandDesignDNA["confidence"];
+      appliedFields: string[];
+    };
   };
   draft: Record<string, unknown>;
   /** Added compatibly to V1 specs; legacy persisted sessions may not include it. */

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   extractFastBrandProfile,
-  extractReadableContent
+  extractReadableContent,
+  normalizeRemoteBrandProfile
 } from "@/lib/integrations/brand-harvester";
 import { decodePortableBrandLogo } from "@/lib/portable-brand-logo";
 
@@ -123,6 +124,215 @@ describe("fast brand extraction", () => {
       strategy: "semantic-tokens",
       confidence: "high"
     });
+  });
+
+  it("normalizes browser-backed design evidence into the bounded runtime contract", () => {
+    const remote = normalizeRemoteBrandProfile({
+      profile: {
+        companyName: "NorthStar",
+        colors: ["#10243A", "#28C6B7", "#FFFFFF"],
+        primaryColor: "#10243A",
+        accentColor: "#28C6B7",
+        surfaceColor: "#FFFFFF",
+        sourceUrl: "https://northstar.example/"
+      },
+      structured_brain_pool: {
+        visual_tokens: { colors: ["#10243A", "#28C6B7", "#FFFFFF"] },
+        component_pool: {
+          button_variants: [{
+            confidence: "high",
+            style: {
+              backgroundColor: "rgb(40, 198, 183)",
+              color: "#10243A",
+              borderColor: "#28C6B7",
+              borderWidth: "2px",
+              borderRadius: "14px"
+            }
+          }],
+          buttons: [{ text: "Explore", rect: { width: 132, height: 48 } }],
+          cards: [{
+            rect: { width: 420, height: 280 },
+            style: { borderRadius: "22px", borderWidth: "1px", boxShadow: "0 18px 44px rgba(0,0,0,.12)" }
+          }],
+          typography: [
+            { tag: "h1", style: { fontFamily: "Atlas Sans", fontSize: "64px", fontWeight: "700", lineHeight: "68px", letterSpacing: "-1.28px", color: "#10243A" } },
+            { tag: "p", style: { fontFamily: "Atlas Sans", fontWeight: "400", color: "#24384B" } }
+          ],
+          layout_candidates: [{ rect: { width: 1280 }, style: { gap: "24px" } }],
+          sections: [{ style: { padding: "96px 40px" } }]
+        },
+        asset_pool: {
+          background_images: [{ style: { backgroundImage: "radial-gradient(circle, #28C6B7, transparent)" } }],
+          pseudo_elements: []
+        }
+      }
+    }, "northstar.example");
+
+    expect(remote?.designDna).toMatchObject({
+      version: 1,
+      source: "remote-harvester",
+      confidence: "high",
+      theme: { hero: "dark", motif: "radial-glow" },
+      typography: {
+        fallback: "sans",
+        headingWeight: 700,
+        bodyWeight: 400,
+        headingLetterSpacingEm: -0.02,
+        headingLineHeight: 1.063
+      },
+      buttons: {
+        primaryBackground: "#28C6B7",
+        primaryText: "#10243A",
+        radiusPx: 14,
+        heightPx: 48,
+        borderWidthPx: 2
+      },
+      cards: { radiusPx: 22, borderWidthPx: 1, shadow: "soft" },
+      spacing: { contentMaxWidthPx: 1280, sectionBlockPx: 96, gridGapPx: 24 }
+    });
+  });
+
+  it("normalizes the deployed browser service contract and preserves its fidelity receipt", () => {
+    const remote = normalizeRemoteBrandProfile({
+      profile: {
+        companyName: "Acme",
+        colors: ["#101820", "#00A7E1", "#FFFFFF"],
+        primaryColor: "#101820",
+        accentColor: "#00A7E1",
+        surfaceColor: "#FFFFFF",
+        sourceUrl: "https://acme.example/"
+      },
+      designDna: {
+        schemaVersion: "brand-design-dna.v1",
+        palette: {
+          roles: {
+            text: "#101820",
+            accent: "#00A7E1",
+            surface: "#FFFFFF",
+            support: "#D7F4FA"
+          }
+        },
+        typography: {
+          roles: {
+            display: {
+              fontFamily: "Acme Display, sans-serif",
+              fontSize: "72px",
+              fontWeight: "700",
+              lineHeight: "76px",
+              letterSpacing: "-1.44px"
+            },
+            body: { fontFamily: "Acme Sans, sans-serif", fontWeight: "400" }
+          }
+        },
+        components: {
+          buttons: [{
+            kind: "navigation",
+            rect: { width: 84, height: 32 },
+            style: {
+              backgroundColor: "rgb(255, 255, 255)",
+              color: "rgb(16, 24, 32)",
+              borderRadius: "0px",
+              borderWidth: "0px"
+            }
+          }, {
+            kind: "primary",
+            rect: { width: 168, height: 48 },
+            style: {
+              backgroundColor: "rgb(0, 167, 225)",
+              color: "rgb(255, 255, 255)",
+              borderRadius: "4px",
+              borderWidth: "1px"
+            }
+          }],
+          cards: [{
+            rect: { width: 360, height: 280 },
+            style: {
+              borderRadius: "12px",
+              borderWidth: "1px",
+              boxShadow: "rgba(0, 0, 0, 0.12) 0px 8px 24px"
+            }
+          }],
+          layouts: [{
+            rect: { width: 1280, height: 700 },
+            style: { gap: "48px", padding: "80px 32px" }
+          }],
+          motifs: [{ pattern: "radial-gradient", style: { borderRadius: "999px" } }]
+        }
+      },
+      receipt: {
+        readiness: {
+          designReady: true,
+          score: 91,
+          missing: [],
+          evidence: {
+            desktopRendered: true,
+            mobileRendered: true,
+            screenshotEvidenceCount: 2,
+            buttonVariantCount: 1,
+            layoutCandidateCount: 2
+          }
+        }
+      }
+    }, "acme.example");
+
+    expect(remote?.designDna).toMatchObject({
+      source: "remote-harvester",
+      confidence: "high",
+      theme: { hero: "light", motif: "radial-glow" },
+      typography: {
+        fallback: "sans",
+        headingWeight: 700,
+        bodyWeight: 400,
+        headingLetterSpacingEm: -0.02
+      },
+      buttons: {
+        primaryBackground: "#00A7E1",
+        primaryText: "#FFFFFF",
+        radiusPx: 4,
+        heightPx: 48,
+        borderWidthPx: 1
+      },
+      cards: { radiusPx: 12, borderWidthPx: 1, shadow: "soft" },
+      spacing: { contentMaxWidthPx: 1280, sectionBlockPx: 80, gridGapPx: 48 }
+    });
+    expect(remote?.diagnostics?.designFidelity).toEqual({
+      designReady: true,
+      score: 91,
+      missing: [],
+      desktopRendered: true,
+      mobileRendered: true,
+      screenshotEvidenceCount: 2,
+      buttonVariantCount: 1,
+      layoutCandidateCount: 2
+    });
+  });
+
+  it("rejects unbounded remote CSS values instead of forwarding them to rendering", () => {
+    const remote = normalizeRemoteBrandProfile({
+      companyName: "Unsafe Styles",
+      colors: ["#111111", "#22AA88", "#FFFFFF"],
+      designDna: {
+        confidence: "high",
+        theme: { hero: "dark", motif: "url(javascript:alert(1))" },
+        buttons: {
+          primaryBackground: "url(javascript:alert(1))",
+          radiusPx: 100000,
+          heightPx: -10,
+          borderWidthPx: 2
+        },
+        spacing: { contentMaxWidthPx: 999999, gridGapPx: 20 }
+      }
+    }, "unsafe.example");
+
+    expect(remote?.designDna).toMatchObject({
+      theme: { hero: "dark" },
+      buttons: { borderWidthPx: 2 },
+      spacing: { gridGapPx: 20 }
+    });
+    expect(remote?.designDna?.theme?.motif).toBeUndefined();
+    expect(remote?.designDna?.buttons?.primaryBackground).toBeUndefined();
+    expect(remote?.designDna?.buttons?.radiusPx).toBeUndefined();
+    expect(remote?.designDna?.spacing?.contentMaxWidthPx).toBeUndefined();
   });
 
   it("prefers source-owned hero gradients over generic framework variables", () => {

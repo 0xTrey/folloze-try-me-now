@@ -23,9 +23,10 @@ import {
   portableBrandLogoFromSvg
 } from "@/lib/portable-brand-logo";
 import { fetchPinnedPublicBytes, fetchPinnedPublicText } from "@/lib/safe-fetch";
-import type { BrandProfile } from "@/lib/types";
+import type { BrandDesignDNA, BrandProfile, IntelligenceConfidence } from "@/lib/types";
 import { normalizeDomain } from "@/lib/validation";
 import {
+  brandDesignDNAFor,
   brandPresentationFor,
   type PresentedBrandProfile,
   verifiedBrandProfileFor
@@ -1241,11 +1242,425 @@ function strings(value: unknown, limit: number): string[] {
     : [];
 }
 
-function normalizeRemoteProfile(value: unknown, domain: string): BrandProfile | null {
+function recordOf(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function records(value: unknown, limit: number): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.map(recordOf).filter((item): item is Record<string, unknown> => Boolean(item)).slice(0, limit)
+    : [];
+}
+
+function boundedNumber(
+  value: unknown,
+  minimum: number,
+  maximum: number
+): number | undefined {
+  const parsed = typeof value === "number"
+    ? value
+    : typeof value === "string"
+      ? Number.parseFloat(value)
+      : Number.NaN;
+  return Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum
+    ? Math.round(parsed * 1000) / 1000
+    : undefined;
+}
+
+function styleColor(style: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = style?.[key];
+  return typeof value === "string" ? normalizeCssColor(value) : undefined;
+}
+
+function px(value: unknown, minimum: number, maximum: number): number | undefined {
+  if (typeof value !== "string" && typeof value !== "number") return undefined;
+  const text = String(value).trim();
+  if (typeof value === "string" && !/^-?\d+(?:\.\d+)?px$/i.test(text)) return undefined;
+  return boundedNumber(text.replace(/px$/i, ""), minimum, maximum);
+}
+
+function confidence(value: unknown, fallback: IntelligenceConfidence): IntelligenceConfidence {
+  return value === "high" || value === "medium" || value === "low" ? value : fallback;
+}
+
+function normalizeDirectDesignDna(value: unknown): BrandDesignDNA | undefined {
+  const raw = recordOf(value);
+  if (!raw) return undefined;
+  const rawTheme = recordOf(raw.theme);
+  const rawColors = recordOf(raw.colors);
+  const rawTypography = recordOf(raw.typography);
+  const rawButtons = recordOf(raw.buttons);
+  const rawCards = recordOf(raw.cards);
+  const rawSpacing = recordOf(raw.spacing);
+  const hero = rawTheme?.hero === "dark" || rawTheme?.hero === "light" ? rawTheme.hero : undefined;
+  const motif = ["none", "soft-gradient", "radial-glow", "technical-grid"].includes(String(rawTheme?.motif))
+    ? rawTheme?.motif as NonNullable<BrandDesignDNA["theme"]>["motif"]
+    : undefined;
+  const shadow = ["none", "soft", "strong"].includes(String(rawCards?.shadow))
+    ? rawCards?.shadow as NonNullable<BrandDesignDNA["cards"]>["shadow"]
+    : undefined;
+  const fallback = rawTypography?.fallback === "sans" || rawTypography?.fallback === "serif"
+    ? rawTypography.fallback
+    : undefined;
+  const normalized: BrandDesignDNA = {
+    version: 1,
+    source: "remote-harvester",
+    confidence: confidence(raw.confidence, "medium"),
+    ...(hero || motif ? { theme: { hero: hero ?? "light", ...(motif ? { motif } : {}) } } : {}),
+    colors: {
+      darkSurface: typeof rawColors?.darkSurface === "string" ? normalizeCssColor(rawColors.darkSurface) : undefined,
+      softSurface: typeof rawColors?.softSurface === "string" ? normalizeCssColor(rawColors.softSurface) : undefined,
+      supportingAccent: typeof rawColors?.supportingAccent === "string" ? normalizeCssColor(rawColors.supportingAccent) : undefined,
+      lightSurfaceAccent: typeof rawColors?.lightSurfaceAccent === "string" ? normalizeCssColor(rawColors.lightSurfaceAccent) : undefined,
+      lightText: typeof rawColors?.lightText === "string" ? normalizeCssColor(rawColors.lightText) : undefined,
+      mutedText: typeof rawColors?.mutedText === "string" ? normalizeCssColor(rawColors.mutedText) : undefined,
+      divider: typeof rawColors?.divider === "string" ? normalizeCssColor(rawColors.divider) : undefined,
+      focus: typeof rawColors?.focus === "string" ? normalizeCssColor(rawColors.focus) : undefined
+    },
+    typography: {
+      fallback,
+      headingWeight: boundedNumber(rawTypography?.headingWeight, 300, 900),
+      bodyWeight: boundedNumber(rawTypography?.bodyWeight, 300, 800),
+      headingLetterSpacingEm: boundedNumber(rawTypography?.headingLetterSpacingEm, -0.1, 0.12),
+      headingLineHeight: boundedNumber(rawTypography?.headingLineHeight, 0.85, 1.45)
+    },
+    buttons: {
+      primaryBackground: typeof rawButtons?.primaryBackground === "string" ? normalizeCssColor(rawButtons.primaryBackground) : undefined,
+      primaryText: typeof rawButtons?.primaryText === "string" ? normalizeCssColor(rawButtons.primaryText) : undefined,
+      primaryHover: typeof rawButtons?.primaryHover === "string" ? normalizeCssColor(rawButtons.primaryHover) : undefined,
+      primaryActive: typeof rawButtons?.primaryActive === "string" ? normalizeCssColor(rawButtons.primaryActive) : undefined,
+      secondaryBorder: typeof rawButtons?.secondaryBorder === "string" ? normalizeCssColor(rawButtons.secondaryBorder) : undefined,
+      secondaryText: typeof rawButtons?.secondaryText === "string" ? normalizeCssColor(rawButtons.secondaryText) : undefined,
+      radiusPx: boundedNumber(rawButtons?.radiusPx, 0, 999),
+      heightPx: boundedNumber(rawButtons?.heightPx, 36, 80),
+      borderWidthPx: boundedNumber(rawButtons?.borderWidthPx, 0, 4)
+    },
+    cards: {
+      radiusPx: boundedNumber(rawCards?.radiusPx, 0, 64),
+      borderWidthPx: boundedNumber(rawCards?.borderWidthPx, 0, 4),
+      shadow
+    },
+    spacing: {
+      contentMaxWidthPx: boundedNumber(rawSpacing?.contentMaxWidthPx, 960, 1800),
+      sectionBlockPx: boundedNumber(rawSpacing?.sectionBlockPx, 52, 160),
+      gridGapPx: boundedNumber(rawSpacing?.gridGapPx, 4, 64)
+    }
+  };
+  const meaningful = JSON.stringify(normalized).match(/#[0-9A-F]{6}|\b(?:dark|light|sans|serif|gradient|grid|glow|soft|strong)\b|\d+(?:\.\d+)?/g)?.length ?? 0;
+  return meaningful > 2 ? normalized : undefined;
+}
+
+function designDnaFromLegacyPresentation(value: unknown): BrandDesignDNA | undefined {
+  const raw = recordOf(value);
+  if (!raw) return undefined;
+  return normalizeDirectDesignDna({
+    confidence: "high",
+    theme: { hero: raw.heroTheme },
+    colors: {
+      darkSurface: raw.darkSurfaceColor,
+      softSurface: raw.softSurfaceColor,
+      supportingAccent: raw.supportingAccentColor,
+      lightSurfaceAccent: raw.lightSurfaceAccentColor,
+      lightText: raw.lightTextColor,
+      mutedText: raw.mutedTextColor,
+      divider: raw.dividerColor,
+      focus: raw.focusColor
+    },
+    typography: { fallback: raw.fontFallback },
+    buttons: {
+      primaryBackground: raw.primaryButtonBackground,
+      primaryText: raw.primaryButtonText,
+      primaryHover: raw.primaryButtonHover,
+      primaryActive: raw.primaryButtonActive,
+      secondaryBorder: raw.secondaryButtonBorder,
+      secondaryText: raw.secondaryButtonText,
+      radiusPx: raw.buttonRadiusPx,
+      heightPx: raw.buttonHeightPx,
+      borderWidthPx: raw.buttonBorderWidthPx
+    },
+    cards: { radiusPx: raw.cardRadiusPx }
+  });
+}
+
+function designDnaFromBrainPool(
+  value: unknown,
+  palette: { primary: string; accent: string; surface: string }
+): BrandDesignDNA | undefined {
+  const pool = recordOf(value);
+  const components = recordOf(pool?.component_pool);
+  const visual = recordOf(pool?.visual_tokens);
+  if (!pool || !components) return undefined;
+
+  const variant = records(components.button_variants, 12).find((item) => {
+    const style = recordOf(item.style);
+    return Boolean(styleColor(style, "backgroundColor") || px(style?.borderRadius, 0, 999));
+  });
+  const buttonStyle = recordOf(variant?.style);
+  const button = records(components.buttons, 60).find((item) => {
+    const rect = recordOf(item.rect);
+    const width = boundedNumber(rect?.width, 64, 800);
+    const height = boundedNumber(rect?.height, 36, 80);
+    return Boolean(width && height && String(item.text ?? "").trim().length > 1);
+  });
+  const buttonRect = recordOf(button?.rect);
+
+  const card = records(components.cards, 60).find((item) => {
+    const rect = recordOf(item.rect);
+    return Boolean(boundedNumber(rect?.width, 180, 1800) && boundedNumber(rect?.height, 100, 1400));
+  });
+  const cardStyle = recordOf(card?.style);
+  const rawShadow = typeof cardStyle?.boxShadow === "string" ? cardStyle.boxShadow.trim() : "";
+  const shadowExtent = Math.max(
+    0,
+    ...(rawShadow.match(/-?\d+(?:\.\d+)?px/gi) ?? []).map((value) => Math.abs(Number.parseFloat(value)))
+  );
+  const cardShadow: NonNullable<BrandDesignDNA["cards"]>["shadow"] | undefined = !rawShadow || rawShadow === "none"
+    ? rawShadow === "none" ? "none" : undefined
+    : shadowExtent >= 64 ? "strong" : "soft";
+
+  const typography = records(components.typography, 220);
+  const heading = typography.find((item) => /^h[1-3]$/i.test(String(item.tag ?? "")));
+  const body = typography.find((item) => /^(?:body|p)$/i.test(String(item.tag ?? "")));
+  const headingStyle = recordOf(heading?.style);
+  const bodyStyle = recordOf(body?.style);
+  const headingSize = px(headingStyle?.fontSize, 10, 200);
+  const headingTrackingPx = px(headingStyle?.letterSpacing, -20, 20);
+  const headingLineHeightPx = px(headingStyle?.lineHeight, 8, 240);
+  const fontRoles = recordOf(visual?.font_roles);
+  const displayRole = recordOf(fontRoles?.display);
+  const displayFamily = String(displayRole?.fontFamily ?? headingStyle?.fontFamily ?? "");
+
+  const layouts = records(components.layout_candidates, 140);
+  const sections = records(components.sections, 50);
+  const contentWidth = layouts
+    .map((item) => boundedNumber(recordOf(item.rect)?.width, 960, 1800))
+    .filter((item): item is number => Boolean(item))
+    .sort((a, b) => b - a)[0];
+  const sectionStyle = sections.map((item) => recordOf(item.style)).find(Boolean);
+  const sectionBlock = typeof sectionStyle?.padding === "string"
+    ? px(sectionStyle.padding.trim().split(/\s+/)[0], 52, 160)
+    : undefined;
+  const gridGap = layouts
+    .map((item) => px(recordOf(item.style)?.gap, 4, 64))
+    .find((item): item is number => item !== undefined);
+
+  const motifEvidence = JSON.stringify({
+    backgrounds: records(recordOf(pool.asset_pool)?.background_images, 12),
+    pseudos: records(recordOf(pool.asset_pool)?.pseudo_elements, 12)
+  }).toLowerCase();
+  const motif: NonNullable<BrandDesignDNA["theme"]>["motif"] | undefined = motifEvidence.includes("radial-gradient")
+    ? "radial-glow"
+    : motifEvidence.includes("linear-gradient") && /background-size|repeat/.test(motifEvidence)
+      ? "technical-grid"
+      : motifEvidence.includes("linear-gradient")
+        ? "soft-gradient"
+        : undefined;
+
+  const primaryBackground = styleColor(buttonStyle, "backgroundColor");
+  const primaryText = styleColor(buttonStyle, "color");
+  const borderColor = styleColor(buttonStyle, "borderColor");
+  const hero = luminance(palette.primary) < 0.22 ? "dark" as const : "light" as const;
+  const darkSurface = [palette.primary, ...strings(visual?.colors, 12).map((color) => normalizeCssColor(color) ?? "")]
+    .filter((color): color is string => Boolean(color))
+    .find((color) => luminance(color) < 0.22);
+  const extractedGroups = [variant, card, heading, contentWidth, motif].filter(Boolean).length;
+  if (extractedGroups === 0) return undefined;
+  return {
+    version: 1,
+    source: "remote-harvester",
+    confidence: extractedGroups >= 4 ? "high" : extractedGroups >= 2 ? "medium" : "low",
+    theme: { hero, ...(motif ? { motif } : {}) },
+    colors: {
+      ...(darkSurface ? { darkSurface } : {}),
+      lightText: styleColor(bodyStyle, "color") ?? styleColor(headingStyle, "color"),
+      lightSurfaceAccent: palette.accent,
+      focus: borderColor ?? palette.accent
+    },
+    typography: {
+      fallback: /serif/i.test(displayFamily) && !/sans-serif/i.test(displayFamily) ? "serif" : "sans",
+      headingWeight: boundedNumber(headingStyle?.fontWeight, 300, 900),
+      bodyWeight: boundedNumber(bodyStyle?.fontWeight, 300, 800),
+      headingLetterSpacingEm: headingSize && headingTrackingPx !== undefined
+        ? boundedNumber(headingTrackingPx / headingSize, -0.1, 0.12)
+        : undefined,
+      headingLineHeight: headingSize && headingLineHeightPx
+        ? boundedNumber(headingLineHeightPx / headingSize, 0.85, 1.45)
+        : undefined
+    },
+    buttons: {
+      primaryBackground,
+      primaryText,
+      secondaryBorder: borderColor,
+      secondaryText: styleColor(buttonStyle, "color"),
+      radiusPx: px(buttonStyle?.borderRadius, 0, 999),
+      heightPx: boundedNumber(buttonRect?.height, 36, 80),
+      borderWidthPx: px(buttonStyle?.borderWidth, 0, 4)
+    },
+    cards: {
+      radiusPx: px(cardStyle?.borderRadius, 0, 64),
+      borderWidthPx: px(cardStyle?.borderWidth, 0, 4),
+      shadow: cardShadow
+    },
+    spacing: {
+      contentMaxWidthPx: contentWidth,
+      sectionBlockPx: sectionBlock,
+      gridGapPx: gridGap
+    }
+  };
+}
+
+function firstPixelToken(value: unknown, minimum: number, maximum: number): number | undefined {
+  if (typeof value !== "string") return undefined;
+  const token = value.trim().split(/\s+/).find((part) => /^-?\d+(?:\.\d+)?px$/i.test(part));
+  return token ? px(token, minimum, maximum) : undefined;
+}
+
+function designDnaFromServiceContract(
+  value: unknown,
+  readiness: NonNullable<NonNullable<BrandProfile["diagnostics"]>["designFidelity"]> | undefined
+): BrandDesignDNA | undefined {
+  const raw = recordOf(value);
+  if (!raw || raw.schemaVersion !== "brand-design-dna.v1") return undefined;
+  const palette = recordOf(raw.palette);
+  const roles = recordOf(palette?.roles);
+  const typography = recordOf(raw.typography);
+  const typeRoles = recordOf(typography?.roles);
+  const displayStyle = recordOf(recordOf(typeRoles?.display)?.style ?? typeRoles?.display);
+  const bodyStyle = recordOf(recordOf(typeRoles?.body)?.style ?? typeRoles?.body);
+  const components = recordOf(raw.components);
+  const buttons = records(components?.buttons, 8);
+  const button = buttons.find((item) => item.kind === "primary") ?? buttons[0];
+  const buttonStyle = recordOf(button?.style);
+  const buttonRect = recordOf(button?.rect);
+  const card = records(components?.cards, 12)[0];
+  const cardStyle = recordOf(card?.style);
+  const layouts = records(components?.layouts, 16);
+  const layoutStyle = recordOf(layouts[0]?.style);
+  const contentWidth = layouts
+    .map((item) => boundedNumber(recordOf(item.rect)?.width, 960, 1800))
+    .filter((item): item is number => item !== undefined)
+    .sort((left, right) => right - left)[0];
+  const motif = records(components?.motifs, 12).find((item) =>
+    ["radial-gradient", "linear-gradient"].includes(String(item.pattern))
+  );
+  const motifPattern = typeof motif?.pattern === "string" ? motif.pattern : undefined;
+  const surface = typeof roles?.surface === "string" ? normalizeCssColor(roles.surface) : undefined;
+  const text = typeof roles?.text === "string" ? normalizeCssColor(roles.text) : undefined;
+  const accent = typeof roles?.accent === "string" ? normalizeCssColor(roles.accent) : undefined;
+  const support = typeof roles?.support === "string" ? normalizeCssColor(roles.support) : undefined;
+  const displaySize = px(displayStyle?.fontSize, 10, 200);
+  const displayTracking = px(displayStyle?.letterSpacing, -20, 20);
+  const displayLineHeight = px(displayStyle?.lineHeight, 8, 240);
+  const displayFamily = String(displayStyle?.fontFamily ?? "");
+  const rawShadow = typeof cardStyle?.boxShadow === "string" ? cardStyle.boxShadow.trim() : "";
+  const shadowExtent = Math.max(
+    0,
+    ...(rawShadow.match(/-?\d+(?:\.\d+)?px/gi) ?? []).map((token) => Math.abs(Number.parseFloat(token)))
+  );
+  const shadow: NonNullable<BrandDesignDNA["cards"]>["shadow"] | undefined = !rawShadow
+    ? undefined
+    : rawShadow === "none"
+      ? "none"
+      : shadowExtent >= 48
+        ? "strong"
+        : "soft";
+  const fidelityScore = readiness?.score ?? 0;
+  const extractedGroups = [roles, displayStyle, button, card, contentWidth].filter(Boolean).length;
+  if (extractedGroups < 2) return undefined;
+  return {
+    version: 1,
+    source: "remote-harvester",
+    confidence: readiness?.designReady && fidelityScore >= 85
+      ? "high"
+      : fidelityScore >= 65
+        ? "medium"
+        : "low",
+    theme: {
+      hero: surface && luminance(surface) < 0.3 ? "dark" : "light",
+      ...(motifPattern === "radial-gradient"
+        ? { motif: "radial-glow" as const }
+        : motifPattern === "linear-gradient"
+          ? { motif: "soft-gradient" as const }
+          : {})
+    },
+    colors: {
+      ...(text && luminance(text) < 0.3 ? { darkSurface: text } : {}),
+      ...(surface ? { softSurface: surface } : {}),
+      ...(support ? { supportingAccent: support } : {}),
+      ...(accent ? { lightSurfaceAccent: accent, focus: accent } : {}),
+      ...(text ? { lightText: text } : {})
+    },
+    typography: {
+      fallback: /serif/i.test(displayFamily) && !/sans-serif/i.test(displayFamily) ? "serif" : "sans",
+      headingWeight: boundedNumber(displayStyle?.fontWeight, 300, 900),
+      bodyWeight: boundedNumber(bodyStyle?.fontWeight, 300, 800),
+      headingLetterSpacingEm: displaySize && displayTracking !== undefined
+        ? boundedNumber(displayTracking / displaySize, -0.1, 0.12)
+        : undefined,
+      headingLineHeight: displaySize && displayLineHeight
+        ? boundedNumber(displayLineHeight / displaySize, 0.85, 1.45)
+        : undefined
+    },
+    buttons: {
+      primaryBackground: styleColor(buttonStyle, "backgroundColor") ?? accent,
+      primaryText: styleColor(buttonStyle, "color"),
+      secondaryBorder: styleColor(buttonStyle, "borderColor"),
+      secondaryText: styleColor(buttonStyle, "color"),
+      radiusPx: px(buttonStyle?.borderRadius, 0, 999),
+      heightPx: boundedNumber(buttonRect?.height, 36, 80),
+      borderWidthPx: px(buttonStyle?.borderWidth, 0, 4)
+    },
+    cards: {
+      radiusPx: px(cardStyle?.borderRadius, 0, 64),
+      borderWidthPx: px(cardStyle?.borderWidth, 0, 4),
+      shadow
+    },
+    spacing: {
+      contentMaxWidthPx: contentWidth,
+      sectionBlockPx: firstPixelToken(layoutStyle?.padding, 52, 160),
+      gridGapPx: px(layoutStyle?.gap, 4, 64)
+    }
+  };
+}
+
+function designFidelityFromRemoteReceipt(
+  value: unknown
+): NonNullable<NonNullable<BrandProfile["diagnostics"]>["designFidelity"]> | undefined {
+  const receipt = recordOf(value);
+  const readiness = recordOf(receipt?.readiness);
+  if (!readiness) return undefined;
+  const evidence = recordOf(readiness.evidence);
+  const score = boundedNumber(readiness.score, 0, 100);
+  if (score === undefined || typeof readiness.designReady !== "boolean") return undefined;
+  const harvestRequestId = typeof receipt?.requestId === "string" && /^[a-f0-9-]{16,64}$/i.test(receipt.requestId)
+    ? receipt.requestId
+    : undefined;
+  return {
+    designReady: readiness.designReady,
+    score,
+    missing: strings(readiness.missing, 12)
+      .filter((item) => /^[a-z0-9_-]{1,64}$/i.test(item)),
+    ...(harvestRequestId ? { harvestRequestId } : {}),
+    desktopRendered: typeof evidence?.desktopRendered === "boolean" ? evidence.desktopRendered : undefined,
+    mobileRendered: typeof evidence?.mobileRendered === "boolean" ? evidence.mobileRendered : undefined,
+    screenshotEvidenceCount: boundedNumber(evidence?.screenshotEvidenceCount, 0, 2),
+    buttonVariantCount: boundedNumber(evidence?.buttonVariantCount, 0, 50),
+    layoutCandidateCount: boundedNumber(evidence?.layoutCandidateCount, 0, 100)
+  };
+}
+
+export function normalizeRemoteBrandProfile(value: unknown, domain: string): BrandProfile | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
   const profile = (record.profile && typeof record.profile === "object" ? record.profile : record) as Record<string, unknown>;
-  const colors = strings(profile.colors, 8).map(normalizeHex).filter((color): color is string => Boolean(color));
+  const pool = recordOf(record.structured_brain_pool) ?? recordOf(profile.structured_brain_pool);
+  const visual = recordOf(pool?.visual_tokens);
+  const identity = recordOf(pool?.identity);
+  const colors = (strings(profile.colors, 8).length ? strings(profile.colors, 8) : strings(visual?.colors, 8))
+    .map((color) => normalizeCssColor(color))
+    .filter((color): color is string => Boolean(color));
   const logoUrl = typeof profile.logoUrl === "string" ? profile.logoUrl : undefined;
   const hasDistinctRemotePalette = colors.length >= 3 &&
     !(
@@ -1253,9 +1668,22 @@ function normalizeRemoteProfile(value: unknown, domain: string): BrandProfile | 
       colors[1] === "#5B5BFF" &&
       colors[2] === "#FFFFFF"
     );
+  const primaryColor = typeof profile.primaryColor === "string" ? normalizeCssColor(profile.primaryColor) ?? "#1C293F" : colors[0] ?? "#1C293F";
+  const accentColor = typeof profile.accentColor === "string" ? normalizeCssColor(profile.accentColor) ?? "#5B5BFF" : colors[1] ?? "#5B5BFF";
+  const surfaceColor = typeof profile.surfaceColor === "string" ? normalizeCssColor(profile.surfaceColor) ?? "#FFFFFF" : colors.find((color) => luminance(color) > 0.86) ?? "#FFFFFF";
+  const serviceDesignDna = record.designDna ?? record.designDNA;
+  const designFidelity = designFidelityFromRemoteReceipt(record.receipt);
+  const designDna = normalizeDirectDesignDna(serviceDesignDna ?? profile.designDna ?? profile.designDNA)
+    ?? designDnaFromServiceContract(serviceDesignDna, designFidelity)
+    ?? designDnaFromLegacyPresentation(profile.presentation)
+    ?? designDnaFromBrainPool(pool, { primary: primaryColor, accent: accentColor, surface: surfaceColor });
   return {
     domain,
-    companyName: typeof profile.companyName === "string" ? profile.companyName : titleCaseDomain(domain),
+    companyName: typeof profile.companyName === "string"
+      ? profile.companyName
+      : typeof identity?.name === "string"
+        ? identity.name
+        : titleCaseDomain(domain),
     title: typeof profile.title === "string" ? profile.title : undefined,
     description: typeof profile.description === "string" ? profile.description.slice(0, 500) : undefined,
     publicContext: typeof profile.publicContext === "string" ? profile.publicContext.slice(0, 2400) : undefined,
@@ -1264,15 +1692,16 @@ function normalizeRemoteProfile(value: unknown, domain: string): BrandProfile | 
     logoSourceUrl: logoUrl,
     imageUrls: strings(profile.imageUrls, 6),
     colors,
-    primaryColor: typeof profile.primaryColor === "string" ? normalizeHex(profile.primaryColor) ?? "#1C293F" : colors[0] ?? "#1C293F",
-    accentColor: typeof profile.accentColor === "string" ? normalizeHex(profile.accentColor) ?? "#5B5BFF" : colors[1] ?? "#5B5BFF",
-    surfaceColor: typeof profile.surfaceColor === "string" ? normalizeHex(profile.surfaceColor) ?? "#FFFFFF" : "#FFFFFF",
+    primaryColor,
+    accentColor,
+    surfaceColor,
     displayFontFamily: typeof profile.displayFontFamily === "string" ? profile.displayFontFamily : undefined,
     bodyFontFamily: typeof profile.bodyFontFamily === "string" ? profile.bodyFontFamily : undefined,
     displayFontUrl: typeof profile.displayFontUrl === "string" ? profile.displayFontUrl : undefined,
     bodyFontUrl: typeof profile.bodyFontUrl === "string" ? profile.bodyFontUrl : undefined,
     sourceUrl: typeof profile.sourceUrl === "string" ? profile.sourceUrl : `https://${domain}`,
     source: "brand-harvester",
+    ...(designDna ? { designDna } : {}),
     diagnostics: {
       logo: {
         strategy: typeof profile.logoUrl === "string" ? "remote-profile" : "none",
@@ -1287,7 +1716,8 @@ function normalizeRemoteProfile(value: unknown, domain: string): BrandProfile | 
         semanticCandidateCount: hasDistinctRemotePalette ? colors.length : 0,
         rejectedCandidateCount: 0,
         gradientCandidateCount: 0
-      }
+      },
+      ...(designFidelity ? { designFidelity } : {})
     }
   };
 }
@@ -1298,6 +1728,7 @@ function mergeVerifiedDesign(
 ): BrandProfile {
   if (!verified) return profile;
   const presentation = brandPresentationFor(verified);
+  const designDna = brandDesignDNAFor(verified);
   const useVerifiedLogo = !profile.portableLogo && !profile.logoUrl && Boolean(verified.logoUrl);
   const logoUrl = useVerifiedLogo ? verified.logoUrl : profile.logoUrl;
   return {
@@ -1317,6 +1748,7 @@ function mergeVerifiedDesign(
     bodyFontUrl: verified.bodyFontUrl ?? profile.bodyFontUrl,
     sourceUrl: profile.sourceUrl || verified.sourceUrl,
     source: "brand-harvester",
+    ...(designDna ? { designDna: structuredClone(designDna) } : {}),
     diagnostics: {
       ...profile.diagnostics,
       logo: useVerifiedLogo
@@ -2237,10 +2669,13 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
           ...(process.env.BRAND_HARVESTER_TOKEN ? { Authorization: `Bearer ${process.env.BRAND_HARVESTER_TOKEN}` } : {})
         },
         body: JSON.stringify({ domain, sourceUrl: `https://${domain}`, capture: "progressive" }),
-        signal: AbortSignal.timeout(25_000)
+        // The browser pass intentionally waits for desktop/mobile lazy-load
+        // evidence. Keep this below the 60-second product promise while giving
+        // the service enough time to finish its bounded 55-second capture.
+        signal: AbortSignal.timeout(58_000)
       });
       if (response.ok) {
-        const normalized = normalizeRemoteProfile(await response.json(), domain);
+        const normalized = normalizeRemoteBrandProfile(await response.json(), domain);
         if (normalized) {
           candidate = normalized;
           remoteBrowserStatus = "succeeded";

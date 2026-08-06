@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://folloze.com/contracts/brand-design-dna.v1.schema.json",
+  "title": "Folloze Brand Design DNA",
+  "type": "object",
+  "required": ["schemaVersion", "identity", "palette", "typography", "components", "responsive", "assets", "evidence"],
+  "properties": {
+    "schemaVersion": { "const": "brand-design-dna.v1" },
+    "identity": {
+      "type": "object",
+      "required": ["domain"],
+      "properties": {
+        "companyName": { "type": "string", "maxLength": 120 },
+        "domain": { "type": "string", "maxLength": 253 },
+        "sourceUrl": { "type": "string", "format": "uri", "maxLength": 2048 }
+      },
+      "additionalProperties": false
+    },
+    "palette": {
+      "type": "object",
+      "required": ["colors", "roles"],
+      "properties": {
+        "colors": { "type": "array", "maxItems": 12, "items": { "$ref": "#/$defs/color" } },
+        "roles": {
+          "type": "object",
+          "properties": {
+            "text": { "$ref": "#/$defs/color" },
+            "accent": { "$ref": "#/$defs/color" },
+            "surface": { "$ref": "#/$defs/color" },
+            "support": { "$ref": "#/$defs/color" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "typography": { "type": "object" },
+    "components": { "type": "object" },
+    "responsive": { "type": "object" },
+    "assets": { "type": "object" },
+    "evidence": { "type": "object" }
+  },
+  "$defs": {
+    "color": { "type": "string", "pattern": "^#[0-9A-F]{6}$" }
+  },
+  "additionalProperties": false
+}

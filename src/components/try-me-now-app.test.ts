@@ -333,6 +333,7 @@ describe("Try Me Now experience copy", () => {
           identityReady: true,
           logoReady: false,
           paletteReady: false,
+          designReady: false,
           sourceEvidenceReady: true,
           reasons: ["No verified logo was captured.", "The palette is still provisional."]
         }

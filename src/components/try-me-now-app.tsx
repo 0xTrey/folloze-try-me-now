@@ -78,6 +78,12 @@ import {
   isBrandfetchHostedLogoUrl
 } from "@/lib/brandfetch-logo";
 import { fallbackCompanyName } from "@/lib/company-name";
+import {
+  SELLER_BRAND_PREFLIGHT_DELAY_MS,
+  SellerBrandPreflightCoordinator,
+  scheduleSellerBrandPreflight,
+  sellerBrandPreflightKey
+} from "@/lib/client-brand-preflight";
 import { imageDeliveryPath } from "@/lib/image-delivery";
 import {
   captureProductEvent,
@@ -1333,9 +1339,11 @@ export function CampaignOverviewRail({ session }: { session: PublicTryMeSession 
 }
 
 function UseCasePortals({
-  onSelect
+  onSelect,
+  disabled = false
 }: {
   onSelect: (value: UseCase) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="entryPathRail" aria-label="Choose what you want to create">
@@ -1347,6 +1355,7 @@ function UseCasePortals({
             title: useCaseContent[key].cta,
             description: useCaseContent[key].description
           }}
+          disabled={disabled}
           onSelect={onSelect}
           onExampleOpen={(useCase) => track("example_opened", { useCase })}
         />
@@ -1362,6 +1371,7 @@ function DomainStart({
   onBack,
   onContinue,
   isStarting,
+  preflightStatus,
   error
 }: {
   useCase: UseCase;
@@ -1370,11 +1380,31 @@ function DomainStart({
   onBack: () => void;
   onContinue: () => void;
   isStarting: boolean;
+  preflightStatus: "idle" | "scheduled" | "starting" | "started" | "failed";
   error?: string;
 }) {
   const portal = useCaseContent[useCase];
   const normalizedDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
   const domainReady = likelyDomain.test(normalizedDomain);
+  const preflightActive = preflightStatus === "starting" || preflightStatus === "started";
+  const scanDetail = isStarting
+    ? `Opening the guided brief for ${normalizedDomain}`
+    : preflightStatus === "starting"
+      ? `Starting the public brand scan for ${normalizedDomain}`
+      : preflightStatus === "started"
+        ? `Public brand scan started for ${normalizedDomain}`
+        : `Ready to scan ${normalizedDomain}`;
+  const helpText = error || (isStarting
+    ? "Opening the guided brief with the brand evidence already in progress…"
+    : preflightStatus === "starting"
+      ? "The public brand scan is starting in the background. Confirm whenever you are ready."
+      : preflightStatus === "started"
+        ? "The public brand scan is already running. Confirm to continue into the guided brief."
+        : preflightStatus === "failed"
+          ? "The early scan was interrupted. We will retry when you confirm this company."
+          : domainReady
+            ? "Pause for a moment and Folloze will start the public brand scan automatically."
+            : "Enter a company domain to prepare the scan.");
   return (
     <section className="domainStage">
       <button className="textBack buttonTertiary" type="button" onClick={onBack}><ArrowLeft size={16} />Choose another path</button>
@@ -1398,19 +1428,20 @@ function DomainStart({
               autoCapitalize="none"
               autoCorrect="off"
               inputMode="url"
+              disabled={isStarting}
               aria-describedby={error ? "domain-error" : "domain-help"}
             />
             {isStarting && <LoaderCircle className="spin" size={19} />}
           </div>
           {(domainReady || isStarting) && (
-            <div className={`domainScanStrip ${isStarting ? "isScanning" : "isReady"}`} role="status" aria-live="polite">
+            <div className={`domainScanStrip ${isStarting || preflightStatus === "starting" ? "isScanning" : "isReady"}`} role="status" aria-live="polite">
               <span className="domainScanDot" aria-hidden="true"><i /></span>
-              <div><strong>{normalizedDomain}</strong><small>{isStarting ? `Scanning ${normalizedDomain}` : `Ready to scan ${normalizedDomain}`}</small></div>
-              {isStarting ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />}
+              <div><strong>{normalizedDomain}</strong><small>{scanDetail}</small></div>
+              {isStarting || preflightStatus === "starting" ? <LoaderCircle className="spin" size={16} /> : preflightActive ? <Check size={16} /> : null}
             </div>
           )}
           <small id={error ? "domain-error" : "domain-help"} className={error ? "fieldError" : ""}>
-            {error || (isStarting ? "Matching the company and harvesting the public brand now…" : domainReady ? "Confirm to begin the public brand scan." : "Enter a company domain to prepare the scan.")}
+            {helpText}
           </small>
           <button className="buttonPrimary domainContinue" type="submit" disabled={!likelyDomain.test(domain.trim()) || isStarting}>
             {isStarting ? "Confirming the company" : "Confirm this company"}{isStarting ? <LoaderCircle className="spin" size={17} /> : <ArrowRight size={17} />}
@@ -2549,11 +2580,13 @@ function SignalDrawer({ events, revealedAt, onClose }: { events: ClientEvent[]; 
 }
 
 export function TryMeNowApp() {
+  const [interactionReady, setInteractionReady] = useState(false);
   const [useCase, setUseCase] = useState<UseCase>();
   const [domain, setDomain] = useState("");
   const [session, setSession] = useState<PublicTryMeSession>();
   const [answers, setAnswers] = useState<SessionAnswers>({});
   const [isStarting, setIsStarting] = useState(false);
+  const [preflightStatus, setPreflightStatus] = useState<"idle" | "scheduled" | "starting" | "started" | "failed">("idle");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [connectionError, setConnectionError] = useState("");
@@ -2581,8 +2614,28 @@ export function TryMeNowApp() {
   const patchRequestRef = useRef(0);
   const persistedSectionSignals = useRef(new Set<string>());
   const lastTrackedStatus = useRef<string | undefined>(undefined);
+  const activePreflightKey = useRef<string | undefined>(undefined);
+  const [preflightCoordinator] = useState(() => (
+    new SellerBrandPreflightCoordinator(
+      async (selectedUseCase, companyDomain) => {
+        const result = await api<{ session: PublicTryMeSession }>("/api/sessions", {
+          method: "POST",
+          body: JSON.stringify({ useCase: selectedUseCase, companyDomain })
+        });
+        return result.session;
+      },
+      async (sessionId) => {
+        const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${sessionId}`);
+        return result.session;
+      }
+    )
+  ));
 
-  useEffect(() => initializeProductAnalytics(), []);
+  useEffect(() => {
+    initializeProductAnalytics();
+    const frame = window.requestAnimationFrame(() => setInteractionReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     setProductAnalyticsSessionId(session?.id);
@@ -2607,6 +2660,7 @@ export function TryMeNowApp() {
     setSession(undefined);
     setAnswers({});
     setError("");
+    setPreflightStatus("idle");
     setConnectionError("");
     setClientEvents([]);
     setRevealedAt(undefined);
@@ -2620,6 +2674,7 @@ export function TryMeNowApp() {
     setClaimStatus("idle");
     setClaimError("");
     startedDomain.current = undefined;
+    activePreflightKey.current = undefined;
     revealTracked.current = false;
     analyticsPromptedSession.current = undefined;
     endJourneyRevealSession.current = undefined;
@@ -2635,6 +2690,7 @@ export function TryMeNowApp() {
     setSession(undefined);
     setAnswers({});
     setError("");
+    setPreflightStatus("idle");
     setConnectionError("");
     setShowSignals(false);
     setShowProcess(false);
@@ -2650,6 +2706,7 @@ export function TryMeNowApp() {
     setRevealedAt(undefined);
     setTuneOpen(false);
     startedDomain.current = undefined;
+    activePreflightKey.current = undefined;
     revealTracked.current = false;
     analyticsPromptedSession.current = undefined;
     endJourneyRevealSession.current = undefined;
@@ -2658,6 +2715,38 @@ export function TryMeNowApp() {
   }, []);
 
   const closeAnalyticsPanel = useCallback(() => setShowAnalyticsPanel(false), []);
+
+  const updateDomain = useCallback((value: string) => {
+    setDomain(value);
+    activePreflightKey.current = undefined;
+    const normalized = value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+    setPreflightStatus(likelyDomain.test(normalized) ? "scheduled" : "idle");
+  }, []);
+
+  useEffect(() => {
+    if (!useCase || session) return;
+    const normalized = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+    if (!likelyDomain.test(normalized)) {
+      activePreflightKey.current = undefined;
+      return;
+    }
+
+    const key = sellerBrandPreflightKey(useCase, normalized);
+    activePreflightKey.current = key;
+    const cancelScheduledPreflight = scheduleSellerBrandPreflight(() => {
+      if (activePreflightKey.current !== key) return;
+      setPreflightStatus("starting");
+      void preflightCoordinator.warm(useCase, normalized).then(
+        () => {
+          if (activePreflightKey.current === key) setPreflightStatus("started");
+        },
+        () => {
+          if (activePreflightKey.current === key) setPreflightStatus("failed");
+        }
+      );
+    }, SELLER_BRAND_PREFLIGHT_DELAY_MS);
+    return cancelScheduledPreflight;
+  }, [domain, preflightCoordinator, session, useCase]);
 
   const startSession = useCallback(async (
     selectedUseCase: UseCase,
@@ -2669,21 +2758,15 @@ export function TryMeNowApp() {
     setIsStarting(true);
     setError("");
     try {
-      const result = await api<{ session: PublicTryMeSession }>("/api/sessions", {
-        method: "POST",
-        body: JSON.stringify({
-          useCase: selectedUseCase,
-          companyDomain: normalized
-        })
-      });
-      setSession(result.session);
-      setAnswers(result.session.answers);
-      setProductAnalyticsSessionId(result.session.id);
+      const confirmedSession = await preflightCoordinator.confirm(selectedUseCase, normalized);
+      setSession(confirmedSession);
+      setAnswers(confirmedSession.answers);
+      setProductAnalyticsSessionId(confirmedSession.id);
       captureProductEvent("session_created", {
         category: "workflow",
         outcome: "success",
-        sessionId: result.session.id,
-        properties: { use_case: result.session.useCase }
+        sessionId: confirmedSession.id,
+        properties: { use_case: confirmedSession.useCase }
       });
       track("domain_submitted", { useCase: selectedUseCase });
     } catch (startError) {
@@ -2692,7 +2775,7 @@ export function TryMeNowApp() {
     } finally {
       setIsStarting(false);
     }
-  }, []);
+  }, [preflightCoordinator]);
 
   useEffect(() => {
     if (!session) return;
@@ -3135,7 +3218,7 @@ export function TryMeNowApp() {
               <span><ShieldCheck size={14} />Preview before email</span>
             </div>
           </div>
-          <UseCasePortals onSelect={selectUseCase} />
+          <UseCasePortals onSelect={selectUseCase} disabled={!interactionReady} />
           <div className="entryFooter">Enrichment starts with the first domain. Session activity is logged to improve this demo; add your email only after the experience is worth keeping.</div>
         </section>
       )}
@@ -3144,10 +3227,11 @@ export function TryMeNowApp() {
         <DomainStart
           useCase={useCase}
           domain={domain}
-          onDomain={setDomain}
+          onDomain={updateDomain}
           onBack={() => setUseCase(undefined)}
           onContinue={() => void startSession(useCase, domain)}
           isStarting={isStarting}
+          preflightStatus={preflightStatus}
           error={error}
         />
       )}

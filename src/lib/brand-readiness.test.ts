@@ -21,6 +21,15 @@ function profile(overrides: Partial<BrandProfile> = {}): BrandProfile {
     surfaceColor: "#FFFFFF",
     sourceUrl: "https://www.jitterbit.com/",
     source: "fast-extractor",
+    designDna: {
+      version: 1,
+      source: "verified-profile",
+      confidence: "high",
+      theme: { hero: "light" },
+      buttons: { radiusPx: 8, heightPx: 48 },
+      cards: { radiusPx: 12 },
+      spacing: { contentMaxWidthPx: 1280, sectionBlockPx: 80, gridGapPx: 24 }
+    },
     identity: {
       expectedDomain: "jitterbit.com",
       canonicalDomain: "jitterbit.com",
@@ -59,6 +68,7 @@ describe("brand readiness", () => {
       identityReady: true,
       logoReady: true,
       paletteReady: true,
+      designReady: true,
       sourceEvidenceReady: true,
       reasons: []
     });
@@ -105,6 +115,32 @@ describe("brand readiness", () => {
     expect(assessBrandReadiness(candidate)).toMatchObject({
       status: "incomplete",
       paletteReady: false
+    });
+  });
+
+  it("does not report ready when browser-backed design evidence is incomplete", () => {
+    const candidate = profile({
+      designDna: {
+        version: 1,
+        source: "remote-harvester",
+        confidence: "medium",
+        theme: { hero: "light" },
+        buttons: { radiusPx: 8, heightPx: 48 }
+      },
+      diagnostics: {
+        ...profile().diagnostics!,
+        designFidelity: {
+          designReady: false,
+          score: 68,
+          missing: ["layout_geometry", "screenshot_evidence"]
+        }
+      }
+    });
+
+    expect(assessBrandReadiness(candidate)).toMatchObject({
+      status: "incomplete",
+      designReady: false,
+      reasons: [expect.stringMatching(/layout_geometry/)]
     });
   });
 });
