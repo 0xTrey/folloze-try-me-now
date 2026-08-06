@@ -73,6 +73,46 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(onExampleOpen).toHaveBeenCalledWith("abm");
   });
 
+  it("previews the Cisco content experience with an accessible motion fallback", () => {
+    const previewVideo = "https://images.folloze.com/video/upload/c_scale,w_720,q_auto:eco,f_mp4/v1777151497/zgkmcphemqnjt3ivxifq.mp4";
+    const previewImage = "/entry/cisco-hmf-runtime-discovery-poster.webp";
+    const { container } = render(
+      <EntryPathMicroDemo
+        option={{
+          id: "content",
+          index: "03",
+          eyebrow: "Content",
+          title: "Turn content into an experience",
+          description: "Turn a public URL or PDF into a guided buyer journey.",
+          actionLabel: "Transform my content",
+          exampleLabel: "Watch Cisco HMF become an experience",
+          exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
+          demoSteps: ["Source", "Buyer lens", "Magic experience"],
+          previewImage,
+          previewVideo,
+          previewAlt: "Cisco Secure Workload application map"
+        }}
+        onSelect={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("img", { name: "Cisco Secure Workload application map" }).getAttribute("src")).toContain(
+      "cisco-hmf-runtime-discovery-poster.webp"
+    );
+    const video = container.querySelector("video");
+    expect(video).not.toBeNull();
+    expect(video?.autoplay).toBe(true);
+    expect(video?.loop).toBe(true);
+    expect(video?.muted).toBe(true);
+    expect(video?.playsInline).toBe(true);
+    expect(video).toHaveAttribute("poster", previewImage);
+    expect(video?.querySelector("source")).toHaveAttribute("src", previewVideo);
+    expect(screen.getByRole("link", { name: /Watch Cisco HMF become an experience/i })).toHaveAttribute(
+      "href",
+      "https://engage.folloze.com/cisco-hmf-example"
+    );
+  });
+
   it("shows the harvested logo, semantic palette, and source proof", () => {
     const inspect = vi.fn();
     const brand = {

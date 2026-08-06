@@ -58,6 +58,7 @@ export interface EntryPathOption {
   exampleUrl: string;
   demoSteps: [string, string, string];
   previewImage: string;
+  previewVideo?: string;
   previewAlt: string;
   accent?: string;
   tone?: "paper" | "cobalt" | "ink";
@@ -91,6 +92,21 @@ export function EntryPathMicroDemo({
       <div className={styles.productPreview}>
         <span className={styles.previewChrome} aria-hidden="true"><i /><i /><i /></span>
         <Image src={option.previewImage} alt={option.previewAlt} width={720} height={380} loading="lazy" />
+        {option.previewVideo && (
+          <video
+            className={styles.previewMotion}
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            poster={option.previewImage}
+            aria-hidden="true"
+            tabIndex={-1}
+          >
+            <source src={option.previewVideo} type="video/mp4" />
+          </video>
+        )}
       </div>
       <div className={styles.pathCopy}>
         <h3>{option.title}</h3>

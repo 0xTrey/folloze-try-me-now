@@ -305,8 +305,9 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     exampleLabel: "Watch Cisco HMF become an experience",
     exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
     demoSteps: ["Source", "Buyer lens", "Magic experience"],
-    previewImage: "/entry/content-preview.webp",
-    previewAlt: "Generated interactive content experience for Cisco Secure Firewall",
+    previewImage: "/entry/cisco-hmf-runtime-discovery-poster.webp",
+    previewVideo: "https://images.folloze.com/video/upload/c_scale,w_720,q_auto:eco,f_mp4/v1777151497/zgkmcphemqnjt3ivxifq.mp4",
+    previewAlt: "Cisco Secure Workload application map from the Hybrid Mesh Firewall experience",
     accent: "#67e8c5",
     tone: "ink"
   }

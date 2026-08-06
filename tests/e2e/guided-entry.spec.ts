@@ -25,6 +25,16 @@ test.describe("guided first-run experience", () => {
       "href",
       "https://engage.folloze.com/cisco-hmf-example"
     );
+
+    const contentPreview = page.locator('article[aria-label="Content: Turn content into an experience"] video');
+    await expect(contentPreview).toHaveAttribute("autoplay", "");
+    await expect(contentPreview).toHaveAttribute("loop", "");
+    await expect(contentPreview).toHaveAttribute("muted", "");
+    await expect(contentPreview).toHaveAttribute("playsinline", "");
+    await expect(contentPreview.locator("source")).toHaveAttribute(
+      "src",
+      "https://images.folloze.com/video/upload/c_scale,w_720,q_auto:eco,f_mp4/v1777151497/zgkmcphemqnjt3ivxifq.mp4"
+    );
   });
 
   test("asks for one company signal before exposing the three-decision flow", async ({ page }) => {
