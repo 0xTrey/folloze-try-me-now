@@ -24,12 +24,18 @@ import {
   prepareAnalyticsSignals,
   ProgressiveArtifactStream,
   SavedExperienceCockpit,
+  supportingSignalLabel,
   ToneChips
 } from "./try-me-now-enhancements";
 
 afterEach(() => cleanup());
 
 describe("Try Me Now prospect enhancement components", () => {
+  it("pluralizes supporting signals", () => {
+    expect(supportingSignalLabel(1)).toBe("1 supporting signal");
+    expect(supportingSignalLabel(3)).toBe("3 supporting signals");
+  });
+
   it("supports a primary entry path and a direct public example link", () => {
     const onSelect = vi.fn();
     const onExampleOpen = vi.fn();
@@ -230,8 +236,8 @@ describe("Try Me Now prospect enhancement components", () => {
       />
     );
 
-    const audience = screen.getByRole("button", { name: /Enterprise integration architecture leaders/i });
-    expect(audience).toHaveAttribute("aria-pressed", "true");
+    const audience = screen.getByRole("radio", { name: /Enterprise integration architecture leaders/i });
+    expect(audience).toHaveAttribute("aria-checked", "true");
     fireEvent.click(audience);
     fireEvent.click(screen.getByRole("button", { name: "Pin" }));
     fireEvent.click(screen.getByRole("button", { name: "Exclude" }));
@@ -258,8 +264,8 @@ describe("Try Me Now prospect enhancement components", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: /Automation architects and platform owners/i })).toBeInTheDocument();
-    expect(screen.getByText("1 supporting signals")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Automation architects and platform owners/i })).toBeInTheDocument();
+    expect(screen.getByText(/Why this fits · 1 supporting signal/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pin" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Exclude" })).not.toBeInTheDocument();
   });

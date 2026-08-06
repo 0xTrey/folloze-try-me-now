@@ -1529,9 +1529,11 @@ function ChipGroup({
             key={option}
             className={`choiceChip ${value === option ? "isSelected" : ""}`}
             aria-pressed={value === option}
+            aria-label={`${option}${recommendedOption === option ? ", recommended" : ""}`}
             onClick={() => onChange(option)}
           >
-            <span>{option}{recommendedOption === option ? " · Recommended" : ""}</span>{value === option ? <Check size={16} /> : <ArrowRight size={15} />}
+            <span className="choiceLabel"><span>{option}</span>{recommendedOption === option && <span className="recommendedChip" aria-hidden="true">Recommended</span>}</span>
+            <span className="choiceRadio" aria-hidden="true">{value === option ? <Check size={14} /> : <i />}</span>
           </button>
         ))}
       </div>
@@ -3234,6 +3236,7 @@ export function TryMeNowApp() {
                 <button
                   className="previewAnalyticsButton"
                   type="button"
+                  aria-label={`See live engagement, ${Math.max(analyticsSignals.length, 1)} ${Math.max(analyticsSignals.length, 1) === 1 ? "signal" : "signals"}`}
                   onClick={() => {
                     analyticsPromptedSession.current = session.id;
                     setShowAnalyticsToast(false);
@@ -3241,7 +3244,7 @@ export function TryMeNowApp() {
                     track("analytics_panel_opened", { useCase: session.useCase, source: "preview-toolbar" });
                   }}
                 >
-                  <Gauge size={16} />See live engagement<span>{Math.max(analyticsSignals.length, 1)}</span>
+                  <Gauge size={16} />See live engagement<span aria-hidden="true">{Math.max(analyticsSignals.length, 1)}</span>
                 </button>
               </div>
               <div className="desktopPreviewShell">

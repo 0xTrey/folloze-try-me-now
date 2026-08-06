@@ -96,6 +96,11 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .chipGrid { display: grid; grid-template-columns: 1fr; gap: 9px; }
 .choiceChip { min-height: 56px; padding: 14px 17px; display: flex; align-items: center; justify-content: space-between; gap: 18px; text-align: left; color: var(--fz-ink); background: white; border: 1px solid var(--fz-border); border-radius: 14px; cursor: pointer; transition: .18s var(--ease); }
 .choiceChip:hover,.choiceChip.isSelected { color: var(--fz-accent); border-color: var(--fz-accent); background: var(--fz-accent-tint); }
+.choiceLabel { min-width:0;display:flex;align-items:center;flex-wrap:wrap;gap:8px; }
+.recommendedChip { padding:4px 7px;color:var(--fz-accent);border:1px solid #d6d6ff;border-radius:999px;background:#fff;font-size:11px;font-weight:750;line-height:1; }
+.choiceRadio { width:22px;height:22px;display:grid;place-items:center;flex:0 0 auto;color:#fff;border:1px solid #c8cfdb;border-radius:50%;background:#fff; }
+.choiceRadio i { width:8px;height:8px;border:1px solid #aeb7c6;border-radius:50%; }
+.choiceChip.isSelected .choiceRadio { border-color:var(--fz-accent);background:var(--fz-accent); }
 .campaignSourceInput { transition: border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease); }
 .campaignSourceInput.isReady { border-color: color-mix(in srgb,var(--fz-success) 58%,var(--fz-border)); background: color-mix(in srgb,var(--fz-success) 4%,white); box-shadow: 0 0 0 3px color-mix(in srgb,var(--fz-success) 8%,transparent); }
 .campaignSourceGuidance { display:flex;margin-top:11px;align-items:center;gap:7px;color:var(--fz-muted-strong);font-size:11px;line-height:1.45; }

@@ -343,6 +343,10 @@ export interface AudienceEvidenceTrayProps {
   onExclude: (id: string, excluded: boolean) => void;
 }
 
+export function supportingSignalLabel(count: number): string {
+  return `${count} supporting ${count === 1 ? "signal" : "signals"}`;
+}
+
 export function AudienceEvidenceTray({ companyName, options, selectedId, simplified = false, onSelect, onPin, onExclude }: AudienceEvidenceTrayProps) {
   return (
     <section className={styles.evidenceTray} aria-labelledby="audience-evidence-title">
@@ -350,19 +354,19 @@ export function AudienceEvidenceTray({ companyName, options, selectedId, simplif
         <div><span>Explainable audience</span><h3 id="audience-evidence-title">Why these roles fit {companyName}</h3></div>
         <small>{options.filter((option) => !option.excluded).length} active hypotheses</small>
       </div>
-      <div className={styles.audienceList}>
+      <div className={styles.audienceList} role="radiogroup" aria-label={`Choose an audience for ${companyName}`}>
         {options.map((option) => (
           <article key={option.id} className={classes(styles.audienceOption, selectedId === option.id && styles.isSelected, option.excluded && styles.isExcluded)}>
             <button
               type="button"
               className={styles.audienceSelect}
-              aria-pressed={selectedId === option.id}
+              role="radio"
+              aria-checked={selectedId === option.id}
               disabled={option.excluded}
               onClick={() => onSelect(option.id)}
             >
               <span className={styles.audienceRadio}>{selectedId === option.id && <i />}</span>
               <span><strong>{option.label}</strong><small>{option.rationale}</small></span>
-              <ArrowRight size={16} />
             </button>
             {!simplified && <div className={styles.audienceTools}>
               <button type="button" aria-pressed={Boolean(option.pinned)} onClick={() => onPin(option.id, !option.pinned)}>
@@ -373,7 +377,7 @@ export function AudienceEvidenceTray({ companyName, options, selectedId, simplif
               </button>
             </div>}
             <details className={styles.evidenceDetails}>
-              <summary>{option.evidence.length} supporting signals</summary>
+              <summary>Why this fits · {supportingSignalLabel(option.evidence.length)}</summary>
               <div>
                 {option.evidence.map((item) => (
                   <div key={item.id} className={styles.evidenceRow}>

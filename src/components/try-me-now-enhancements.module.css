@@ -126,14 +126,13 @@
 .audienceOption { overflow:hidden;border:1px solid var(--border);border-radius:15px;background:#fff;transition:border-color .2s var(--ease),box-shadow .2s var(--ease),opacity .2s }
 .audienceOption.isSelected { border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 8%,transparent) }
 .audienceOption.isExcluded { opacity:.48;background:#f4f5f7 }
-.audienceSelect { width:100%;min-height:70px;padding:13px 14px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;text-align:left;color:var(--ink);border:0;background:transparent;cursor:pointer }
+.audienceSelect { width:100%;min-height:70px;padding:13px 14px;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:12px;text-align:left;color:var(--ink);border:0;background:transparent;cursor:pointer }
 .audienceSelect:disabled { cursor:not-allowed }
 .audienceRadio { width:19px;height:19px;display:grid;place-items:center;border:1px solid #c8cfdb;border-radius:50% }
 .audienceRadio i { width:9px;height:9px;border-radius:50%;background:var(--accent) }
 .audienceSelect strong,.audienceSelect small { display:block }
 .audienceSelect strong { font:600 14px/1.2 var(--font-display),Georgia,serif }
 .audienceSelect small { margin-top:4px;color:var(--muted);font-size:11px;line-height:1.4 }
-.audienceSelect>svg { color:var(--accent) }
 .audienceTools { padding:0 14px 10px 45px;display:flex;gap:6px }
 .audienceTools button { min-height:32px;padding:0 9px;display:flex;align-items:center;gap:5px;color:var(--muted);border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer;font-size:11px }
 .audienceTools button[aria-pressed="true"] { color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,var(--border));background:var(--accent-tint) }
