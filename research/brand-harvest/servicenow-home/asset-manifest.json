@@ -1,0 +1,27 @@
+{
+  "logos": [],
+  "images": [],
+  "background_images": [],
+  "brandfetch_logos": [],
+  "screenshots": {
+    "desktop_full": {
+      "path": "research/brand-harvest/servicenow-home/screenshots/homepage-desktop-full.png",
+      "width": 1440,
+      "height": 9072,
+      "clipped": false
+    },
+    "mobile_full": {
+      "path": "research/brand-harvest/servicenow-home/screenshots/homepage-mobile-full.png",
+      "width": 390,
+      "height": 11084,
+      "clipped": false
+    }
+  },
+  "manual_screenshots": [
+    {
+      "source": "research/brand-harvest/manual/servicenow-platform-fold.png",
+      "status": "copied",
+      "path": "research/brand-harvest/servicenow-home/screenshots/manual-1.png"
+    }
+  ]
+}

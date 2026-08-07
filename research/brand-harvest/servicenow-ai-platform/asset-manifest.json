@@ -1,0 +1,21 @@
+{
+  "logos": [],
+  "images": [],
+  "background_images": [],
+  "brandfetch_logos": [],
+  "screenshots": {
+    "desktop_full": {
+      "path": "research/brand-harvest/servicenow-ai-platform/screenshots/homepage-desktop-full.png",
+      "width": 1440,
+      "height": 8663,
+      "clipped": false
+    }
+  },
+  "manual_screenshots": [
+    {
+      "source": "research/brand-harvest/manual/servicenow-platform-fold.png",
+      "status": "copied",
+      "path": "research/brand-harvest/servicenow-ai-platform/screenshots/manual-1.png"
+    }
+  ]
+}

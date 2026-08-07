@@ -1,0 +1,13 @@
+:root {
+  --brand-primary: #000000;
+  --brand-accent: #FFFFFF;
+  --brand-text: #111827;
+  --brand-surface: #FFFFFF;
+  --brand-font-display: ServiceNowSansLight, -apple-system, "system-ui", "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --brand-font-body: ServiceNowSansLight, -apple-system, "system-ui", "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --brand-button-radius: 0px;
+  --brand-button-padding: 12px 18px;
+  --brand-button-font-weight: 600;
+  --brand-card-radius: 8px;
+  --brand-card-shadow: none;
+}

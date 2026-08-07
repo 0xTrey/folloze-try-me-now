@@ -112,8 +112,9 @@ describe("Try Me Now experience copy", () => {
     expect(entryPathOptions.campaign).toMatchObject({
       title: "Launch a campaign landing page",
       actionLabel: "Launch a campaign landing page",
-      exampleLabel: "See the Folloze + ServiceNow AI campaign",
-      exampleUrl: "https://engage.folloze.com/6bbf48"
+      exampleLabel: "See the ServiceNow AI platform campaign",
+      exampleUrl: "/examples/servicenow-ai-platform-campaign.html",
+      previewAlt: "ServiceNow-branded AI platform campaign landing page"
     });
     expect(entryPathOptions.content).toMatchObject({
       exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
