@@ -10,6 +10,7 @@ import type { PublicTryMeSession } from "@/lib/types";
 import {
   AssemblyPreview,
   buildMoments,
+  canClaimPreview,
   CampaignOverviewRail,
   getBuildPanelCopy,
   OptionalContextComposer,
@@ -54,6 +55,7 @@ const readySession: PublicTryMeSession = {
     ready: true,
     title: "Jitterbit campaign",
     headline: "A generated buyer experience",
+    readiness: "final",
     generationSource: "openai",
     artifactRevision: 1
   }
@@ -219,6 +221,36 @@ describe("guided build state", () => {
 });
 
 describe("PreviewUpdateNotice", () => {
+  it("shows the interactive first preview while keeping claim gated", () => {
+    const provisional = {
+      ...readySession,
+      status: "preview_provisional" as const,
+      experience: {
+        ...readySession.experience!,
+        readiness: "provisional" as const
+      },
+      stages: {
+        ...readySession.stages,
+        story: { status: "running" as const }
+      }
+    };
+
+    render(
+      <>
+        <PreviewUpdateNotice session={provisional} onRetry={vi.fn()} />
+        <AssemblyPreview session={provisional} />
+      </>
+    );
+
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveAttribute("data-preview-update-state", "provisional");
+    expect(notice).toHaveTextContent("Your first preview is ready.");
+    expect(notice).toHaveTextContent("Quality pass running");
+    expect(screen.getByTitle("Generated buyer experience preview")).toBeInTheDocument();
+    expect(canClaimPreview(provisional)).toBe(false);
+    expect(canClaimPreview(readySession)).toBe(true);
+  });
+
   it("keeps the current revision usable while a replacement is running", () => {
     const updating = {
       ...readySession,

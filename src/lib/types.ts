@@ -88,6 +88,7 @@ export type StageStatus = "pending" | "running" | "complete" | "fallback" | "fai
 export type SessionStatus =
   | "collecting"
   | "generating"
+  | "preview_provisional"
   | "preview_ready_unclaimed"
   | "claim_pending"
   | "claimed"
@@ -431,6 +432,7 @@ export interface ExperienceModel {
   closingHeadline: string;
   closingBody: string;
   html: string;
+  readiness?: "provisional" | "final";
   generationSource: "openai" | "deterministic-fallback";
   artifactRevision: number;
   artifactDigest: string;
@@ -438,7 +440,7 @@ export interface ExperienceModel {
 
 export type PublicExperienceSummary = Pick<
   ExperienceModel,
-  "title" | "headline" | "generationSource" | "artifactRevision"
+  "title" | "headline" | "readiness" | "generationSource" | "artifactRevision"
 > & { ready: true };
 
 export interface SessionEvent {

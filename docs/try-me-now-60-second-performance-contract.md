@@ -66,12 +66,17 @@ authorities when the browser pass times out.
 
 Primary service-level metric:
 
-`generation_eligible -> preview_ready`
+`generation_eligible -> preview_provisional_ready`
 
 This begins when the last required brief answer is committed. It excludes human
-form-fill time and includes every remaining prerequisite, model, composition,
-render, and persistence step. Report p50, p95, percentage at or below 60 seconds,
-and fallback rate by use case.
+form-fill time and includes every remaining prerequisite, deterministic
+composition, render, and persistence step required for the first interactive
+buyer page. Report p50, p95, percentage at or below 60 seconds, and fallback
+rate by use case.
+
+The companion quality metric is `preview_provisional_ready -> preview_ready`.
+It measures the bounded model refinement without hiding the usable page while
+that work continues.
 
 Supporting spans:
 
@@ -83,8 +88,8 @@ Supporting spans:
 - session-created-to-preview duration for the full prospect journey.
 
 The browser should eventually emit `preview_rendered` after the generated
-experience is actually visible. Server `preview_ready` remains the authoritative
-build completion time until that acknowledgement is implemented.
+experience is actually visible. Server `preview_provisional_ready` remains the
+authoritative first-preview time until that acknowledgement is implemented.
 
 ## Acceptance criteria
 
@@ -101,11 +106,26 @@ build completion time until that acknowledgement is implemented.
 10. A timed-out refinement preserves the current safe preview and never replaces
     a newer revision.
 
-## Next implementation slice
+## Implemented provisional lifecycle
 
-The current system still reveals `session.experience` only after final story
-generation. The next slice is a phase-aware provisional preview: build the fixed
-wireframe shell immediately, keep it unclaimable until verified brand and source
-requirements pass, then atomically upgrade it with bounded generated copy. This
-will make the 0-20-second product progress tangible without weakening the final
-brand or evidence gates.
+Try Me Now now commits a deterministic `preview_provisional` artifact through
+the same `ExperienceSpec`, renderer, brand assets, analytics runtime, and
+desktop iframe as the final experience. It appears before the OpenAI call,
+remains explicitly labeled as refining, and cannot be saved or claimed. The
+bounded model pass replaces it atomically only when the generation attempt and
+input fingerprint still match. A changed brief discards the stale refinement;
+a failed refinement leaves the interactive provisional page available with a
+retry path.
+
+The August 7 local ServiceNow campaign verification recorded:
+
+- verified seller brand ready in 1,015 ms;
+- `generation_eligible -> preview_provisional_ready` in 775 ms;
+- deterministic composition and render in 8 ms;
+- provisional-to-final upgrade in 248 ms when OpenAI was intentionally absent;
+- no browser console errors and a 6,002 px inner experience that remained
+  independently scrollable inside the desktop preview.
+
+Slow-model integration coverage holds the provider promise unresolved while
+asserting that the provisional iframe is ready, the claim boundary rejects the
+draft, and a late model result cannot overwrite a newer brief revision.

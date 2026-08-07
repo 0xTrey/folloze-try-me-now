@@ -479,6 +479,9 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
           ready: true,
           title: session.experience.title,
           headline: session.experience.headline,
+          ...(session.experience.readiness
+            ? { readiness: session.experience.readiness }
+            : {}),
           generationSource: session.experience.generationSource,
           artifactRevision: session.experience.artifactRevision
         }

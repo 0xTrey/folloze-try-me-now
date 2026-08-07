@@ -1057,10 +1057,21 @@ export function preservePreviewDuringRegeneration(
   return { ...next, experience: current.experience };
 }
 
+export function canClaimPreview(
+  session: Pick<PublicTryMeSession, "experience" | "status"> | undefined
+): boolean {
+  if (!session?.experience || session.experience.readiness === "provisional") return false;
+  return ["preview_ready_unclaimed", "claim_failed"].includes(session.status);
+}
+
 export function previewUpdateState(
   session: Pick<PublicTryMeSession, "experience" | "stages">
-): "running" | "failed" | undefined {
+): "provisional" | "running" | "failed" | undefined {
   if (!session.experience) return undefined;
+  if (
+    session.experience.readiness === "provisional" &&
+    session.stages.story.status === "running"
+  ) return "provisional";
   if (session.stages.story.status === "running") return "running";
   if (session.stages.story.status === "failed") return "failed";
   return undefined;
@@ -1076,6 +1087,16 @@ export function PreviewUpdateNotice({
   const state = previewUpdateState(session);
   if (!state || !session.experience) return null;
   const revision = session.experience.artifactRevision ?? 1;
+
+  if (state === "provisional") {
+    return (
+      <section className="previewUpdateNotice isRunning" role="status" aria-live="polite" data-preview-update-state="provisional">
+        <span className="previewUpdateIcon" aria-hidden="true"><LoaderCircle className="spin" size={18} /></span>
+        <span><strong>Your first preview is ready.</strong>Explore the page now while Folloze refines the copy and evidence in place.</span>
+        <small><i className="liveDot" />Quality pass running</small>
+      </section>
+    );
+  }
 
   if (state === "running") {
     return (
@@ -2606,6 +2627,7 @@ export function TryMeNowApp() {
   const [tuneOpen, setTuneOpen] = useState(false);
   const startedDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
+  const initialPreviewScrolled = useRef(false);
   const analyticsPromptedSession = useRef<string | undefined>(undefined);
   const endJourneyRevealSession = useRef<string | undefined>(undefined);
   const ctaSessionSignature = useRef<string | undefined>(undefined);
@@ -2676,6 +2698,7 @@ export function TryMeNowApp() {
     startedDomain.current = undefined;
     activePreflightKey.current = undefined;
     revealTracked.current = false;
+    initialPreviewScrolled.current = false;
     analyticsPromptedSession.current = undefined;
     endJourneyRevealSession.current = undefined;
     ctaSessionSignature.current = undefined;
@@ -2708,6 +2731,7 @@ export function TryMeNowApp() {
     startedDomain.current = undefined;
     activePreflightKey.current = undefined;
     revealTracked.current = false;
+    initialPreviewScrolled.current = false;
     analyticsPromptedSession.current = undefined;
     endJourneyRevealSession.current = undefined;
     ctaSessionSignature.current = undefined;
@@ -2817,13 +2841,14 @@ export function TryMeNowApp() {
   }, [pollSessionId, pollSessionStatus]);
 
   useEffect(() => {
+    if (!session?.experience || initialPreviewScrolled.current) return;
+    initialPreviewScrolled.current = true;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [session?.experience]);
+
+  useEffect(() => {
     if (!session || session.status !== "preview_ready_unclaimed" || revealTracked.current) return;
     revealTracked.current = true;
-    // The guided form can be several viewports tall. When it is replaced by
-    // the preview, preserving that document offset drops the visitor into the
-    // middle or bottom of a brand-new experience and can look like a blank
-    // result. Start every first reveal at its headline.
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     const revealTime = Date.now();
     setRevealedAt(revealTime);
     track("experience_revealed", { useCase: session.useCase });
@@ -3171,6 +3196,13 @@ export function TryMeNowApp() {
   };
 
   const isReveal = Boolean(session?.experience);
+  const isProvisionalPreview = Boolean(
+    session?.experience && (
+      session.experience.readiness === "provisional" ||
+      session.status === "preview_provisional"
+    )
+  );
+  const canSaveExperience = canClaimPreview(session);
   const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
   const revealCopy = session ? getRevealCopy(session) : undefined;
   const analyticsSignals: AnalyticsSignal[] = clientEvents.map((event, index) => ({
@@ -3296,21 +3328,33 @@ export function TryMeNowApp() {
           <div className="revealIntro">
             <div className="revealIntroCopy">
               <span className="sectionKicker">
-                {session.status === "claimed" ? "Saved. Shareable. Measurable." : revealCopy.kicker}
+                {session.status === "claimed"
+                  ? "Saved. Shareable. Measurable."
+                  : isProvisionalPreview
+                    ? "First preview ready"
+                    : revealCopy.kicker}
               </span>
               <h1>{getRevealShellHeadline(session)}</h1>
-              <p className="revealPayoff">{revealCopy.summary}</p>
-              <div className="revealMeta"><span>Built from public brand and company signals</span><i /><span>Private until you save it</span></div>
+              <p className="revealPayoff">
+                {isProvisionalPreview
+                  ? "The experience is interactive now. Folloze is finishing the quality pass without taking the page away."
+                  : revealCopy.summary}
+              </p>
+              <div className="revealMeta"><span>Built from public brand and company signals</span><i /><span>{isProvisionalPreview ? "Refining before save" : "Private until you save it"}</span></div>
             </div>
             <div className="revealActions">
               {session.status === "claimed" ? (
                 <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
-              ) : (
+              ) : canSaveExperience ? (
                 <button className="buttonPrimary" type="button" onClick={() => setShowSavePrompt(true)}><Mail size={16} />Save this preview</button>
+              ) : (
+                <span className="buttonPrimary" role="status"><LoaderCircle className="spin" size={16} />Quality pass running</span>
               )}
-              <a className="buttonSecondary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
+              <a className="buttonSecondary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">{isProvisionalPreview ? "Open working preview" : "Open full screen"}<ExternalLink size={16} /></a>
               {session.status === "claimed" ? (
                 <span className="previewExpiryChip isSaved"><Check size={15} />Saved</span>
+              ) : isProvisionalPreview ? (
+                <span className="previewExpiryChip"><Clock3 size={15} />Interactive now · finalizing in place</span>
               ) : (
                 <span className={`previewExpiryChip ${previewSecondsRemaining <= 300 ? "isWarning" : ""}`}><Clock3 size={15} />Private preview · expires in {previewCountdown}</span>
               )}
@@ -3353,7 +3397,7 @@ export function TryMeNowApp() {
                   setShowAnalyticsPanel(true);
                 }}
               />
-              {session.status !== "claimed" && (
+              {session.status !== "claimed" && !isProvisionalPreview && (
                 <details className="experienceControlDeck" open={tuneOpen} onToggle={(event) => setTuneOpen(event.currentTarget.open)}>
                   <summary>
                     <span className="tuneSummaryTitle"><Sparkles size={17} />Tune this experience</span>
@@ -3412,18 +3456,18 @@ export function TryMeNowApp() {
                 target="_blank"
                 rel="noopener"
               >
-                Explore the full experience<ArrowRight size={16} />
+                {isProvisionalPreview ? "Explore the working preview" : "Explore the full experience"}<ArrowRight size={16} />
               </a>
             </div>
           </div>
-          <div className="revealFooter"><span>{session.status === "claimed" ? "Saved URL" : "Temporary URL"}</span><code>{session.liveUrl || session.temporaryUrl}</code><span>{session.status === "claimed" ? "Saved" : "Expires 30 minutes after generation"}</span></div>
+          <div className="revealFooter"><span>{session.status === "claimed" ? "Saved URL" : "Temporary URL"}</span><code>{session.liveUrl || session.temporaryUrl}</code><span>{session.status === "claimed" ? "Saved" : isProvisionalPreview ? "Quality pass in progress" : "Expires 30 minutes after generation"}</span></div>
         </section>
       )}
 
       {showProcess && session && <MobileProcessDialog session={session} onClose={() => setShowProcess(false)} />}
       {showSignals && revealedAt && <SignalDrawer events={clientEvents} revealedAt={revealedAt} onClose={() => setShowSignals(false)} />}
     </main>
-    {showSavePrompt && session && session.status !== "claimed" && (
+    {showSavePrompt && session && canSaveExperience && (
       <SaveExperienceDialog
         open
         expiresLabel={previewCountdown}

@@ -7,6 +7,7 @@ import { recordLeadCapture, updateLeadOutcome } from "@/lib/lead-store";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import {
   claimSession,
+  patchSessionAnswers,
   reconcileLeadSession,
   recoverSessionWork,
   runStoryStage
@@ -201,6 +202,121 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(recordLeadCapture).not.toHaveBeenCalled();
     expect(updateLeadOutcome).not.toHaveBeenCalled();
     expect(sendClaimEmail).not.toHaveBeenCalled();
+  });
+
+  it("shows an unclaimable deterministic preview before slow model refinement finishes", async () => {
+    const pending = session({ id: "provisional-preview-before-model" });
+    pending.events.push({
+      name: "generation_eligible",
+      at: new Date().toISOString(),
+      meta: { trigger: "answers", revision: pending.revision }
+    });
+    await putSession(pending);
+
+    let resolveGeneration!: (value: Awaited<ReturnType<typeof generateExperienceDraft>>) => void;
+    vi.mocked(generateExperienceDraft).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveGeneration = resolve;
+      })
+    );
+
+    const completion = runStoryStage(pending.id);
+    await vi.waitFor(async () => {
+      expect(await getSession(pending.id)).toMatchObject({
+        status: "preview_provisional",
+        experience: {
+          readiness: "provisional",
+          generationSource: "deterministic-fallback"
+        },
+        stages: { story: { status: "running" } }
+      });
+    });
+
+    const provisional = await getSession(pending.id);
+    const provisionalEvent = provisional?.events.find(
+      (event) => event.name === "preview_provisional_ready"
+    );
+    expect(provisionalEvent?.meta).toMatchObject({
+      source: "deterministic-fallback",
+      artifactRevision: provisional?.experience?.artifactRevision,
+      generationEligibleToPreviewMs: expect.any(Number)
+    });
+    expect(Number(provisionalEvent?.meta?.generationEligibleToPreviewMs)).toBeLessThan(10_000);
+    await expect(claimSession(pending.id, "buyer@example.com")).rejects.toMatchObject({
+      code: "claim_not_ready"
+    });
+    expect(recordLeadCapture).not.toHaveBeenCalled();
+
+    resolveGeneration({
+      draft: {
+        ...draft,
+        headline: "A refined buyer-ready campaign",
+        sections: draft.sections.map((section) => ({ ...section })),
+        signalLabels: [...draft.signalLabels]
+      },
+      source: "openai",
+      durationMs: 18_000
+    });
+    await completion;
+
+    const final = await getSession(pending.id);
+    expect(final).toMatchObject({
+      status: "preview_ready_unclaimed",
+      experience: {
+        readiness: "final",
+        headline: "A refined buyer-ready campaign"
+      },
+      stages: { story: { status: "complete" } }
+    });
+    expect(final!.experience!.artifactRevision).toBeGreaterThan(
+      provisional!.experience!.artifactRevision
+    );
+  });
+
+  it("discards a late refinement after the buyer brief changes", async () => {
+    const pending = session({ id: "provisional-stale-refinement" });
+    await putSession(pending);
+
+    let resolveGeneration!: (value: Awaited<ReturnType<typeof generateExperienceDraft>>) => void;
+    vi.mocked(generateExperienceDraft).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveGeneration = resolve;
+      })
+    );
+
+    const completion = runStoryStage(pending.id);
+    await vi.waitFor(async () => {
+      expect((await getSession(pending.id))?.experience?.readiness).toBe("provisional");
+    });
+    const provisional = await getSession(pending.id);
+
+    await patchSessionAnswers(pending.id, { objective: "Drive product evaluation" });
+    resolveGeneration({
+      draft: {
+        ...draft,
+        headline: "Stale model output must never replace the page",
+        sections: draft.sections.map((section) => ({ ...section })),
+        signalLabels: [...draft.signalLabels]
+      },
+      source: "openai",
+      durationMs: 20_000
+    });
+    await completion;
+
+    const stored = await getSession(pending.id);
+    expect(stored?.answers.objective).toBe("Drive product evaluation");
+    expect(stored?.experience?.artifactRevision).toBeGreaterThanOrEqual(
+      provisional?.experience?.artifactRevision ?? 0
+    );
+    expect(stored?.experience?.headline).not.toBe(
+      "Stale model output must never replace the page"
+    );
+    expect(stored?.events).toContainEqual(
+      expect.objectContaining({
+        name: "generation_discarded",
+        meta: expect.objectContaining({ reason: "input_changed" })
+      })
+    );
   });
 
   it("passes CTA readiness from intent and style without requiring a destination URL", async () => {

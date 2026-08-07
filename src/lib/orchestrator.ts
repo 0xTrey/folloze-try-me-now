@@ -487,6 +487,12 @@ function resetGeneratedExperience(session: TryMeSession, detail: string): void {
     session.experienceSpecRevision ?? 0,
     session.experienceSpec?.revision ?? 0
   );
+  if (session.stages.story.status === "running" && session.stages.story.attemptId) {
+    appendEvent(session, "generation_discarded", {
+      attemptId: session.stages.story.attemptId,
+      reason: "input_changed"
+    });
+  }
   session.status = "collecting";
   session.stages.story = {
     status: "pending",
@@ -713,6 +719,81 @@ function qualityReceiptFor(
     artifactRevision,
     checks
   };
+}
+
+function assembleExperienceArtifact(input: {
+  id: string;
+  session: TryMeSession;
+  draft: ExperienceDraft;
+  brand: BrandProfile;
+  targetBrand?: BrandProfile;
+  imageSourceBrand: BrandProfile;
+  imageSourceTargetBrand?: BrandProfile;
+  trustFallbackReason?: string;
+}) {
+  const controlledDraft = draftWithBlockControls(input.draft, input.session.blockControls);
+  syncCampaignContracts(input.session);
+  const experienceSpec = buildExperienceSpec(
+    input.session,
+    controlledDraft,
+    input.brand,
+    input.targetBrand
+  );
+  const webDraft = draftFromExperienceSpec(experienceSpec);
+  const qualityReceipt = qualityReceiptFor(
+    input.session,
+    input.session.revision + 1,
+    input.trustFallbackReason
+  );
+  const imageSources = imageDeliverySources(
+    input.session,
+    input.imageSourceBrand,
+    input.imageSourceTargetBrand
+  );
+  const renderBrand = brandWithFirstPartyImages(
+    input.id,
+    input.brand,
+    imageSources,
+    qualityReceipt.artifactRevision
+  );
+  const renderTargetBrand = input.targetBrand
+    ? brandWithFirstPartyImages(
+        input.id,
+        input.targetBrand,
+        imageSources,
+        qualityReceipt.artifactRevision
+      )
+    : undefined;
+  const renderStartedAt = Date.now();
+  const html = renderExperienceHtml({
+    draft: webDraft,
+    brand: renderBrand,
+    targetBrand: renderTargetBrand,
+    useCase: input.session.useCase,
+    answers: input.session.answers,
+    themeUrl: process.env.FOLLOZE_THEME_URL,
+    fontDeliveryUrls: fontDeliveryUrls(input.id, input.brand),
+    qualityReceipt,
+    contentItems: experienceSpec.contentItems,
+    wireframeSelection: experienceSpec.wireframeSelection
+  });
+  return {
+    controlledDraft,
+    experienceSpec,
+    webDraft,
+    qualityReceipt,
+    html,
+    renderDurationMs: Date.now() - renderStartedAt
+  };
+}
+
+function generationEligibleAt(session: TryMeSession): number | undefined {
+  const event = [...session.events]
+    .reverse()
+    .find((candidate) => candidate.name === "generation_eligible");
+  if (!event) return undefined;
+  const timestamp = Date.parse(event.at);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
 }
 
 function isStale(startedAt: string | undefined, maxAgeMs: number): boolean {
@@ -2271,6 +2352,93 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         : undefined);
     const generationTargetBrand = curatedTargetBrand(latest, targetBrand);
     const selectedBrands = brandsWithSelectedAssets(latest, brand, generationTargetBrand);
+
+    // The first buyer-readable artifact uses the same canonical spec and
+    // renderer as the final experience. It is deliberately deterministic so
+    // slow model refinement can never hold the first useful preview hostage.
+    // Existing final previews remain visible during later regenerations.
+    if (!latest.experience) {
+      const provisionalStartedAt = Date.now();
+      const provisionalDraft = deterministicDraft({
+        brand: selectedBrands.brand,
+        targetBrand: selectedBrands.targetBrand,
+        useCase: latest.useCase,
+        answers: latest.answers,
+        sourceArtifact: latest.sourceArtifact
+      });
+      const provisionalArtifact = assembleExperienceArtifact({
+        id,
+        session: latest,
+        draft: provisionalDraft,
+        brand: selectedBrands.brand,
+        targetBrand: selectedBrands.targetBrand,
+        imageSourceBrand: brand,
+        imageSourceTargetBrand: targetBrand
+      });
+      const provisionalReadyAt = Date.now();
+      const eligibleAt = generationEligibleAt(latest);
+      const storyStartedAt = Date.parse(latest.stages.story.startedAt ?? "");
+      const previewTimingOrigin = eligibleAt ?? (
+        Number.isFinite(storyStartedAt) ? storyStartedAt : provisionalStartedAt
+      );
+      let provisionalCommitted = false;
+      const provisioned = await updateSession(
+        id,
+        (session) => {
+          if (
+            session.stages.story.attemptId !== attemptId ||
+            storyInputFingerprint(session) !== expectedFingerprint ||
+            session.experience
+          ) {
+            staleGeneration = true;
+            return session;
+          }
+          provisionalCommitted = true;
+          session.brand = brand;
+          session.targetBrand = targetBrand;
+          session.experience = {
+            ...provisionalArtifact.webDraft,
+            html: provisionalArtifact.html,
+            readiness: "provisional",
+            generationSource: "deterministic-fallback",
+            artifactRevision: session.revision + 1,
+            artifactDigest: createHash("sha256")
+              .update(provisionalArtifact.html)
+              .digest("hex")
+          };
+          session.experienceSpecRevision = provisionalArtifact.experienceSpec.revision;
+          session.experienceSpec = provisionalArtifact.experienceSpec;
+          session.qualityReceipt = provisionalArtifact.qualityReceipt;
+          session.status = "preview_provisional";
+          session.expiresAt = new Date(
+            provisionalReadyAt + config.sessionTtlSeconds * 1000
+          ).toISOString();
+          session.stages.story = {
+            ...session.stages.story,
+            status: "running",
+            attemptId,
+            inputFingerprint: expectedFingerprint,
+            detail: "The first buyer-ready draft is live while Folloze refines the copy and evidence.",
+            artifact: provisionalArtifact.controlledDraft.narrativeArc
+          };
+          appendEvent(session, "preview_provisional_ready", {
+            attemptId,
+            source: "deterministic-fallback",
+            durationMs: Math.max(0, provisionalReadyAt - provisionalStartedAt),
+            generationEligibleToPreviewMs: Math.max(
+              0,
+              provisionalReadyAt - previewTimingOrigin
+            ),
+            artifactRevision: session.revision + 1
+          });
+          return session;
+        },
+        { ttlSeconds: config.sessionTtlSeconds }
+      );
+      if (!provisionalCommitted) return false;
+      latest = provisioned ?? latest;
+    }
+
     let generated = await generateExperienceDraft({
       brand: selectedBrands.brand,
       targetBrand: selectedBrands.targetBrand,
@@ -2299,49 +2467,16 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         fallbackReason: `trust_gate_${trustFallbackReason}`
       };
     }
-    const controlledDraft = draftWithBlockControls(generated.draft, latest.blockControls);
-    syncCampaignContracts(latest);
-    const experienceSpec = buildExperienceSpec(
-      latest,
-      controlledDraft,
-      selectedBrands.brand,
-      selectedBrands.targetBrand
-    );
-    const webDraft = draftFromExperienceSpec(experienceSpec);
-    const generationQualityReceipt = qualityReceiptFor(
-      latest,
-      latest.revision + 1,
-      trustFallbackReason
-    );
-    const imageSources = imageDeliverySources(latest, brand, targetBrand);
-    const renderBrand = brandWithFirstPartyImages(
+    const finalArtifact = assembleExperienceArtifact({
       id,
-      selectedBrands.brand,
-      imageSources,
-      generationQualityReceipt.artifactRevision
-    );
-    const renderTargetBrand = selectedBrands.targetBrand
-      ? brandWithFirstPartyImages(
-          id,
-          selectedBrands.targetBrand,
-          imageSources,
-          generationQualityReceipt.artifactRevision
-        )
-      : undefined;
-    const renderStartedAt = Date.now();
-    const html = renderExperienceHtml({
-      draft: webDraft,
-      brand: renderBrand,
-      targetBrand: renderTargetBrand,
-      useCase: latest.useCase,
-      answers: latest.answers,
-      themeUrl: process.env.FOLLOZE_THEME_URL,
-      fontDeliveryUrls: fontDeliveryUrls(id, selectedBrands.brand),
-      qualityReceipt: generationQualityReceipt,
-      contentItems: experienceSpec.contentItems,
-      wireframeSelection: experienceSpec.wireframeSelection
+      session: latest,
+      draft: generated.draft,
+      brand: selectedBrands.brand,
+      targetBrand: selectedBrands.targetBrand,
+      imageSourceBrand: brand,
+      imageSourceTargetBrand: targetBrand,
+      trustFallbackReason
     });
-    const renderDurationMs = Date.now() - renderStartedAt;
     if (generated.error) {
       logServerError(generated.error, {
         sessionId: id,
@@ -2367,6 +2502,10 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       });
     }
     const readyAt = Date.now();
+    const provisionalReadyEvent = [...latest.events]
+      .reverse()
+      .find((event) => event.name === "preview_provisional_ready");
+    const provisionalReadyTimestamp = Date.parse(provisionalReadyEvent?.at ?? "");
     await updateSession(
       id,
       (session) => {
@@ -2388,15 +2527,16 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         session.brand = brand;
         session.targetBrand = targetBrand;
         session.experience = {
-          ...webDraft,
-          html,
+          ...finalArtifact.webDraft,
+          html: finalArtifact.html,
+          readiness: "final",
           generationSource: generated.source,
           artifactRevision: session.revision + 1,
-          artifactDigest: createHash("sha256").update(html).digest("hex")
+          artifactDigest: createHash("sha256").update(finalArtifact.html).digest("hex")
         };
-        session.experienceSpecRevision = experienceSpec.revision;
-        session.experienceSpec = experienceSpec;
-        session.qualityReceipt = generationQualityReceipt;
+        session.experienceSpecRevision = finalArtifact.experienceSpec.revision;
+        session.experienceSpec = finalArtifact.experienceSpec;
+        session.qualityReceipt = finalArtifact.qualityReceipt;
         session.status = "preview_ready_unclaimed";
         session.expiresAt = new Date(readyAt + config.sessionTtlSeconds * 1000).toISOString();
         session.stages.story = {
@@ -2409,7 +2549,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
               : generated.fallbackReason === "openai_not_configured"
                 ? "A reliable fallback story is ready while OpenAI is not configured."
                 : "A source-grounded fallback is ready after the AI draft did not pass our quality checks.",
-          artifact: controlledDraft.narrativeArc
+          artifact: finalArtifact.controlledDraft.narrativeArc
         };
         appendEvent(session, "generation_completed", {
           attemptId,
@@ -2422,12 +2562,15 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         });
         appendEvent(session, "render_completed", {
           attemptId,
-          durationMs: renderDurationMs,
+          durationMs: finalArtifact.renderDurationMs,
           artifactRevision: session.revision + 1
         });
         appendEvent(session, "preview_ready", {
           attemptId,
           artifactRevision: session.revision + 1,
+          provisionalToFinalMs: Number.isFinite(provisionalReadyTimestamp)
+            ? Math.max(0, readyAt - provisionalReadyTimestamp)
+            : 0,
           submissionToPreviewMs: Math.max(0, readyAt - Date.parse(session.createdAt))
         });
         return session;
@@ -2459,7 +2602,11 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         }
         return session;
       }
-      session.status = session.experience ? "preview_ready_unclaimed" : "generation_failed";
+      session.status = session.experience
+        ? session.experience.readiness === "provisional"
+          ? "preview_provisional"
+          : "preview_ready_unclaimed"
+        : "generation_failed";
       session.stages.story = {
         status: "failed",
         startedAt: session.stages.story.startedAt,
@@ -2651,6 +2798,23 @@ async function claimSessionUnlocked(
 ): Promise<ClaimResult & { traceId: string }> {
   const current = await getSession(id);
   if (!current || !current.experience) throw new Error("This temporary experience is not ready or has expired.");
+  if (current.experience.readiness === "provisional") {
+    throw new HttpError(
+      409,
+      "claim_not_ready",
+      "This first preview is still being refined. Save it after the final quality pass is ready."
+    );
+  }
+  if (
+    current.experience.readiness === "final" &&
+    current.qualityReceipt?.artifactRevision !== current.experience.artifactRevision
+  ) {
+    throw new HttpError(
+      409,
+      "claim_not_ready",
+      "This experience is waiting for its final quality receipt."
+    );
+  }
   if (current.claim?.email && current.claim.email !== email) {
     throw new HttpError(
       409,
@@ -2727,6 +2891,13 @@ async function claimSessionUnlocked(
       }
       if (session.status === "claimed") {
         throw new HttpError(409, "already_claimed", "This experience has already been claimed.");
+      }
+      if (session.experience?.readiness === "provisional") {
+        throw new HttpError(
+          409,
+          "claim_not_ready",
+          "This first preview is still being refined."
+        );
       }
       if (
         !recoveringPending &&

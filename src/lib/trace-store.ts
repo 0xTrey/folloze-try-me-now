@@ -127,6 +127,8 @@ const traceMetaAllowlist = new Set([
   "colorCount",
   "versionNumber",
   "artifactRevision",
+  "generationEligibleToPreviewMs",
+  "provisionalToFinalMs",
   "submissionToPreviewMs",
   "qualityGate",
   "reason",
