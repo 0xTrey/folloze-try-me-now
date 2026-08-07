@@ -260,11 +260,17 @@ describe("compileCampaignContext", () => {
 
     expect(event.brief.primaryAction).toBe("Save your place");
     expect(event.wireframe.labels).toMatchObject({
-      thesis: "Why this session matters",
-      lenses: "Choose your reason to attend",
-      close: "Save your place"
+      thesis: "Why this session is worth the time",
+      lenses: "Three reasons to attend or keep exploring",
+      close: "Register or continue the conversation"
     });
-    expect(event.wireframe.finalCtaPattern).toMatch(/registration action/i);
+    expect(event.wireframe.finalCtaPattern).toMatch(/register, watch/i);
+    expect(event.wireframe.selection).toMatchObject({
+      archetypeId: "campaign-event",
+      compositionId: "chapter-journey",
+      selectedBy: "system",
+      locked: true
+    });
   });
 
   it("keeps a promoted campaign offer first-class in the brief and message spine", () => {

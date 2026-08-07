@@ -277,6 +277,13 @@ describe("campaign contract", () => {
         intent: "explore",
         style: "solid",
         label: "Plan the architecture session"
+      },
+      wireframeSelection: {
+        family: "account",
+        archetypeId: "account-technical",
+        compositionId: "workflow-spine",
+        selectedBy: "system",
+        locked: true
       }
     });
     expect(spec.artifactDigest).toMatch(/^[a-f0-9]{64}$/);
@@ -313,7 +320,13 @@ describe("campaign contract", () => {
     expect(projection.experienceSpec).toMatchObject({
       schemaVersion: "1.0",
       sourceBriefRevision: current.campaignBrief?.revision,
-      sectionCount: 3
+      sectionCount: 3,
+      wireframeSelection: {
+        archetypeId: "account-technical",
+        compositionId: "workflow-spine",
+        selectedBy: "system",
+        locked: true
+      }
     });
     expect(projection.experienceSpec).not.toHaveProperty("draft");
   });

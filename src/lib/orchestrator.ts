@@ -315,6 +315,10 @@ function assetsFor(brand: BrandProfile | undefined, target: BrandProfile | undef
 }
 
 function syncExperienceFoundation(session: TryMeSession): void {
+  const selectedAssetIds = new Set(session.answers.selectedAssetIds ?? []);
+  const preservedSelectedAssets = (session.availableAssets ?? []).filter((asset) =>
+    selectedAssetIds.has(asset.id)
+  );
   session.evidenceItems = evidenceItemsFor(
     session.useCase,
     session.brand,
@@ -327,7 +331,17 @@ function syncExperienceFoundation(session: TryMeSession): void {
     session.targetBrand,
     session.evidenceItems
   );
-  session.availableAssets = assetsFor(session.brand, session.targetBrand);
+  const harvestedAssets = assetsFor(session.brand, session.targetBrand);
+  // A brand refresh may replace the harvested asset inventory while a curator
+  // is working. Explicitly selected, server-approved assets remain part of the
+  // workspace until the curator removes them; otherwise the next generation
+  // silently drops the chosen visual.
+  session.availableAssets = [
+    ...preservedSelectedAssets,
+    ...harvestedAssets.filter(
+      (asset) => !preservedSelectedAssets.some((selected) => selected.id === asset.id)
+    )
+  ];
   const availableAssetIds = new Set(session.availableAssets.map((asset) => asset.id));
   if (session.answers.selectedAssetIds) {
     session.answers.selectedAssetIds = session.answers.selectedAssetIds.filter((id) =>
@@ -2293,7 +2307,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       themeUrl: process.env.FOLLOZE_THEME_URL,
       fontDeliveryUrls: fontDeliveryUrls(id, selectedBrands.brand),
       qualityReceipt: generationQualityReceipt,
-      contentItems: experienceSpec.contentItems
+      contentItems: experienceSpec.contentItems,
+      wireframeSelection: experienceSpec.wireframeSelection
     });
     const renderDurationMs = Date.now() - renderStartedAt;
     if (generated.error) {

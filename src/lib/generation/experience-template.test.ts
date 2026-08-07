@@ -498,7 +498,7 @@ describe("renderExperienceHtml", () => {
   });
 
   it("uses the campaign register to select a campaign composition and preserves its wireframe metadata", () => {
-    expect(html).toContain('class="register-campaign-product design-source-brand-editorial template-campaign-launch variant-standard style-standard cta-solid brand-hero-light"');
+    expect(html).toContain('template-campaign-launch archetype-campaign-product composition-editorial-split');
     expect(html).toContain('data-wireframe="product-launch-landing-page"');
     expect(html).toContain('data-experience-shape="offer-landing-page"');
     expect(html).toContain('data-template-fingerprint="v3-campaign-routes-proof-thesis"');
@@ -531,7 +531,7 @@ describe("renderExperienceHtml", () => {
       answers: enhancedAnswers
     });
 
-    expect(enhanced).toContain('class="register-content-magic design-source-brand-editorial template-content-source variant-standard style-editorial cta-solid brand-hero-light"');
+    expect(enhanced).toContain('template-content-source archetype-content-report composition-editorial-split');
     expect(enhanced).toContain('data-layout-variant="standard"');
     expect(enhanced).toContain('data-style-variant="editorial"');
     expect(enhanced).not.toContain('data-quality-receipt="true"');
@@ -727,18 +727,18 @@ describe("renderExperienceHtml", () => {
       wireframe: "content-resource-companion",
       shape: "resource-companion",
       family: "content-source",
-      template: "v3-content-source-findings-paths",
+      template: "v5-content-report-editorial-split",
       sectionOrder: ["experience-thesis", "decision-path", "supporting-resources"]
     });
     expect(abm).toContain("Jitterbit × Cisco");
-    expect(abm).toContain("Decision paths for Cisco");
-    expect(html).toContain("Three ways in for Enterprise architects and platform owners");
-    expect(content).toContain("Choose how to explore the source");
+    expect(abm).toContain("Executive account narrative for Cisco");
+    expect(html).toContain("Product introduction");
+    expect(content).toContain("Executive report");
     expect(content).toContain("How should buyers explore the enterprise automation guide?");
     expect(html).not.toContain("How should buyers explore the enterprise automation guide?");
   });
 
-  it("renders all five registers through three compositions with shared primitives and preview-only CTAs", () => {
+  it("renders all five registers through backend-selected archetypes with shared primitives and preview-only CTAs", () => {
     const target: BrandProfile = {
       ...brand,
       domain: "cisco.com",
@@ -825,7 +825,7 @@ describe("renderExperienceHtml", () => {
     expect(new Set(fingerprints.map(({ family }) => family))).toEqual(
       new Set(["account-abm", "campaign-launch", "content-source"])
     );
-    expect(new Set(fingerprints.map(({ template }) => template)).size).toBe(3);
+    expect(new Set(fingerprints.map(({ template }) => template)).size).toBe(5);
     expect(new Set(fingerprints.map(({ sharedPrimitives }) => sharedPrimitives))).toEqual(
       new Set(["brand-lockup,hero,signature-paths,thesis,lenses,resources,close,analytics"])
     );

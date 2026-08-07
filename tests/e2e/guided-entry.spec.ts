@@ -9,7 +9,7 @@ test.describe("guided first-run experience", () => {
   test("starts with three plain-language paths and no premature email gate", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "What do you want to build?" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Build an ABM campaign" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Launch a campaign" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Launch a campaign landing page" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Transform my content" })).toBeVisible();
     await expect(page.getByText("No blank canvas")).toBeVisible();
     await expect(page.getByText("Usually 30–60 seconds")).toBeVisible();
@@ -19,7 +19,7 @@ test.describe("guided first-run experience", () => {
     await expect(examples).toHaveCount(3);
     await expect(examples.nth(0)).toHaveAttribute(
       "href",
-      "https://experience.folloze.com/folloze-for-nvidia"
+      "https://experience.folloze.com/aprio-for-georgia-pacific"
     );
     await expect(examples.nth(2)).toHaveAttribute(
       "href",

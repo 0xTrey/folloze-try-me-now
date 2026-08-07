@@ -85,7 +85,7 @@ describe("Try Me Now prospect enhancement components", () => {
           title: "Turn content into an experience",
           description: "Turn a public URL or PDF into a guided buyer journey.",
           actionLabel: "Transform my content",
-          exampleLabel: "Watch Cisco HMF become an experience",
+          exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
           exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
           demoSteps: ["Source", "Buyer lens", "Magic experience"],
           previewImage,
@@ -107,7 +107,7 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(video?.playsInline).toBe(true);
     expect(video).toHaveAttribute("poster", previewImage);
     expect(video?.querySelector("source")).toHaveAttribute("src", previewVideo);
-    expect(screen.getByRole("link", { name: /Watch Cisco HMF become an experience/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /See the Cisco Hybrid Mesh Firewall report as an experience/i })).toHaveAttribute(
       "href",
       "https://engage.folloze.com/cisco-hmf-example"
     );

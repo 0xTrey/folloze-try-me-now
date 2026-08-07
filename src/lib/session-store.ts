@@ -457,6 +457,13 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
           sourceBriefRevision: session.experienceSpec.sourceBriefRevision,
           artifactDigest: session.experienceSpec.artifactDigest,
           renderers: structuredClone(session.experienceSpec.renderers),
+          ...(session.experienceSpec.wireframeSelection
+            ? {
+                wireframeSelection: structuredClone(
+                  session.experienceSpec.wireframeSelection
+                )
+              }
+            : {}),
           sectionCount:
             (Array.isArray(session.experienceSpec.draft.sections)
               ? session.experienceSpec.draft.sections.length

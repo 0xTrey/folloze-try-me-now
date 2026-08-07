@@ -5,6 +5,11 @@ import {
   type BrandCategory
 } from "@/lib/brand-intelligence";
 import { primaryActionFor } from "@/lib/cta-presentation";
+import {
+  getWireframeArchetype,
+  selectWireframe,
+  type WireframeSelectionV1
+} from "@/lib/generation/wireframe-library";
 import type {
   BrandProfile,
   EntityIdentity,
@@ -174,6 +179,7 @@ export interface CampaignGenerationContext {
     signatureMoment: string;
     finalCtaPattern: string;
     labels: { thesis: string; lenses: string; journey: string; close: string };
+    selection: WireframeSelectionV1;
   };
 }
 
@@ -593,7 +599,7 @@ export function targetAccountEvidenceFor(
 function wireframeFor(input: {
   register: CampaignRegister;
   objective: string;
-}): CampaignGenerationContext["wireframe"] {
+}): Omit<CampaignGenerationContext["wireframe"], "selection"> {
   const sharedSections = [
     ...CANONICAL_EXPERIENCE_STRUCTURE.sectionSequence
   ] as CampaignGenerationContext["wireframe"]["sectionSequence"];
@@ -713,7 +719,46 @@ export function compileCampaignContext(input: {
   const eventContext = cleanEventContext(answers.eventSource);
   const proofMode = proofModeFor(brand, answers, sourceContent);
   const targetEvidence = targetAccountEvidenceFor(targetBrand);
-  const wireframe = wireframeFor({ register, objective });
+  const legacyWireframe = wireframeFor({ register, objective });
+  const wireframeSelection = selectWireframe(
+    {
+      family: useCase === "abm" ? "account" : useCase,
+      audience,
+      objective,
+      sourceTitle: sourceTitle ?? undefined,
+      sourceDescription: sourceContent?.description ?? sourceContent?.excerpt,
+      sourceUrl: sourceGrounding.sourceUrl,
+      sourceKind: sourceGrounding.kind,
+      sourceTopics: sourceGrounding.topics,
+      campaignType: answers.campaignType,
+      eventContext: eventContext ?? undefined,
+      promotedOffer: answers.promotedOffer,
+      productDescription: answers.messageBelief,
+      approvedCustomerStory: /customer (?:story|case)|case study|customer result/i.test(
+        `${sourceTitle ?? ""} ${sourceContent?.description ?? ""}`
+      ),
+      isSpecificUseCase: /\b(?:use case|workflow|process|operational outcome)\b/i.test(
+        `${objective} ${answers.messageBelief ?? ""}`
+      ),
+      isNurture: /\b(?:follow[- ]?up|nurture|post[- ]?(?:launch|event))\b/i.test(
+        objective
+      )
+    },
+    { selectedBy: "system", locked: true }
+  );
+  const selectedWireframe = getWireframeArchetype(wireframeSelection.archetypeId);
+  const wireframe: CampaignGenerationContext["wireframe"] = {
+    ...legacyWireframe,
+    signatureMoment: selectedWireframe.summary,
+    finalCtaPattern: selectedWireframe.ctaRule,
+    labels: {
+      thesis: selectedWireframe.sectionLabels[0],
+      lenses: selectedWireframe.sectionLabels[3],
+      journey: selectedWireframe.sectionLabels[5],
+      close: selectedWireframe.sectionLabels[6]
+    },
+    selection: wireframeSelection
+  };
   const designRegister = designRegisterFor(brand, category);
   const imageMode = brand.imageUrls.length >= 3 ? "image-led" : brand.imageUrls.length ? "image-supported" : "type-led";
   const primaryAction = primaryActionFor({ useCase, objective, campaignType: answers.campaignType });

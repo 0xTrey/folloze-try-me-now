@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Review the reusable Folloze Try Me Now wireframe library across account, campaign, and content experiences."
+    />
+    <title>Folloze Try Me Now — Wireframe Library</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./gallery.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#wireframe-grid">Skip to wireframes</a>
+
+    <header class="masthead">
+      <div class="brand-lockup" aria-label="Folloze Try Me Now">
+        <span class="brand-mark" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+        <span>Folloze</span>
+      </div>
+      <div class="masthead-note">Internal design review · v1</div>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="page-title">
+        <div class="intro-kicker">Wireframe system / 17 archetypes</div>
+        <h1 id="page-title">One signal in.<br /><em>A buyer-ready story out.</em></h1>
+        <p class="intro-copy">
+          This is the review surface for the layouts Folloze selects behind the scenes. Every frame shares
+          the same hardened shell, analytics, save lifecycle, and brand system—while changing the story
+          structure to fit the buyer job.
+        </p>
+        <div class="principle-strip" aria-label="Core principles">
+          <div><strong>01</strong><span>Folloze chooses the frame</span></div>
+          <div><strong>02</strong><span>Brand DNA changes the skin</span></div>
+          <div><strong>03</strong><span>Buyer intent changes the story</span></div>
+        </div>
+      </section>
+
+      <section class="catalog" aria-labelledby="catalog-title">
+        <div class="catalog-heading">
+          <div>
+            <p class="eyebrow">Review catalog</p>
+            <h2 id="catalog-title">The complete library</h2>
+          </div>
+          <div class="review-meter" aria-live="polite">
+            <span id="review-count">0 of 17 reviewed</span>
+            <div class="meter-track" aria-hidden="true"><span id="review-progress"></span></div>
+          </div>
+        </div>
+
+        <div class="toolbar" aria-label="Wireframe filters">
+          <div class="search-wrap">
+            <label for="wireframe-search">Search</label>
+            <input
+              id="wireframe-search"
+              type="search"
+              placeholder="Search title, audience, CTA…"
+              autocomplete="off"
+            />
+          </div>
+
+          <fieldset class="filter-group" id="family-filters">
+            <legend>Family</legend>
+            <button type="button" class="filter-pill is-active" data-family="all" aria-pressed="true">All <span>17</span></button>
+            <button type="button" class="filter-pill" data-family="account" aria-pressed="false">Account <span>5</span></button>
+            <button type="button" class="filter-pill" data-family="campaign" aria-pressed="false">Campaign <span>6</span></button>
+            <button type="button" class="filter-pill" data-family="content" aria-pressed="false">Content <span>6</span></button>
+          </fieldset>
+
+          <fieldset class="filter-group" id="status-filters">
+            <legend>Review</legend>
+            <button type="button" class="filter-pill is-active" data-status="all" aria-pressed="true">All</button>
+            <button type="button" class="filter-pill" data-status="unreviewed" aria-pressed="false">Open</button>
+            <button type="button" class="filter-pill" data-status="approved" aria-pressed="false">Keep</button>
+            <button type="button" class="filter-pill" data-status="revise" aria-pressed="false">Revise</button>
+          </fieldset>
+        </div>
+
+        <div class="results-line" aria-live="polite">
+          <span id="results-count">Showing all 17 wireframes</span>
+          <button type="button" id="clear-reviews" class="text-button">Clear review marks</button>
+        </div>
+
+        <div id="wireframe-grid" class="wireframe-grid" tabindex="-1"></div>
+
+        <div id="empty-state" class="empty-state" hidden>
+          <p class="empty-index">00</p>
+          <h3>No frames match this view.</h3>
+          <p>Try another family, review state, or search phrase.</p>
+          <button type="button" id="reset-filters" class="button button-dark">Reset filters</button>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="wireframe-dialog" class="wireframe-dialog" aria-labelledby="dialog-title">
+      <div class="dialog-shell">
+        <header class="dialog-header">
+          <div>
+            <p class="eyebrow" id="dialog-family">Account · A1</p>
+            <h2 id="dialog-title">Executive account narrative</h2>
+          </div>
+          <button type="button" class="icon-button" id="dialog-close" aria-label="Close wireframe details">×</button>
+        </header>
+
+        <div class="dialog-body">
+          <section class="dialog-preview" aria-label="Wireframe visual composition">
+            <div id="dialog-visual"></div>
+            <div class="dialog-grammar">
+              <span>Composition grammar</span>
+              <strong id="dialog-grammar">Editorial split</strong>
+            </div>
+          </section>
+
+          <section class="dialog-spec">
+            <div class="selection-rule">
+              <span>Selected when</span>
+              <p id="dialog-condition"></p>
+            </div>
+
+            <div class="section-map">
+              <div class="section-map-heading">
+                <span>Page sequence</span>
+                <span>7 section jobs</span>
+              </div>
+              <ol id="dialog-sections"></ol>
+            </div>
+
+            <div class="cta-rule">
+              <span>Closing action</span>
+              <p id="dialog-cta"></p>
+            </div>
+          </section>
+        </div>
+
+        <footer class="dialog-footer">
+          <div class="dialog-nav">
+            <button type="button" id="dialog-prev" class="button button-quiet">← Previous</button>
+            <span id="dialog-position">1 / 17</span>
+            <button type="button" id="dialog-next" class="button button-quiet">Next →</button>
+          </div>
+          <div class="dialog-review" aria-label="Review this wireframe">
+            <span>Review state</span>
+            <button type="button" class="button review-action review-revise" data-dialog-status="revise">Needs edits</button>
+            <button type="button" class="button review-action review-approve" data-dialog-status="approved">Keep this frame</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+
+    <template id="wireframe-card-template">
+      <article class="wireframe-card">
+        <div class="card-topline">
+          <span class="family-label"></span>
+          <span class="status-label"></span>
+        </div>
+        <button type="button" class="visual-trigger" aria-label="Open wireframe details">
+          <span class="card-visual"></span>
+        </button>
+        <div class="card-copy">
+          <p class="grammar-label"></p>
+          <h3></h3>
+          <p class="condition-copy"></p>
+        </div>
+        <div class="card-cta">
+          <span>Closing action</span>
+          <p></p>
+        </div>
+        <footer class="card-footer">
+          <button type="button" class="details-button">Review framework <span aria-hidden="true">↗</span></button>
+          <div class="inline-review" role="group" aria-label="Review state">
+            <button type="button" class="mark-button mark-revise" data-mark="revise" aria-label="Mark as needs edits">Edit</button>
+            <button type="button" class="mark-button mark-approved" data-mark="approved" aria-label="Mark as keep">Keep</button>
+          </div>
+        </footer>
+      </article>
+    </template>
+
+    <noscript>
+      <div class="noscript-message">This review gallery needs JavaScript to render the wireframe catalog.</div>
+    </noscript>
+  </body>
+</html>

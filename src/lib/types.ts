@@ -1,4 +1,5 @@
 import type { SourceArtifact } from "@/lib/content-intelligence";
+import type { WireframeSelectionV1 } from "@/lib/generation/wireframe-library";
 
 export const USE_CASES = ["abm", "campaign", "content"] as const;
 export const EXPERIENCE_MODES = ["custom", "example"] as const;
@@ -729,6 +730,8 @@ export interface ExperienceSpecV1 {
       appliedFields: string[];
     };
   };
+  /** Backend-selected layout receipt. Legacy persisted specs may omit it. */
+  wireframeSelection?: WireframeSelectionV1;
   draft: Record<string, unknown>;
   /** Added compatibly to V1 specs; legacy persisted sessions may not include it. */
   contentItems?: ExperienceContentItem[];
@@ -750,7 +753,12 @@ export interface ExperienceSpecV1 {
 
 export type PublicExperienceSpecSummary = Pick<
   ExperienceSpecV1,
-  "schemaVersion" | "revision" | "sourceBriefRevision" | "artifactDigest" | "renderers"
+  | "schemaVersion"
+  | "revision"
+  | "sourceBriefRevision"
+  | "artifactDigest"
+  | "renderers"
+  | "wireframeSelection"
 > & {
   sectionCount: number;
   contentItemCount: number;

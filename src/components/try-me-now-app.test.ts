@@ -104,18 +104,19 @@ describe("Try Me Now experience copy", () => {
     expect(entryPathOptions.abm).toMatchObject({
       title: "Build an ABM campaign",
       actionLabel: "Build an ABM campaign",
-      exampleLabel: "Watch the NVIDIA 1:1 experience",
-      exampleUrl: "https://experience.folloze.com/folloze-for-nvidia",
+      exampleLabel: "See the Aprio + Georgia-Pacific example",
+      exampleUrl: "https://experience.folloze.com/aprio-for-georgia-pacific",
       previewImage: "/entry/aprio-georgia-pacific-preview.webp",
       previewAlt: "Aprio account experience tailored for Georgia-Pacific"
     });
     expect(entryPathOptions.campaign).toMatchObject({
-      title: "Launch a campaign",
-      exampleLabel: "Watch Folloze + Claude launch",
-      exampleUrl: "https://experience.folloze.com/folloze-claude-launch"
+      title: "Launch a campaign landing page",
+      actionLabel: "Launch a campaign landing page",
+      exampleLabel: "See the Folloze + ServiceNow AI campaign",
+      exampleUrl: "https://engage.folloze.com/6bbf48"
     });
     expect(entryPathOptions.content).toMatchObject({
-      exampleLabel: "Watch Cisco HMF become an experience",
+      exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
       exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
       previewImage: "/entry/cisco-hmf-runtime-discovery-poster.webp",
       previewVideo: "https://images.folloze.com/video/upload/c_scale,w_720,q_auto:eco,f_mp4/v1777151497/zgkmcphemqnjt3ivxifq.mp4"

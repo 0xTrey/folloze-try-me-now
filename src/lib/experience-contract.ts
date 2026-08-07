@@ -4,6 +4,7 @@ import {
   experienceDraftSchema,
   type ExperienceDraft
 } from "@/lib/generation/experience-schema";
+import { selectWireframe } from "@/lib/generation/wireframe-library";
 import {
   PREVIEW_INTERACTION_TYPES,
   type AudienceLensArtifact,
@@ -350,6 +351,47 @@ export function buildExperienceSpec(
     session.answers.promotedOffer ??
     session.answers.sourceName;
   const contentItems = contentItemsFor(session, canonicalDraft);
+  const sourceSignalText = [
+    sourceTitle,
+    session.sourceArtifact?.understanding.premise,
+    ...(session.sourceArtifact?.understanding.topics ?? [])
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const approvedQuantifiedProof = Boolean(
+    canonicalDraft.persuasionFramework?.strategy.evidenceMap.some(
+      (item) => item.kind === "proof" && /\d/.test(item.claim)
+    )
+  );
+  const approvedCustomerStory =
+    /customer (?:story|case)|case study|customer result/i.test(sourceSignalText);
+  const wireframeSelection = selectWireframe(
+    {
+      family: session.useCase === "abm" ? "account" : session.useCase,
+      audience: session.answers.customAudience ?? session.answers.audience,
+      objective: session.answers.objective,
+      sourceTitle,
+      sourceDescription: session.sourceArtifact?.understanding.premise,
+      sourceUrl,
+      sourceKind,
+      sourceTopics: session.sourceArtifact?.understanding.topics,
+      experiencePattern:
+        session.sourceArtifact?.understanding.experiencePlan.pattern,
+      campaignType: session.answers.campaignType,
+      eventContext: session.answers.eventSource,
+      promotedOffer: session.answers.promotedOffer,
+      productDescription: session.answers.messageBelief,
+      approvedQuantifiedProof,
+      approvedCustomerStory,
+      isSpecificUseCase: /\b(?:use case|workflow|process|operational outcome)\b/i.test(
+        `${session.answers.objective ?? ""} ${session.answers.messageBelief ?? ""}`
+      ),
+      isNurture: /\b(?:follow[- ]?up|nurture|post[- ]?(?:launch|event))\b/i.test(
+        session.answers.objective ?? ""
+      )
+    },
+    { selectedBy: "system", locked: true }
+  );
   const payload = {
     schemaVersion: "1.0" as const,
     revision:
@@ -425,6 +467,7 @@ export function buildExperienceSpec(
           }
         : {})
     },
+    wireframeSelection,
     draft: canonicalDraft as Record<string, unknown>,
     contentItems,
     ...(session.sourceArtifact

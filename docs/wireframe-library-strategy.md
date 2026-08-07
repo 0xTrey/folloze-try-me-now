@@ -1,5 +1,13 @@
 # Try Me Now Wireframe Library
 
+## Review surface and implementation
+
+- Open the local visual catalog at `http://127.0.0.1:3000/wireframes/` while the app is running.
+- The backend source of truth is `src/lib/generation/wireframe-library.ts`; it registers all 17 archetypes and returns an explainable, locked selection receipt.
+- The generated `ExperienceSpec` stores that receipt, and the renderer maps it to one of the six composition grammars while preserving the shared BrandDesignDNA, analytics, accessibility, save, and expiration behavior.
+- The visual catalog is an internal review surface only. Prospects never choose from the full library before generation.
+- The catalog's **Keep** and **Needs edits** states are stored locally in the reviewer browser so the team can work through the library without affecting generated experiences.
+
 ## Product anchor
 
 The system should make one moment memorable:

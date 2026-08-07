@@ -222,9 +222,9 @@ const useCaseContent: Record<
   campaign: {
     number: "02",
     kicker: "Campaign",
-    title: "Launch a campaign",
+    title: "Launch a campaign landing page",
     description: "Turn one offer and one audience into a campaign experience.",
-    cta: "Launch a campaign",
+    cta: "Launch a campaign landing page",
     domainTitle: "Which company is launching the campaign?",
     domainBody: "Add the company domain. We will verify the identity and start the brand scan immediately.",
     icon: Megaphone,
@@ -268,7 +268,7 @@ export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCa
   );
 }
 
-const NVIDIA_ONE_TO_ONE_EXAMPLE_URL = "https://experience.folloze.com/folloze-for-nvidia";
+const APRIO_GEORGIA_PACIFIC_EXAMPLE_URL = "https://experience.folloze.com/aprio-for-georgia-pacific";
 
 export const entryPathOptions: Record<UseCase, EntryPathOption> = {
   abm: {
@@ -278,8 +278,8 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     title: "Build an ABM campaign",
     description: "Tell us who you sell for and which account you want to reach. We will shape the campaign around that account.",
     actionLabel: "Build an ABM campaign",
-    exampleLabel: "Watch the NVIDIA 1:1 experience",
-    exampleUrl: NVIDIA_ONE_TO_ONE_EXAMPLE_URL,
+    exampleLabel: "See the Aprio + Georgia-Pacific example",
+    exampleUrl: APRIO_GEORGIA_PACIFIC_EXAMPLE_URL,
     demoSteps: ["Seller", "Account evidence", "1:1 experience"],
     previewImage: "/entry/aprio-georgia-pacific-preview.webp",
     previewAlt: "Aprio account experience tailored for Georgia-Pacific",
@@ -290,11 +290,11 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     id: "campaign",
     index: "02",
     eyebrow: "Campaign",
-    title: "Launch a campaign",
+    title: "Launch a campaign landing page",
     description: "Give one offer a clear story, buyer path, and measurable next step.",
-    actionLabel: "Launch a campaign",
-    exampleLabel: "Watch Folloze + Claude launch",
-    exampleUrl: "https://experience.folloze.com/folloze-claude-launch",
+    actionLabel: "Launch a campaign landing page",
+    exampleLabel: "See the Folloze + ServiceNow AI campaign",
+    exampleUrl: "https://engage.folloze.com/6bbf48",
     demoSteps: ["Offer", "Buyer objective", "Live campaign"],
     previewImage: "/entry/campaign-preview.webp",
     previewAlt: "Generated campaign experience for ServiceNow",
@@ -308,7 +308,7 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     title: "Turn content into an experience",
     description: "Keep the source facts, then turn a URL or PDF into a guided buyer journey.",
     actionLabel: "Transform my content",
-    exampleLabel: "Watch Cisco HMF become an experience",
+    exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
     exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
     demoSteps: ["Source", "Buyer lens", "Magic experience"],
     previewImage: "/entry/cisco-hmf-runtime-discovery-poster.webp",
