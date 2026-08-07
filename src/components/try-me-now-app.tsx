@@ -294,7 +294,7 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     description: "Give one offer a clear story, buyer path, and measurable next step.",
     actionLabel: "Launch a campaign landing page",
     exampleLabel: "See the ServiceNow AI platform campaign",
-    exampleUrl: "/examples/servicenow-ai-platform-campaign.html",
+    exampleUrl: "https://engage.folloze.com/servicenow-ai-platform-campaign",
     demoSteps: ["Offer", "Buyer objective", "Live campaign"],
     previewImage: "/entry/campaign-preview.webp",
     previewAlt: "ServiceNow-branded AI platform campaign landing page",

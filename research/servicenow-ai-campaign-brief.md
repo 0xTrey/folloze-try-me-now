@@ -55,4 +55,17 @@ No customer metrics, analyst claims, or unsourced outcome claims are used in the
 
 ## Publication state
 
-Local-only. This artifact is not a saved Folloze board and is not publicly deployed until Trey explicitly asks for those separate actions.
+Save intent: create a new Folloze campaign board named `ServiceNow AI Platform Campaign` from `public/examples/servicenow-ai-platform-campaign.html` after Trey approved the local preview on August 7, 2026.
+
+- Vendor: ServiceNow.
+- Target account: none; this is a one-to-many campaign landing page.
+- Theme mode: no Folloze company theme. Folloze no-theme ID `5374`; required stylesheet `https://cdn.folloze.com/theme/2/5374.css?v=1767691946`.
+- Folloze guide: current board-creation and analytics guide read before save.
+- Analytics: external CTAs use direct `cta_click` tracking; architecture tabs, role tabs, and internal navigation use descriptive interaction events.
+- QA status before save: user-approved local preview; desktop and responsive checks passed in the initial build. Publishing preflight will be rerun against the exact saved HTML.
+- Tracker status: not in scope for this request.
+- Board ID: `249912`.
+- Designer URL: `https://app.folloze.com/app/board/249912/designer`.
+- Public deployment: `https://engage.folloze.com/servicenow-ai-platform-campaign`.
+- Publication verification: published and public; saved and published config hashes both `70ee93abc6081378ceed91b9cf57e0ff0af258b0`. Anonymous HTTP returned `200` with the expected board ID, vanity slug, title, and hero copy; a signed-out hosted-browser check showed no sign-in redirect, no broken images, no horizontal overflow, the ServiceNow logo and headline, and working architecture and role tabs.
+- Try Me Now integration: the campaign example now points to the verified Folloze public URL rather than the local preview route.

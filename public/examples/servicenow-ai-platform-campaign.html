@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Explore how ServiceNow connects AI, data, workflows, and security to put enterprise AI to work." />
   <title>Put enterprise AI to work | ServiceNow</title>
+  <link rel="stylesheet" href="https://cdn.folloze.com/theme/2/5374.css?v=1767691946" />
   <style>
     :root {
       --ink: #032d42;
@@ -45,6 +46,7 @@
       padding: 10px 14px; border-radius: 999px; background: var(--white); color: var(--ink);
       transform: translateY(-180%); transition: transform .2s ease;
     }
+    .skip-link { border: 0; cursor: pointer; }
     .skip-link:focus { transform: translateY(0); }
     :focus-visible { outline: 3px solid var(--cyan); outline-offset: 4px; }
 
@@ -57,8 +59,9 @@
     .header-row { min-height: 72px; display: flex; align-items: center; gap: 32px; }
     .brand img { width: 146px; height: auto; }
     .main-nav { display: flex; align-items: center; gap: 30px; margin-left: auto; }
-    .main-nav a { color: rgba(255,255,255,.82); text-decoration: none; font-size: 14px; font-weight: 650; }
-    .main-nav a:hover { color: var(--green-soft); }
+    .main-nav a, .main-nav button { color: rgba(255,255,255,.82); text-decoration: none; font-size: 14px; font-weight: 650; }
+    .main-nav button { padding: 0; border: 0; background: transparent; cursor: pointer; }
+    .main-nav a:hover, .main-nav button:hover { color: var(--green-soft); }
     .button {
       display: inline-flex; align-items: center; justify-content: center; gap: 12px;
       min-height: 52px; padding: 0 26px; border: 2px solid transparent; border-radius: 999px;
@@ -191,7 +194,7 @@
 
     @media (max-width: 980px) {
       .shell { width: min(100% - 36px, 860px); }
-      .main-nav a:not(.header-cta) { display: none; }
+      .main-nav a:not(.header-cta), .main-nav button { display: none; }
       .capability-nav { overflow-x: auto; justify-content: flex-start; padding-bottom: 8px; }
       .hero { min-height: auto; }
       .section { padding: 90px 0; }
@@ -249,16 +252,16 @@
   </style>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
+  <button type="button" class="skip-link" onclick="flzAnalytic('anchor_click',{text:this.innerText.trim(),area:'accessibility navigation',target:'main'},this);document.getElementById('main').scrollIntoView({behavior:'smooth',block:'start'})">Skip to content</button>
   <header class="site-header">
     <div class="shell header-row">
       <a class="brand" href="https://www.servicenow.com/" target="_blank" rel="noopener" aria-label="ServiceNow home" onclick="flzAnalytic('cta_click',{text:'ServiceNow home',area:'header',url:this.href},this)">
         <img src="https://www.servicenow.com/content/dam/servicenow-assets/images/naas/servicenow-header-logo-white.svg" alt="ServiceNow" />
       </a>
       <nav class="main-nav" aria-label="Primary navigation">
-        <a href="#architecture" onclick="flzAnalytic('anchor_click',{text:this.innerText.trim(),area:'header',target:'architecture'},this)">How it works</a>
-        <a href="#capabilities" onclick="flzAnalytic('anchor_click',{text:this.innerText.trim(),area:'header',target:'capabilities'},this)">AI capabilities</a>
-        <a href="#roles" onclick="flzAnalytic('anchor_click',{text:this.innerText.trim(),area:'header',target:'roles'},this)">Where to start</a>
+        <button type="button" onclick="flzAnalytic('anchor_click',{text:this.innerText.trim(),area:'header',target:'architecture'},this);document.getElementById('architecture').scrollIntoView({behavior:'smooth',block:'start'})">How it works</button>
+        <button type="button" onclick="flzAnalytic('anchor_click',{text:this.innerText.trim(),area:'header',target:'capabilities'},this);document.getElementById('capabilities').scrollIntoView({behavior:'smooth',block:'start'})">AI capabilities</button>
+        <button type="button" onclick="flzAnalytic('anchor_click',{text:this.innerText.trim(),area:'header',target:'roles'},this);document.getElementById('roles').scrollIntoView({behavior:'smooth',block:'start'})">Where to start</button>
         <a class="button primary header-cta" href="https://www.servicenow.com/contact-us.html" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click',{text:this.innerText.trim(),area:'header',url:this.href},this)">Schedule demo</a>
       </nav>
     </div>
@@ -279,7 +282,7 @@
           <p class="hero-lede">Connect AI, data, workflows, and security on one platform—so intelligence can move from recommendation to governed action.</p>
           <div class="hero-actions">
             <a class="button primary" href="https://www.servicenow.com/contact-us.html" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click',{text:this.innerText.trim(),area:'hero',url:this.href},this)">Schedule a demo <span class="arrow">→</span></a>
-            <a class="button outline" href="https://www.servicenow.com/standard/other-documents/blueprint-for-agentic-business.html" target="_blank" rel="noopener" onclick="flzAnalytic('resource_open',{text:this.innerText.trim(),area:'hero',url:this.href},this)">Get the AI Platform Blueprint <span class="arrow">↗</span></a>
+            <a class="button outline" href="https://www.servicenow.com/standard/other-documents/blueprint-for-agentic-business.html" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click',{text:this.innerText.trim(),area:'hero',url:this.href},this)">Get the AI Platform Blueprint <span class="arrow">↗</span></a>
           </div>
         </div>
         <div class="hero-stage media" data-reveal>
@@ -315,10 +318,10 @@
         </div>
         <div class="workbench" data-reveal>
           <div class="workbench-tabs" role="tablist" aria-label="AI Platform architecture">
-            <button class="workbench-tab" role="tab" aria-selected="true" aria-controls="architecture-panel" data-architecture="sense"><strong>Sense</strong><span>Access data from across the enterprise.</span></button>
-            <button class="workbench-tab" role="tab" aria-selected="false" aria-controls="architecture-panel" data-architecture="decide"><strong>Decide</strong><span>Ground AI in business reality.</span></button>
-            <button class="workbench-tab" role="tab" aria-selected="false" aria-controls="architecture-panel" data-architecture="act"><strong>Act</strong><span>Execute workflows autonomously.</span></button>
-            <button class="workbench-tab" role="tab" aria-selected="false" aria-controls="architecture-panel" data-architecture="secure"><strong>Secure</strong><span>Apply guardrails at action time.</span></button>
+            <button class="workbench-tab" role="tab" aria-selected="true" aria-controls="architecture-panel" data-architecture="sense" onclick="flzAnalytic('architecture_select',{text:this.innerText.trim(),area:'architecture',value:this.getAttribute('data-architecture')},this)"><strong>Sense</strong><span>Access data from across the enterprise.</span></button>
+            <button class="workbench-tab" role="tab" aria-selected="false" aria-controls="architecture-panel" data-architecture="decide" onclick="flzAnalytic('architecture_select',{text:this.innerText.trim(),area:'architecture',value:this.getAttribute('data-architecture')},this)"><strong>Decide</strong><span>Ground AI in business reality.</span></button>
+            <button class="workbench-tab" role="tab" aria-selected="false" aria-controls="architecture-panel" data-architecture="act" onclick="flzAnalytic('architecture_select',{text:this.innerText.trim(),area:'architecture',value:this.getAttribute('data-architecture')},this)"><strong>Act</strong><span>Execute workflows autonomously.</span></button>
+            <button class="workbench-tab" role="tab" aria-selected="false" aria-controls="architecture-panel" data-architecture="secure" onclick="flzAnalytic('architecture_select',{text:this.innerText.trim(),area:'architecture',value:this.getAttribute('data-architecture')},this)"><strong>Secure</strong><span>Apply guardrails at action time.</span></button>
           </div>
           <div class="workbench-panel" id="architecture-panel" role="tabpanel" aria-live="polite">
             <div class="panel-copy"><h3 data-architecture-title>Unlock your enterprise data advantage.</h3><p data-architecture-body>Workflow Data Fabric gives AI real-time access to data from more than 450 systems, including SAP and Salesforce, so every action starts with context.</p></div>
@@ -335,10 +338,10 @@
           <div><h2 id="capability-title">One platform. Four ways to move work.</h2><p class="section-intro">Give people an AI assistant, deploy agents, scale specialist capacity, and govern the entire AI estate.</p></div>
         </div>
         <div class="capability-grid">
-          <article class="capability-card dark" data-reveal><span class="number">01 · SERVICENOW OTTO</span><h3>Ask. The work gets done.</h3><p>ServiceNow Otto coordinates requests across systems and departments, then closes the loop.</p><a class="text-link" href="https://www.servicenow.com/platform/otto.html" target="_blank" rel="noopener" onclick="flzAnalytic('resource_open',{text:this.innerText.trim(),area:'capabilities',url:this.href},this)">Explore Otto <span>↗</span></a></article>
-          <article class="capability-card green" data-reveal><span class="number">02 · AI AGENTS</span><h3>Agents built into the work.</h3><p>Deploy out-of-the-box AI agents or create specialized agents with natural language and enterprise guardrails.</p><a class="text-link" href="https://www.servicenow.com/products/ai-agents.html" target="_blank" rel="noopener" onclick="flzAnalytic('resource_open',{text:this.innerText.trim(),area:'capabilities',url:this.href},this)">Explore AI Agents <span>↗</span></a></article>
+          <article class="capability-card dark" data-reveal><span class="number">01 · SERVICENOW OTTO</span><h3>Ask. The work gets done.</h3><p>ServiceNow Otto coordinates requests across systems and departments, then closes the loop.</p><a class="text-link" href="https://www.servicenow.com/platform/otto.html" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click',{text:this.innerText.trim(),area:'capabilities',url:this.href},this)">Explore Otto <span>↗</span></a></article>
+          <article class="capability-card green" data-reveal><span class="number">02 · AI AGENTS</span><h3>Agents built into the work.</h3><p>Deploy out-of-the-box AI agents or create specialized agents with natural language and enterprise guardrails.</p><a class="text-link" href="https://www.servicenow.com/products/ai-agents.html" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click',{text:this.innerText.trim(),area:'capabilities',url:this.href},this)">Explore AI Agents <span>↗</span></a></article>
           <article class="capability-card wide dark" data-reveal>
-            <div><span class="number">03 · GOVERNED SCALE</span><h3>See and control every AI.</h3><p>AI Control Tower brings discovery, governance, security, performance, and value measurement into one operating view.</p><a class="text-link" href="https://www.servicenow.com/products/ai-control-tower.html" target="_blank" rel="noopener" onclick="flzAnalytic('resource_open',{text:this.innerText.trim(),area:'capabilities',url:this.href},this)">Explore AI Control Tower <span>↗</span></a></div>
+            <div><span class="number">03 · GOVERNED SCALE</span><h3>See and control every AI.</h3><p>AI Control Tower brings discovery, governance, security, performance, and value measurement into one operating view.</p><a class="text-link" href="https://www.servicenow.com/products/ai-control-tower.html" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click',{text:this.innerText.trim(),area:'capabilities',url:this.href},this)">Explore AI Control Tower <span>↗</span></a></div>
             <div class="card-visual media"><img src="https://www.servicenow.com/content/dam/servicenow-assets/public/en-us/images/ds-screenshots/platform-ai-control-tower-1.sm.png" alt="ServiceNow AI Control Tower monitoring AI assets and business value" /><div class="asset-fallback">ServiceNow AI Control Tower product view.</div></div>
           </article>
         </div>
@@ -350,10 +353,10 @@
         <div class="section-head" data-reveal><p class="section-kicker">Where to start</p><div><h2 id="roles-title">Start with the work that cannot wait.</h2><p class="section-intro">Choose a business area to see how autonomous workflows can move from request to outcome.</p></div></div>
         <div class="role-console" data-reveal>
           <div class="role-tabs" role="tablist" aria-label="Business areas">
-            <button class="role-tab" role="tab" aria-selected="true" aria-controls="role-panel" data-role="it">IT operations</button>
-            <button class="role-tab" role="tab" aria-selected="false" aria-controls="role-panel" data-role="crm">Customer service</button>
-            <button class="role-tab" role="tab" aria-selected="false" aria-controls="role-panel" data-role="employee">Employee experience</button>
-            <button class="role-tab" role="tab" aria-selected="false" aria-controls="role-panel" data-role="risk">Risk and security</button>
+            <button class="role-tab" role="tab" aria-selected="true" aria-controls="role-panel" data-role="it" onclick="flzAnalytic('role_select',{text:this.innerText.trim(),area:'role paths',value:this.getAttribute('data-role')},this)">IT operations</button>
+            <button class="role-tab" role="tab" aria-selected="false" aria-controls="role-panel" data-role="crm" onclick="flzAnalytic('role_select',{text:this.innerText.trim(),area:'role paths',value:this.getAttribute('data-role')},this)">Customer service</button>
+            <button class="role-tab" role="tab" aria-selected="false" aria-controls="role-panel" data-role="employee" onclick="flzAnalytic('role_select',{text:this.innerText.trim(),area:'role paths',value:this.getAttribute('data-role')},this)">Employee experience</button>
+            <button class="role-tab" role="tab" aria-selected="false" aria-controls="role-panel" data-role="risk" onclick="flzAnalytic('role_select',{text:this.innerText.trim(),area:'role paths',value:this.getAttribute('data-role')},this)">Risk and security</button>
           </div>
           <div class="role-panel" id="role-panel" role="tabpanel" aria-live="polite"><div class="role-signal" data-role-label>IT operations</div><h3 data-role-title>Resolve incidents before they become interruptions.</h3><p data-role-body>AI agents can triage incidents, coordinate actions, and automate request fulfillment across IT workflows while teams retain enterprise control.</p><a class="button primary" data-role-link href="https://www.servicenow.com/solutions/enterprise-it.html" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click',{text:this.innerText.trim(),area:'role path',url:this.href},this)">Explore the path <span class="arrow">↗</span></a></div>
         </div>
@@ -364,9 +367,9 @@
       <div class="shell">
         <div class="section-head" data-reveal><p class="section-kicker">Go deeper</p><div><h2 id="resources-title">See the platform from every angle.</h2><p class="section-intro">Explore the official platform, agent, and governance resources behind this campaign.</p></div></div>
         <div class="resource-list" data-reveal>
-          <a class="resource-link" href="https://www.servicenow.com/platform.html" target="_blank" rel="noopener" onclick="flzAnalytic('resource_open',{text:'ServiceNow AI Platform',area:'resources',url:this.href},this)"><span class="type">Platform</span><strong>ServiceNow AI Platform</strong><span class="arrow">→</span></a>
-          <a class="resource-link" href="https://www.servicenow.com/products/ai-agents.html" target="_blank" rel="noopener" onclick="flzAnalytic('resource_open',{text:'ServiceNow AI Agents',area:'resources',url:this.href},this)"><span class="type">Product</span><strong>Put AI Agents to work</strong><span class="arrow">→</span></a>
-          <a class="resource-link" href="https://www.servicenow.com/standard/other-documents/blueprint-for-agentic-business.html" target="_blank" rel="noopener" onclick="flzAnalytic('resource_open',{text:'AI Platform Blueprint',area:'resources',url:this.href},this)"><span class="type">Blueprint</span><strong>Build an agentic business</strong><span class="arrow">→</span></a>
+          <a class="resource-link" href="https://www.servicenow.com/platform.html" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click',{text:this.innerText.trim(),area:'resources',url:this.href},this)"><span class="type">Platform</span><strong>ServiceNow AI Platform</strong><span class="arrow">→</span></a>
+          <a class="resource-link" href="https://www.servicenow.com/products/ai-agents.html" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click',{text:this.innerText.trim(),area:'resources',url:this.href},this)"><span class="type">Product</span><strong>Put AI Agents to work</strong><span class="arrow">→</span></a>
+          <a class="resource-link" href="https://www.servicenow.com/standard/other-documents/blueprint-for-agentic-business.html" target="_blank" rel="noopener" onclick="flzAnalytic('cta_click',{text:this.innerText.trim(),area:'resources',url:this.href},this)"><span class="type">Blueprint</span><strong>Build an agentic business</strong><span class="arrow">→</span></a>
         </div>
       </div>
     </section>
@@ -401,7 +404,6 @@
         document.querySelector('[data-architecture-body]').textContent = item.body;
         var image = document.querySelector('[data-architecture-image]');
         image.src = item.image; image.alt = item.alt; image.closest('.media').classList.remove('asset-failed');
-        flzAnalytic('architecture_select', { text: tab.innerText.trim(), area: 'architecture', value: key }, tab);
       });
     });
 
@@ -419,7 +421,6 @@
         document.querySelector('[data-role-title]').textContent = item.title;
         document.querySelector('[data-role-body]').textContent = item.body;
         document.querySelector('[data-role-link]').href = item.url;
-        flzAnalytic('role_select', { text: item.label, area: 'role paths', value: key }, tab);
       });
     });
 

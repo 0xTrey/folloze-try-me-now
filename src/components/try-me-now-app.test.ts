@@ -113,7 +113,7 @@ describe("Try Me Now experience copy", () => {
       title: "Launch a campaign landing page",
       actionLabel: "Launch a campaign landing page",
       exampleLabel: "See the ServiceNow AI platform campaign",
-      exampleUrl: "/examples/servicenow-ai-platform-campaign.html",
+      exampleUrl: "https://engage.folloze.com/servicenow-ai-platform-campaign",
       previewAlt: "ServiceNow-branded AI platform campaign landing page"
     });
     expect(entryPathOptions.content).toMatchObject({
