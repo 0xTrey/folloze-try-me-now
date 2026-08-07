@@ -34,8 +34,12 @@ export const config = {
   emailMode: oneOf(process.env.EMAIL_MODE, ["console", "resend"] as const, "console"),
   openAIModel: nonEmptyFromEnv(process.env.OPENAI_MODEL, "gpt-5.6-terra"),
   generationTimeoutMs: Math.min(
-    Math.max(intFromEnv(process.env.TRY_ME_GENERATION_TIMEOUT_MS, 52_000), 10_000),
-    58_000
+    Math.max(intFromEnv(process.env.TRY_ME_GENERATION_TIMEOUT_MS, 25_000), 10_000),
+    30_000
+  ),
+  brandHarvesterTimeoutMs: Math.min(
+    Math.max(intFromEnv(process.env.TRY_ME_BRAND_HARVESTER_TIMEOUT_MS, 12_000), 5_000),
+    20_000
   ),
   sessionTtlSeconds: Math.min(
     Math.max(intFromEnv(process.env.TRY_ME_SESSION_TTL_SECONDS, 1800), 300),

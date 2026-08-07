@@ -126,6 +126,9 @@ describe("campaign offer source intelligence", () => {
       "offer_source_intelligence_started",
       "offer_source_intelligence_completed"
     ]));
+    expect(
+      stored?.events.find(({ name }) => name === "offer_source_intelligence_completed")?.meta
+    ).toEqual(expect.objectContaining({ durationMs: expect.any(Number) }));
 
     const projected = toPublicSession(stored!);
     expect(projected.campaignOfferSource).toMatchObject({
@@ -135,6 +138,27 @@ describe("campaign offer source intelligence", () => {
     });
     expect(projected.campaignOfferSource).not.toHaveProperty("sourceUrl");
     expect(projected.sourceInsight?.premise).toContain("complete product platform");
+  });
+
+  it("records the first moment a brief becomes eligible for generation", async () => {
+    const id = `generation-eligible-${Date.now()}`;
+    ids.add(id);
+    await putSession(campaignSession(id));
+
+    await patchSessionAnswers(id, {
+      promotedOffer: "Revenue Intelligence Platform",
+      audience: "Revenue operations leaders",
+      objective: "Launch or announce"
+    });
+    await patchSessionAnswers(id, { customAudience: "Revenue systems leaders" });
+
+    const stored = await getSession(id);
+    const eligibilityEvents = stored?.events.filter(({ name }) => name === "generation_eligible");
+    expect(eligibilityEvents).toHaveLength(1);
+    expect(eligibilityEvents?.[0]?.meta).toEqual({
+      trigger: "answers",
+      revision: 2
+    });
   });
 
   it("discards a superseded extraction and keeps only intelligence for the latest URL", async () => {

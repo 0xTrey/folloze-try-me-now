@@ -48,10 +48,11 @@ newer recorded decision wins.
 | D-023 | Transactional delivery and marketing subscription are separate. | Sending the claimed URL does not silently subscribe the visitor to marketing; optional consent is explicit. | Accepted default |
 | D-024 | Output facts must be source-grounded. | The system must not invent customer claims, metrics, testimonials, speakers, dates, or target-account facts. | Accepted default |
 | D-025 | Every validated business-email claim is written to a durable lead ledger before publication begins. | The ledger is keyed idempotently by session and records qualification, experience URL, publication, and delivery outcomes without storing generated HTML or source content. Transactional delivery still does not create a marketing subscription. | Accepted 2026-07-30 |
-| D-026 | The target experience uses a 30–60 second quality window, with the first useful build signal or provisional artifact visible within 10 seconds. | Trey explicitly superseded D-014 so generation can spend more time on copy and visual quality. The OpenAI request defaults to a 52-second budget, is hard-capped below 60 seconds, and retains deterministic fallback at the deadline. | Accepted 2026-08-04; supersedes D-014 |
+| D-026 | The target experience uses a 30–60 second quality window, with the first useful build signal or provisional artifact visible within 10 seconds. | Trey explicitly superseded D-014 so generation can spend more time on copy and visual quality. The first-preview OpenAI pass now defaults to 25 seconds and is hard-capped at 30 seconds; browser brand evidence defaults to 12 seconds and is hard-capped at 20 seconds. Verified public HTML/CSS and Brandfetch evidence run concurrently, and deterministic fallback remains available at the model deadline. | Accepted 2026-08-04; latency budget tightened 2026-08-07; supersedes D-014 |
 
-On 2026-08-04, Trey explicitly superseded D-014. D-026 is the canonical
-latency and progressive-feedback decision.
+On 2026-08-04, Trey explicitly superseded D-014. On 2026-08-07, he clarified
+that the complete Try Me Now result must fit inside 60 seconds. D-026 is the
+canonical latency and progressive-feedback decision.
 
 ## Superseded June 1 directions
 

@@ -1263,6 +1263,7 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
   );
   if (!lease) return;
   const attemptId = opaqueId();
+  const startedAtMs = Date.now();
   const controller = new AbortController();
   sourceIntelligenceControllers.get(id)?.abort();
   sourceIntelligenceControllers.set(id, controller);
@@ -1338,6 +1339,7 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
         ? "offer_source_intelligence_completed"
         : "source_intelligence_completed", {
         attemptId,
+        durationMs: Date.now() - startedAtMs,
         sourceKind,
         status: sourceArtifact.status,
         confidence: sourceArtifact.confidence,
@@ -1367,6 +1369,11 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
         if (session.campaignOfferSource) {
           session.campaignOfferSource.intelligenceStatus = "failed";
         }
+        appendEvent(session, "offer_source_intelligence_failed", {
+          attemptId,
+          durationMs: Date.now() - startedAtMs,
+          sourceKind
+        });
         return session;
       });
     } else {
@@ -1377,6 +1384,11 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
           sourceKind: "public-url",
           provenance: "user-submitted"
         };
+        appendEvent(session, "source_intelligence_failed", {
+          attemptId,
+          durationMs: Date.now() - startedAtMs,
+          sourceKind
+        });
         return session;
       });
     }
@@ -1664,9 +1676,16 @@ export async function patchSessionAnswers(
 ): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean; traceId: string }> {
   assertProductionSessionStore();
   const updated = await updateSession(id, (session) => {
+    const wasGenerationReady = isGenerationReady(session.useCase, session.answers);
     const previousFingerprint = storyInputFingerprint(session);
     applyAnswerPatch(session, patch);
     completeInputMutation(session, previousFingerprint);
+    if (!wasGenerationReady && isGenerationReady(session.useCase, session.answers)) {
+      appendEvent(session, "generation_eligible", {
+        trigger: "answers",
+        revision: session.revision + 1
+      });
+    }
     return session;
   });
   if (!updated) throw new Error("This temporary experience has expired.");
@@ -1683,6 +1702,7 @@ export async function patchSessionWorkspace(
 ): Promise<{ session: PublicTryMeSession; shouldGenerate: boolean; traceId: string }> {
   assertProductionSessionStore();
   const updated = await updateSession(id, (session) => {
+    const wasGenerationReady = isGenerationReady(session.useCase, session.answers);
     const previousFingerprint = storyInputFingerprint(session);
     if (session.status === "claimed") {
       throw new HttpError(
@@ -1818,6 +1838,12 @@ export async function patchSessionWorkspace(
     syncCampaignContracts(session);
 
     completeInputMutation(session, previousFingerprint);
+    if (!wasGenerationReady && isGenerationReady(session.useCase, session.answers)) {
+      appendEvent(session, "generation_eligible", {
+        trigger: "workspace",
+        revision: session.revision + 1
+      });
+    }
     return session;
   });
   if (!updated) throw new Error("This temporary experience has expired.");
@@ -2010,7 +2036,12 @@ export async function runStoryStage(id: string): Promise<void> {
     if (!preflight?.brand || hasTerminalStoryFailure(preflight)) return;
   }
   const preflightBrandReadiness = preflight?.brand?.readiness;
-  const requiresBrowserDesignEvidence = config.brandMode === "remote";
+  // A successful browser pass must still satisfy its design-DNA contract. A
+  // timed-out browser pass may fall back to verified public HTML/CSS and
+  // Brandfetch evidence instead of blocking the complete first preview.
+  const requiresBrowserDesignEvidence =
+    config.brandMode === "remote" &&
+    preflight?.brand?.diagnostics?.providers?.remoteBrowser === "succeeded";
   if (
     preflight?.brand &&
     !preflight.experience &&

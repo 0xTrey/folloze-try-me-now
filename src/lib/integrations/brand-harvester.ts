@@ -2533,11 +2533,11 @@ async function copyOfficialRemoteLogo(
       (candidate, index, values) =>
         values.findIndex((other) => other.source === candidate.source) === index
     )
-    .slice(0, 6);
-  let attempted = 0;
-  let rejected = 0;
-  for (const candidate of candidates) {
-    attempted += 1;
+    .slice(0, 4);
+  // Candidate validation used to be serial, which let four blocked assets add
+  // twenty seconds to the first-preview path. Preserve score ordering while
+  // validating the bounded candidate set concurrently.
+  const validations = await Promise.all(candidates.map(async (candidate) => {
     try {
       const asset = await fetchPinnedPublicBytes(candidate.source, {
         timeoutMs: 5_000,
@@ -2548,40 +2548,41 @@ async function copyOfficialRemoteLogo(
         }
       });
       if (asset.status !== 200 || asset.truncated) {
-        rejected += 1;
-        continue;
+        return undefined;
       }
       const portableLogo = await validatedPortableRemoteLogo(
         asset.bytes,
         "official-remote-asset"
       );
-      if (!portableLogo) {
-        rejected += 1;
-        continue;
-      }
-      return {
-        ...profile,
-        logoUrl: candidate.source,
-        logoSourceUrl: candidate.source,
-        portableLogo,
-        diagnostics: {
-          ...profile.diagnostics,
-          logo: {
-            strategy: "official-remote-portable",
-            imageCandidateCount: receipt?.imageCandidateCount ?? 0,
-            rejectedImageCount: receipt?.rejectedImageCount ?? 0,
-            inlineSvgCandidateCount: receipt?.inlineSvgCandidateCount ?? 0,
-            selectedScore: candidate.score,
-            selectedSource: candidate.sourceKind,
-            validationAttempted: attempted,
-            validationRejected: rejected,
-            resolutionComplete: true
-          }
-        }
-      };
+      return portableLogo ? { candidate, portableLogo } : undefined;
     } catch {
-      rejected += 1;
+      return undefined;
     }
+  }));
+  const attempted = validations.length;
+  const rejected = validations.filter((result) => !result).length;
+  const selected = validations.find((result) => result);
+  if (selected) {
+    return {
+      ...profile,
+      logoUrl: selected.candidate.source,
+      logoSourceUrl: selected.candidate.source,
+      portableLogo: selected.portableLogo,
+      diagnostics: {
+        ...profile.diagnostics,
+        logo: {
+          strategy: "official-remote-portable",
+          imageCandidateCount: receipt?.imageCandidateCount ?? 0,
+          rejectedImageCount: receipt?.rejectedImageCount ?? 0,
+          inlineSvgCandidateCount: receipt?.inlineSvgCandidateCount ?? 0,
+          selectedScore: selected.candidate.score,
+          selectedSource: selected.candidate.sourceKind,
+          validationAttempted: attempted,
+          validationRejected: rejected,
+          resolutionComplete: true
+        }
+      }
+    };
   }
 
   return {
@@ -2669,10 +2670,10 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
           ...(process.env.BRAND_HARVESTER_TOKEN ? { Authorization: `Bearer ${process.env.BRAND_HARVESTER_TOKEN}` } : {})
         },
         body: JSON.stringify({ domain, sourceUrl: `https://${domain}`, capture: "progressive" }),
-        // The browser pass intentionally waits for desktop/mobile lazy-load
-        // evidence. Keep this below the 60-second product promise while giving
-        // the service enough time to finish its bounded 55-second capture.
-        signal: AbortSignal.timeout(58_000)
+        // Browser evidence enriches the same first-preview budget as the
+        // concurrent public-page and Brandfetch passes. It cannot consume the
+        // complete 60-second promise by itself.
+        signal: AbortSignal.timeout(config.brandHarvesterTimeoutMs)
       });
       if (response.ok) {
         const normalized = normalizeRemoteBrandProfile(await response.json(), domain);

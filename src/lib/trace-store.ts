@@ -60,6 +60,8 @@ let schemaReady: Promise<void> | null = null;
 const traceMetaAllowlist = new Set([
   "attemptId",
   "priorAttemptId",
+  "trigger",
+  "revision",
   "requestId",
   "useCase",
   "source",
