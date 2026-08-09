@@ -607,8 +607,13 @@ fieldset.controlCard { min-inline-size:0 }
   padding: 8px 2px 0;
   justify-content: flex-start;
   border-radius: 0;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb,var(--muted) 32%,transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
   font-size: 12px;
 }
+.pathActions .exampleAction:hover { text-decoration-color:currentColor }
 
 .brandStrip {
   container: brand-proof / inline-size;
