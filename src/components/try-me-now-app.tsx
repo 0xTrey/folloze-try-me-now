@@ -838,9 +838,9 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
     sourceBody: "Give us a public URL or PDF. We will preserve the facts and reshape the way buyers explore them.",
     audienceLoadingTitle: `Finding the buyers who should care about ${campaignOfferFor(session) || `${brandName}'s offer`}.`,
     audienceLoadingBody: `We are pairing ${brandName}'s public company and industry context with the promoted offer now.`,
-    audienceTitle: "Who is this campaign for?",
+    audienceTitle: `Who should see ${campaignOfferFor(session) || `${brandName}'s offer`}?`,
     audienceBody: `Choose the buyer role that should see the most value in ${campaignOfferFor(session) || `${brandName}'s offer`}.`,
-    objectiveTitle: "What should this campaign help them do?",
+    objectiveTitle: `What should ${campaignOfferFor(session) || `${brandName}'s offer`} help them do?`,
     objectiveBody: "Choose one goal. It will shape the promise, proof, and final button.",
     completeTitle: `${campaignTypeFor(session)} brief ready.`,
     completeBody: "Folloze is composing the campaign promise, proof sequence, interaction, and conversion path now."
