@@ -793,18 +793,18 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
 
   if (session.useCase === "abm") {
     return {
-      targetTitle: `Which account should see itself in ${brandName}'s story?`,
-      targetBody: `Add the account domain. We will map its public context against ${brandName}'s value before the page is composed.`,
-      campaignTitle: "What are you taking to market?",
+      targetTitle: "Which account are you trying to reach?",
+      targetBody: `Add the account domain. We will use public signals from both companies to make ${brandName}'s page relevant.`,
+      campaignTitle: "What are you promoting?",
       campaignBody: "The offer changes the message emphasis, proof, and action buyers should take.",
       sourceTitle: "Which content should do more work?",
       sourceBody: "Give us a public URL or PDF. We will preserve the facts and reshape the way buyers explore them.",
       audienceLoadingTitle: `Mapping the buying roles that fit ${targetName}.`,
       audienceLoadingBody: `We are reading ${targetName}'s public product and operating context now.`,
-      audienceTitle: `Which buyer persona should this experience reach at ${targetName}?`,
-      audienceBody: `Choose the closest role. Every recommendation is tied to ${targetName}'s public context and the problem ${brandName} can help that team solve.`,
-      objectiveTitle: `Choose the outcome this experience should drive for ${targetName}.`,
-      objectiveBody: "Choose one outcome. It will align the opening promise, proof, and visual CTA treatment.",
+      audienceTitle: `Who is this experience for at ${targetName}?`,
+      audienceBody: `Choose the role that should see the most value. Recommendations use ${targetName}'s public business context.`,
+      objectiveTitle: "What should this experience help them do?",
+      objectiveBody: "Choose one goal. It will shape the page message, proof, and final button.",
       completeTitle: `${brandName} × ${targetName}. The brief is ready.`,
       completeBody: "Folloze is composing the account story, proof sequence, interaction path, and next move now."
     };
@@ -816,14 +816,14 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
       targetBody: "Add the target domain to create an account-specific version.",
       campaignTitle: "What are you taking to market?",
       campaignBody: "The offer changes the page structure and the action buyers should take.",
-      sourceTitle: `Which ${brandName} content should become interactive?`,
+      sourceTitle: "Which piece of content should become interactive?",
       sourceBody: "We will preserve the source facts, then turn them into a guided path buyers can explore and you can measure.",
       audienceLoadingTitle: `Finding the buyers who should get more from ${sourceName}.`,
       audienceLoadingBody: `We are pairing ${brandName}'s public market context with the source now.`,
-      audienceTitle: `Which buyer persona should get more from ${sourceName}?`,
-      audienceBody: "Choose the buyer lens. It will change what gets emphasized, sequenced, and measured.",
-      objectiveTitle: `Choose the outcome ${sourceName} should unlock.`,
-      objectiveBody: "Choose one outcome. It will decide how the source becomes a useful next step instead of another download.",
+      audienceTitle: `Who should get the most from ${sourceName}?`,
+      audienceBody: "Choose the buyer role. We will emphasize the source details that matter most to them.",
+      objectiveTitle: `What should they do after exploring ${sourceName}?`,
+      objectiveBody: "Choose one goal. It will shape the guided path and final next step.",
       completeTitle: `${sourceName} is becoming a buyer path.`,
       completeBody: "Folloze is preserving the facts while composing the guided sequence, interaction, and next move."
     };
@@ -832,16 +832,16 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
   return {
     targetTitle: "Which account should this feel built for?",
     targetBody: "Add the target domain to create an account-specific version.",
-    campaignTitle: `What is ${brandName} taking to market?`,
+    campaignTitle: "What are you promoting?",
     campaignBody: "Choose the campaign format. It will change the message, proof emphasis, and conversion path.",
     sourceTitle: "Which content should do more work?",
     sourceBody: "Give us a public URL or PDF. We will preserve the facts and reshape the way buyers explore them.",
     audienceLoadingTitle: `Finding the buyers who should care about ${campaignOfferFor(session) || `${brandName}'s offer`}.`,
     audienceLoadingBody: `We are pairing ${brandName}'s public company and industry context with the promoted offer now.`,
-    audienceTitle: `Who should care most about ${campaignOfferFor(session) || `${brandName}'s campaign`}?`,
-    audienceBody: "Choose the buyer who should recognize the problem, trust the proof, and care about the next step. Evidence-backed options cite the public signals behind them; the rest stay labeled as hypotheses.",
-    objectiveTitle: `What should ${campaignOfferFor(session) || "this campaign"} help them do?`,
-    objectiveBody: "Choose one outcome. It will keep the promise, proof, and visual CTA treatment pointed in the same direction.",
+    audienceTitle: "Who is this campaign for?",
+    audienceBody: `Choose the buyer role that should see the most value in ${campaignOfferFor(session) || `${brandName}'s offer`}.`,
+    objectiveTitle: "What should this campaign help them do?",
+    objectiveBody: "Choose one goal. It will shape the promise, proof, and final button.",
     completeTitle: `${campaignTypeFor(session)} brief ready.`,
     completeBody: "Folloze is composing the campaign promise, proof sequence, interaction, and conversion path now."
   };
@@ -1954,7 +1954,7 @@ export function ProgressiveQuestions({
             eventSource: choice === "event" && eventContextValue.trim() ? eventContextValue.trim() : undefined
           })}
         >
-          Continue<ArrowRight size={17} />
+          Use this campaign<ArrowRight size={17} />
         </button>
       </div>
     );
@@ -2006,7 +2006,7 @@ export function ProgressiveQuestions({
           {sourceInsight}
           <div className="questionCard generationCard" role="status" aria-live="polite">
             <span className="generationGlyph"><LoaderCircle className="spin" size={24} /></span>
-            <span className="questionCount">Next signal · buyer persona</span>
+            <span className="questionCount">Next choice · audience</span>
             <h2>{questionCopy.audienceLoadingTitle}</h2>
             <p>{questionCopy.audienceLoadingBody}</p>
           </div>
@@ -2024,7 +2024,7 @@ export function ProgressiveQuestions({
         <div className="questionSequence">
           {sourceInsight}
           <div className="questionCard audienceEvidenceStep">
-          <span className="questionCount">Next signal · buyer persona</span>
+          <span className="questionCount">Next choice · audience</span>
           <h2>{questionCopy.audienceTitle}</h2>
           <p>{questionCopy.audienceBody}</p>
           <AudienceEvidenceTray
@@ -2097,7 +2097,7 @@ export function ProgressiveQuestions({
               ? void onPatch({ audience: "Other", customAudience: customAudience.trim() })
               : void onWorkspacePatch({ selectedAudienceRecommendationId: chosenId })}
           >
-            Continue<ArrowRight size={17} />
+            Use this audience<ArrowRight size={17} />
           </button>
           </div>
         </div>
@@ -2109,15 +2109,15 @@ export function ProgressiveQuestions({
       <div className="questionSequence">
         {sourceInsight}
         <div className="questionCard">
-          <span className="questionCount">Next signal · buyer persona</span>
+          <span className="questionCount">Next choice · audience</span>
           <h2>{questionCopy.audienceTitle}</h2>
           <p>{questionCopy.audienceBody}</p>
-          <ChipGroup label="Choose a buyer persona" options={[...session.audienceSuggestions, "Other"]} value={chosenAudience} disabled={isSaving} onChange={setSelectedAudience} />
+          <ChipGroup label="Choose an audience" options={[...session.audienceSuggestions, "Other"]} value={chosenAudience} disabled={isSaving} onChange={setSelectedAudience} />
           {chosenAudience === "Other" && (
             <label className="lineInput"><span>Audience</span><div><Users size={19} /><input value={customAudience} onChange={(event) => setCustomAudience(event.target.value)} placeholder="Regional field marketing leaders" /></div></label>
           )}
           <button className="buttonPrimary" type="button" disabled={isSaving || (chosenAudience === "Other" && customAudience.trim().length < 3)} onClick={() => void onPatch({ audience: chosenAudience, customAudience: chosenAudience === "Other" ? customAudience.trim() : undefined })}>
-            Continue<ArrowRight size={17} />
+            Use this audience<ArrowRight size={17} />
           </button>
         </div>
       </div>
@@ -2172,10 +2172,10 @@ export function ProgressiveQuestions({
     };
     return (
       <div className="questionCard">
-        <span className="questionCount">Final signal · outcome</span>
+        <span className="questionCount">Final choice · goal</span>
         <h2>{questionCopy.objectiveTitle}</h2>
         <p>{questionCopy.objectiveBody}</p>
-        <ChipGroup label="Choose an outcome" options={orderedObjectives} value={chosenObjective} recommendedOption={recommended} disabled={isSaving} onChange={setSelectedObjective} />
+        <ChipGroup label="Choose a goal" options={orderedObjectives} value={chosenObjective} recommendedOption={recommended} disabled={isSaving} onChange={setSelectedObjective} />
         {needsProductContext && (
           <section className="productContextQuestion" aria-labelledby="product-context-title">
             <div className="productContextHeading">

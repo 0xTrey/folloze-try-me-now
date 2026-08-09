@@ -439,7 +439,7 @@ describe("guided campaign workspace", () => {
     fireEvent.change(screen.getByLabelText(/Product page or source URL/i), {
       target: { value: "https://www.fordpro.com/en-us/intelligence/" }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use this campaign" }));
 
     expect(onPatch).toHaveBeenCalledWith({
       campaignType: "product",
@@ -471,7 +471,7 @@ describe("guided campaign workspace", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Product or solution/i }));
-    const continueButton = screen.getByRole("button", { name: "Continue" });
+    const continueButton = screen.getByRole("button", { name: "Use this campaign" });
     expect(continueButton).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/Product page or source URL/i), {
