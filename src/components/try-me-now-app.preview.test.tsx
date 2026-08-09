@@ -380,8 +380,8 @@ describe("guided campaign workspace", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Your build brief" })).toBeInTheDocument();
-    expect(screen.getByLabelText("3 of 4 details collected")).toBeInTheDocument();
-    expect(screen.getByText("Jitterbit")).toBeInTheDocument();
+    expect(screen.getByLabelText("Completed brief choices")).toBeInTheDocument();
+    expect(screen.queryByText("Jitterbit")).not.toBeInTheDocument();
     expect(screen.getByText("Jitterbit Harmony")).toBeInTheDocument();
     expect(screen.getByText("Enterprise architects")).toBeInTheDocument();
     expect(document.querySelector('[data-overview-field="target"]')).not.toBeInTheDocument();
@@ -404,8 +404,8 @@ describe("guided campaign workspace", () => {
       />
     );
 
-    expect(screen.getByLabelText("2 of 4 details collected")).toBeInTheDocument();
-    expect(document.querySelector('[data-overview-field="offer"]')).toHaveTextContent("Campaign offer");
+    expect(screen.getByLabelText("Completed brief choices")).toBeInTheDocument();
+    expect(document.querySelector('[data-overview-field="offer"]')).not.toBeInTheDocument();
     expect(screen.queryByText("Product campaign")).not.toBeInTheDocument();
   });
 
