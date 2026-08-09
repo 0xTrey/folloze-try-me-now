@@ -1314,6 +1314,7 @@ export function CampaignOverviewRail({ session }: { session: PublicTryMeSession 
   const activeMoment = moments.find((moment) => moment.status === "running")
     || moments.find((moment) => moment.status === "pending")
     || moments.at(-1);
+  const waitingForInput = activeMoment?.status === "pending";
 
   return (
     <section className="campaignOverview" aria-labelledby="campaign-overview-title">
@@ -1340,8 +1341,8 @@ export function CampaignOverviewRail({ session }: { session: PublicTryMeSession 
         })}
       </div>}
       {activeMoment && (
-        <div className={`overviewNow is-${activeMoment.status}`} role="status" aria-live="polite">
-          <span><span className="liveDot" />What Folloze is doing</span>
+        <div className={`overviewNow is-${activeMoment.status} ${waitingForInput ? "is-waiting" : ""}`} role="status" aria-live="polite">
+          <span>{!waitingForInput && <span className="liveDot" />}{waitingForInput ? "Ready for your next choice" : "Folloze is working"}</span>
           <strong>{session.status === "generation_failed" ? "Build paused — your brief is safe" : activeMoment.title}</strong>
           <p>{session.status === "generation_failed" ? `Retry with support reference ${session.supportRef}.` : activeMoment.detail}</p>
         </div>
