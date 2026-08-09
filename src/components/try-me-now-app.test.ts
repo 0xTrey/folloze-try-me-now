@@ -102,8 +102,8 @@ describe("Try Me Now experience copy", () => {
 
   it("routes each watch-example action to a verified public Folloze board", () => {
     expect(entryPathOptions.abm).toMatchObject({
-      title: "Build an ABM campaign",
-      actionLabel: "Build an ABM campaign",
+      title: "Build a 1:1 account experience",
+      actionLabel: "Build a 1:1 account experience",
       exampleLabel: "See the Aprio + Georgia-Pacific example",
       exampleUrl: "https://experience.folloze.com/aprio-for-georgia-pacific",
       previewImage: "/entry/aprio-georgia-pacific-preview.webp",

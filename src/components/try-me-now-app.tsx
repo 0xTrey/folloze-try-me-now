@@ -211,11 +211,11 @@ const useCaseContent: Record<
   abm: {
     number: "01",
     kicker: "1:1 ABM",
-    title: "Build an ABM campaign",
-    description: "Build a buyer-ready campaign around one target company.",
-    cta: "Build an ABM campaign",
-    domainTitle: "What is your company domain?",
-    domainBody: "Add the seller domain. We will verify the identity and start the brand scan immediately.",
+    title: "Build a 1:1 account experience",
+    description: "Add your company and one target account. Folloze builds a personalized buyer experience for that account.",
+    cta: "Build a 1:1 account experience",
+    domainTitle: "Start with your company.",
+    domainBody: "Enter your company domain. We will start matching the logo, colors, and public brand cues right away.",
     icon: Target,
     className: "portalEditorial"
   },
@@ -223,10 +223,10 @@ const useCaseContent: Record<
     number: "02",
     kicker: "Campaign",
     title: "Launch a campaign landing page",
-    description: "Turn one offer and one audience into a campaign experience.",
+    description: "Add one offer and audience. Folloze builds a branded campaign page with a measurable next step.",
     cta: "Launch a campaign landing page",
-    domainTitle: "Which company is launching the campaign?",
-    domainBody: "Add the company domain. We will verify the identity and start the brand scan immediately.",
+    domainTitle: "Who is launching this campaign?",
+    domainBody: "Enter the company domain. We will start matching its logo, colors, and public brand cues right away.",
     icon: Megaphone,
     className: "portalCobalt"
   },
@@ -234,10 +234,10 @@ const useCaseContent: Record<
     number: "03",
     kicker: "Content",
     title: "Turn content into an experience",
-    description: "Transform a public URL or PDF into a guided buyer journey.",
-    cta: "Turn content into an experience",
-    domainTitle: "Which company owns the content?",
-    domainBody: "Add the company domain. We will verify the identity and start the brand scan immediately.",
+    description: "Add a public URL or PDF. Folloze keeps the facts and builds an interactive buyer experience.",
+    cta: "Make content interactive",
+    domainTitle: "Who owns this content?",
+    domainBody: "Enter the company domain. We will start matching its logo, colors, and public brand cues right away.",
     icon: BookOpen,
     className: "portalTerminal"
   }
@@ -275,9 +275,9 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     id: "abm",
     index: "01",
     eyebrow: "1:1 ABM",
-    title: "Build an ABM campaign",
+    title: "Build a 1:1 account experience",
     description: "Add your company and one target account. Folloze builds a personalized buyer experience for that account.",
-    actionLabel: "Build an ABM campaign",
+    actionLabel: "Build a 1:1 account experience",
     exampleLabel: "See the Aprio + Georgia-Pacific example",
     exampleUrl: APRIO_GEORGIA_PACIFIC_EXAMPLE_URL,
     demoSteps: ["Company + account", "Public account context", "1:1 buyer experience"],
@@ -307,7 +307,7 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     eyebrow: "Content",
     title: "Turn content into an experience",
     description: "Add a public URL or PDF. Folloze keeps the facts and builds an interactive buyer experience.",
-    actionLabel: "Transform my content",
+    actionLabel: "Make content interactive",
     exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
     exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
     demoSteps: ["URL or PDF", "Buyer lens", "Interactive experience"],
@@ -1414,7 +1414,7 @@ function DomainStart({
       ? `Starting the public brand scan for ${normalizedDomain}`
       : preflightStatus === "started"
         ? `Public brand scan started for ${normalizedDomain}`
-        : `Ready to scan ${normalizedDomain}`;
+        : `Ready to match ${normalizedDomain}`;
   const helpText = error || (isStarting
     ? "Opening the guided brief with the brand evidence already in progress…"
     : preflightStatus === "starting"
@@ -1424,17 +1424,17 @@ function DomainStart({
         : preflightStatus === "failed"
           ? "The early scan was interrupted. We will retry when you confirm this company."
           : domainReady
-            ? "Pause for a moment and Folloze will start the public brand scan automatically."
-            : "Enter a company domain to prepare the scan.");
+            ? "Pause briefly and we will begin matching the public brand automatically."
+            : "Enter a company domain to start the brand match.");
   return (
     <section className="domainStage">
       <button className="textBack buttonTertiary" type="button" onClick={onBack}><ArrowLeft size={16} />Choose another path</button>
       <div className="domainStageGrid">
         <div className="domainPrompt">
-          <span className="sectionKicker">Folloze guide · first signal</span>
+          <span className="sectionKicker">Start with the brand</span>
           <h2>{portal.domainTitle}</h2>
           <p>{portal.domainBody}</p>
-          <div className="domainPromise"><ShieldCheck size={18} /><span><strong>We confirm before we compose.</strong> You will see the company name, logo, and color evidence before choosing an audience.</span></div>
+          <div className="domainPromise"><ShieldCheck size={18} /><span><strong>We verify the brand before we build.</strong> You will see the company, logo, and palette we found before we tailor the experience.</span></div>
         </div>
         <form className={`domainInput ${isStarting ? "isWorking" : ""}`} onSubmit={(event) => { event.preventDefault(); onContinue(); }}>
           <label htmlFor="company-domain">Company domain</label>
@@ -1465,7 +1465,7 @@ function DomainStart({
             {helpText}
           </small>
           <button className="buttonPrimary domainContinue" type="submit" disabled={!likelyDomain.test(domain.trim()) || isStarting}>
-            {isStarting ? "Confirming the company" : "Confirm this company"}{isStarting ? <LoaderCircle className="spin" size={17} /> : <ArrowRight size={17} />}
+            {isStarting ? "Opening the guided brief" : "Use this company"}{isStarting ? <LoaderCircle className="spin" size={17} /> : <ArrowRight size={17} />}
           </button>
         </form>
       </div>

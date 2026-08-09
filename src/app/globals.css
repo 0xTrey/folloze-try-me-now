@@ -49,13 +49,13 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .entryHero p { max-width: 760px; margin: 0 auto; color: var(--fz-body); font-size: clamp(17px, 1.6vw, 21px); line-height: 1.55; }
 .entryFooter { width: min(100%,1460px); margin: 24px auto 0; color: var(--fz-muted-strong); font-size: 12px; text-align: center; }
 
-.domainStage { min-height: calc(100vh - 72px); padding: clamp(54px,8vw,120px) clamp(22px,8vw,130px); background: linear-gradient(135deg,#fff 0%,#fff 64%,#f1f1ff 100%); }
+.domainStage { min-height: calc(100vh - 72px); padding: clamp(42px,6vw,84px) clamp(22px,8vw,130px); background: linear-gradient(135deg,#fff 0%,#fff 62%,var(--fz-canvas) 100%); }
 .textBack { margin: 0 0 clamp(52px,8vw,100px) -8px; padding-inline: 8px; color: var(--fz-muted-strong); }
 .textBack:hover { color: var(--fz-accent); }
 .domainStageGrid { max-width: 1260px; margin: 0 auto; display: grid; grid-template-columns: minmax(0,1.15fr) minmax(380px,.85fr); gap: clamp(50px,9vw,140px); align-items: center; }
-.domainStageGrid h2 { max-width: 720px; margin: 13px 0 24px; font: 520 clamp(46px,6vw,82px)/.98 var(--font-display),sans-serif; letter-spacing: -.045em; }
+.domainStageGrid h2 { max-width: 720px; margin: 13px 0 20px; font: 560 clamp(42px,5.2vw,68px)/.98 var(--font-display),sans-serif; letter-spacing: -.045em; text-wrap:balance; }
 .domainStageGrid > div > p { max-width: 650px; color: var(--fz-body); font-size: 19px; line-height: 1.55; }
-.domainInput { display: block; padding: 27px; background: white; border: 1px solid var(--fz-border); border-radius: 24px; transition: border-color .2s var(--ease), box-shadow .2s var(--ease); }
+.domainInput { display: block; padding: 27px; background: white; border: 1px solid var(--fz-border); border-radius: 18px; transition: border-color .2s var(--ease), box-shadow .2s var(--ease); }
 .domainInput.isWorking { border-color: color-mix(in srgb,var(--fz-accent) 45%,var(--fz-border)); box-shadow: 0 18px 60px rgba(42,42,105,.1); }
 .domainInput > span,.lineInput > span { display: block; margin-bottom: 10px; color: var(--fz-muted-strong); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 .domainInput > div,.lineInput > div { min-height: 63px; display: flex; align-items: center; gap: 13px; border-bottom: 2px solid var(--fz-ink); color: var(--fz-accent); }
