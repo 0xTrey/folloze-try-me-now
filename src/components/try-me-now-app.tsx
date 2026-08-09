@@ -1894,12 +1894,12 @@ export function ProgressiveQuestions({
     const offerResearchStatus = matchingOfferSource?.intelligenceStatus;
     const understoodOfferTitle = matchingOfferSource?.title || session.sourceInsight?.title;
     const offerResearchCopy = offerResearchStatus === "ready"
-      ? `Source understood${understoodOfferTitle ? `: ${understoodOfferTitle}` : "."} We’re using its cited context to shape the page.`
+      ? `Page understood${understoodOfferTitle ? `: ${understoodOfferTitle}` : "."} We’re using its offer, proof, and buyer language to shape the page.`
       : offerResearchStatus === "failed"
         ? "We could not read every page signal, so we’ll use the URL identity and company research as a safe fallback."
         : offerResearchStatus === "researching" || offerResearchStatus === "pending"
-          ? `Researching ${offerSourceHost} now — extracting the offer, proof, and message cues in the background.`
-          : "Research starts automatically after you pause typing. We’ll identify the offer and research this page while you keep moving.";
+          ? `Reading ${offerSourceHost} now. We’re identifying the offer, proof, and useful buyer message.`
+          : "Research starts after you pause typing. We’ll read the page while you keep moving.";
     return (
       <div className="questionCard">
         <span className="questionCount">Next signal · campaign</span>
@@ -2193,7 +2193,7 @@ export function ProgressiveQuestions({
                 <label htmlFor="abm-product-source">Existing product page</label>
                 <div className="contextUrlInput"><ExternalLink size={17} /><input id="abm-product-source" value={productSourceUrlValue} onChange={(event) => { setFieldValues((current) => ({ ...current, "abm-product-source": event.target.value })); setProductResearchStartRevision(session.revision); lastProductResearchRef.current = undefined; }} placeholder={productSourceReady ? "A product page is attached — paste another URL to replace it" : "https://yourcompany.com/product"} inputMode="url" /></div>
                 <div className="contextPanelFooter">
-                  <small role={productSourceFailed ? "alert" : "status"} aria-live="polite">{productSourceReady ? `Product page understood${session.sourceInsight?.title ? `: ${session.sourceInsight.title}` : "."}` : productSourceFailed ? "We could not read that page. Paste another URL or choose a PDF or description." : validProductUrl ? "Researching the product page now. You can keep moving." : "Paste a public HTTPS product page. Research starts after you pause typing."}</small>
+                  <small role={productSourceFailed ? "alert" : "status"} aria-live="polite">{productSourceReady ? `Product page understood${session.sourceInsight?.title ? `: ${session.sourceInsight.title}` : "."} Its offer and proof are ready for the experience.` : productSourceFailed ? "We could not read that page. Paste another URL or choose a PDF or description." : validProductUrl ? "Reading this product page now. We’re identifying the offer, proof, and useful buyer message." : "Paste a public HTTPS product page. Research starts after you pause typing."}</small>
                 </div>
               </div>
             )}

@@ -478,7 +478,7 @@ describe("guided campaign workspace", () => {
       target: { value: "https://6sense.com/platform/revvyai/" }
     });
 
-    expect(screen.getByRole("status")).toHaveTextContent(/identify the offer and research this page/i);
+    expect(screen.getByRole("status")).toHaveTextContent(/read the page while you keep moving/i);
     expect(continueButton).toBeEnabled();
     fireEvent.click(continueButton);
 
