@@ -3224,6 +3224,19 @@ export function TryMeNowApp() {
   const engagementSeconds = revealedAt
     ? Math.max(1, Math.round((((clientEvents.at(-1)?.at ?? revealedAt) - revealedAt) / 1000)))
     : 0;
+  const headerStatus = !useCase
+    ? "Build a buyer-ready experience in about a minute"
+    : !session
+      ? `${useCaseContent[useCase].kicker} selected`
+      : session.status === "claimed"
+        ? "Experience saved and ready to share"
+        : isProvisionalPreview
+          ? "Preview ready · final review in progress"
+          : isReveal
+            ? "Experience ready to explore"
+            : session.brand
+              ? `${brandNameFor(session)} brand matched`
+              : "Matching the public brand";
 
   return (
     <>
@@ -3234,7 +3247,7 @@ export function TryMeNowApp() {
     >
       <header className="siteHeader">
         <Link href="/" aria-label="Folloze Try Me Now home"><Image src="/brand/folloze-logo.svg" width={101} height={25} alt="Folloze" priority /><span>Try Me Now</span></Link>
-        <div className="headerPromise"><span className="liveDot" />A live buyer experience in about a minute</div>
+        <div className="headerPromise" role="status" aria-live="polite"><span className="liveDot" />{headerStatus}</div>
         {session && <button className="resetButton" type="button" onClick={resetExperience}><RefreshCw size={14} />Start over</button>}
       </header>
 
