@@ -57,12 +57,9 @@
 .toneink { color:#f7f6ff;border-color:#27273a;background:radial-gradient(circle at 84% 11%,color-mix(in srgb,var(--enh-accent) 24%,transparent),transparent 30%),#090a12 }
 .isSelected { border-color:var(--enh-accent,var(--accent));box-shadow:0 0 0 3px color-mix(in srgb,var(--enh-accent,var(--accent)) 12%,transparent),0 22px 68px rgba(12,24,50,.12) }
 .pathTopline { display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;opacity:.72 }
-.productPreview { height:202px;margin:25px 0 22px;overflow:hidden;position:relative;border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:17px;background:#fff;box-shadow:0 14px 36px rgba(7,20,40,.12) }
-.previewChrome { height:22px;padding:0 9px;display:flex;align-items:center;gap:5px;position:relative;z-index:2;border-bottom:1px solid #e5e7ed;background:#f3f4f7 }
-.previewChrome i { width:6px;height:6px;border-radius:50%;background:#ff8378 }
-.previewChrome i:nth-child(2) { background:#efc35b }.previewChrome i:nth-child(3) { background:#65c98b }
-.productPreview img { width:100%;height:calc(100% - 22px);display:block;object-fit:cover;object-position:top;transition:transform .45s var(--ease) }
-.previewMotion { width:100%;height:calc(100% - 22px);display:block;position:absolute;z-index:1;inset:22px 0 0;object-fit:cover;object-position:center;background:#fff;transition:transform .45s var(--ease) }
+.productPreview { height:202px;margin:25px 0 22px;overflow:hidden;position:relative;border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:12px;background:#fff;box-shadow:0 10px 26px rgba(7,20,40,.1) }
+.productPreview img { width:100%;height:100%;display:block;object-fit:cover;object-position:top;transition:transform .45s var(--ease) }
+.previewMotion { width:100%;height:100%;display:block;position:absolute;z-index:1;inset:0;object-fit:cover;object-position:center;background:#fff;transition:transform .45s var(--ease) }
 .pathCard:hover .productPreview img,.pathCard:focus-within .productPreview img,.pathCard:hover .previewMotion,.pathCard:focus-within .previewMotion { transform:scale(1.025) }
 @media (prefers-reduced-motion:reduce) { .previewMotion { display:none } }
 .pathCopy { margin-top:auto }

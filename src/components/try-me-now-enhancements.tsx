@@ -92,7 +92,6 @@ export function EntryPathMicroDemo({
     >
       <div className={styles.pathTopline}><span>{option.index}</span><span>{option.eyebrow}</span></div>
       <div className={styles.productPreview}>
-        <span className={styles.previewChrome} aria-hidden="true"><i /><i /><i /></span>
         <Image src={option.previewImage} alt={option.previewAlt} width={720} height={380} loading="lazy" />
         {option.previewVideo && (
           <video
