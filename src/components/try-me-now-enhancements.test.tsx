@@ -356,7 +356,7 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByRole("status")).toHaveAttribute("aria-atomic", "true");
     expect(screen.getByRole("status")).toHaveAttribute("aria-relevant", "text");
     expect(screen.getByRole("status")).toHaveTextContent("Working now");
-    expect(screen.getByRole("status")).toHaveTextContent("Stage 2 of 2");
+    expect(screen.getByRole("status")).toHaveTextContent("Story");
     expect(screen.getByRole("status")).toHaveTextContent("Turning live signals into the next build decision.");
     expect(screen.getAllByText("Working now").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Your experience is assembling live")).toHaveAttribute("aria-busy", "true");
@@ -377,7 +377,7 @@ describe("Try Me Now prospect enhancement components", () => {
     const { rerender } = render(<ProgressiveArtifactStream artifacts={queued} />);
 
     expect(screen.getAllByText("Mapping account roles").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("1 completed")).toBeInTheDocument();
+    expect(screen.queryByText("1 completed")).not.toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "33");
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", expect.stringContaining("Working now"));
 
@@ -397,7 +397,7 @@ describe("Try Me Now prospect enhancement components", () => {
 
     expect(container.querySelector('[data-build-state="queued"]')).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Up next");
-    expect(screen.getByRole("status")).toHaveTextContent("Stage 1 of 1");
+    expect(screen.getByRole("status")).toHaveTextContent("Story");
     expect(screen.getByRole("status")).toHaveTextContent("Standing by for the next build stage.");
     expect(screen.getByLabelText("Your experience is assembling live")).toHaveAttribute("aria-busy", "false");
 
@@ -417,11 +417,11 @@ describe("Try Me Now prospect enhancement components", () => {
       { id: "experience", phase: "Experience", title: "Composing the buyer journey", detail: "Composing the guided experience", status: "running" }
     ]} />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Stage 4 of 4");
+    expect(screen.getByRole("status")).toHaveTextContent("Experience");
     expect(screen.getByRole("status")).toHaveTextContent("Final assembly · live");
     expect(screen.getByRole("status")).toHaveTextContent("Shaping the story · arranging proof · polishing the page");
     expect(screen.getByRole("status")).toHaveTextContent("Usually takes 30–60 seconds. Keep this page open.");
-    expect(screen.getByText("Final assembly")).toBeInTheDocument();
+    expect(screen.queryByText("Final assembly")).not.toBeInTheDocument();
     expect(screen.queryByText("75% assembled")).not.toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "75");
     expect(screen.getByLabelText("Your experience is assembling live")).toHaveAttribute("aria-busy", "true");
