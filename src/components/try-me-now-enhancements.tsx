@@ -112,6 +112,11 @@ export function EntryPathMicroDemo({
       <div className={styles.pathCopy}>
         <h3>{option.title}</h3>
         <p>{option.description}</p>
+        <div className={styles.pathTransformation} aria-label={`${option.demoSteps[0]} becomes ${option.demoSteps[2]}`}>
+          <span><small>You add</small>{option.demoSteps[0]}</span>
+          <ArrowRight size={14} aria-hidden="true" />
+          <span><small>Folloze builds</small>{option.demoSteps[2]}</span>
+        </div>
       </div>
       <div className={styles.pathActions}>
         <button type="button" className={styles.primaryAction} disabled={disabled} onClick={() => onSelect(option.id)}>

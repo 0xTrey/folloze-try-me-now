@@ -64,7 +64,11 @@
 @media (prefers-reduced-motion:reduce) { .previewMotion { display:none } }
 .pathCopy { margin-top:auto }
 .pathCopy h3 { margin:0 0 10px;font:540 clamp(28px,2.5vw,38px)/.98 var(--font-display),"Iowan Old Style",Georgia,serif;letter-spacing:-.035em }
-.pathCopy p { min-height:44px;margin:0;color:inherit;font-size:13px;line-height:1.5;opacity:.72 }
+.pathCopy p { min-height:44px;margin:0;color:inherit;font-size:13px;line-height:1.5;opacity:.78 }
+.pathTransformation { margin-top:14px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:9px;color:inherit }
+.pathTransformation>span { min-width:0;font-size:12px;font-weight:720;line-height:1.25 }
+.pathTransformation small { display:block;margin-bottom:3px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.58 }
+.pathTransformation svg { opacity:.56 }
 .pathActions { margin-top:20px;padding-top:15px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent) }
 .tonecobalt .primaryAction { color:#0b2dac;border-color:#fff;background:#fff }
 .toneink .primaryAction { color:#111221;border-color:#fff;background:#fff }
