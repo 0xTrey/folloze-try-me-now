@@ -1967,8 +1967,8 @@ export function ProgressiveQuestions({
         <h2>{questionCopy.sourceTitle}</h2>
         <p>{questionCopy.sourceBody}</p>
         <div className="sourceTabs" role="tablist" aria-label="Content source type">
-          <button type="button" role="tab" id="source-tab-url" aria-controls="source-panel-url" aria-selected={sourceMode === "url"} className={sourceMode === "url" ? "isActive" : ""} onClick={() => setSourceMode("url")}>Public URL</button>
-          <button type="button" role="tab" id="source-tab-pdf" aria-controls="source-panel-pdf" aria-selected={sourceMode === "pdf"} className={sourceMode === "pdf" ? "isActive" : ""} onClick={() => setSourceMode("pdf")}>PDF upload</button>
+          <button type="button" role="tab" id="source-tab-url" aria-controls="source-panel-url" aria-selected={sourceMode === "url"} className={sourceMode === "url" ? "isActive" : ""} onClick={() => setSourceMode("url")}>Paste a URL</button>
+          <button type="button" role="tab" id="source-tab-pdf" aria-controls="source-panel-pdf" aria-selected={sourceMode === "pdf"} className={sourceMode === "pdf" ? "isActive" : ""} onClick={() => setSourceMode("pdf")}>Upload a PDF</button>
         </div>
         {sourceMode === "url" ? (
           <form className="sourceForm" role="tabpanel" id="source-panel-url" aria-labelledby="source-tab-url" onSubmit={(event) => { event.preventDefault(); void onPatch({ sourceUrl: sourceUrlValue.trim() }); }}>
@@ -2180,13 +2180,13 @@ export function ProgressiveQuestions({
           <section className="productContextQuestion" aria-labelledby="product-context-title">
             <div className="productContextHeading">
               <span className="sectionKicker">One more signal · product</span>
-              <h3 id="product-context-title">Tell us about the product.</h3>
-              <p>Use the source you already have. We will extract the product, proof, and message cues before composing the account experience.</p>
+              <h3 id="product-context-title">How should we learn about the product?</h3>
+              <p>Choose the source you already have. We will identify the product, proof, and useful buyer message.</p>
             </div>
             <div className="contextModeRail" role="tablist" aria-label="Product information type">
-              <button type="button" role="tab" aria-selected={productMode === "url"} className={productMode === "url" ? "isActive" : ""} disabled={isChangingProductSource || (productPdfReady && productMode !== "url")} onClick={() => void selectProductMode("url")}><ExternalLink size={16} />Product page</button>
-              <button type="button" role="tab" aria-selected={productMode === "pdf"} className={productMode === "pdf" ? "isActive" : ""} disabled={isChangingProductSource} onClick={() => void selectProductMode("pdf")}><FileText size={16} />Product PDF</button>
-              <button type="button" role="tab" aria-selected={productMode === "text"} className={productMode === "text" ? "isActive" : ""} disabled={isChangingProductSource || (productPdfReady && productMode !== "text")} onClick={() => void selectProductMode("text")}><MessageSquareText size={16} />Tell us</button>
+              <button type="button" role="tab" aria-selected={productMode === "url"} className={productMode === "url" ? "isActive" : ""} disabled={isChangingProductSource || (productPdfReady && productMode !== "url")} onClick={() => void selectProductMode("url")}><ExternalLink size={16} />Paste a URL</button>
+              <button type="button" role="tab" aria-selected={productMode === "pdf"} className={productMode === "pdf" ? "isActive" : ""} disabled={isChangingProductSource} onClick={() => void selectProductMode("pdf")}><FileText size={16} />Upload a document</button>
+              <button type="button" role="tab" aria-selected={productMode === "text"} className={productMode === "text" ? "isActive" : ""} disabled={isChangingProductSource || (productPdfReady && productMode !== "text")} onClick={() => void selectProductMode("text")}><MessageSquareText size={16} />Describe it</button>
             </div>
             {productMode === "url" && (
               <div className="contextPanel" role="tabpanel">

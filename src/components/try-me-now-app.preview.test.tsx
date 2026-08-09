@@ -561,10 +561,10 @@ describe("guided campaign workspace", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Introduce a product/i }));
-    expect(screen.getByRole("heading", { name: "Tell us about the product." })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Product page" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Product PDF" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Tell us" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "How should we learn about the product?" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Paste a URL" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Upload a document" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Describe it" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Existing product page"), {
       target: { value: "https://www.folloze.com/platform" }
@@ -604,7 +604,7 @@ describe("guided campaign workspace", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("tab", { name: "Product PDF" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Upload a document" }));
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -642,11 +642,11 @@ describe("guided campaign workspace", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "Tell us about the product." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "How should we learn about the product?" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("We could not read that page");
     expect(screen.getByRole("button", { name: /Build my experience/i })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Tell us" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Describe it" }));
     await waitFor(() => expect(onPatch).toHaveBeenCalledWith({ sourceUrl: "" }));
     fireEvent.change(screen.getByLabelText("What should buyers understand about the product?"), {
       target: { value: "A governed product story that gives every buyer a useful next step." }
@@ -716,7 +716,7 @@ describe("guided campaign workspace", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "Tell us about the product." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "How should we learn about the product?" })).toBeInTheDocument();
     expect(screen.queryByText("Brief complete")).not.toBeInTheDocument();
   });
 
@@ -744,7 +744,7 @@ describe("guided campaign workspace", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Introduce a product/i }));
-    fireEvent.click(screen.getByRole("tab", { name: "Tell us" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Describe it" }));
     fireEvent.change(screen.getByLabelText("What should buyers understand about the product?"), {
       target: { value: "A governed buyer experience platform that turns account signals into seller action." }
     });
@@ -876,7 +876,7 @@ describe("guided campaign workspace", () => {
         pdfUpload={{ status: "uploading", fileName: "platform-guide.pdf", message: "Checking the file, then uploading it securely." }}
       />
     );
-    fireEvent.click(screen.getByRole("tab", { name: "PDF upload" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Upload a PDF" }));
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("status")).toHaveTextContent("Uploading securely");
     expect(screen.getByText("Uploading platform-guide.pdf")).toBeInTheDocument();
@@ -929,7 +929,7 @@ describe("guided campaign workspace", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "PDF upload" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Upload a PDF" }));
     const fileInput = document.querySelector('input[type="file"]');
     fireEvent.change(fileInput!, {
       target: {
@@ -938,7 +938,7 @@ describe("guided campaign workspace", () => {
     });
     expect(onUpload).toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Public URL" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Paste a URL" }));
     expect(screen.getByLabelText("Content URL")).toHaveValue("");
   });
 
