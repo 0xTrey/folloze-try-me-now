@@ -3356,13 +3356,6 @@ export function TryMeNowApp() {
                 <span className="buttonPrimary" role="status"><LoaderCircle className="spin" size={16} />Quality pass running</span>
               )}
               <a className="buttonSecondary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">{isProvisionalPreview ? "Open working preview" : "Open full screen"}<ExternalLink size={16} /></a>
-              {session.status === "claimed" ? (
-                <span className="previewExpiryChip isSaved"><Check size={15} />Saved</span>
-              ) : isProvisionalPreview ? (
-                <span className="previewExpiryChip"><Clock3 size={15} />Interactive now · finalizing in place</span>
-              ) : (
-                <span className={`previewExpiryChip ${previewSecondsRemaining <= 300 ? "isWarning" : ""}`}><Clock3 size={15} />Private preview · expires in {previewCountdown}</span>
-              )}
             </div>
           </div>
           <PreviewUpdateNotice
@@ -3376,19 +3369,28 @@ export function TryMeNowApp() {
                   <Globe2 size={16} aria-hidden="true" />
                   <span><strong>Live preview</strong><small>Scroll inside to explore the full experience.</small></span>
                 </div>
-                <button
-                  className="previewAnalyticsButton"
-                  type="button"
-                  aria-label={`See live engagement, ${Math.max(analyticsSignals.length, 1)} ${Math.max(analyticsSignals.length, 1) === 1 ? "signal" : "signals"}`}
-                  onClick={() => {
-                    analyticsPromptedSession.current = session.id;
-                    setShowAnalyticsToast(false);
-                    setShowAnalyticsPanel(true);
-                    track("analytics_panel_opened", { useCase: session.useCase, source: "preview-toolbar" });
-                  }}
-                >
-                  <Gauge size={16} />See live engagement<span aria-hidden="true">{Math.max(analyticsSignals.length, 1)}</span>
-                </button>
+                <div className="previewToolbarActions">
+                  {session.status === "claimed" ? (
+                    <span className="previewReadinessStatus isSaved"><Check size={14} />Saved</span>
+                  ) : isProvisionalPreview ? (
+                    <span className="previewReadinessStatus isRefining"><LoaderCircle className="spin" size={14} />Interactive · refining</span>
+                  ) : (
+                    <span className={`previewReadinessStatus ${previewSecondsRemaining <= 300 ? "isWarning" : ""}`}><Clock3 size={14} />Ready to save · {previewCountdown}</span>
+                  )}
+                  <button
+                    className="previewAnalyticsButton"
+                    type="button"
+                    aria-label={`See live engagement, ${Math.max(analyticsSignals.length, 1)} ${Math.max(analyticsSignals.length, 1) === 1 ? "signal" : "signals"}`}
+                    onClick={() => {
+                      analyticsPromptedSession.current = session.id;
+                      setShowAnalyticsToast(false);
+                      setShowAnalyticsPanel(true);
+                      track("analytics_panel_opened", { useCase: session.useCase, source: "preview-toolbar" });
+                    }}
+                  >
+                    <Gauge size={16} />See live engagement<span aria-hidden="true">{Math.max(analyticsSignals.length, 1)}</span>
+                  </button>
+                </div>
               </div>
               <div className="desktopPreviewShell">
                 <AssemblyPreview session={session} iframeRef={previewFrameRef} />

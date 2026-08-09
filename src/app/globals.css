@@ -309,6 +309,11 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .desktopPreviewLabel>span,.desktopPreviewLabel strong,.desktopPreviewLabel small { display:block }
 .desktopPreviewLabel strong { font-size:11px;letter-spacing:.02em }
 .desktopPreviewLabel small { margin-top:2px;color:var(--fz-muted-strong);font-size:11px }
+.previewToolbarActions { display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap }
+.previewReadinessStatus { min-height:38px;padding:8px 11px;display:inline-flex;align-items:center;gap:6px;color:var(--fz-action-dark);border:1px solid color-mix(in srgb,var(--fz-action) 26%,var(--fz-border));border-radius:999px;background:var(--fz-accent-tint);font-size:11px;font-weight:750;white-space:nowrap }
+.previewReadinessStatus.isRefining { color:var(--fz-action-dark) }
+.previewReadinessStatus.isSaved { color:#087448;border-color:#bde8d1;background:#f3fcf7 }
+.previewReadinessStatus.isWarning { color:#704400;border-color:#e9c783;background:#fff7e7 }
 .editBriefButton { min-height: 42px; padding: 8px 15px; white-space: nowrap; }
 .desktopPreviewShell {
   width: 100%;
