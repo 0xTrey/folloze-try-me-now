@@ -372,9 +372,9 @@ export function supportingSignalLabel(count: number): string {
 export function AudienceEvidenceTray({ companyName, options, selectedId, simplified = false, onSelect, onPin, onExclude }: AudienceEvidenceTrayProps) {
   return (
     <section className={styles.evidenceTray} aria-labelledby="audience-evidence-title">
-      <div className={styles.sectionHeading}>
-        <div><span>Explainable audience</span><h3 id="audience-evidence-title">Why these roles fit {companyName}</h3></div>
-        <small>{options.filter((option) => !option.excluded).length} active hypotheses</small>
+      <div className={styles.audienceRecommendationIntro}>
+        <strong id="audience-evidence-title">{options.filter((option) => !option.excluded).length} suggested roles</strong>
+        <span>Based on public signals from {companyName}</span>
       </div>
       <div className={styles.audienceList} role="radiogroup" aria-label={`Choose an audience for ${companyName}`}>
         {options.map((option) => (
@@ -399,7 +399,7 @@ export function AudienceEvidenceTray({ companyName, options, selectedId, simplif
               </button>
             </div>}
             <details className={styles.evidenceDetails}>
-              <summary>Why this fits · {supportingSignalLabel(option.evidence.length)}</summary>
+              <summary>Why we recommended this role · {supportingSignalLabel(option.evidence.length)}</summary>
               <div>
                 {option.evidence.map((item) => (
                   <div key={item.id} className={styles.evidenceRow}>

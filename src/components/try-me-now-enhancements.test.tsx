@@ -306,7 +306,7 @@ describe("Try Me Now prospect enhancement components", () => {
     );
 
     expect(screen.getByRole("radio", { name: /Automation architects and platform owners/i })).toBeInTheDocument();
-    expect(screen.getByText(/Why this fits · 1 supporting signal/)).toBeInTheDocument();
+    expect(screen.getByText(/Why we recommended this role · 1 supporting signal/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pin" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Exclude" })).not.toBeInTheDocument();
   });
