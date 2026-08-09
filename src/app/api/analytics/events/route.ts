@@ -12,7 +12,24 @@ function requireSameOrigin(request: NextRequest): void {
   const origin = request.headers.get("origin");
   const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim();
   const fetchSite = request.headers.get("sec-fetch-site");
-  if (!origin || origin !== request.nextUrl.origin || (fetchSite && fetchSite !== "same-origin")) {
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",", 1)[0].trim();
+  const requestHost = forwardedHost || request.headers.get("host")?.trim();
+  const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",", 1)[0].trim();
+  const requestProtocol = forwardedProtocol || request.nextUrl.protocol.replace(/:$/, "");
+  let matchesVisibleHost = false;
+  if (origin && requestHost) {
+    try {
+      const originUrl = new URL(origin);
+      matchesVisibleHost = originUrl.host === requestHost && originUrl.protocol === `${requestProtocol}:`;
+    } catch {
+      matchesVisibleHost = false;
+    }
+  }
+  if (
+    !origin
+    || (origin !== request.nextUrl.origin && !matchesVisibleHost)
+    || (fetchSite && fetchSite !== "same-origin")
+  ) {
     throw new HttpError(403, "analytics_origin_forbidden", "Analytics origin is not allowed.");
   }
   if (contentType !== "application/json") {
