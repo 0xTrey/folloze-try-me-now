@@ -600,6 +600,17 @@ export function ProgressiveArtifactStream({ artifacts, headline = "Your experien
                 ? "Clarifying the objective · structuring the message · choosing the next move"
                 : "Turning live signals into the next build decision."
         : "Standing by for the next build stage.";
+  const focusVisual = focus?.id === "brand"
+    ? <Globe2 size={34} strokeWidth={1.7} />
+    : focus?.id === "buyer"
+      ? <Users size={34} strokeWidth={1.7} />
+      : focus?.id === "strategy"
+        ? <Target size={34} strokeWidth={1.7} />
+        : focus?.id === "experience"
+          ? <Layers3 size={34} strokeWidth={1.7} />
+          : running
+            ? <WandSparkles size={34} strokeWidth={1.7} />
+            : <Clock size={32} strokeWidth={1.7} />;
   return (
     <section className={styles.artifactStream} aria-labelledby="artifact-stream-title" aria-busy={Boolean(running)}>
       <div className={styles.streamHeader}>
@@ -616,9 +627,9 @@ export function ProgressiveArtifactStream({ artifacts, headline = "Your experien
         data-final-assembly={finalAssembly ? "true" : "false"}
       >
         <span className={styles.buildVisual} aria-hidden="true">
-          <span className={styles.buildSignal}>
+          <span className={styles.buildSignal} data-stage-visual={focus?.id ?? "waiting"}>
             <span className={styles.buildCore}>
-              {failed ? <X size={34} strokeWidth={1.7} /> : complete ? <Check size={34} strokeWidth={1.7} /> : running ? <WandSparkles size={34} strokeWidth={1.7} /> : <Clock size={32} strokeWidth={1.7} />}
+              {failed ? <X size={34} strokeWidth={1.7} /> : complete ? <Check size={34} strokeWidth={1.7} /> : focusVisual}
             </span>
             <i /><i /><i />
           </span>

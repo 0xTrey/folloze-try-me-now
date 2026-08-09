@@ -377,6 +377,7 @@ describe("Try Me Now prospect enhancement components", () => {
     const { rerender } = render(<ProgressiveArtifactStream artifacts={queued} />);
 
     expect(screen.getAllByText("Mapping account roles").length).toBeGreaterThanOrEqual(2);
+    expect(document.querySelector('[data-stage-visual="buyer"]')).toBeInTheDocument();
     expect(screen.queryByText("1 completed")).not.toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "33");
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", expect.stringContaining("Working now"));
@@ -426,6 +427,7 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "75");
     expect(screen.getByLabelText("Your experience is assembling live")).toHaveAttribute("aria-busy", "true");
     expect(document.querySelector('[data-final-assembly="true"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-stage-visual="experience"]')).toBeInTheDocument();
   });
 
   it("exposes block, tone, variant, and asset editing callbacks", () => {
