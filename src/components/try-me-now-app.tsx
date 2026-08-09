@@ -3216,6 +3216,18 @@ export function TryMeNowApp() {
   const engagementSeconds = revealedAt
     ? Math.max(1, Math.round((((clientEvents.at(-1)?.at ?? revealedAt) - revealedAt) / 1000)))
     : 0;
+  const selectedToneLabel = ({
+    executive: "Concise",
+    consultative: "Business value",
+    technical: "Technical detail",
+    provocative: "Bold point of view"
+  } as const)[answers.toneVariant || "executive"];
+  const selectedStyleLabel = ({
+    "brand-led": "Brand-led",
+    editorial: "Editorial",
+    technical: "Technical",
+    minimal: "Minimal"
+  } as const)[answers.styleVariant || "brand-led"];
   const headerStatus = !useCase
     ? "Build a buyer-ready experience in about a minute"
     : !session
@@ -3407,19 +3419,19 @@ export function TryMeNowApp() {
               {session.status !== "claimed" && !isProvisionalPreview && (
                 <details className="experienceControlDeck" open={tuneOpen} onToggle={(event) => setTuneOpen(event.currentTarget.open)}>
                   <summary>
-                    <span className="tuneSummaryTitle"><Sparkles size={17} />Tune this experience</span>
-                    <span className="tuneSummaryChips" aria-hidden="true"><i>Shorter</i><i>Business value</i><i>Technical</i><i>Bolder</i></span>
+                    <span className="tuneSummaryTitle"><Sparkles size={17} />Refine this experience</span>
+                    <span className="tuneSummaryChips" aria-label={`Current choices: ${selectedToneLabel}, ${selectedStyleLabel}`}><i>{selectedToneLabel}</i><i>{selectedStyleLabel}</i></span>
                     <ChevronDown size={16} />
                   </summary>
                   <div className="experienceControlBody">
                     <ToneChips
-                      label="Rewrite the message"
+                      label="Message tone"
                       selectedId={answers.toneVariant || "executive"}
                       options={[
-                        { id: "executive", label: "Shorter", description: "Tighter, more direct copy." },
-                        { id: "consultative", label: "More business value", description: "Put the buyer outcome and value first." },
-                        { id: "technical", label: "More technical", description: "Use more precise language for expert buyers." },
-                        { id: "provocative", label: "Bolder", description: "Sharpen the tension and point of view." }
+                        { id: "executive", label: "Concise", description: "Use tighter, more direct copy." },
+                        { id: "consultative", label: "Lead with business value", description: "Put the buyer outcome and value first." },
+                        { id: "technical", label: "Add technical detail", description: "Use more precise language for expert buyers." },
+                        { id: "provocative", label: "Sharpen the point of view", description: "Make the tension and argument more direct." }
                       ]}
                       onChange={(id) => void patchWorkspace({ answers: { toneVariant: id as NonNullable<SessionAnswers["toneVariant"]> } })}
                     />
@@ -3452,7 +3464,7 @@ export function TryMeNowApp() {
                       onClick={() => void saveCreativeDirection()}
                     >
                       {isSaving ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}
-                      Apply creative direction
+                      Update preview
                     </button>
                   </div>
                 </details>
