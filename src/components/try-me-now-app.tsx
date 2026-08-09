@@ -1309,9 +1309,7 @@ function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
 
 export function CampaignOverviewRail({ session }: { session: PublicTryMeSession }) {
   const rows = overviewRowsFor(session);
-  const requiredRows = rows.filter((row) => row.required);
-  const completeCount = requiredRows.filter((row) => Boolean(row.value)).length;
-  const currentIndex = rows.findIndex((row) => row.required && !row.value);
+  const summaryRows = rows.filter((row) => row.key !== "seller" && Boolean(row.value));
   const moments = buildMoments(session);
   const activeMoment = moments.find((moment) => moment.status === "running")
     || moments.find((moment) => moment.status === "pending")
@@ -1321,33 +1319,26 @@ export function CampaignOverviewRail({ session }: { session: PublicTryMeSession 
     <section className="campaignOverview" aria-labelledby="campaign-overview-title">
       <div className="campaignOverviewHeader">
         <div>
-          <span className="sectionKicker">Live brief</span>
-          <h2 id="campaign-overview-title">Campaign Overview</h2>
+          <span className="sectionKicker">Your choices</span>
+          <h2 id="campaign-overview-title">Your build brief</h2>
         </div>
-        <span className="overviewCount" aria-label={`${completeCount} of ${requiredRows.length} details collected`}>
-          {completeCount}/{requiredRows.length}
-        </span>
       </div>
-      <p className="campaignOverviewIntro">Each detail sharpens the buyer experience while Folloze works in the background.</p>
-      <div className="overviewFieldList">
-        {rows.map((row, index) => {
+      <p className="campaignOverviewIntro">Your choices stay visible while Folloze builds in the background.</p>
+      {summaryRows.length > 0 && <div className="overviewFieldList" aria-label="Completed brief choices">
+        {summaryRows.map((row) => {
           const Icon = row.icon;
-          const state = row.value ? "complete" : !row.required ? "optional" : index === currentIndex ? "current" : "pending";
-          const stateLabel = state === "complete" ? "Done" : state === "current" ? "Active" : "Waiting";
           return (
-            <div className={`overviewField is-${state}`} data-overview-field={row.key} key={row.key}>
+            <div className="overviewField is-complete" data-overview-field={row.key} key={row.key}>
               <span className="overviewFieldIcon" aria-hidden="true"><Icon size={17} /></span>
               <div>
                 <span>{row.label}</span>
-                <strong>{row.value || row.detail}</strong>
+                <strong>{row.value}</strong>
               </div>
-              <span className="overviewFieldState" aria-label={stateLabel} title={stateLabel}>
-                {state === "complete" ? <Check size={14} /> : state === "current" ? <span className="liveDot" /> : <span aria-hidden="true" />}
-              </span>
+              <span className="overviewFieldState" aria-label="Done" title="Done"><Check size={14} /></span>
             </div>
           );
         })}
-      </div>
+      </div>}
       {activeMoment && (
         <div className={`overviewNow is-${activeMoment.status}`} role="status" aria-live="polite">
           <span><span className="liveDot" />What Folloze is doing</span>
@@ -1483,7 +1474,7 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
       : Boolean(session.answers.sourceUrl || session.answers.sourceName);
   const audienceComplete = Boolean(session.answers.audience && (session.answers.audience !== "Other" || session.answers.customAudience));
   const objectiveComplete = Boolean(session.answers.objective);
-  const contextLabel = session.useCase === "abm" ? "Target account" : session.useCase === "campaign" ? "Campaign offer" : "Source content";
+  const contextLabel = session.useCase === "abm" ? "Account" : session.useCase === "campaign" ? "Offer" : "Source";
   const contextValue = session.useCase === "abm"
     ? targetName
     : session.useCase === "campaign"
@@ -1491,8 +1482,8 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
       : sourceNameFor(session);
   const decisions = [
     { label: contextLabel, complete: contextComplete },
-    { label: "Buyer persona", complete: audienceComplete },
-    { label: "Outcome", complete: objectiveComplete }
+    { label: "Audience", complete: audienceComplete },
+    { label: "Goal", complete: objectiveComplete }
   ];
   const currentIndex = Math.min(decisions.findIndex((decision) => !decision.complete), 2);
   const activeIndex = currentIndex < 0 ? 2 : currentIndex;
@@ -1513,7 +1504,7 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
     <section className="guidedThread" aria-labelledby="guided-thread-title">
       <div className="guidedThreadHeader">
         <span className="guideAvatar" aria-hidden="true"><Sparkles size={16} /></span>
-        <div><span>Folloze guide</span><h2 id="guided-thread-title">A guided brief, assembled with you.</h2></div>
+        <div><span>Guided brief</span><h2 id="guided-thread-title">A few choices. One focused experience.</h2></div>
       </div>
       <ol className="decisionRail" aria-label="Experience brief progress">
         {decisions.map((decision, index) => (

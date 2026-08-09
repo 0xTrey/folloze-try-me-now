@@ -379,7 +379,7 @@ describe("guided campaign workspace", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "Campaign Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your build brief" })).toBeInTheDocument();
     expect(screen.getByLabelText("3 of 4 details collected")).toBeInTheDocument();
     expect(screen.getByText("Jitterbit")).toBeInTheDocument();
     expect(screen.getByText("Jitterbit Harmony")).toBeInTheDocument();
