@@ -51,10 +51,10 @@
 .eyebrow { color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase }
 
 /* Entry path: real generated outcomes, framed as three equal product paths. */
-.pathCard { --enh-accent:var(--accent);min-height:470px;padding:24px;display:flex;flex-direction:column;overflow:hidden;position:relative;isolation:isolate;border:1px solid var(--border);border-radius:24px;background:#f4eee1;box-shadow:0 16px 55px rgba(12,24,50,.06);transition:transform .3s var(--ease),box-shadow .3s var(--ease),border-color .25s var(--ease) }
+.pathCard { --enh-accent:var(--accent);min-height:470px;padding:24px;display:flex;flex-direction:column;overflow:hidden;position:relative;isolation:isolate;color:var(--ink);border:1px solid color-mix(in srgb,var(--enh-accent) 16%,var(--border));border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--enh-accent) 4%,#fff),#fff 62%);box-shadow:0 12px 42px rgba(12,24,50,.055);transition:transform .3s var(--ease),box-shadow .3s var(--ease),border-color .25s var(--ease) }
+.pathCard::before { content:"";height:4px;position:absolute;inset:0 0 auto;background:var(--enh-accent) }
 .pathCard:hover,.pathCard:focus-within { transform:translateY(-5px);box-shadow:0 24px 72px rgba(12,24,50,.13);border-color:color-mix(in srgb,var(--enh-accent) 38%,var(--border)) }
-.tonecobalt { color:#fff;border-color:rgba(255,255,255,.22);background:radial-gradient(circle at 84% 12%,rgba(255,255,255,.2),transparent 22%),linear-gradient(145deg,#165ef4,#082cbf 62%,#071a79) }
-.toneink { color:#f7f6ff;border-color:#27273a;background:radial-gradient(circle at 84% 11%,color-mix(in srgb,var(--enh-accent) 24%,transparent),transparent 30%),#090a12 }
+.tonecobalt,.toneink { color:var(--ink) }
 .isSelected { border-color:var(--enh-accent,var(--accent));box-shadow:0 0 0 3px color-mix(in srgb,var(--enh-accent,var(--accent)) 12%,transparent),0 22px 68px rgba(12,24,50,.12) }
 .pathTopline { display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;opacity:.72 }
 .productPreview { height:202px;margin:25px 0 22px;overflow:hidden;position:relative;border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:12px;background:#fff;box-shadow:0 10px 26px rgba(7,20,40,.1) }
@@ -70,9 +70,6 @@
 .pathTransformation small { display:block;margin-bottom:3px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.58 }
 .pathTransformation svg { opacity:.56 }
 .pathActions { margin-top:20px;padding-top:15px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent) }
-.tonecobalt .primaryAction { color:#0b2dac;border-color:#fff;background:#fff }
-.toneink .primaryAction { color:#111221;border-color:#fff;background:#fff }
-.tonecobalt .exampleAction,.toneink .exampleAction { color:rgba(255,255,255,.72) }
 
 /* Immediate brand proof. */
 .brandStrip { min-height:224px;padding:22px 18px 17px;display:grid;grid-template-columns:156px minmax(0,1fr);grid-template-areas:"mark identity" "status action" "palette palette";align-items:center;gap:13px 18px;position:relative;overflow:hidden;border:1px solid color-mix(in srgb,var(--harvest-primary) 14%,var(--border));border-radius:22px;background:radial-gradient(circle at 5% 0,color-mix(in srgb,var(--harvest-accent) 11%,transparent),transparent 38%),linear-gradient(120deg,color-mix(in srgb,var(--harvest-surface) 94%,#fff),#fff 68%);box-shadow:0 18px 56px color-mix(in srgb,var(--harvest-primary) 10%,transparent);animation:brandArrive .52s var(--ease) both }
