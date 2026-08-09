@@ -3280,6 +3280,16 @@ export function TryMeNowApp() {
             <div className="guidedWorkspaceInner">
               <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
               <ConversationThread session={session} onRestart={resetExperience} />
+              <ProgressiveQuestions
+                session={session}
+                answers={answers}
+                isSaving={isSaving}
+                pdfUpload={pdfUpload}
+                onPatch={patchAnswers}
+                onBackgroundPatch={patchAnswersInBackground}
+                onWorkspacePatch={patchWorkspace}
+                onUpload={uploadPdf}
+              />
               <div className="brandLockStage">
                 <InstantBrandLockStrip
                   status={!session.brand ? "scanning" : session.stages.brand.status === "fallback" || session.brand.readiness?.status === "incomplete" ? "fallback" : "locked"}
@@ -3298,16 +3308,6 @@ export function TryMeNowApp() {
                   onInspect={() => setShowProcess(true)}
                 />
               </div>
-              <ProgressiveQuestions
-                session={session}
-                answers={answers}
-                isSaving={isSaving}
-                pdfUpload={pdfUpload}
-                onPatch={patchAnswers}
-                onBackgroundPatch={patchAnswersInBackground}
-                onWorkspacePatch={patchWorkspace}
-                onUpload={uploadPdf}
-              />
               {!(session.useCase === "abm" && (!answers.objective || productContextNeedsAttention(session))) && (
                 <OptionalContextComposer
                   session={session}

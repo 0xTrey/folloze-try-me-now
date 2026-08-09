@@ -650,7 +650,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   background: #f8f9fb;
   box-shadow: 0 16px 44px rgba(7,20,40,.055);
 }
-.brandLockStage { margin-bottom: 18px; }
+.brandLockStage { margin-top: 18px; }
 .guidedThreadHeader {
   min-height: 68px;
   padding: 14px 16px;
