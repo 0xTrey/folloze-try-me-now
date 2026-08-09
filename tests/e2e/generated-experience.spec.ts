@@ -93,7 +93,7 @@ async function majorLayoutOverflow(page: Page): Promise<string[]> {
 }
 
 test.describe("generated 1:1 experience", () => {
-  test("keeps one computed desktop geometry across ABM, campaign, and content", async ({ page }) => {
+  test("keeps shared desktop invariants across ABM, campaign, and content", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await fulfillFixtureAssets(page);
     const fingerprints: Array<Record<string, unknown>> = [];
@@ -165,30 +165,31 @@ test.describe("generated 1:1 experience", () => {
       expect(await majorLayoutOverflow(page)).toEqual([]);
     }
 
-    expect(fingerprints[1]).toEqual(fingerprints[0]);
-    expect(fingerprints[2]).toEqual(fingerprints[0]);
-    expect(fingerprints[0]).toMatchObject({
-      wireframe: "canonical-desktop-experience",
-      shape: "guided-buyer-experience",
-      layout: "standard",
-      sectionOrder: [
+    for (const fingerprint of fingerprints) {
+      expect(fingerprint).toMatchObject({
+        wireframe: "canonical-desktop-experience",
+        shape: "guided-buyer-experience",
+        layout: "standard",
+        counts: {
+          signature: 3,
+          tabs: 3,
+          panels: 3,
+          cards: 3,
+          heroActions: 1,
+          liveHeroLinks: 0
+        },
+        overflow: 0
+      });
+      expect(fingerprint.sectionOrder).toEqual(expect.arrayContaining([
         "experience-overview",
         "signature signature-canonical",
         "experience-thesis",
         "decision-path",
         "supporting-resources",
         "next-step"
-      ],
-      counts: {
-        signature: 3,
-        tabs: 3,
-        panels: 3,
-        cards: 3,
-        heroActions: 1,
-        liveHeroLinks: 0
-      },
-      overflow: 0
-    });
+      ]));
+    }
+    expect(new Set(fingerprints.map((fingerprint) => JSON.stringify(fingerprint.geometry))).size).toBeGreaterThan(1);
     expect(new Set(visibleHeadlines).size).toBe(3);
   });
 

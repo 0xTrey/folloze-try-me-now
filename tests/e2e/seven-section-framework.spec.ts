@@ -314,15 +314,7 @@ for (const scenario of [
     expect(firstBox).not.toBeNull();
     expect(firstBox!.x).toBeGreaterThanOrEqual(railBox!.x - 1);
 
-    await page
-      .getByRole("button", {
-        name:
-          scenario.name === "account"
-            ? "What teams need"
-            : "Value for your team",
-        exact: true,
-      })
-      .click();
+    await page.locator('.journey-links button[data-scroll-target="team-value"]').click();
     await expect
       .poll(() =>
         page

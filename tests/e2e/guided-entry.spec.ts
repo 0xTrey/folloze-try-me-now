@@ -26,7 +26,7 @@ test.describe("guided first-run experience", () => {
       "https://engage.folloze.com/cisco-hmf-example"
     );
 
-    const contentPreview = page.locator('article[aria-label="Content: Turn content into an experience"] video');
+    const contentPreview = page.locator('article[aria-label="Content: Make content interactive"] video');
     await expect(contentPreview).toHaveAttribute("autoplay", "");
     await expect(contentPreview).toHaveAttribute("loop", "");
     await expect(contentPreview).toHaveAttribute("muted", "");
@@ -40,10 +40,10 @@ test.describe("guided first-run experience", () => {
   test("asks for one company signal before exposing the three-decision flow", async ({ page }) => {
     await page.getByRole("button", { name: "Build a 1:1 account experience" }).click();
 
-    await expect(page.getByRole("heading", { name: "What is your company domain?" })).toBeVisible();
-    await expect(page.getByText("We confirm before we compose.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Start with your company." })).toBeVisible();
+    await expect(page.getByText(/start matching the logo, colors, and public brand cues/i)).toBeVisible();
     const domain = page.getByLabel("Company domain");
-    const confirm = page.getByRole("button", { name: "Confirm this company" });
+    const confirm = page.getByRole("button", { name: "Use this company" });
     await expect(confirm).toBeDisabled();
 
     await domain.fill("folloze.com");
