@@ -81,7 +81,7 @@ export function EntryPathMicroDemo({
   onExampleOpen
 }: EntryPathMicroDemoProps) {
   const style = {
-    "--enh-accent": option.accent ?? "#5b5bff"
+    "--enh-accent": option.accent ?? "#0077ff"
   } as CSSProperties;
 
   return (

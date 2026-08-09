@@ -2389,11 +2389,12 @@ export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSe
     : undefined;
   const audience = session.answers.customAudience || session.answers.audience;
   const objective = session.answers.objective;
-  const palette = session.brand?.colors.length ? session.brand.colors : ["#1c293f", "#5b5bff", "#11d175"];
+  const verifiedPalette = brandReady && session.brand?.colors.length ? session.brand.colors : undefined;
+  const palette = verifiedPalette ?? ["#eef0f4", "#64748b", "#ffffff"];
   const canvasStyle = {
-    "--build-primary": session.brand?.primaryColor || palette[0],
-    "--build-accent": session.brand?.accentColor || palette[1] || palette[0],
-    "--build-surface": session.brand?.surfaceColor || "#ffffff"
+    "--build-primary": verifiedPalette ? session.brand?.primaryColor || palette[0] : "#64748b",
+    "--build-accent": verifiedPalette ? session.brand?.accentColor || palette[1] || palette[0] : "#0077ff",
+    "--build-surface": verifiedPalette ? session.brand?.surfaceColor || "#ffffff" : "#ffffff"
   } as CSSProperties;
   return (
     <div className={`assembly ${storyReady ? "isReady" : ""}`}>
@@ -2434,7 +2435,11 @@ export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSe
               <div><small>Brand system</small><strong>{brandName}</strong></div>
             </div>
             {targetName && <div className="accountBridge"><small>Building for</small><strong>{targetName}</strong></div>}
-            <div className="swatches" aria-label="Detected brand palette">{palette.slice(0, 4).map((color) => <i style={{ background: color }} key={color} />)}</div>
+            {verifiedPalette ? (
+              <div className="swatches" aria-label="Detected brand palette">{palette.slice(0, 4).map((color) => <i style={{ background: color }} key={color} />)}</div>
+            ) : (
+              <span className="brandEvidencePending">Brand evidence loading</span>
+            )}
           </div>
           <div className="assemblyInputs">
             <div className={`artifact audienceArtifact ${audienceReady ? "isPlaced" : ""}`}>
@@ -2858,7 +2863,7 @@ export function TryMeNowApp() {
   useEffect(() => {
     if (!session?.experience || session.status === "claimed" || tunedSession.current === session.id) return;
     tunedSession.current = session.id;
-    setTuneOpen(window.matchMedia("(min-width: 821px)").matches);
+    setTuneOpen(false);
   }, [session?.experience, session?.id, session?.status]);
 
   useEffect(() => {

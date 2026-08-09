@@ -115,6 +115,27 @@ describe("AssemblyPreview", () => {
       "/api/sessions/desktop-preview-session/image/seller-logo"
     );
   });
+
+  it("does not present neutral assembly colors as detected brand evidence", () => {
+    render(
+      <AssemblyPreview
+        session={{
+          ...readySession,
+          status: "collecting",
+          brand: undefined,
+          stages: {
+            brand: { status: "running" },
+            audience: { status: "pending" },
+            story: { status: "pending" }
+          },
+          experience: undefined
+        }}
+      />
+    );
+
+    expect(screen.getByText("Brand evidence loading")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Detected brand palette")).not.toBeInTheDocument();
+  });
 });
 
 describe("SourceUnderstandingSummary", () => {

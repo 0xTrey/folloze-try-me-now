@@ -24,7 +24,7 @@ export async function sendClaimEmail(input: {
       html: `
         <div style="background:#f4f4fb;padding:42px 20px;font-family:Inter,Arial,sans-serif;color:#1c293f">
           <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e6e8f0;border-radius:24px;padding:38px">
-            <p style="margin:0 0 20px;color:#5b5bff;font-size:12px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase">Folloze Try Me Now</p>
+            <p style="margin:0 0 20px;color:#0077ff;font-size:12px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase">Folloze Try Me Now</p>
             <h1 style="font-size:34px;line-height:1.1;margin:0 0 18px">Your live experience is ready.</h1>
             <p style="font-size:16px;line-height:1.55;color:#42536c;margin:0 0 28px">We saved the ${escapeHtml(companyName)} experience you created. Use the link below to open it or share it with your team.</p>
             <a href="${escapeHtml(input.liveUrl)}" style="display:inline-block;background:#0a1230;color:#fff;text-decoration:none;border-radius:999px;padding:15px 24px">Open your experience</a>
