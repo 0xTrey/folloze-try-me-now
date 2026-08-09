@@ -220,15 +220,15 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
   const isCaptured = status === "locked";
   const needsReview = status === "fallback" || brand?.readiness?.status === "incomplete";
   const paletteKind = status === "scanning"
-    ? "Detecting palette"
+    ? "Matching brand details"
     : !paletteReady
-      ? "Brand colors unavailable"
-      : "Harvested palette";
+      ? "Brand details need review"
+      : "View brand details";
   const stateTitle = status === "scanning"
-    ? "Scanning public brand"
+    ? "Matching your brand"
     : needsReview
       ? "Brand evidence needs review"
-      : "Identity and brand matched";
+      : "Brand matched";
   const readinessReason = brand?.readiness?.reasons.filter(Boolean).slice(0, 2).join(" ");
   const stateDetail = status === "scanning"
     ? "Checking logo, palette, typography, and source."
@@ -303,37 +303,37 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
         {status === "scanning" ? <span className={styles.orbit} /> : <Check size={14} />}
         {statusLabel}
       </span>
-      <div
+      <details
         className={styles.brandPalette}
         aria-label={status === "scanning" ? "Brand palette is being detected" : needsReview ? `${companyName} brand palette evidence needs review` : `Harvested ${companyName} brand palette`}
       >
-        <div className={styles.brandPaletteHeader}>
+        <summary className={styles.brandPaletteHeader}>
           <span>{paletteKind}</span>
-          <small>{status === "scanning" ? "Reading Brandfetch + public CSS" : !paletteReady ? "No generic palette applied" : `${palette.colors.length} colors captured`}</small>
-        </div>
-        {status === "scanning" ? (
-          <span className={styles.brandPaletteSkeleton} aria-hidden="true"><i /><i /><i /><i /></span>
-        ) : !paletteReady ? (
-          <p className={styles.brandPaletteUnavailable} role="alert">
-            {readinessReason || "Brand API and public-site color evidence did not produce a verified palette."}
-          </p>
-        ) : (
-          <>
-            <span className={styles.brandPaletteRail} aria-hidden="true">
-              {palette.colors.slice(0, 6).map((color) => <i key={color} style={{ backgroundColor: color }} />)}
-            </span>
-            <ul className={styles.brandTokenList}>
-              {palette.tokens.map(([label, color]) => (
-                <li key={`${label}-${color}`} data-color={color}>
-                  <i style={{ backgroundColor: color }} aria-hidden="true" />
-                  <span><small>{label}</small><code>{color}</code></span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </div>
-      {onInspect && <button type="button" className={styles.tertiaryAction} aria-label={`Inspect ${companyName} brand signals`} onClick={onInspect}>Review evidence</button>}
+          <small>{status === "scanning" ? "Reading the public site" : !paletteReady ? "No generic palette applied" : `${Math.min(palette.colors.length, 3)} applied colors`}</small>
+        </summary>
+        <div className={styles.brandPaletteBody}>{status === "scanning" ? (
+            <span className={styles.brandPaletteSkeleton} aria-hidden="true"><i /><i /><i /><i /></span>
+          ) : !paletteReady ? (
+            <p className={styles.brandPaletteUnavailable} role="alert">
+              {readinessReason || "Brand API and public-site color evidence did not produce a verified palette."}
+            </p>
+          ) : (
+            <>
+              <span className={styles.brandPaletteRail} aria-hidden="true">
+                {palette.colors.slice(0, 3).map((color) => <i key={color} style={{ backgroundColor: color }} />)}
+              </span>
+              <ul className={styles.brandTokenList}>
+                {palette.tokens.slice(0, 3).map(([label, color]) => (
+                  <li key={`${label}-${color}`} data-color={color}>
+                    <i style={{ backgroundColor: color }} aria-hidden="true" />
+                    <span><small>{label}</small><code>{color}</code></span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}</div>
+      </details>
+      {onInspect && <button type="button" className={styles.tertiaryAction} aria-label={`Inspect ${companyName} brand signals`} onClick={onInspect}>Review brand details</button>}
     </section>
   );
 }

@@ -86,8 +86,13 @@
 .brandIdentity>span { display:block;color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase }
 .brandIdentity strong { display:block;margin:5px 0 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 22px/1.02 var(--font-display),sans-serif;letter-spacing:-.025em }
 .brandIdentity small { max-width:310px;display:block;color:var(--muted);font-size:11px;line-height:1.35 }
-.brandPalette { min-width:0;grid-area:palette;display:grid;grid-template-columns:1fr;grid-template-areas:"header" "rail" "tokens";align-items:center;gap:8px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--harvest-primary) 11%,var(--border));border-radius:14px;background:rgba(255,255,255,.74);box-shadow:inset 0 1px 0 rgba(255,255,255,.8) }
+.brandPalette { min-width:0;grid-area:palette;padding:10px 12px;border:1px solid color-mix(in srgb,var(--harvest-primary) 11%,var(--border));border-radius:10px;background:rgba(255,255,255,.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.8) }
 .brandPaletteHeader { grid-area:header;display:flex;align-items:center;justify-content:space-between;gap:12px }
+.brandPaletteHeader { cursor:pointer;list-style:none }
+.brandPaletteHeader::-webkit-details-marker { display:none }
+.brandPaletteHeader::after { content:"+";margin-left:4px;color:var(--accent);font-size:15px }
+.brandPalette[open] .brandPaletteHeader::after { content:"−" }
+.brandPaletteBody { margin-top:10px;display:grid;gap:8px }
 .brandPaletteHeader>span { color:var(--deep);font-size:11px;font-weight:850;letter-spacing:.12em;text-transform:uppercase }
 .brandPaletteHeader>small { color:var(--muted);font-size:11px;font-weight:700 }
 .brandPaletteRail { height:22px;grid-area:rail;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;overflow:hidden;border:1px solid rgba(7,20,40,.11);border-radius:8px;box-shadow:0 4px 11px rgba(7,20,40,.08) }
@@ -478,7 +483,7 @@ fieldset.controlCard { min-inline-size:0 }
   .brandMark { width:112px;height:62px;padding:13px }
   .lockStatus { justify-self:start }
   .brandStrip>.tertiaryAction { justify-self:end }
-  .brandPalette { grid-template-columns:1fr;grid-template-areas:"header" "rail" "tokens" }
+  .brandPalette { width:100% }
   .sourceCard { grid-template-columns:1fr }
   .sourcePreview { min-height:210px }
   .sourceCopy { padding:5px }
@@ -637,11 +642,7 @@ fieldset.controlCard { min-inline-size:0 }
 }
 
 .brandPalette {
-  grid-template-columns: minmax(118px,.48fr) minmax(0,1.52fr);
-  grid-template-areas:
-    "header header"
-    "rail tokens";
-  column-gap: 12px;
+  width:100%;
 }
 
 .artifactStream {
@@ -741,10 +742,7 @@ fieldset.controlCard { min-inline-size:0 }
   }
 
   .brandPalette {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "header"
-      "rail";
+    width:100%;
   }
 
   .brandTokenList {
