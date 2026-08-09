@@ -802,7 +802,7 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
       audienceLoadingTitle: `Mapping the buying roles that fit ${targetName}.`,
       audienceLoadingBody: `We are reading ${targetName}'s public product and operating context now.`,
       audienceTitle: `Who is this experience for at ${targetName}?`,
-      audienceBody: `Choose the role that should see the most value. Recommendations use ${targetName}'s public business context.`,
+      audienceBody: `Choose the role that should see the most value. Recommendations connect ${brandName}'s public story to ${targetName}'s business context.`,
       objectiveTitle: "What should this experience help them do?",
       objectiveBody: "Choose one goal. It will shape the page message, proof, and final button.",
       completeTitle: `${brandName} × ${targetName}. The brief is ready.`,
