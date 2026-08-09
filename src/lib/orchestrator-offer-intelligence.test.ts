@@ -155,10 +155,10 @@ describe("campaign offer source intelligence", () => {
     const stored = await getSession(id);
     const eligibilityEvents = stored?.events.filter(({ name }) => name === "generation_eligible");
     expect(eligibilityEvents).toHaveLength(1);
-    expect(eligibilityEvents?.[0]?.meta).toEqual({
+    expect(eligibilityEvents?.[0]?.meta).toEqual(expect.objectContaining({
       trigger: "answers",
       revision: 2
-    });
+    }));
   });
 
   it("discards a superseded extraction and keeps only intelligence for the latest URL", async () => {

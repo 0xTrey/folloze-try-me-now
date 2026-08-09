@@ -7,6 +7,7 @@ import {
   SHARED_EXPERIENCE_PRIMITIVES,
   type ExperiencePrimitive
 } from "@/lib/generation/experience-renderers";
+import type { VisualGrammar } from "@/lib/generation/visual-grammar";
 import type { WireframeSelectionV1 } from "@/lib/generation/wireframe-library";
 import { isImageDeliveryPath } from "@/lib/image-delivery";
 import type {
@@ -172,18 +173,39 @@ function imageFigure(
   alt: string,
   className: string,
   eager = false,
-  allowFallback = true
+  allowFallback = true,
+  assetRole?: string
 ): string {
   const safeUrl = safeAssetUrl(url);
   if (!safeUrl && !allowFallback) return "";
   const roleClass = safeUrl && /diagram|architecture|marketecture|workflow|chart/i.test(safeUrl) ? " is-diagram" : "";
-  return `<figure class="media ${className}${roleClass}"${allowFallback ? "" : ' data-no-fallback="true"'}>
+  const safeAssetRole = assetRole && /^[a-z-]{1,48}$/.test(assetRole) ? ` data-asset-role="${assetRole}"` : "";
+  return `<figure class="media ${className}${roleClass}"${allowFallback ? "" : ' data-no-fallback="true"'}${safeAssetRole}>
     ${allowFallback ? `<div class="media-fallback" data-fallback-kind="experience-blueprint" aria-hidden="true">
       <span class="media-fallback-kicker">Experience blueprint</span>
       <strong>Context.<br>Proof.<br>Next step.</strong>
       <span class="media-fallback-steps"><i>01</i><i>02</i><i>03</i></span>
     </div>` : ""}
     ${safeUrl ? `<img src="${escapeHtml(safeUrl)}" alt="${escapeHtml(alt)}" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>` : ""}
+  </figure>`;
+}
+
+function noAssetFigure(grammar: VisualGrammar, className: string): string {
+  const copy: Record<VisualGrammar["noAssetTreatment"], { label: string; headline: string; steps: readonly string[] }> = {
+    "editorial-evidence": { label: "A considered point of view", headline: "The signal is clear.\nThe next move\nshould be too.", steps: ["Signal", "Meaning", "Action"] },
+    "proof-receipt": { label: "Evidence is being carried forward", headline: "A supported case.\nA decision worth\nmaking.", steps: ["Fact", "Context", "Decision"] },
+    "choice-map": { label: "Choose the useful way in", headline: "One promise.\nThree ways to\nmake it real.", steps: ["Explore", "Compare", "Act"] },
+    "system-map": { label: "A validation path", headline: "Map the system.\nValidate the\nfirst outcome.", steps: ["Input", "Flow", "Outcome"] },
+    "data-frame": { label: "The evidence frame", headline: "Read the finding.\nSee the pattern.\nChoose the implication.", steps: ["Finding", "Pattern", "Implication"] },
+    "chapter-index": { label: "The guided source", headline: "Start with the\nmoment that\nmatters most.", steps: ["Watch", "Learn", "Continue"] }
+  };
+  const treatment = copy[grammar.noAssetTreatment];
+  return `<figure class="media ${className} no-asset-treatment no-asset-${grammar.noAssetTreatment}" data-fallback-kind="${grammar.noAssetTreatment}" data-asset-role="${grammar.heroMediaRole}">
+    <div class="media-fallback" aria-hidden="true">
+      <span class="media-fallback-kicker">${escapeHtml(treatment.label)}</span>
+      <strong>${escapeHtml(treatment.headline).replace(/\n/g, "<br>")}</strong>
+      <span class="media-fallback-steps">${treatment.steps.map((step) => `<i>${escapeHtml(step)}</i>`).join("")}</span>
+    </div>
   </figure>`;
 }
 
@@ -226,7 +248,7 @@ function frameworkImage(
     : images.length === 1
       ? images[0]
       : undefined;
-  return imageFigure(selected, brief.caption, className, eager, false);
+  return imageFigure(selected, brief.caption, className, eager, false, brief.assetType);
 }
 
 type RenderStyleVariant = "standard" | "brand-led" | "editorial" | "technical" | "minimal";
@@ -366,7 +388,11 @@ export function renderExperienceHtml(input: {
   const supportingImages = images.filter((image) => image !== heroImage);
   const vendorUrl = safePublicLinkUrl(`https://${brand.domain}`) ?? "https://www.folloze.com";
   const template = experienceTemplateFor(draft, input.wireframeSelection);
+  const visualGrammar = template.visualGrammar;
   const framework = template.family === "content-source" ? undefined : draft.persuasionFramework;
+  const frameworkHeroMedia = framework
+    ? frameworkImage(images, framework.opening.imageBrief, "hero-media", true)
+    : undefined;
   const templateFingerprint = framework
     ? template.fingerprint
     : template.family === "account-abm"
@@ -452,7 +478,14 @@ export function renderExperienceHtml(input: {
         const question = frameworkChoices ? frameworkChoices[index].validationQuestion : undefined;
         const media = frameworkChoices
           ? frameworkImage(images, frameworkChoices[index].imageBrief, "lens-media")
-          : imageFigure(supportingImages[index] ?? supportingImages[0] ?? heroImage, `${brand.companyName}: ${label}`, "lens-media");
+          : imageFigure(
+              supportingImages[index] ?? supportingImages[0],
+              `${brand.companyName}: ${label}`,
+              "lens-media",
+              false,
+              false,
+              "supporting"
+            );
         return `<section class="lens-panel${media ? "" : " no-media"}" id="lens-panel-${index}" role="tabpanel" aria-labelledby="lens-tab-${index}" tabindex="0" ${index === 0 ? "" : "hidden"}>
         <div class="lens-number" aria-hidden="true">0${index + 1}</div>
         <div class="lens-copy"><p class="eyebrow" ${editableBlock(`lens.${index}.eyebrow`, "eyebrow")}>${escapeHtml(label)}</p><h2 ${editableBlock(`lens.${index}.headline`, "headline")}>${escapeHtml(headline)}</h2><p ${editableBlock(`lens.${index}.body`, "body")}>${escapeHtml(body)}</p>${question ? `<p class="validation-question"><strong>Question to answer</strong>${escapeHtml(question)}</p>` : ""}</div>
@@ -595,6 +628,7 @@ export function renderExperienceHtml(input: {
     .media.media .media-fallback>strong{position:relative;max-width:520px;font-family:var(--display);font-size:clamp(34px,4.4vw,62px);line-height:.98;letter-spacing:-.035em}
     .media.media .media-fallback-steps{width:100%;padding-top:16px;display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid color-mix(in srgb,var(--brand-ink) 20%,transparent)}
     .media.media .media-fallback-steps i{font-style:normal;font-size:11px;font-weight:850;letter-spacing:.12em}
+    .no-asset-treatment{isolation:isolate}.no-asset-treatment:before{content:"";position:absolute;inset:0;z-index:-1;opacity:.92}.no-asset-editorial-evidence:before{background:linear-gradient(135deg,color-mix(in srgb,var(--brand-accent) 18%,transparent),transparent 46%),repeating-linear-gradient(90deg,transparent 0 48px,color-mix(in srgb,var(--brand-ink) 8%,transparent) 49px 50px)}.no-asset-proof-receipt:before{background:radial-gradient(circle at 82% 16%,color-mix(in srgb,var(--brand-accent) 28%,transparent),transparent 28%),linear-gradient(135deg,var(--brand-soft-surface),var(--brand-surface))}.no-asset-choice-map:before{background:linear-gradient(90deg,color-mix(in srgb,var(--brand-accent) 14%,transparent) 1px,transparent 1px),linear-gradient(color-mix(in srgb,var(--brand-accent) 14%,transparent) 1px,transparent 1px);background-size:64px 64px}.no-asset-system-map:before{background:linear-gradient(135deg,transparent 49.5%,color-mix(in srgb,var(--brand-accent) 28%,transparent) 50%,transparent 50.5%),radial-gradient(circle at 20% 72%,color-mix(in srgb,var(--brand-support) 28%,transparent),transparent 28%)}.no-asset-data-frame:before{background:linear-gradient(90deg,transparent 0 18%,color-mix(in srgb,var(--brand-accent) 34%,transparent) 18% 20%,transparent 20% 44%,color-mix(in srgb,var(--brand-support) 28%,transparent) 44% 46%,transparent 46%)}.no-asset-chapter-index:before{background:repeating-linear-gradient(0deg,color-mix(in srgb,var(--brand-ink) 8%,transparent) 0 1px,transparent 1px 72px),linear-gradient(145deg,var(--brand-dark),var(--brand-surface));opacity:.38}
     *{box-sizing:border-box}[hidden]{display:none!important}html{scroll-behavior:auto;overflow-x:clip;scroll-padding-top:70px}body{margin:0;background:var(--brand-surface);color:var(--brand-ink);font-family:var(--body);line-height:1.5;overflow-x:clip;overscroll-behavior-y:contain;-webkit-font-smoothing:antialiased}button,a{font:inherit;touch-action:manipulation}.hero-copy,.lens-copy,.journey-copy,.close>div,.region-heading{min-width:0}.shell{max-width:1600px;min-height:100dvh;margin:0 auto;background:var(--brand-surface);overflow:clip}.eyebrow{margin:0 0 18px;color:var(--brand-accent);font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.skip-link{position:fixed;left:16px;top:12px;z-index:1000;padding:10px 14px;border-radius:6px;background:var(--brand-ink);color:#fff;text-decoration:none;transform:translateY(-180%);transition:transform .16s ease}.skip-link:focus{transform:translateY(0)}.nav{height:78px;padding:0 clamp(22px,6vw,96px);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:var(--brand-surface)}.brand-lockup{display:flex;flex:0 0 auto;align-items:center;gap:12px;min-width:0}.lockup-divider{min-width:38px;min-height:32px;padding:0 9px;display:grid;place-items:center;border-inline:1px solid color-mix(in srgb,var(--muted) 32%,transparent);color:var(--muted);font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.wordmark{display:inline-grid;grid-template-areas:"mark";flex:0 0 auto;align-items:center;max-width:172px;min-height:36px;color:var(--brand-ink);font-weight:800;font-size:19px;line-height:1;white-space:nowrap}.wordmark img,.wordmark-fallback{grid-area:mark}.wordmark img{display:block;width:auto;height:auto;max-width:172px;max-height:32px;object-fit:contain;opacity:0}.wordmark-fallback{max-width:100%;overflow:hidden;text-overflow:ellipsis}.wordmark.has-image img{opacity:1}.wordmark.has-image .wordmark-fallback{visibility:hidden}.target-wordmark{max-width:142px}.target-wordmark img{max-width:142px;max-height:30px}.nav-action{border:0;background:transparent;color:var(--brand-ink);min-height:44px;padding:0;cursor:pointer;font-weight:750}.nav-action:hover,.nav-action:focus-visible{color:var(--brand-accent)}
     .journey-nav{position:sticky;top:0;z-index:40;min-height:58px;border-bottom:1px solid color-mix(in srgb,var(--brand-ink) 14%,transparent);background:color-mix(in srgb,var(--brand-surface) 92%,transparent);box-shadow:0 12px 34px color-mix(in srgb,var(--brand-ink) 7%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}.journey-nav-inner{min-height:58px;padding:0 clamp(22px,6vw,96px);display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:clamp(18px,3vw,42px)}.journey-nav-title{display:grid;min-width:124px;line-height:1.1}.journey-nav-title strong{font-size:11px;letter-spacing:.13em;text-transform:uppercase}.journey-nav-title small{max-width:170px;margin-top:4px;overflow:hidden;color:var(--muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.journey-links{min-width:0;width:100%;display:flex;align-self:stretch;align-items:center;justify-content:flex-start;gap:clamp(4px,1vw,14px);overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none}.journey-links::-webkit-scrollbar{display:none}.journey-links button{position:relative;display:inline-flex;flex:0 0 auto;align-items:center;gap:8px;min-height:44px;padding:0 9px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-weight:750;white-space:nowrap}.journey-links button>span{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.35;transition:opacity .18s ease,transform .18s ease}.journey-links button:after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:var(--brand-accent);transform:scaleX(0);transform-origin:center;transition:transform .18s ease}.journey-links button:hover,.journey-links button:focus-visible,.journey-links button[aria-current="location"]{color:var(--brand-ink)}.journey-links button[aria-current="location"]>span{background:var(--brand-accent);opacity:1;transform:scale(1.45)}.journey-links button[aria-current="location"]:after{transform:scaleX(1)}.fullscreen-control{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:var(--brand-surface);color:var(--brand-ink);cursor:pointer;font-size:11px;font-weight:800;white-space:nowrap}.fullscreen-control svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.6}.fullscreen-control:hover,.fullscreen-control:focus-visible,.fullscreen-control[aria-pressed="true"]{border-color:var(--brand-accent);color:var(--brand-accent)}
     .hero{position:relative;min-height:650px;padding:clamp(70px,8vw,128px) clamp(24px,7vw,112px);display:grid;grid-template-columns:minmax(0,1.04fr) minmax(360px,.76fr);gap:clamp(44px,7vw,108px);align-items:center;background:linear-gradient(132deg,var(--brand-surface) 0 58%,var(--soft) 58% 100%)}.hero-copy{position:relative;z-index:2}.hero h1{max-width:940px;margin:0;font-family:var(--display);font-size:clamp(46px,4.6vw,72px);font-weight:800;line-height:1.02;letter-spacing:-.01em;text-wrap:balance;overflow-wrap:break-word}.hero .subhead{max-width:780px;margin:28px 0 34px;color:var(--text);font-size:clamp(18px,1.65vw,22px);line-height:1.5}.primary,.secondary{display:inline-flex;align-items:center;justify-content:center;min-height:var(--button-height);padding:13px 24px;border-radius:var(--button-radius);text-decoration:none;font-weight:750;cursor:pointer;transition:background-color .18s ease,color .18s ease,border-color .18s ease}.primary{border:var(--button-border-width) solid var(--brand-button-bg);background:var(--brand-button-bg);color:var(--brand-button-text)}.primary:hover,.primary:focus-visible{border-color:var(--brand-button-hover);background:var(--brand-button-hover)}.primary:active{border-color:var(--brand-button-active);background:var(--brand-button-active)}.secondary{border:var(--button-border-width) solid var(--brand-secondary-border);background:transparent;color:var(--brand-secondary-text)}.secondary:hover,.secondary:focus-visible{border-color:var(--brand-button-hover);color:var(--brand-button-hover)}.actions{display:flex;gap:12px;flex-wrap:wrap}.hero-media{width:100%;max-width:100%;height:clamp(380px,42vw,560px);min-height:0;align-self:center;border:1px solid color-mix(in srgb,var(--brand-ink) 12%,transparent);border-radius:var(--card-radius);box-shadow:0 28px 80px color-mix(in srgb,var(--brand-ink) 16%,transparent)}.media{position:relative;margin:0;overflow:hidden;background:var(--soft)}.media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;opacity:0;transition:opacity .2s ease}.media.has-asset img{opacity:1}.media-fallback{position:absolute;inset:0;isolation:isolate}.media.has-asset .media-fallback{opacity:0}.context-note{display:inline-flex;align-items:center;gap:9px;margin-top:24px;padding:9px 13px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:13px}.context-note:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--brand-accent)}
@@ -610,6 +644,7 @@ export function renderExperienceHtml(input: {
     .composition-workflow-spine .hero{background-image:linear-gradient(color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px);background-size:38px 38px}.composition-workflow-spine .mechanism-section{grid-template-columns:1fr}.composition-workflow-spine .mechanism-media{display:none}.composition-workflow-spine .mechanism-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line)}.composition-workflow-spine .mechanism-steps article{position:relative;min-height:300px;padding:32px;display:flex;flex-direction:column;gap:38px;border:0;border-right:1px solid var(--line)}.composition-workflow-spine .mechanism-steps article:last-child{border-right:0}.composition-workflow-spine .mechanism-steps article:not(:last-child):after{content:"";position:absolute;right:-7px;top:50%;z-index:2;width:12px;height:12px;border:2px solid var(--brand-surface);border-radius:50%;background:var(--brand-accent)}
     .composition-data-story .hero{grid-template-columns:minmax(0,1.12fr) minmax(360px,.58fr);background:var(--soft)}.composition-data-story .hero h1{max-width:920px}.composition-data-story .credibility-anchor{grid-template-columns:minmax(320px,.64fr) minmax(0,1.1fr);background:var(--brand-surface)}.composition-data-story .fact-implication{grid-template-columns:1fr}.composition-data-story .fact-implication>div:first-child p{font-family:var(--display);font-size:clamp(28px,3vw,48px);font-weight:var(--heading-weight);line-height:1.05}.composition-data-story .role-grid article{position:relative;overflow:hidden}.composition-data-story .role-grid article:before{content:"";position:absolute;left:0;top:0;width:100%;height:5px;background:linear-gradient(90deg,var(--brand-accent) 0 66%,var(--line) 66%)}
     .composition-chapter-journey .hero{min-height:72vh}.composition-chapter-journey .framework-starting-points{background:var(--brand-dark);color:#fff}.composition-chapter-journey .framework-starting-points .eyebrow{color:var(--brand-accent)}.composition-chapter-journey .framework-starting-points .region-intro{color:color-mix(in srgb,#fff 76%,transparent)}.composition-chapter-journey .lens-tabs{counter-reset:chapter;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;padding:0;background:color-mix(in srgb,#fff 18%,transparent)}.composition-chapter-journey .lens-tabs button{counter-increment:chapter;min-height:92px;padding:18px 20px;border:0;background:var(--brand-dark);color:#fff;text-align:left;white-space:normal}.composition-chapter-journey .lens-tabs button:before{content:"0" counter(chapter) "  ";color:var(--brand-accent)}.composition-chapter-journey .lens-tabs button[aria-selected="true"]{background:var(--brand-accent);color:var(--brand-on-accent)}.composition-chapter-journey .lens-tabs button[aria-selected="true"]:before{color:currentColor}.composition-chapter-journey .lens-panel{padding:clamp(30px,5vw,64px) 0;color:#fff}.composition-chapter-journey .lens-copy>p:not(.eyebrow){color:color-mix(in srgb,#fff 78%,transparent)}
+    @keyframes guided-arrival{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:no-preference){.motion-guided .hero-copy,.motion-guided .hero-media{animation:guided-arrival .48s cubic-bezier(.2,.8,.2,1) both}.motion-guided .hero-media{animation-delay:.08s}.motion-demonstrative .lens-tabs button{transition:transform .18s ease,background-color .18s ease,color .18s ease}.motion-demonstrative .lens-tabs button:hover{transform:translateY(-2px)}.motion-quiet .hero-media{box-shadow:var(--brand-card-shadow)}}
     body.cta-outline .primary{background:transparent;color:var(--brand-accent)}body.cta-outline .close .primary{background:transparent;border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.cta-text .primary{min-height:44px;padding:8px 0;border:0;border-bottom:2px solid currentColor;border-radius:0;background:transparent;color:var(--brand-accent)}body.cta-text .close .primary{color:#fff}.footer{padding:26px clamp(24px,6vw,96px);display:flex;justify-content:space-between;gap:24px;color:var(--muted);font-size:12px}.footer a{color:inherit;text-decoration:none}.footer a:hover,.footer a:focus-visible{color:var(--brand-accent)}.experience-region,.framework-section,.close,#next-step,.hero{scroll-margin-top:70px}
     html:fullscreen,html:fullscreen body,html:fullscreen .shell{width:100%;max-width:none;min-height:100%;background:var(--brand-surface)}body.is-fullscreen .shell{max-width:none}body.is-fullscreen .journey-nav{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}body.is-fullscreen .hero{min-height:calc(100dvh - 58px)}
     body.style-editorial .hero h1,body.style-editorial .signature-intro h2,body.style-editorial .thesis h2,body.style-editorial .region-heading h2,body.style-editorial .journey-header h2{letter-spacing:-.025em}body.style-editorial .eyebrow{letter-spacing:.18em}body.style-technical .fullscreen-control{border-radius:4px}body.style-technical .hero{background-image:linear-gradient(color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px);background-size:42px 42px}body.style-minimal .hero{background:var(--brand-surface)}body.style-minimal .hero-media{box-shadow:none}body.style-minimal .signature,body.style-minimal .lens-lab,body.style-minimal .journey{background:var(--brand-surface)}body.style-minimal .journey-card{background:transparent}
@@ -628,7 +663,7 @@ export function renderExperienceHtml(input: {
     body.brand-hero-dark .hero .eyebrow,.close .eyebrow{color:var(--brand-accent)}
   </style>
 </head>
-<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}"${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
+<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} visual-grammar-${visualGrammar.id} motion-${visualGrammar.motionProfile} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}" data-visual-grammar="${visualGrammar.id}" data-motion-profile="${visualGrammar.motionProfile}" data-hero-media-role="${visualGrammar.heroMediaRole}" data-proof-device="${visualGrammar.proofDevice}" data-cadence="${visualGrammar.cadence}" data-close-treatment="${visualGrammar.closeTreatment}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}"${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
 <button class="skip-link" type="button" data-scroll-target="main-content">Skip to experience</button>
 <div class="shell">
   <header class="nav">
@@ -649,7 +684,7 @@ export function renderExperienceHtml(input: {
     </div>
   </nav>
   <main id="main-content" tabindex="-1">
-    <section class="hero${framework && !frameworkImage(images, framework.opening.imageBrief, "hero-media", true) ? " hero-no-media" : ""}" id="experience-overview" data-journey-section="experience-overview" data-template-primitive="hero" ${framework ? evidenceAttribute(framework.opening.evidenceIds) : ""} aria-labelledby="experience-headline">
+    <section class="hero" id="experience-overview" data-journey-section="experience-overview" data-template-primitive="hero" ${framework ? evidenceAttribute(framework.opening.evidenceIds) : ""} aria-labelledby="experience-headline">
       <div class="hero-copy">
         <p class="eyebrow" ${editableBlock("hero.eyebrow", "eyebrow")}>${escapeHtml(framework?.opening.eyebrow ?? heroEyebrow)}</p>
         <h1 id="experience-headline" ${editableBlock("hero.headline", "headline")}>${escapeHtml(framework?.opening.headline ?? draft.headline)}</h1>
@@ -659,7 +694,11 @@ export function renderExperienceHtml(input: {
         </div>
         <span class="context-note" ${editableBlock("hero.audience", "audience")}>For ${escapeHtml(draft.audienceLabel)}</span>
       </div>
-      ${framework ? frameworkImage(images, framework.opening.imageBrief, "hero-media", true) : imageFigure(heroImage, `${brand.companyName} platform visual`, "hero-media", true)}
+      ${framework
+        ? frameworkHeroMedia || noAssetFigure(visualGrammar, "hero-media")
+        : heroImage
+          ? imageFigure(heroImage, `${brand.companyName} platform visual`, "hero-media", true, true, visualGrammar.heroMediaRole)
+          : noAssetFigure(visualGrammar, "hero-media")}
     </section>
     ${pageFlow}
     ${closeMarkup}

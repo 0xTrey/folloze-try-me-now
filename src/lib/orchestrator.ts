@@ -9,6 +9,11 @@ import {
 import { assessBrandReadiness } from "@/lib/brand-readiness";
 import { config } from "@/lib/config";
 import type { SourceArtifact } from "@/lib/content-intelligence";
+import {
+  canStartOptionalRefinement,
+  generationBudgetFor,
+  timingMetaForGenerationBudget
+} from "@/lib/generation-budget";
 import { fetchPublicUrlSourceArtifact } from "@/lib/content-url";
 import {
   buildExperienceSpec,
@@ -32,6 +37,7 @@ import { sendClaimEmail } from "@/lib/integrations/email";
 import {
   deterministicDraft,
   generateExperienceDraft,
+  openAIErrorDiagnostics,
   SourceFetchError
 } from "@/lib/integrations/openai";
 import { leadStoreMode, recordLeadCapture, updateLeadOutcome } from "@/lib/lead-store";
@@ -1762,9 +1768,15 @@ export async function patchSessionAnswers(
     applyAnswerPatch(session, patch);
     completeInputMutation(session, previousFingerprint);
     if (!wasGenerationReady && isGenerationReady(session.useCase, session.answers)) {
+      const eligibleAt = Date.now();
+      const budget = generationBudgetFor(eligibleAt, {
+        totalMs: config.generationDeadlineMs,
+        finalizationReserveMs: config.generationFinalizationReserveMs
+      }, eligibleAt);
       appendEvent(session, "generation_eligible", {
         trigger: "answers",
-        revision: session.revision + 1
+        revision: session.revision + 1,
+        ...timingMetaForGenerationBudget(budget)
       });
     }
     return session;
@@ -2264,7 +2276,15 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       startedAt: new Date().toISOString(),
       detail: "Turning the brief into a tension, value, proof, and next-step sequence."
     };
-    appendEvent(session, "generation_started", { attemptId });
+    const eligibleAt = generationEligibleAt(session) ?? Date.now();
+    const budget = generationBudgetFor(eligibleAt, {
+      totalMs: config.generationDeadlineMs,
+      finalizationReserveMs: config.generationFinalizationReserveMs
+    });
+    appendEvent(session, "generation_started", {
+      attemptId,
+      ...timingMetaForGenerationBudget(budget)
+    });
     return session;
   });
   if (!started || !acquiredGeneration) return false;
@@ -2439,13 +2459,40 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       latest = provisioned ?? latest;
     }
 
-    let generated = await generateExperienceDraft({
-      brand: selectedBrands.brand,
-      targetBrand: selectedBrands.targetBrand,
-      useCase: latest.useCase,
-      answers: latest.answers,
-      sourceArtifact: latest.sourceArtifact
-    });
+    const eligibleAt = generationEligibleAt(latest) ?? Date.parse(
+      latest.stages.story.startedAt ?? ""
+    );
+    const refinementBudget = generationBudgetFor(
+      Number.isFinite(eligibleAt) ? eligibleAt : Date.now(),
+      {
+        totalMs: config.generationDeadlineMs,
+        finalizationReserveMs: config.generationFinalizationReserveMs
+      }
+    );
+    const refinementSkipped = !canStartOptionalRefinement(
+      refinementBudget,
+      config.generationTimeoutMs
+    );
+    let generated = refinementSkipped
+      ? {
+          draft: deterministicDraft({
+            brand: selectedBrands.brand,
+            targetBrand: selectedBrands.targetBrand,
+            useCase: latest.useCase,
+            answers: latest.answers,
+            sourceArtifact: latest.sourceArtifact
+          }),
+          source: "deterministic-fallback" as const,
+          durationMs: 0,
+          fallbackReason: "generation_budget_reserved_finalization"
+        }
+      : await generateExperienceDraft({
+          brand: selectedBrands.brand,
+          targetBrand: selectedBrands.targetBrand,
+          useCase: latest.useCase,
+          answers: latest.answers,
+          sourceArtifact: latest.sourceArtifact
+        });
     const trustFallbackReason = generationTrustFailureFor({
       draft: generated.draft,
       brand: selectedBrands.brand,
@@ -2483,7 +2530,11 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         traceId: traceIdForSession(latest),
         operation: "openai_story_generation",
         code: generated.fallbackReason ?? "openai_request_failed",
-        details: { durationMs: generated.durationMs, model: config.openAIModel }
+        details: {
+          durationMs: generated.durationMs,
+          model: config.openAIModel,
+          ...openAIErrorDiagnostics(generated.error)
+        }
       });
     } else if (
       generated.source === "deterministic-fallback" &&
@@ -2558,8 +2609,17 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           fallbackReason: generated.fallbackReason ?? null,
           model: generated.source === "openai" ? config.openAIModel : null,
           artifactRevision: session.revision + 1,
-          qualityGate: trustFallbackReason ?? "passed"
+          qualityGate: trustFallbackReason ?? "passed",
+          ...timingMetaForGenerationBudget(refinementBudget)
         });
+        if (refinementSkipped) {
+          appendEvent(session, "generation_refinement_skipped", {
+            attemptId,
+            reason: "generation_budget_reserved_finalization",
+            requiredMs: config.generationTimeoutMs,
+            ...timingMetaForGenerationBudget(refinementBudget)
+          });
+        }
         appendEvent(session, "render_completed", {
           attemptId,
           durationMs: finalArtifact.renderDurationMs,

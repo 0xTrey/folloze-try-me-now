@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { zodTextFormat } from "openai/helpers/zod";
 
 const parseResponse = vi.hoisted(() => vi.fn());
 
@@ -37,8 +38,10 @@ import {
 } from "@/lib/generation/experience-schema";
 import {
   deterministicDraft,
+  experienceDraftResponseSchema,
   experienceQualityFailure,
   generateExperienceDraft,
+  openAIErrorDiagnostics,
   SourceFetchError,
   isNonBlockingStyleFailure
 } from "@/lib/integrations/openai";
@@ -133,6 +136,37 @@ function draftFor(useCase: UseCase, answers: SessionAnswers, targetBrand?: Brand
   const draft = deterministicDraft({ brand: jitterbit, targetBrand, useCase, answers, context });
   return { context, draft };
 }
+
+describe("OpenAI error diagnostics", () => {
+  it("keeps unsupported URI formats out of the structured-output schema", () => {
+    const format = zodTextFormat(experienceDraftResponseSchema, "folloze_try_me_experience_v4");
+    expect(JSON.stringify(format)).not.toContain('"format":"uri"');
+  });
+
+  it("keeps only safe provider classification fields", () => {
+    expect(openAIErrorDiagnostics({
+      status: 429,
+      code: "rate_limit_exceeded",
+      type: "tokens",
+      message: "prompt and secret material must never be logged",
+      request_id: "req_private"
+    })).toEqual({
+      upstreamStatus: 429,
+      clientCode: "rate_limit_exceeded",
+      providerType: "tokens",
+      retryable: true
+    });
+    expect(openAIErrorDiagnostics({
+      status: 400,
+      code: "invalid request with spaces",
+      type: "invalid_request_error"
+    })).toEqual({
+      upstreamStatus: 400,
+      providerType: "invalid_request_error",
+      retryable: false
+    });
+  });
+});
 
 describe("supplemental public source ingestion", () => {
   beforeEach(() => {

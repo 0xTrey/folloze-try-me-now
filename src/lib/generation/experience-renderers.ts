@@ -7,6 +7,10 @@ import {
   type WireframeArchetypeId,
   type WireframeSelectionV1
 } from "@/lib/generation/wireframe-library";
+import {
+  visualGrammarForArchetype,
+  type VisualGrammar
+} from "@/lib/generation/visual-grammar";
 
 export type ExperienceTemplateFamily = "account-abm" | "campaign-launch" | "content-source";
 
@@ -25,6 +29,8 @@ export interface ExperienceTemplateComposition {
   resourcesEyebrow: string;
   resourceAction: string;
   journeyNavigation: readonly string[];
+  /** Presentation-only grammar; copy and proof stay in the ExperienceSpec. */
+  visualGrammar: VisualGrammar;
 }
 
 const canonicalRegionOrder: readonly ExperiencePrimitive[] = [
@@ -50,7 +56,8 @@ const accountComposition: ExperienceTemplateComposition = {
   regionOrder: canonicalRegionOrder,
   resourcesEyebrow: "Evidence to carry forward",
   resourceAction: "Explore the evidence",
-  journeyNavigation: ["Overview", "Why it matters", "Where to start", "How it works", "For your team", "Evidence", "Next step"]
+  journeyNavigation: ["Overview", "Why it matters", "Where to start", "How it works", "For your team", "Evidence", "Next step"],
+  visualGrammar: visualGrammarForArchetype("account-executive")
 };
 
 const campaignComposition: ExperienceTemplateComposition = {
@@ -69,7 +76,8 @@ const campaignComposition: ExperienceTemplateComposition = {
   regionOrder: canonicalRegionOrder,
   resourcesEyebrow: "Proof for the campaign",
   resourceAction: "Explore this proof",
-  journeyNavigation: ["Overview", "Why it matters", "Where to start", "How it works", "For your team", "Evidence", "Next step"]
+  journeyNavigation: ["Overview", "Why it matters", "Where to start", "How it works", "For your team", "Evidence", "Next step"],
+  visualGrammar: visualGrammarForArchetype("campaign-demand")
 };
 
 const contentComposition: ExperienceTemplateComposition = {
@@ -88,7 +96,8 @@ const contentComposition: ExperienceTemplateComposition = {
   regionOrder: canonicalRegionOrder,
   resourcesEyebrow: "From the source",
   resourceAction: "Explore this highlight",
-  journeyNavigation: ["Key finding", "Explore", "Chapters", "Apply it", "Source", "Next step"]
+  journeyNavigation: ["Key finding", "Explore", "Chapters", "Apply it", "Source", "Next step"],
+  visualGrammar: visualGrammarForArchetype("content-report")
 };
 
 export const SHARED_EXPERIENCE_PRIMITIVES = [
@@ -157,6 +166,7 @@ export function experienceTemplateFor(
       archetype.contentPolicy === "source-preserving"
         ? "Explore this source point"
         : "Explore the evidence",
-    journeyNavigation: archetype.navigationLabels
+    journeyNavigation: archetype.navigationLabels,
+    visualGrammar: visualGrammarForArchetype(archetype.id)
   };
 }

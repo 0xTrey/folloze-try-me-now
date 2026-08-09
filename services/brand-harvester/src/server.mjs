@@ -55,7 +55,7 @@ function requestErrorCode(error) {
   return /^[a-z0-9_]{3,80}$/.test(code) ? code : "harvest_failed";
 }
 
-export function createServer() {
+export function createServer({ harvest = harvestBrand } = {}) {
   return http.createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/health") {
       const browser = browserReadiness();
@@ -76,6 +76,14 @@ export function createServer() {
     const requestId = crypto.randomUUID();
     const started = Date.now();
     inFlight += 1;
+    const disconnected = new AbortController();
+    const abortForDisconnect = () => {
+      if (!disconnected.signal.aborted) {
+        disconnected.abort(new Error("request_disconnected"));
+      }
+    };
+    request.once("aborted", abortForDisconnect);
+    response.once("close", abortForDisconnect);
     try {
       const body = await readBody(request);
       const domain = normalizeDomain(body.domain);
@@ -89,7 +97,8 @@ export function createServer() {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(new Error("harvest_timeout")), timeoutMs);
       try {
-        const raw = await harvestBrand({ domain, sourceUrl: sourceUrl.toString(), signal: controller.signal });
+        const signal = AbortSignal.any([controller.signal, disconnected.signal]);
+        const raw = await harvest({ domain, sourceUrl: sourceUrl.toString(), signal });
         const result = buildPublicPayload(raw, {
           domain,
           sourceUrl: sourceUrl.toString(),
@@ -107,6 +116,8 @@ export function createServer() {
       process.stderr.write(`${JSON.stringify({ event: "brand_harvest_failed", requestId, code, durationMs: Date.now() - started })}\n`);
       return json(response, status, { error: code, requestId });
     } finally {
+      request.removeListener("aborted", abortForDisconnect);
+      response.removeListener("close", abortForDisconnect);
       inFlight -= 1;
     }
   });

@@ -6,6 +6,10 @@ import {
 } from "@/lib/brand-intelligence";
 import { primaryActionFor } from "@/lib/cta-presentation";
 import {
+  compileMessageSpine,
+  type MessageSpineV2
+} from "@/lib/generation/message-spine";
+import {
   getWireframeArchetype,
   selectWireframe,
   type WireframeSelectionV1
@@ -181,6 +185,8 @@ export interface CampaignGenerationContext {
     labels: { thesis: string; lenses: string; journey: string; close: string };
     selection: WireframeSelectionV1;
   };
+  /** Evidence-first editorial plan for future generation and repair passes. */
+  messageSpineV2: MessageSpineV2;
 }
 
 const technicalCategories = new Set<BrandCategory>([
@@ -796,7 +802,7 @@ export function compileCampaignContext(input: {
         ? `The visitor named ${offerName} as the promoted offer for this ${register.replace("campaign-", "")} campaign.`
         : null;
 
-  return {
+  const contextWithoutSpine = {
     brief: {
       campaignGoal: objective,
       audience,
@@ -930,5 +936,6 @@ export function compileCampaignContext(input: {
       ]
     },
     wireframe
-  };
+  } satisfies Omit<CampaignGenerationContext, "messageSpineV2">;
+  return { ...contextWithoutSpine, messageSpineV2: compileMessageSpine(contextWithoutSpine) };
 }

@@ -13,6 +13,7 @@ import {
   canClaimPreview,
   CampaignOverviewRail,
   getBuildPanelCopy,
+  IntentComposer,
   OptionalContextComposer,
   PreviewUpdateNotice,
   ProgressiveQuestions,
@@ -400,12 +401,12 @@ describe("guided campaign workspace", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "Your build brief" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Completed brief choices")).toBeInTheDocument();
-    expect(screen.queryByText("Jitterbit")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What Folloze is building" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Live experience brief")).toBeInTheDocument();
+    expect(screen.getByText("Jitterbit")).toBeInTheDocument();
     expect(screen.getByText("Jitterbit Harmony")).toBeInTheDocument();
-    expect(screen.getByText("Enterprise architects")).toBeInTheDocument();
-    expect(document.querySelector('[data-overview-field="target"]')).not.toBeInTheDocument();
+    expect(screen.getAllByText("Enterprise architects").length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('[data-overview-field]')).toHaveLength(5);
   });
 
   it("keeps the campaign offer incomplete when only a campaign type is selected", () => {
@@ -425,8 +426,8 @@ describe("guided campaign workspace", () => {
       />
     );
 
-    expect(screen.getByLabelText("Completed brief choices")).toBeInTheDocument();
-    expect(document.querySelector('[data-overview-field="offer"]')).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Live experience brief")).toBeInTheDocument();
+    expect(document.querySelector('[data-overview-field="offer"]')).toHaveTextContent("Waiting for this signal");
     expect(screen.queryByText("Product campaign")).not.toBeInTheDocument();
   });
 
@@ -812,6 +813,40 @@ describe("guided campaign workspace", () => {
     });
   });
 
+  it("does not ask for the same campaign direction twice after the composer saved it", () => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const campaignSession = {
+      ...readySession,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {
+        campaignType: "product" as const,
+        promotedOffer: "Lawn care service",
+        promotedOfferConfirmed: true,
+        audience: "Other",
+        customAudience: "Commercial property managers",
+        messageBelief: "Lead with a reliable property-maintenance outcome and invite buyers to request a quote."
+      }
+    };
+    render(
+      <ProgressiveQuestions
+        session={campaignSession}
+        answers={campaignSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(screen.queryByLabelText(/What is new or worth noticing/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Build my experience/i }));
+    expect(onPatch).toHaveBeenCalledWith({
+      objective: "Launch or announce",
+      messageBelief: campaignSession.answers.messageBelief
+    });
+  });
+
   it("accepts one optional URL or PDF source across paths without changing the path", () => {
     const onPatch = vi.fn().mockResolvedValue(undefined);
     const onUpload = vi.fn().mockResolvedValue(undefined);
@@ -832,10 +867,10 @@ describe("guided campaign workspace", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "Add anything that should shape the result." })).toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: "Additional guidance or context type" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What should this account care about?" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Add context to the live brief" })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Message or helpful context"), {
+    fireEvent.change(screen.getByLabelText("What should the buyer understand, believe, or do?"), {
       target: { value: "Lead with the cost of disconnected buyer journeys." }
     });
     fireEvent.click(screen.getByRole("button", { name: "Add to brief" }));
@@ -843,14 +878,14 @@ describe("guided campaign workspace", () => {
       messageBelief: "Lead with the cost of disconnected buyer journeys."
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: "URL" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Attach URL" }));
     const urlInput = screen.getByLabelText("Public HTTPS URL");
     expect(urlInput).toBeEnabled();
     fireEvent.change(urlInput, { target: { value: "https://example.com/account-proof" } });
     fireEvent.click(screen.getByRole("button", { name: "Use this URL" }));
     expect(onPatch).toHaveBeenLastCalledWith({ sourceUrl: "https://example.com/account-proof" });
 
-    fireEvent.click(screen.getByRole("tab", { name: "PDF" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Attach PDF" }));
     expect(screen.getByText("Add a supporting PDF")).toBeInTheDocument();
     const fileInput = document.querySelector('input[type="file"]');
     expect(fileInput).toBeEnabled();
@@ -867,12 +902,112 @@ describe("guided campaign workspace", () => {
         onUpload={onUpload}
       />
     );
-    fireEvent.click(screen.getByRole("tab", { name: "URL" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Attach URL" }));
     expect(screen.getByLabelText("Public HTTPS URL")).toBeDisabled();
     expect(screen.getByText("One source is already attached to this brief.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "PDF" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Attach PDF" }));
     expect(screen.getByText("One source is already attached")).toBeInTheDocument();
     expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
+  });
+
+  it.each(["abm", "campaign", "content"] as const)("uses the same intent composer grammar for %s", (useCase) => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const composerSession = {
+      ...readySession,
+      useCase,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {}
+    };
+
+    const { container } = render(
+      <IntentComposer
+        session={composerSession}
+        answers={composerSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(container.querySelector("[data-intent-composer='true']")).toBeInTheDocument();
+    expect(screen.getByLabelText("What should the buyer understand, believe, or do?")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Attach URL" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Attach PDF" })).toBeInTheDocument();
+  });
+
+  it("submits composer text by keyboard without changing structured answer submission", () => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const composerSession = { ...readySession, status: "collecting" as const, experience: undefined, answers: {} };
+    render(
+      <IntentComposer
+        session={composerSession}
+        answers={composerSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    const input = screen.getByLabelText("What should the buyer understand, believe, or do?");
+    fireEvent.change(input, { target: { value: "Lead with the cost of disconnected buyer journeys." } });
+    expect(document.querySelector("[data-interpretation-receipt='true']")).toBeInTheDocument();
+    expect(onPatch).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+    expect(onPatch).toHaveBeenCalledWith({ messageBelief: "Lead with the cost of disconnected buyer journeys." });
+  });
+
+  it("projects an accepted campaign sentence into the visible structured brief", () => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    const composerSession = {
+      ...readySession,
+      useCase: "campaign" as const,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {}
+    };
+    render(
+      <IntentComposer
+        session={composerSession}
+        answers={composerSession.answers}
+        isSaving={false}
+        onPatch={onPatch}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    const input = screen.getByLabelText("What should the buyer understand, believe, or do?");
+    fireEvent.change(input, {
+      target: { value: "Build a landing page to promote my lawn care service for commercial property managers and request a service quote." }
+    });
+    expect(screen.getByText("lawn care service")).toBeInTheDocument();
+    expect(screen.getByText("commercial property managers")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use these details" }));
+
+    expect(onPatch).toHaveBeenCalledWith({
+      messageBelief: "Build a landing page to promote my lawn care service for commercial property managers and request a service quote.",
+      audience: "Other",
+      customAudience: "commercial property managers",
+      messageAction: "Request a quote",
+      campaignType: "product",
+      promotedOffer: "lawn care service",
+      promotedOfferConfirmed: true
+    });
+  });
+
+  it("shows exactly one active decision surface at a time", () => {
+    const campaignSession = { ...readySession, status: "collecting" as const, experience: undefined, answers: {} };
+    const { container } = render(
+      <ProgressiveQuestions
+        session={campaignSession}
+        answers={campaignSession.answers}
+        isSaving={false}
+        onPatch={vi.fn().mockResolvedValue(undefined)}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+    expect(container.querySelectorAll(".questionCard")).toHaveLength(1);
   });
 
   it("makes PDF upload progress, acceptance, and errors unmistakable in the guided shell", () => {
@@ -923,9 +1058,9 @@ describe("guided campaign workspace", () => {
         onUpload={props.onUpload}
       />
     );
-    fireEvent.click(screen.getByRole("tab", { name: "PDF" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Attach PDF" }));
     expect(screen.getByText("PDF accepted and added")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("PDF accepted");
+    expect(screen.getAllByRole("status").some((node) => node.textContent?.includes("PDF accepted"))).toBe(true);
     expect(screen.queryByText("Choose PDF")).not.toBeInTheDocument();
   });
 

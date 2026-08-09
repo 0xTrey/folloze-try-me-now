@@ -204,6 +204,35 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(sendClaimEmail).not.toHaveBeenCalled();
   });
 
+  it("uses the deterministic preview when a full model pass would consume the finalization reserve", async () => {
+    const pending = session({ id: "anonymous-preview-budget-reserve" });
+    pending.events.push({
+      name: "generation_eligible",
+      at: new Date(Date.now() - 30_500).toISOString(),
+      meta: { trigger: "answers" }
+    });
+    await putSession(pending);
+
+    await runStoryStage(pending.id);
+
+    const stored = await getSession(pending.id);
+    expect(generateExperienceDraft).not.toHaveBeenCalled();
+    expect(stored).toMatchObject({
+      status: "preview_ready_unclaimed",
+      experience: { generationSource: "deterministic-fallback", readiness: "final" }
+    });
+    expect(stored?.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: "generation_refinement_skipped",
+        meta: expect.objectContaining({
+          reason: "generation_budget_reserved_finalization",
+          budgetMs: 60_000,
+          finalizationReserveMs: 5_000
+        })
+      })
+    ]));
+  });
+
   it("shows an unclaimable deterministic preview before slow model refinement finishes", async () => {
     const pending = session({ id: "provisional-preview-before-model" });
     pending.events.push({

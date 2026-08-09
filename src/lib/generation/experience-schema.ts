@@ -203,6 +203,37 @@ export const persuasionFrameworkSchema = z
   })
   .strict();
 
+/**
+ * OpenAI Structured Outputs rejects the JSON Schema `uri` format emitted by
+ * Zod's `.url()`. Keep the provider-facing field as a bounded nullable string,
+ * then pass the parsed result back through `persuasionFrameworkSchema` before
+ * any draft can be accepted by the product.
+ */
+export const persuasionFrameworkResponseSchema = persuasionFrameworkSchema.extend({
+  strategy: persuasionFrameworkSchema.shape.strategy.extend({
+    evidenceMap: z
+      .array(
+        z
+          .object({
+            id: evidenceId,
+            kind: z.enum([
+              "seller-fact",
+              "target-fact",
+              "source-claim",
+              "mechanism",
+              "proof",
+              "visitor-input"
+            ]),
+            claim: z.string().min(8).max(240),
+            sourceUrl: z.string().max(500).nullable()
+          })
+          .strict()
+      )
+      .min(2)
+      .max(10)
+  })
+});
+
 export const experienceDraftSchema = z
   .object({
     campaignRegister: z.enum(campaignRegisters),

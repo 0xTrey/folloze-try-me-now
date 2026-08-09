@@ -15,6 +15,15 @@ async function brandHarvesterTimeoutFor(value: string): Promise<number> {
   return (await configFor({ TRY_ME_BRAND_HARVESTER_TIMEOUT_MS: value })).brandHarvesterTimeoutMs;
 }
 
+async function generationDeadlineFor(value: string): Promise<number> {
+  return (await configFor({ TRY_ME_GENERATION_DEADLINE_MS: value })).generationDeadlineMs;
+}
+
+async function finalizationReserveFor(value: string): Promise<number> {
+  return (await configFor({ TRY_ME_GENERATION_FINALIZATION_RESERVE_MS: value }))
+    .generationFinalizationReserveMs;
+}
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.resetModules();
@@ -22,7 +31,7 @@ afterEach(() => {
 
 describe("generation timeout configuration", () => {
   it("defaults to a 25-second first-preview quality budget", async () => {
-    expect(await generationTimeoutFor("")).toBe(25_000);
+    expect(await generationTimeoutFor("")).toBe(30_000);
   });
 
   it("preserves the useful 10-second lower clamp", async () => {
@@ -35,6 +44,22 @@ describe("generation timeout configuration", () => {
 
   it("accepts an override inside the bounded window", async () => {
     expect(await generationTimeoutFor("20000")).toBe(20_000);
+  });
+});
+
+describe("end-to-end generation budget configuration", () => {
+  it("defaults to a 60-second customer contract with a five-second finalization reserve", async () => {
+    expect(await generationDeadlineFor("")).toBe(60_000);
+    expect(await finalizationReserveFor("")).toBe(5_000);
+  });
+
+  it("never permits an environment override beyond the 60-second contract", async () => {
+    expect(await generationDeadlineFor("90000")).toBe(60_000);
+  });
+
+  it("keeps the render/persist reserve inside a bounded operational range", async () => {
+    expect(await finalizationReserveFor("100")).toBe(2_000);
+    expect(await finalizationReserveFor("90000")).toBe(10_000);
   });
 });
 

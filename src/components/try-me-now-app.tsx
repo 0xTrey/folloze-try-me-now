@@ -85,6 +85,7 @@ import {
   sellerBrandPreflightKey
 } from "@/lib/client-brand-preflight";
 import { imageDeliveryPath } from "@/lib/image-delivery";
+import { interpretConversationalBrief } from "@/lib/conversational-brief";
 import {
   captureProductEvent,
   identifyProductVisitor,
@@ -1301,15 +1302,35 @@ function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
       icon: Gauge
     }
   };
-  const visibleKeys: OverviewFieldKey[] = session.useCase === "abm"
-    ? ["seller", "target", "offer", "audience", "objective"]
-    : ["seller", "offer", "audience", "objective"];
-  return visibleKeys.map((key) => rows[key]);
+  // Every motion presents the same five-field grammar. For campaign/content,
+  // "target" becomes the people the experience is intended to help rather than
+  // a named account. This keeps the visible brief simple without collapsing
+  // seller, source/offer, audience, and objective in the underlying session.
+  if (session.useCase !== "abm") {
+    rows.target = {
+      key: "target",
+      label: "Who it is for",
+      detail: "Intended buyer",
+      value: briefFields?.target?.value || (session.answers.audience ? audienceFor(session) : undefined),
+      required: true,
+      icon: Target
+    };
+    rows.offer.label = session.useCase === "content" ? "What it is about" : "What it is about";
+    rows.offer.detail = session.useCase === "content" ? "Source content" : "Offer or campaign";
+    rows.audience.label = "Buyer group";
+    rows.objective.label = "What they should do";
+  } else {
+    rows.seller.label = "Your brand";
+    rows.target.label = "Who it is for";
+    rows.offer.label = "What it is about";
+    rows.audience.label = "Buyer group";
+    rows.objective.label = "What they should do";
+  }
+  return (["seller", "target", "offer", "audience", "objective"] as OverviewFieldKey[]).map((key) => rows[key]);
 }
 
 export function CampaignOverviewRail({ session }: { session: PublicTryMeSession }) {
   const rows = overviewRowsFor(session);
-  const summaryRows = rows.filter((row) => row.key !== "seller" && Boolean(row.value));
   const moments = buildMoments(session);
   const activeMoment = moments.find((moment) => moment.status === "running")
     || moments.find((moment) => moment.status === "pending")
@@ -1317,29 +1338,30 @@ export function CampaignOverviewRail({ session }: { session: PublicTryMeSession 
   const waitingForInput = activeMoment?.status === "pending";
 
   return (
-    <section className="campaignOverview" aria-labelledby="campaign-overview-title">
+    <section className="campaignOverview liveBriefRail" aria-labelledby="campaign-overview-title" data-live-brief="true">
       <div className="campaignOverviewHeader">
         <div>
-          <span className="sectionKicker">Your choices</span>
-          <h2 id="campaign-overview-title">Your build brief</h2>
+          <span className="sectionKicker">Live brief</span>
+          <h2 id="campaign-overview-title">What Folloze is building</h2>
         </div>
       </div>
-      <p className="campaignOverviewIntro">Your choices stay visible while Folloze builds in the background.</p>
-      {summaryRows.length > 0 && <div className="overviewFieldList" aria-label="Completed brief choices">
-        {summaryRows.map((row) => {
+      <p className="campaignOverviewIntro">The experience updates from these simple signals. Change a choice whenever you need to.</p>
+      <div className="overviewFieldList" aria-label="Live experience brief">
+        {rows.map((row) => {
           const Icon = row.icon;
+          const complete = Boolean(row.value);
           return (
-            <div className="overviewField is-complete" data-overview-field={row.key} key={row.key}>
+            <div className={`overviewField ${complete ? "is-complete" : "is-current"}`} data-overview-field={row.key} key={row.key}>
               <span className="overviewFieldIcon" aria-hidden="true"><Icon size={17} /></span>
               <div>
                 <span>{row.label}</span>
-                <strong>{row.value}</strong>
+                <strong>{row.value || "Waiting for this signal"}</strong>
               </div>
-              <span className="overviewFieldState" aria-label="Done" title="Done"><Check size={14} /></span>
+              <span className="overviewFieldState" aria-label={complete ? "Done" : "Next signal"} title={complete ? "Done" : "Next signal"}>{complete ? <Check size={14} /> : <ArrowRight size={14} />}</span>
             </div>
           );
         })}
-      </div>}
+      </div>
       {activeMoment && (
         <div className={`overviewNow is-${activeMoment.status} ${waitingForInput ? "is-waiting" : ""}`} role="status" aria-live="polite">
           <span>{!waitingForInput && <span className="liveDot" />}{waitingForInput ? "Ready for your next choice" : "Folloze is working"}</span>
@@ -1502,18 +1524,11 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
         : undefined;
 
   return (
-    <section className="guidedThread" aria-labelledby="guided-thread-title">
+    <section className="guidedThread" aria-labelledby="guided-thread-title" data-guided-composer="true">
       <div className="guidedThreadHeader">
         <span className="guideAvatar" aria-hidden="true"><Sparkles size={16} /></span>
-        <div><span>Guided brief</span><h2 id="guided-thread-title">A few choices. One focused experience.</h2></div>
+        <div><span>Live brief</span><h2 id="guided-thread-title">Folloze is turning your inputs into a focused buyer experience.</h2></div>
       </div>
-      <ol className="decisionRail" aria-label="Experience brief progress">
-        {decisions.map((decision, index) => (
-          <li key={decision.label} className={decision.complete ? "isComplete" : index === activeIndex ? "isCurrent" : ""} aria-current={index === activeIndex ? "step" : undefined}>
-            <span>{decision.complete ? <Check size={13} /> : index + 1}</span><strong>{decision.label}</strong>
-          </li>
-        ))}
-      </ol>
       <div className="conversationHistory">
         <article className="guideBubble">
           <span><ShieldCheck size={14} />Identity check</span>
@@ -1526,8 +1541,8 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
           </div>
         </article>
         {latestSelection && (
-          <article className="prospectBubble">
-            <span>You chose</span><strong>{latestSelection.label}: {latestSelection.value}</strong>
+          <article className="prospectBubble compactTurnReceipt">
+            <span>Brief updated</span><strong>{latestSelection.label}: {latestSelection.value}</strong>
             {session.useCase === "content" && latestSelection.label === contextLabel && <button type="button" onClick={onRestart}><PencilLine size={13} />Replace source</button>}
           </article>
         )}
@@ -1544,6 +1559,7 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
           </article>
         )}
       </div>
+      <div className="briefNextSignal" role="status" aria-live="polite"><span>{decisions[activeIndex]?.complete ? "Brief ready" : `Next: ${decisions[activeIndex]?.label ?? "final check"}`}</span><small>One decision at a time. You can edit the brief any time.</small></div>
       <button type="button" className="identityReset buttonTertiary" onClick={onRestart}>{brandResolved && !brandVerified ? "Brand evidence looks wrong? Try another domain" : "Something look wrong? Start over"}</button>
     </section>
   );
@@ -1617,7 +1633,7 @@ function PdfUploadProgress({ feedback }: { feedback: PdfUploadFeedback }) {
   );
 }
 
-export function OptionalContextComposer({
+export function IntentComposer({
   session,
   answers,
   isSaving,
@@ -1640,38 +1656,113 @@ export function OptionalContextComposer({
   const savedText = answers.messageBelief?.trim() ?? "";
   const canSaveText = textValue.length >= 4 && textValue.length <= 240 && textValue !== savedText;
   const canSaveUrl = sourceOpen && /^https:\/\/[^\s]+$/i.test(contextUrl.trim());
+  const interpretation = interpretConversationalBrief(textValue, session.useCase);
+  const interpretedSignals = [
+    interpretation.targetAccount && { label: "Account", hint: interpretation.targetAccount },
+    interpretation.offer && { label: "Offer", hint: interpretation.offer },
+    interpretation.sourceUrl && { label: "Source", hint: interpretation.sourceUrl },
+    interpretation.audience && { label: "Buyer group", hint: interpretation.audience },
+    interpretation.objective && { label: "Outcome", hint: interpretation.objective }
+  ].filter((value): value is { label: string; hint: NonNullable<typeof interpretation.targetAccount> } => Boolean(value));
+  let attachmentLabel = answers.sourceName;
+  if (!attachmentLabel && answers.sourceUrl) {
+    try {
+      attachmentLabel = new URL(answers.sourceUrl).hostname.replace(/^www\./, "");
+    } catch {
+      attachmentLabel = "Public source";
+    }
+  }
+  const composerCopy = session.useCase === "abm"
+    ? {
+        kicker: "Start with one sentence",
+        title: "What should this account care about?",
+        body: "Describe the account conversation in plain language, or attach a product source. Folloze will turn it into a structured brief you can review."
+      }
+    : session.useCase === "campaign"
+      ? {
+          kicker: "Start with one sentence",
+          title: "What are you launching?",
+          body: "Describe the offer and the buyers you want to reach, or attach the product page. Folloze will organize the details for you."
+        }
+      : {
+          kicker: "Start with the source",
+          title: "What should this content help buyers understand?",
+          body: "Add one sentence, a public URL, or a PDF. Folloze will preserve the facts and shape the buyer experience around them."
+        };
+  const submitText = () => {
+    if (!canSaveText) return;
+    const patch: SessionAnswers = { messageBelief: textValue };
+    if (sourceOpen && interpretation.sourceUrl) {
+      patch.sourceUrl = interpretation.sourceUrl.value;
+    }
+    if (interpretation.audience) {
+      patch.audience = "Other";
+      patch.customAudience = interpretation.audience.value;
+    }
+    if (interpretation.objective && objectives[session.useCase].includes(interpretation.objective.value)) {
+      patch.objective = interpretation.objective.value;
+    }
+    if (interpretation.cta) {
+      patch.messageAction = interpretation.cta.value;
+    }
+    if (session.useCase === "campaign") {
+      if (interpretation.campaignType) {
+        patch.campaignType = interpretation.campaignType.value as SessionAnswers["campaignType"];
+      }
+      if (interpretation.offer) {
+        patch.promotedOffer = interpretation.offer.value;
+        patch.promotedOfferConfirmed = true;
+      }
+    }
+    void onPatch(patch);
+  };
 
   return (
-    <section className="contextComposer" aria-labelledby="context-composer-title">
+    <section className="contextComposer intentComposer" aria-labelledby="context-composer-title" data-intent-composer="true">
       <div className="contextComposerHeader">
         <div>
-          <span className="sectionKicker">Additional guidance or context</span>
-          <h2 id="context-composer-title">Add anything that should shape the result.</h2>
+          <span className="sectionKicker">{savedText ? "Refine the experience" : composerCopy.kicker}</span>
+          <h2 id="context-composer-title">{savedText ? "Tell Folloze anything else that matters." : composerCopy.title}</h2>
         </div>
         {savedText && <span className="contextSaved"><Check size={13} />Added to brief</span>}
       </div>
-      <p>Share one useful note, public URL, or PDF. You can skip this and keep moving.</p>
-      <div className="contextModeRail" role="tablist" aria-label="Additional guidance or context type">
-        <button id="context-tab-text" type="button" role="tab" aria-controls="context-panel-text" aria-selected={mode === "text"} className={mode === "text" ? "isActive" : ""} onClick={() => setMode("text")}><MessageSquareText size={16} />Text</button>
-        <button id="context-tab-url" type="button" role="tab" aria-controls="context-panel-url" aria-selected={mode === "url"} className={mode === "url" ? "isActive" : ""} onClick={() => setMode("url")}><ExternalLink size={16} />URL</button>
-        <button id="context-tab-pdf" type="button" role="tab" aria-controls="context-panel-pdf" aria-selected={mode === "pdf"} className={mode === "pdf" ? "isActive" : ""} onClick={() => setMode("pdf")}><FileText size={16} />PDF</button>
+      <p>{savedText ? "Type a useful note, attach a public URL, or add a PDF. Folloze will incorporate only what helps the buyer story." : composerCopy.body}</p>
+      <div className="contextModeRail composerTools" role="tablist" aria-label="Add context to the live brief">
+        <button id="context-tab-text" type="button" role="tab" aria-controls="context-panel-text" aria-selected={mode === "text"} className={mode === "text" ? "isActive" : ""} onClick={() => setMode("text")}><MessageSquareText size={16} />Add a note</button>
+        <button id="context-tab-url" type="button" role="tab" aria-controls="context-panel-url" aria-selected={mode === "url"} className={mode === "url" ? "isActive" : ""} onClick={() => setMode("url")}><ExternalLink size={16} />Attach URL</button>
+        <button id="context-tab-pdf" type="button" role="tab" aria-controls="context-panel-pdf" aria-selected={mode === "pdf"} className={mode === "pdf" ? "isActive" : ""} onClick={() => setMode("pdf")}><FileText size={16} />Attach PDF</button>
       </div>
+      {attachmentLabel && <div className="composerAttachment" role="status"><Check size={14} /><span>Source attached: <strong>{attachmentLabel}</strong></span></div>}
       {mode === "text" && (
         <div className="contextPanel" role="tabpanel" id="context-panel-text" aria-labelledby="context-tab-text">
-          <label htmlFor="optional-context-text">Message or helpful context</label>
+          <label htmlFor="optional-context-text">What should the buyer understand, believe, or do?</label>
           <textarea
             id="optional-context-text"
             value={contextText}
             onChange={(event) => setContextText(event.target.value)}
-            placeholder="For example: Lead with the cost of disconnected buyer journeys."
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault();
+                submitText();
+              }
+            }}
+            placeholder="For example: Lead with the cost of disconnected buyer journeys, then show a practical next step."
             maxLength={240}
           />
           <div className="contextPanelFooter">
-            <small>{contextText.length}/240 · Plain-language context only</small>
-            <button className="contextAddButton" type="button" disabled={isSaving || !canSaveText} onClick={() => void onPatch({ messageBelief: textValue })}>
-              {isSaving ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}{savedText ? "Update brief" : "Add to brief"}
+            <small>{contextText.length}/240 · Cmd/Ctrl + Enter to add</small>
+            <button className="contextAddButton" type="button" disabled={isSaving || !canSaveText} onClick={submitText}>
+              {isSaving ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}{savedText ? "Update brief" : interpretedSignals.length ? "Use these details" : "Add to brief"}
             </button>
           </div>
+          {textValue.length >= 4 && (
+            <div className="interpretationReceipt" role="status" aria-live="polite" data-interpretation-receipt="true">
+              <span><Sparkles size={13} />I’m reading this as</span>
+              {interpretedSignals.length > 0 ? (
+                <ul>{interpretedSignals.slice(0, 3).map(({ label, hint }) => <li key={label}><strong>{label}</strong><span>{hint.value}</span><small>from your note</small></li>)}</ul>
+              ) : <p>Helpful direction for the buyer story. Add it when it looks right.</p>}
+            </div>
+          )}
         </div>
       )}
       {mode === "url" && (
@@ -1711,6 +1802,10 @@ export function OptionalContextComposer({
     </section>
   );
 }
+
+// Compatibility export for existing callers and tests while the UI adopts the
+// conversational-composer language.
+export const OptionalContextComposer = IntentComposer;
 
 export function SourceUnderstandingSummary({
   insight
@@ -2219,7 +2314,7 @@ export function ProgressiveQuestions({
             )}
           </section>
         )}
-        {session.useCase === "campaign" && (
+        {session.useCase === "campaign" && !answers.messageBelief?.trim() && (
           <label className="briefPromptField">
             <span><MessageSquareText size={15} />{contextPrompt.label}</span>
             <textarea value={objectiveContext} onChange={(event) => setFieldValues((current) => ({ ...current, "objective-context": event.target.value }))} placeholder={contextPrompt.placeholder} maxLength={320} />
@@ -2389,6 +2484,11 @@ export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSe
     : undefined;
   const audience = session.answers.customAudience || session.answers.audience;
   const objective = session.answers.objective;
+  const previewRevision = session.experience?.artifactRevision ?? 0;
+  const previewLoadStarted = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    previewLoadStarted.current = performance.now();
+  }, [previewRevision]);
   const verifiedPalette = brandReady && session.brand?.colors.length ? session.brand.colors : undefined;
   const palette = verifiedPalette ?? ["#eef0f4", "#64748b", "#ffffff"];
   const canvasStyle = {
@@ -2412,6 +2512,23 @@ export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSe
           scrolling="yes"
           tabIndex={0}
           data-preview-scroll="contained"
+          onLoad={() => {
+            const startedAt = previewLoadStarted.current;
+            captureProductEvent("preview_rendered", {
+              category: "performance",
+              outcome: "success",
+              sessionId: session.id,
+              ...(startedAt === undefined
+                ? {}
+                : { durationMs: Math.max(0, Math.round(performance.now() - startedAt)) }),
+              properties: {
+                use_case: session.useCase,
+                artifact_revision: previewRevision,
+                readiness: session.experience?.readiness ?? "final",
+                generation_source: session.experience?.generationSource ?? "unknown"
+              }
+            });
+          }}
         />
       ) : (
         <div className="assemblyCanvas" style={canvasStyle}>
@@ -3297,6 +3414,14 @@ export function TryMeNowApp() {
             <div className="guidedWorkspaceInner">
               <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
               <ConversationThread session={session} onRestart={resetExperience} />
+              <IntentComposer
+                session={session}
+                answers={answers}
+                isSaving={isSaving}
+                pdfUpload={pdfUpload}
+                onPatch={patchAnswers}
+                onUpload={uploadPdf}
+              />
               <ProgressiveQuestions
                 session={session}
                 answers={answers}
@@ -3325,16 +3450,6 @@ export function TryMeNowApp() {
                   onInspect={() => setShowProcess(true)}
                 />
               </div>
-              {!(session.useCase === "abm" && (!answers.objective || productContextNeedsAttention(session))) && (
-                <OptionalContextComposer
-                  session={session}
-                  answers={answers}
-                  isSaving={isSaving}
-                  pdfUpload={pdfUpload}
-                  onPatch={patchAnswers}
-                  onUpload={uploadPdf}
-                />
-              )}
               {error && <div className="inlineError" role="alert">{error}</div>}
               {connectionError && <div className="connectionNotice" role="status"><LoaderCircle className="spin" size={15} />{connectionError}</div>}
             </div>

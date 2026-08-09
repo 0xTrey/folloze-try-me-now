@@ -207,6 +207,6 @@ describe("generated experience image delivery", () => {
     expect(html).not.toContain("attacker.example");
     expect(html).not.toContain("/uploads/brand-image.jpg");
     expect(html).not.toContain("seller-image-6");
-    expect(html).toContain('data-fallback-kind="experience-blueprint"');
+    expect(html).toContain('data-fallback-kind="editorial-evidence"');
   });
 });

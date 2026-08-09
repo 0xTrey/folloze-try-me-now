@@ -127,6 +127,8 @@ const safeDetailKeys = new Set([
   "slot",
   "mode",
   "upstreamStatus",
+  "providerType",
+  "retryable",
   "contentTypeHint",
   "detectedKind",
   "colorSpan",

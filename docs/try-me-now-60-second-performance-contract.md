@@ -1,6 +1,6 @@
 # Try Me Now: 60-second performance contract
 
-Date: August 7, 2026
+Date: August 9, 2026
 
 Status: active product constraint
 
@@ -37,17 +37,24 @@ therefore reach the final question before those jobs had hidden their latency.
 | Elapsed time | Required result |
 | --- | --- |
 | 0-5 seconds | Temporary URL plus a truthful build shell. Seller brand research has started. |
-| 5-20 seconds | Wireframe locked; target and source research visible as independent progress. |
-| 20-45 seconds | Branded, interactive preview assembled from fixed sections and verified evidence. |
-| 45-60 seconds | Copy validation and final render complete, or a safe deterministic preview remains visible with an honest refinement state. |
+| 5-15 seconds | Minimum-safe brand identity and source premise resolve where available; the reviewed wireframe is locked. |
+| By 15 seconds | A source-grounded, interactive provisional preview is visible in deterministic contract tests. It uses only verified brand fields and is explicitly unclaimable. |
+| 15-45 seconds | Desktop DesignDNA, full source evidence, assets, and model copy refine the same artifact in place. |
+| 45-55 seconds | Quality gates complete; optional provider work is declared non-blocking. |
+| 55-60 seconds | No new external work starts. The system assembles, renders, persists, and reaches a final or explicit safe terminal state. |
 
 The first usable preview must never wait for publishing, email, lead routing,
 analytics persistence, optional imagery, or a second model repair pass.
 
 ## Runtime budgets
 
-- OpenAI first-preview pass: 25-second default, 30-second hard maximum.
-- Remote browser brand pass: 12-second default, 20-second hard maximum.
+- One shared attempt deadline owns the complete 60-second promise. Provider
+  timeouts are sub-budgets, not permission to extend the customer deadline.
+- OpenAI refinement pass: 30-second default and hard maximum, and it
+  never blocks the deterministic provisional preview.
+- Remote browser brand pass: 12-second default, 20-second hard maximum, treated
+  as desktop presentation enrichment rather than a prerequisite for the first
+  preview.
 - Public HTML/CSS and Brandfetch run concurrently with the browser pass.
 - Remote logo candidates validate concurrently in score order within one
   five-second network window.
@@ -57,10 +64,11 @@ analytics persistence, optional imagery, or a second model repair pass.
   and HTML rendering share a two-second target.
 
 No fast path may present generic framework colors as customer branding. A
-final preview requires verified identity, logo, palette, and source evidence.
-Browser-derived component DNA enriches that evidence when it returns inside the
-budget; verified public HTML/CSS and Brandfetch evidence remain valid first-pass
-authorities when the browser pass times out.
+minimum-safe provisional requires verified identity, official logo, and
+semantic palette roles. A final preview requires the complete path-appropriate
+brand and source quality contract. Browser-derived typography, component,
+layout, and imagery DNA enriches the presentation when it returns inside the
+budget; it never changes narrative, proof, audience, or CTA authority.
 
 ## Measurement contract
 
@@ -71,8 +79,8 @@ Primary service-level metric:
 This begins when the last required brief answer is committed. It excludes human
 form-fill time and includes every remaining prerequisite, deterministic
 composition, render, and persistence step required for the first interactive
-buyer page. Report p50, p95, percentage at or below 60 seconds, and fallback
-rate by use case.
+buyer page. Report p50, p95, percentage at or below 15 seconds, percentage at
+or below 60 seconds, and fallback rate by use case.
 
 The companion quality metric is `preview_provisional_ready -> preview_ready`.
 It measures the bounded model refinement without hiding the usable page while
@@ -87,9 +95,11 @@ Supporting spans:
 - render duration;
 - session-created-to-preview duration for the full prospect journey.
 
-The browser should eventually emit `preview_rendered` after the generated
-experience is actually visible. Server `preview_provisional_ready` remains the
-authoritative first-preview time until that acknowledgement is implemented.
+The browser must emit `preview_rendered` after the generated experience is
+actually visible and interactive. The customer-visible SLO is measured from
+committed `generation_eligible` to the matching artifact revision's
+`preview_rendered`. Server `preview_provisional_ready` remains the operational
+fallback when browser acknowledgement is unavailable.
 
 ## Acceptance criteria
 
@@ -101,9 +111,13 @@ authoritative first-preview time until that acknowledgement is implemented.
 6. Logo candidate validation cannot add serial five-second waits.
 7. Source-grounded content still fails closed when the source cannot be read.
 8. Final previews never use broken images or unverified generic palettes.
-9. p95 `generation_eligible -> preview_ready` is at or below 60 seconds in a
-   production-like run set covering account, campaign, and content inputs.
-10. A timed-out refinement preserves the current safe preview and never replaces
+9. Deterministic contract tests produce a provisional preview by 15 seconds and
+   a terminal final or explicit safe state by 60 seconds for account, campaign,
+   and content inputs.
+10. Production-like runs target p50 at or below 15 seconds and p95 at or below
+    45 seconds for `generation_eligible -> preview_rendered`, and p95 at or below
+    60 seconds for the final visible state.
+11. A timed-out refinement preserves the current safe preview and never replaces
     a newer revision.
 
 ## Implemented provisional lifecycle
@@ -129,3 +143,18 @@ The August 7 local ServiceNow campaign verification recorded:
 Slow-model integration coverage holds the provider promise unresolved while
 asserting that the provisional iframe is ready, the claim boundary rejects the
 draft, and a late model result cannot overwrite a newer brief revision.
+
+The August 9 Keychain-backed local campaign verification recorded:
+
+- verified Folloze identity and six-color palette harvested in 1,250 ms;
+- browser-visible provisional preview in 2,308 ms after the build action;
+- OpenAI `gpt-5.6-terra` structured refinement completed in 25,709 ms;
+- browser-visible refined final in 28,185 ms;
+- no browser console errors and no deterministic fallback in the successful run.
+
+That run also exposed and fixed a provider schema incompatibility: Zod's URL
+validator emitted the unsupported JSON Schema `uri` format. The provider-facing
+schema now uses a bounded nullable string, while the returned draft is still
+revalidated by the stricter product URL schema before acceptance. Safe error
+classification now records provider status, code, type, and retryability without
+logging provider messages, prompts, responses, URLs, or credentials.

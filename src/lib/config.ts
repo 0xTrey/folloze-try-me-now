@@ -34,8 +34,19 @@ export const config = {
   emailMode: oneOf(process.env.EMAIL_MODE, ["console", "resend"] as const, "console"),
   openAIModel: nonEmptyFromEnv(process.env.OPENAI_MODEL, "gpt-5.6-terra"),
   generationTimeoutMs: Math.min(
-    Math.max(intFromEnv(process.env.TRY_ME_GENERATION_TIMEOUT_MS, 25_000), 10_000),
+    Math.max(intFromEnv(process.env.TRY_ME_GENERATION_TIMEOUT_MS, 30_000), 10_000),
     30_000
+  ),
+  // This is the customer-facing generation contract measured from the moment
+  // the brief becomes generation-ready. Provider-specific timeouts must fit
+  // inside it; the last window belongs solely to render/persist/fallback.
+  generationDeadlineMs: Math.min(
+    Math.max(intFromEnv(process.env.TRY_ME_GENERATION_DEADLINE_MS, 60_000), 30_000),
+    60_000
+  ),
+  generationFinalizationReserveMs: Math.min(
+    Math.max(intFromEnv(process.env.TRY_ME_GENERATION_FINALIZATION_RESERVE_MS, 5_000), 2_000),
+    10_000
   ),
   brandHarvesterTimeoutMs: Math.min(
     Math.max(intFromEnv(process.env.TRY_ME_BRAND_HARVESTER_TIMEOUT_MS, 12_000), 5_000),

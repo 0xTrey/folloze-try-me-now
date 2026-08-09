@@ -31,6 +31,7 @@ import {
   type PresentedBrandProfile,
   verifiedBrandProfileFor
 } from "@/lib/verified-brand-profiles";
+import { createBrandBudget, type BrandBudget } from "@/lib/brand-budget";
 
 const htmlEntityMap: Record<string, string> = {
   "&amp;": "&",
@@ -2019,7 +2020,10 @@ function brandfetchFonts(payload: Record<string, unknown>): {
   };
 }
 
-async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchLookup> {
+async function fetchBrandfetchBrand(
+  domain: string,
+  signal?: AbortSignal
+): Promise<BrandfetchLookup> {
   const token = process.env.BRANDFETCH_API_KEY;
   if (!token || !hasBrandfetchBrandApi) return { status: "failed" };
   try {
@@ -2034,7 +2038,7 @@ async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchLookup> {
           Authorization: `Bearer ${token}`
         },
         redirect: "error",
-        signal: AbortSignal.timeout(8_000)
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8_000)]) : AbortSignal.timeout(8_000)
       }
     );
     if (!response.ok) {
@@ -2181,7 +2185,8 @@ async function fetchBrandfetchBrand(domain: string): Promise<BrandfetchLookup> {
 
 async function fetchBrandfetchSearchDomain(
   query: string,
-  allowedDomains: Array<string | undefined>
+  allowedDomains: Array<string | undefined>,
+  signal?: AbortSignal
 ): Promise<string | undefined> {
   const clientId = process.env.BRANDFETCH_CLIENT_ID?.trim();
   if (!hasBrandfetchLogoApi || !clientId) return undefined;
@@ -2199,7 +2204,7 @@ async function fetchBrandfetchSearchDomain(
     const response = await fetch(url, {
       headers: { Accept: "application/json" },
       redirect: "error",
-      signal: AbortSignal.timeout(5_000)
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(5_000)]) : AbortSignal.timeout(5_000)
     });
     if (!response.ok) return undefined;
     const parsed = JSON.parse(await readBoundedResponseText(response, 250_000)) as unknown;
@@ -2256,11 +2261,14 @@ async function readBoundedResponseText(response: Response, maximumBytes: number)
 
 const brandfetchRequests = new Map<string, Promise<BrandfetchLookup>>();
 
-function fetchBrandfetchBrandSingleflight(domain: string): Promise<BrandfetchLookup> {
+function fetchBrandfetchBrandSingleflight(
+  domain: string,
+  signal?: AbortSignal
+): Promise<BrandfetchLookup> {
   const normalized = normalizeDomain(domain);
   const existing = brandfetchRequests.get(normalized);
   if (existing) return existing;
-  const request = fetchBrandfetchBrand(normalized).finally(() => {
+  const request = fetchBrandfetchBrand(normalized, signal).finally(() => {
     if (brandfetchRequests.get(normalized) === request) brandfetchRequests.delete(normalized);
   });
   brandfetchRequests.set(normalized, request);
@@ -2487,9 +2495,66 @@ function mergePublicBrandEvidence(
   return mergeVerifiedDesign(merged, verified);
 }
 
+interface CachedPortableLogo {
+  expiresAt: number;
+  portableLogo: NonNullable<BrandProfile["portableLogo"]>;
+}
+
+const portableLogoCache = new Map<string, CachedPortableLogo>();
+const portableLogoInFlight = new Map<
+  string,
+  Promise<NonNullable<BrandProfile["portableLogo"]> | undefined>
+>();
+const PORTABLE_LOGO_CACHE_MS = 15 * 60 * 1000;
+const PORTABLE_LOGO_CACHE_MAX = 100;
+
+async function validatedOfficialLogoFor(
+  source: string,
+  signal?: AbortSignal
+): Promise<NonNullable<BrandProfile["portableLogo"]> | undefined> {
+  const cached = portableLogoCache.get(source);
+  if (cached && cached.expiresAt > Date.now()) return cached.portableLogo;
+  if (cached) portableLogoCache.delete(source);
+  const existing = portableLogoInFlight.get(source);
+  if (existing) return existing;
+  const request = (async () => {
+    try {
+      const asset = await fetchPinnedPublicBytes(source, {
+        timeoutMs: 5_000,
+        maxBytes: 350_000,
+        maxRedirects: 2,
+        signal,
+        headers: {
+          Accept: "image/svg+xml,image/png,image/webp,image/jpeg,image/avif,image/gif;q=0.8,*/*;q=0.1"
+        }
+      });
+      if (asset.status !== 200 || asset.truncated) return undefined;
+      const portableLogo = await validatedPortableRemoteLogo(asset.bytes, "official-remote-asset");
+      if (portableLogo) {
+        if (portableLogoCache.size >= PORTABLE_LOGO_CACHE_MAX) {
+          const oldest = portableLogoCache.keys().next().value as string | undefined;
+          if (oldest) portableLogoCache.delete(oldest);
+        }
+        portableLogoCache.set(source, {
+          expiresAt: Date.now() + PORTABLE_LOGO_CACHE_MS,
+          portableLogo
+        });
+      }
+      return portableLogo;
+    } catch {
+      return undefined;
+    }
+  })().finally(() => {
+    if (portableLogoInFlight.get(source) === request) portableLogoInFlight.delete(source);
+  });
+  portableLogoInFlight.set(source, request);
+  return request;
+}
+
 async function copyOfficialRemoteLogo(
   profile: BrandProfile,
-  discovered: LogoCandidate[] = []
+  discovered: LogoCandidate[] = [],
+  budget?: BrandBudget
 ): Promise<BrandProfile> {
   const receipt = profile.diagnostics?.logo;
   if (profile.portableLogo) {
@@ -2538,26 +2603,11 @@ async function copyOfficialRemoteLogo(
   // twenty seconds to the first-preview path. Preserve score ordering while
   // validating the bounded candidate set concurrently.
   const validations = await Promise.all(candidates.map(async (candidate) => {
-    try {
-      const asset = await fetchPinnedPublicBytes(candidate.source, {
-        timeoutMs: 5_000,
-        maxBytes: 350_000,
-        maxRedirects: 2,
-        headers: {
-          Accept: "image/svg+xml,image/png,image/webp,image/jpeg,image/avif,image/gif;q=0.8,*/*;q=0.1"
-        }
-      });
-      if (asset.status !== 200 || asset.truncated) {
-        return undefined;
-      }
-      const portableLogo = await validatedPortableRemoteLogo(
-        asset.bytes,
-        "official-remote-asset"
-      );
-      return portableLogo ? { candidate, portableLogo } : undefined;
-    } catch {
-      return undefined;
-    }
+    const portableLogo = await validatedOfficialLogoFor(
+      candidate.source,
+      budget?.signalFor(5_000)
+    );
+    return portableLogo ? { candidate, portableLogo } : undefined;
   }));
   const attempted = validations.length;
   const rejected = validations.filter((result) => !result).length;
@@ -2607,6 +2657,10 @@ async function copyOfficialRemoteLogo(
 export async function harvestBrand(domain: string): Promise<BrandProfile> {
   const cached = cachedBrandProfile(domain);
   if (cached) return cached;
+  // This is the synchronous identity budget, not the overall buyer-experience
+  // budget. Optional browser/mobile enrichment can continue separately; the
+  // initial brand decision must leave time for a useful preview to render.
+  const budget = createBrandBudget(15_000);
   const verified = verifiedBrandProfileFor(domain);
   let publicPageStatus: "succeeded" | "failed" = "failed";
   let publicPageAttempts = 0;
@@ -2624,7 +2678,7 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
   const submittedBrandfetchDomain = normalizeDomain(domain);
   const parentBrandfetchDomain = registrableCompanyDomain(domain) || submittedBrandfetchDomain;
   const eagerBrandfetchPromise = config.brandfetchMode === "enrich" && hasBrandfetchBrandApi
-    ? fetchBrandfetchBrandSingleflight(submittedBrandfetchDomain)
+    ? fetchBrandfetchBrandSingleflight(submittedBrandfetchDomain, budget.signalFor(8_000))
     : undefined;
   // Run the deterministic public-page pass alongside an optional browser
   // harvester. This keeps richer semantic color evidence inside the existing
@@ -2635,12 +2689,12 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     try {
       const { text: html, finalUrl, attempts } = await fetchPublicTextWithRetry(
         new URL(`https://${domain}`),
-        AbortSignal.timeout(8_500)
+        budget.signalFor(8_500)
       );
       publicPageAttempts = attempts;
       const styles = await Promise.allSettled(
         stylesheetUrls(html, finalUrl).map(async (url) =>
-          (await fetchPublicText(new URL(url), AbortSignal.timeout(2_500))).text
+          (await fetchPublicText(new URL(url), budget.signalFor(2_500))).text
         )
       );
       const css = styles
@@ -2673,7 +2727,7 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
         // Browser evidence enriches the same first-preview budget as the
         // concurrent public-page and Brandfetch passes. It cannot consume the
         // complete 60-second promise by itself.
-        signal: AbortSignal.timeout(config.brandHarvesterTimeoutMs)
+        signal: budget.signalFor(config.brandHarvesterTimeoutMs)
       });
       if (response.ok) {
         const normalized = normalizeRemoteBrandProfile(await response.json(), domain);
@@ -2717,7 +2771,8 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     publicCanonicalDomain = publicEvidence.profile.canonicalDomain;
     const extracted = await copyOfficialRemoteLogo(
       publicEvidence.profile,
-      logoCandidatesByProfile.get(publicEvidence.profile) ?? []
+      logoCandidatesByProfile.get(publicEvidence.profile) ?? [],
+      budget
     );
     candidate = candidate
       ? mergePublicBrandEvidence(candidate, extracted, undefined)
@@ -2736,7 +2791,7 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     });
   }
 
-  if (candidate) candidate = await copyOfficialRemoteLogo(candidate);
+  if (candidate) candidate = await copyOfficialRemoteLogo(candidate, [], budget);
   const shouldFetchBrandData = hasBrandfetchBrandApi && (
     config.brandfetchMode === "enrich" ||
       !candidate ||
@@ -2745,35 +2800,44 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
   );
   if (shouldFetchBrandData) {
     let brandfetchLookup = await (
-      eagerBrandfetchPromise ?? fetchBrandfetchBrandSingleflight(submittedBrandfetchDomain)
+      eagerBrandfetchPromise ?? fetchBrandfetchBrandSingleflight(
+        submittedBrandfetchDomain,
+        budget.signalFor(8_000)
+      )
     );
     // A first-party redirect is the only automatic alias authority. If the
     // submitted hostname redirects to a canonical host, retry Brandfetch with
     // that exact host rather than accepting an unrelated search result.
-    if (
-      !brandfetchLookup.result &&
-      publicCanonicalDomain &&
-      publicCanonicalDomain !== normalizeDomain(domain)
-    ) {
-      brandfetchLookup = await fetchBrandfetchBrandSingleflight(publicCanonicalDomain);
+    if (!brandfetchLookup.result && !budget.exhausted()) {
+      // Both alternatives have already been proven safe: the first-party
+      // redirect supplies the canonical host and the registrable parent is a
+      // bounded identity fallback. Query them concurrently so aliases do not
+      // stack two eight-second waits onto the first-preview path.
+      const alternatives = [...new Set([
+        publicCanonicalDomain,
+        parentBrandfetchDomain
+      ].filter((candidateDomain): candidateDomain is string => Boolean(
+        candidateDomain && candidateDomain !== submittedBrandfetchDomain
+      )))];
+      const lookups = await Promise.all(
+        alternatives.map((candidateDomain) =>
+          fetchBrandfetchBrandSingleflight(candidateDomain, budget.signalFor(8_000))
+        )
+      );
+      const resolved = lookups.find((lookup) => lookup.result);
+      brandfetchLookup = resolved ?? lookups[0] ?? brandfetchLookup;
     }
-    // A regional or application host may not have a standalone Brandfetch
-    // record. Preserve real sub-brands by trying the submitted host first, then
-    // fall back to its registrable company domain only after an exact miss.
-    if (
-      !brandfetchLookup.result &&
-      parentBrandfetchDomain !== submittedBrandfetchDomain &&
-      parentBrandfetchDomain !== publicCanonicalDomain
-    ) {
-      brandfetchLookup = await fetchBrandfetchBrandSingleflight(parentBrandfetchDomain);
-    }
-    if (!brandfetchLookup.result) {
+    if (!brandfetchLookup.result && !budget.exhausted()) {
       const searchedDomain = await fetchBrandfetchSearchDomain(
         candidate?.companyName ?? domain,
-        [domain, parentBrandfetchDomain, publicCanonicalDomain]
+        [domain, parentBrandfetchDomain, publicCanonicalDomain],
+        budget.signalFor(5_000)
       );
       if (searchedDomain && searchedDomain !== normalizeDomain(domain)) {
-        brandfetchLookup = await fetchBrandfetchBrandSingleflight(searchedDomain);
+        brandfetchLookup = await fetchBrandfetchBrandSingleflight(
+          searchedDomain,
+          budget.signalFor(8_000)
+        );
       }
     }
     brandfetchBrandStatus = brandfetchLookup.status;
@@ -2786,7 +2850,7 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
   if (!candidate && hasBrandfetchLogoApi) candidate = fallbackBrand(domain);
   if (candidate) {
     const mergedCandidate = mergeVerifiedDesign(candidate, verified);
-    const resolvedCandidate = await copyOfficialRemoteLogo(mergedCandidate);
+    const resolvedCandidate = await copyOfficialRemoteLogo(mergedCandidate, [], budget);
     const usedVerifiedFallback = resolvedCandidate.diagnostics?.logo.strategy === "verified-profile";
     const logoApiCandidate = profileWithBrandfetchLogoApi(domain, resolvedCandidate);
     const finalLogoReceipt = logoApiCandidate.diagnostics?.logo ?? {

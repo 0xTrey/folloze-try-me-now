@@ -140,4 +140,21 @@ describe("validation-first logo recovery", () => {
       logoReady: false
     });
   });
+
+  it("singleflights the same official logo validation across concurrent harvests", async () => {
+    const domain = "northstar-singleflight.test";
+    safeFetchMocks.fetchPinnedPublicText.mockResolvedValue(publicPage(domain));
+    safeFetchMocks.fetchPinnedPublicBytes.mockResolvedValue({
+      status: 200,
+      headers: { "content-type": "image/svg+xml" },
+      bytes: validWordmark,
+      finalUrl: new URL(`https://${domain}/broken-northstar-logo.svg`),
+      truncated: false
+    });
+
+    await Promise.all([harvestBrand(domain), harvestBrand(domain)]);
+
+    // Both harvests discover two candidates, but each URL is validated once.
+    expect(safeFetchMocks.fetchPinnedPublicBytes).toHaveBeenCalledTimes(2);
+  });
 });

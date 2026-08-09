@@ -125,7 +125,7 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("object-fit:cover");
   });
 
-  it("uses an intentional experience blueprint when approved imagery is unavailable", () => {
+  it("uses an intentional grammar-specific treatment when approved imagery is unavailable", () => {
     const withoutImages = renderExperienceHtml({
       draft,
       brand: { ...brand, imageUrls: [] },
@@ -133,9 +133,9 @@ describe("renderExperienceHtml", () => {
       answers: {}
     });
 
-    expect(withoutImages).toContain('data-fallback-kind="experience-blueprint"');
-    expect(withoutImages).toContain("Experience blueprint");
-    expect(withoutImages).toContain("Context.<br>Proof.<br>Next step.");
+    expect(withoutImages).toContain('data-fallback-kind="editorial-evidence"');
+    expect(withoutImages).toContain("A considered point of view");
+    expect(withoutImages).toContain("The signal is clear.<br>The next move<br>should be too.");
     expect(withoutImages).toContain(".media.media .media-fallback:before,.media.media .media-fallback:after{display:none}");
     expect(withoutImages).not.toContain("<div class=\"media-fallback\" aria-hidden=\"true\"><span></span><span></span><span></span></div>");
     expect(withoutImages).not.toMatch(/<figure[^>]*>\s*<img/i);
@@ -147,6 +147,29 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain('--display:"Roboto Slab"');
     expect(html).toContain("Jitterbit-logo-2.svg");
     expect(html).toContain("HarmonyTitle-HeroImage-Ring.jpg");
+  });
+
+  it("exposes a bounded visual grammar without letting it alter copy or CTA intent", () => {
+    expect(html).toContain('data-visual-grammar="editorial-split"');
+    expect(html).toContain('data-motion-profile="quiet"');
+    expect(html).toContain('data-hero-media-role="brand-moment"');
+    expect(html).toContain('data-proof-device="narrative"');
+    expect(html).toContain('data-close-treatment="working-session"');
+    expect(html).toContain("Connect systems. Automate workflows. Keep AI accountable.");
+    expect(html).toContain('data-flz-cta-id="hero-primary"');
+  });
+
+  it("does not repeat the hero asset as a generic lens placeholder", () => {
+    const singleAsset = renderExperienceHtml({
+      draft,
+      brand: { ...brand, imageUrls: [brand.imageUrls[0]] },
+      useCase: "campaign",
+      answers: {}
+    });
+    const heroIndex = singleAsset.indexOf('HarmonyTitle-HeroImage-Ring.jpg');
+    expect(heroIndex).toBeGreaterThan(-1);
+    expect(singleAsset.indexOf('HarmonyTitle-HeroImage-Ring.jpg', heroIndex + 1)).toBe(-1);
+    expect(singleAsset).toContain('class="lens-panel no-media"');
   });
 
   it("applies normalized remote design DNA and emits an auditable renderer receipt", () => {

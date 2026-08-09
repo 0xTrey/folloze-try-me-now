@@ -303,6 +303,17 @@ export async function harvestBrand({ domain, sourceUrl, signal }) {
     headless: true,
     args: ["--disable-dev-shm-usage", "--disable-background-networking", "--disable-extensions", "--no-first-run"]
   });
+  const closeOnAbort = () => {
+    // Closing Chromium aborts an in-flight navigation, screenshot, or page
+    // evaluation. This is materially better than leaving the only worker busy
+    // after Try Me Now has already moved on to a newer domain/session.
+    browser.close().catch(() => undefined);
+  };
+  if (signal?.aborted) {
+    closeOnAbort();
+    throw signal.reason ?? new Error("harvest_aborted");
+  }
+  signal?.addEventListener("abort", closeOnAbort, { once: true });
   try {
     const context = await browser.newContext({
       userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/128 Safari/537.36 FollozeBrandHarvester/1.0",
@@ -321,6 +332,7 @@ export async function harvestBrand({ domain, sourceUrl, signal }) {
       brandfetch: await providerPromise
     };
   } finally {
-    await browser.close();
+    signal?.removeEventListener("abort", closeOnAbort);
+    await browser.close().catch(() => undefined);
   }
 }
