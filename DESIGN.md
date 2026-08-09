@@ -2,7 +2,7 @@
 
 Status: active product design baseline  
 Owner: Trey Harnden  
-Last reconciled: 2026-08-08
+Last reconciled: 2026-08-09
 
 ## Product design promise
 
@@ -82,6 +82,13 @@ given state.
 ## Guided-flow rules
 
 - Ask one obvious question at a time.
+- After the prospect chooses a motion, use one natural-language brief composer
+  as the front door to the structured flow. Natural language is presentation;
+  the visible, editable Live Brief remains product truth.
+- The composer may accept a short description, public URL, or PDF. It must show
+  an “I’m reading this as…” receipt and provenance for inferred fields.
+- Completed conversational turns collapse into compact receipts. Do not make the
+  prospect scroll through a chat transcript.
 - Use one prospect-facing three-step brief: account or offer, audience, goal.
 - Brand, research, and generation are shown separately as **Folloze is working**.
 - Brand evidence collapses to logo, company name, and status by default. Color and

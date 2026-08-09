@@ -1,6 +1,6 @@
 # Folloze Try Me Now Decision Log
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 
 Product requirements: [`product-requirements.md`](./product-requirements.md)
 
@@ -77,6 +77,8 @@ the newer recorded decision wins.
 | D-031 | The three entry examples are Aprio for Georgia-Pacific (one-to-one), ServiceNow AI Platform (campaign), and Cisco Hybrid Mesh Firewall (content). | Each card opens a motion-appropriate, verified example instead of a generic placeholder or a mismatched API/demo board. Example links are secondary proof, not the primary creation action. | Accepted and implemented 2026-08-07 |
 | D-032 | Analytics uses layered authority: first-party product/session ledgers for durable QA and inputs, optional PostHog for funnels/errors/masked replay, and native Folloze analytics inside published buyer experiences. | Server and browser events use stable explicit names; PostHog autocapture is disabled. Raw source content, prompts, secrets, domains, and email stay out of ordinary analytics events. Email becomes a person property only after an explicit claim. Analytics failures never block the build. | Implemented; PostHog is config-gated 2026-08-05 |
 | D-033 | The visual system has three owners: a calm light Folloze shell, one deep-navy Folloze processing module, and a customer-led generated preview. | This keeps Folloze recognizable without contaminating harvested customer branding. Verified Folloze blue/cyan/green tokens drive action, focus, progress, and success; the shell stays sans-serif, controls have visible focus and 44px targets, and motion respects reduced-motion preferences. | Implemented 2026-08-08 |
+| D-034 | After a prospect chooses one of the three motions, the primary brief surface is a conversational composer that translates one short sentence, URL, or PDF into visible, editable structured fields. | This clarifies D-017 rather than permitting arbitrary prompt-driven generation. The natural-language layer is a capture surface over the existing seller, target, offer/source, audience, objective, evidence, wireframe, and claim contracts. Folloze asks only the highest-leverage unresolved question, shows provenance for inferred values, and never treats unvalidated streamed prose as product truth. | Accepted 2026-08-09 |
+| D-035 | Brand delivery is progressive: a minimum-safe bundle of verified identity, official logo, and semantic color roles may power an unclaimable provisional preview; browser-derived typography, components, layout, and imagery enrich the final preview within the same 60-second deadline. | This makes D-026 and D-027 operationally compatible. A partial state is labeled honestly and never uses generic brand values, while optional desktop DesignDNA work can upgrade the preview without holding it hostage. Final save/share still requires the full final readiness and quality contract. | Accepted 2026-08-09 |
 
 On 2026-08-04, Trey explicitly superseded D-014. On 2026-08-07, he clarified
 that the complete Try Me Now result must fit inside 60 seconds. D-026 is the
@@ -86,6 +88,12 @@ safety decision for delivering that speed.
 On 2026-08-08, the guided-flow presentation in D-011 and D-013 was clarified:
 the visitor's three choices and Folloze's four autonomous work stages are related
 but are not two competing progress meters.
+
+On 2026-08-09, D-034 clarified D-017: a natural-language composer is approved
+as a structured-input surface, but arbitrary generation instructions remain
+outside the primary flow. D-035 clarifies that verified minimum-safe brand
+evidence can support the provisional artifact while deeper DesignDNA remains a
+bounded final-preview enrichment.
 
 ## Superseded June 1 directions
 

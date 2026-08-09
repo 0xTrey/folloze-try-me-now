@@ -4,7 +4,7 @@ Status: Approved for V1 implementation
 
 Owner: Trey Harnden
 
-Last updated: 2026-08-04
+Last updated: 2026-08-09
 
 ## Source material
 
@@ -65,7 +65,10 @@ The business should receive:
 - The current six-field Campaign Agent collection model
 - Multi-account campaign orchestration
 - CRM-dependent account enrichment
-- Arbitrary freeform generation instructions in the primary flow
+- Arbitrary freeform generation instructions in the primary flow. A natural-
+  language brief composer is allowed only when it projects the input into the
+  visible, editable structured brief and preserves every evidence and safety
+  gate.
 - User accounts, passwords, billing, or workspace administration
 - Email, social, and ad asset generation
 - n8n orchestration
@@ -98,6 +101,11 @@ No login or email is required.
 
 - Ask one question per screen or card.
 - Ask no more than four creation questions after the path is selected.
+- Present one motion-aware composer as the primary brief surface. It accepts a
+  short description, public URL, or PDF and translates that input into visible,
+  editable structured fields.
+- Show the visitor how Folloze interpreted the input and the provenance of each
+  inferred value before using it as generation truth.
 - Keep the live checklist visible while the user continues answering.
 - Start each eligible background task as soon as its input becomes available.
 - Offer inferred chips and defaults before requesting free text.
