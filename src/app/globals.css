@@ -40,9 +40,9 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .resetButton:hover { color: var(--fz-accent); }
 .sectionKicker { display: inline-block; color: var(--fz-accent); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 
-.entryStage { min-height: calc(100vh - 72px); display: flex; flex-direction: column; padding: 68px clamp(22px, 4vw, 64px) 26px; }
-.entryHero { max-width: 1120px; margin: 0 auto 50px; text-align: center; }
-.entryHero h1 { margin: 14px 0 20px; color: var(--fz-ink); font-family: var(--font-display), sans-serif; font-size: clamp(50px, 6.3vw, 88px); font-weight: 520; letter-spacing: -.045em; line-height: .98; }
+.entryStage { min-height: calc(100vh - 72px); display: flex; flex-direction: column; padding: 46px clamp(22px, 4vw, 64px) 24px; }
+.entryHero { max-width: 1040px; margin: 0 auto 34px; text-align: center; }
+.entryHero h1 { margin: 12px 0 16px; color: var(--fz-ink); font-family: var(--font-display), sans-serif; font-size: clamp(46px, 5.5vw, 76px); font-weight: 560; letter-spacing: -.045em; line-height: .98; text-wrap: balance; }
 .entryHero h1 em { color: var(--fz-accent); font-style: normal; }
 .entryHero p { max-width: 760px; margin: 0 auto; color: var(--fz-body); font-size: clamp(17px, 1.6vw, 21px); line-height: 1.55; }
 .entryFooter { width: min(100%,1460px); margin: 24px auto 0; color: var(--fz-muted-strong); font-size: 12px; text-align: center; }

@@ -3242,16 +3242,16 @@ export function TryMeNowApp() {
         <section className="entryStage">
           <div className="entryHero">
             <span className="sectionKicker">Try Folloze</span>
-            <h1>What do you want to build?</h1>
-            <p>Choose a path, answer three guided questions, and watch Folloze turn live company signals into a buyer-ready experience.</p>
+            <h1>Build a buyer-ready experience.</h1>
+            <p>Choose a starting point. Add a company and a few details. Folloze builds a branded experience your buyers can explore.</p>
             <div className="entryPromise" aria-label="Try Me Now experience promise">
-              <span><CircleCheck size={14} />No blank canvas</span>
-              <span><Clock3 size={14} />Usually 30–60 seconds</span>
-              <span><ShieldCheck size={14} />Preview before email</span>
+              <span><CircleCheck size={14} />Start with a guided brief</span>
+              <span><Clock3 size={14} />First preview in about a minute</span>
+              <span><ShieldCheck size={14} />Preview first. Save when ready.</span>
             </div>
           </div>
           <UseCasePortals onSelect={selectUseCase} disabled={!interactionReady} />
-          <div className="entryFooter">Enrichment starts with the first domain. Session activity is logged to improve this demo; add your email only after the experience is worth keeping.</div>
+          <div className="entryFooter">Start with a company domain. Explore the result before sharing your email.</div>
         </section>
       )}
 
