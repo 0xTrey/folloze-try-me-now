@@ -495,11 +495,13 @@ describe("Try Me Now prospect enhancement components", () => {
     );
 
     expect(screen.getByText("Signal captured")).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "What Folloze knows about this journey." })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "See what buyers engage with." })).toBeInTheDocument();
     expect(screen.getByText("Your activity in this preview")).toBeInTheDocument();
     expect(screen.getByText("You've spent 18 seconds here — that's already a signal.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Show a live-campaign example"));
     expect(screen.getByText("Not captured leads")).toBeInTheDocument();
     expect(screen.getByText("Simulated activity only. These placeholder names and actions demonstrate what Folloze can report in a live campaign.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("See the full analytics picture"));
     expect(screen.getByText("Journey path")).toBeInTheDocument();
     expect(screen.getByText("Buying group")).toBeInTheDocument();
     expect(screen.getByText(/John Smith spent/)).toBeInTheDocument();
@@ -570,11 +572,11 @@ describe("Try Me Now prospect enhancement components", () => {
 
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "88");
     expect(screen.getByText("Not required for this path")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Keep this experience live." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Save your live experience." })).toBeInTheDocument();
     expect(screen.getByLabelText("Preview of Connect Cisco workflows without losing control.")).toHaveTextContent("Jitterbit for Cisco");
     expect(screen.getByText("https://experience.example/jitterbit-for-cisco")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Business email"), { target: { value: "buyer@company.com" } });
-    fireEvent.submit(screen.getByRole("button", { name: "Save and email my link" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Email me this link" }).closest("form")!);
     fireEvent.click(screen.getByRole("button", { name: "Open experience" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy experience URL" }));
     expect(onEmail).toHaveBeenCalledWith("buyer@company.com");

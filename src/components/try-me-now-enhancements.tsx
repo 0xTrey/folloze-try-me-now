@@ -934,7 +934,7 @@ export function AnalyticsSignalPanel({
   return (
     <div className={classes(styles.modalBackdrop, styles.signalBackdrop)} onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
       <aside ref={ref} className={styles.signalPanel} role="dialog" aria-modal="true" aria-labelledby="signal-panel-title" onKeyDown={(event) => trapModalFocus(event, ref.current)}>
-        <div className={styles.drawerHeader}><div><span>Live engagement</span><h2 id="signal-panel-title">What Folloze knows about this journey.</h2><p>Every meaningful interaction can become context for campaign and sales follow-up.</p></div><button type="button" onClick={onClose} aria-label="Close analytics signals"><X size={20} /></button></div>
+        <div className={styles.drawerHeader}><div><span>Live engagement</span><h2 id="signal-panel-title">See what buyers engage with.</h2><p>Your activity appears first. A live campaign can add account and buying-group context.</p></div><button type="button" onClick={onClose} aria-label="Close analytics signals"><X size={20} /></button></div>
         {showCounters ? (
           <div className={styles.signalStats}><div><strong>1</strong><span>{visitorLabel}</span></div><div><strong>{liveSignals.length}</strong><span>meaningful interactions</span></div><div><strong>{engagedSeconds}s</strong><span>engaged</span></div></div>
         ) : (
@@ -950,25 +950,31 @@ export function AnalyticsSignalPanel({
             </div>
           </section>
           {buyingGroupSignals.length > 0 && (
-            <section className={styles.exampleSignalSection} aria-labelledby="example-signal-title">
-              <div className={styles.exampleSignalLabel}><span>Illustrative examples</span><strong>Not captured leads</strong></div>
-              <div className={styles.signalSectionHeading}><div><span>Buying-group view</span><h3 id="example-signal-title">What account-level depth could look like</h3></div></div>
-              <p className={styles.exampleSignalDisclosure}>Simulated activity only. These placeholder names and actions demonstrate what Folloze can report in a live campaign.</p>
-              <div className={classes(styles.signalTimeline, styles.exampleTimeline)}>
-                {buyingGroupSignals.map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel} · {signal.roleLabel}</span><strong>{signal.label}</strong><p>{signal.detail}</p></div></article>)}
-              </div>
-            </section>
+            <details className={styles.exampleSignalDetails}>
+              <summary>Show a live-campaign example <span>Simulated</span></summary>
+              <section className={styles.exampleSignalSection} aria-labelledby="example-signal-title">
+                <div className={styles.exampleSignalLabel}><span>Illustrative examples</span><strong>Not captured leads</strong></div>
+                <div className={styles.signalSectionHeading}><div><span>Buying-group view</span><h3 id="example-signal-title">What account-level depth could look like</h3></div></div>
+                <p className={styles.exampleSignalDisclosure}>Simulated activity only. These placeholder names and actions demonstrate what Folloze can report in a live campaign.</p>
+                <div className={classes(styles.signalTimeline, styles.exampleTimeline)}>
+                  {buyingGroupSignals.map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel} · {signal.roleLabel}</span><strong>{signal.label}</strong><p>{signal.detail}</p></div></article>)}
+                </div>
+              </section>
+            </details>
           )}
         </div>
-        <section className={styles.signalCapabilitySection} aria-labelledby="signal-capability-title">
-          <div className={styles.signalSectionHeading}><div><span>What Folloze reports</span><h3 id="signal-capability-title">A live campaign turns activity into usable context</h3></div></div>
-          <div className={styles.signalCapabilityGrid}>
-            {ANALYTICS_CAPABILITIES.map((capability) => {
-              const Icon = capability.icon;
-              return <article key={capability.id} title={capability.detail}><span><Icon size={15} /></span><strong>{capability.label}</strong></article>;
-            })}
-          </div>
-        </section>
+        <details className={styles.signalCapabilityDetails}>
+          <summary>See the full analytics picture</summary>
+          <section className={styles.signalCapabilitySection} aria-labelledby="signal-capability-title">
+            <div className={styles.signalSectionHeading}><div><span>What Folloze reports</span><h3 id="signal-capability-title">A live campaign turns activity into usable context</h3></div></div>
+            <div className={styles.signalCapabilityGrid}>
+              {ANALYTICS_CAPABILITIES.map((capability) => {
+                const Icon = capability.icon;
+                return <article key={capability.id} title={capability.detail}><span><Icon size={15} /></span><strong>{capability.label}</strong></article>;
+              })}
+            </div>
+          </section>
+        </details>
         <div className={styles.signalValue}><BarChart3 size={20} /><p>In a live campaign, these signals can route to campaign and sales systems so the next move starts with context.</p></div>
       </aside>
     </div>
@@ -1052,14 +1058,13 @@ export function ExpirySaveValuePanel({ expiresLabel, url, sellerName, targetName
   const submit = (event: FormEvent) => { event.preventDefault(); onSave(); };
   return (
     <section className={classes(styles.savePanel, status === "saved" && styles.isSaved)} aria-labelledby="save-value-title">
-      <div className={styles.saveCopy}><span>{status === "saved" ? "Experience secured" : "Keep what you built"}</span><h3 id="save-value-title">{status === "saved" ? "Your experience is ready to share." : "Keep this experience live."}</h3><p>{status === "saved" ? "Your permanent experience is ready." : "Save it before the private preview expires."}</p><ul>{benefits.map((benefit) => <li key={benefit}><Check size={13} />{benefit}</li>)}</ul></div>
+      <div className={styles.saveCopy}><span>{status === "saved" ? "Experience secured" : "Keep what you built"}</span><h3 id="save-value-title">{status === "saved" ? "Your experience is ready to share." : "Save your live experience."}</h3><p>{status === "saved" ? "Your permanent experience is ready." : "Email the link to yourself and keep this buyer experience available."}</p><ul>{benefits.map((benefit) => <li key={benefit}><Check size={13} />{benefit}</li>)}</ul></div>
       <div className={styles.saveExperiencePreview} aria-label={`Preview of ${headline}`}>
-        <div className={styles.saveBrandLockup}><span>{sellerName.slice(0, 2).toUpperCase()}</span>{targetName && <><i>×</i><span>{targetName.slice(0, 2).toUpperCase()}</span></>}</div>
-        <div><small>{targetName ? `${sellerName} for ${targetName}` : sellerName}</small><strong>{headline}</strong></div>
+        <div><span className={styles.saveBrandLine}><i aria-hidden="true" />{targetName ? `${sellerName} for ${targetName}` : sellerName}</span><strong>{headline}</strong></div>
       </div>
       <div className={styles.saveUrlRow}><code title={url}>{url}</code><button type="button" className={styles.tertiaryAction} onClick={() => void navigator.clipboard?.writeText(url)} aria-label="Copy preview URL"><Copy size={14} />Copy</button></div>
       <div className={styles.expiryClock}><Clock size={16} /><span>{status === "saved" ? "Saved" : `Private preview · expires in ${expiresLabel}`}</span></div>
-      {status !== "saved" && <form className={styles.saveForm} onSubmit={submit}><label><span>Business email</span><div><Mail size={16} /><input type="email" required value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@company.com" /></div></label><button type="submit" className={styles.primaryAction} disabled={status === "saving"}>{status === "saving" ? "Saving…" : "Save and email my link"}</button>{error && <small role="alert">{error}</small>}<p>No newsletter signup. Used only to save and deliver this experience.</p></form>}
+      {status !== "saved" && <form className={styles.saveForm} onSubmit={submit}><label><span>Business email</span><div><Mail size={16} /><input type="email" required value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@company.com" /></div></label><button type="submit" className={styles.primaryAction} disabled={status === "saving"}>{status === "saving" ? "Saving…" : "Email me this link"}</button>{error && <small role="alert">{error}</small>}<p>No newsletter signup. Your email is used only to save and deliver this experience.</p></form>}
     </section>
   );
 }

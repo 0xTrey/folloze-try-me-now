@@ -317,7 +317,7 @@ describe("SaveExperienceDialog", () => {
       />
     );
 
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Keep this experience live.");
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("Save your live experience.");
     expect(screen.getByText("Jitterbit for Cisco")).toBeInTheDocument();
     expect(screen.getByText("https://experience.example/jitterbit-for-cisco")).toBeInTheDocument();
     expect(screen.getByText("Private preview · expires in 24:00")).toBeInTheDocument();
