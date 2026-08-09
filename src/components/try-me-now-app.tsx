@@ -283,7 +283,7 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     demoSteps: ["Company + account", "Public account context", "1:1 buyer experience"],
     previewImage: "/entry/aprio-georgia-pacific-preview.webp",
     previewAlt: "Aprio account experience tailored for Georgia-Pacific",
-    accent: "#645cff",
+    accent: "#0077ff",
     tone: "paper"
   },
   campaign: {
@@ -298,7 +298,7 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     demoSteps: ["Offer + audience", "Buyer objective", "Campaign landing page"],
     previewImage: "/entry/campaign-preview.webp",
     previewAlt: "ServiceNow-branded AI platform campaign landing page",
-    accent: "#5865ff",
+    accent: "#0048de",
     tone: "cobalt"
   },
   content: {
@@ -314,7 +314,7 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     previewImage: "/entry/cisco-hmf-runtime-discovery-poster.webp",
     previewVideo: "https://images.folloze.com/video/upload/c_scale,w_720,q_auto:eco,f_mp4/v1777151497/zgkmcphemqnjt3ivxifq.mp4",
     previewAlt: "Cisco Secure Workload application map from the Hybrid Mesh Firewall experience",
-    accent: "#67e8c5",
+    accent: "#11d175",
     tone: "ink"
   }
 };
