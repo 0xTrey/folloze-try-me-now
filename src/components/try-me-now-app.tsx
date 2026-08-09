@@ -3374,7 +3374,7 @@ export function TryMeNowApp() {
               <div className="previewControlBar">
                 <div className="desktopPreviewLabel">
                   <Globe2 size={16} aria-hidden="true" />
-                  <span><strong>Interactive desktop preview</strong><small>One continuous preview. Scroll inside to explore the buyer journey.</small></span>
+                  <span><strong>Live preview</strong><small>Scroll inside to explore the full experience.</small></span>
                 </div>
                 <button
                   className="previewAnalyticsButton"

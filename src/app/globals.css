@@ -321,6 +321,11 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .desktopPreviewShell .assembly { width:100%;height:clamp(620px,72vh,780px);margin:0;pointer-events:auto }
 .desktopPreviewShell .assembly iframe { height:calc(100% - 45px);pointer-events:auto }
 
+.revealIntro h1 { max-width:900px;font-size:clamp(36px,3.4vw,52px);line-height:1.02; }
+.revealGrid { box-shadow:0 18px 58px rgba(12,19,48,.09); }
+.revealPreview { background:#fff; }
+.desktopPreviewShell { border:1px solid var(--fz-border); }
+
 .experienceControlDeck {
   margin-top: 14px;
   overflow: clip;
@@ -1056,7 +1061,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   .revealPreview {
     padding: 16px;
     overflow: visible;
-    background: linear-gradient(145deg,#eef0f5,#fafafd);
+    background:#fff;
   }
   .previewControlBar { margin: 0 2px 12px; }
   .desktopPreviewShell { border-radius: 16px; }
