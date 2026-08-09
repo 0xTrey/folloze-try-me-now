@@ -1,6 +1,6 @@
 # Try Me Now design uplift: 25 implemented outcomes
 
-Status: implementation contract  
+Status: implemented and verified
 Date: 2026-08-08  
 Design authority: [`../DESIGN.md`](../DESIGN.md)  
 Canonical product decisions: [`decision-log.md`](./decision-log.md)
@@ -100,12 +100,47 @@ or the 60-second performance contract.
 
 ## Verification
 
-Completion requires:
+All 25 outcomes are implemented. The final pass also corrected the first-party
+analytics origin check so a legitimate local session opened through
+`127.0.0.1` is treated as the same browser-visible origin while forged origins
+remain rejected.
 
-1. focused component tests for changed labels and disclosure behavior;
-2. `npm run qa`;
-3. desktop Playwright verification with `domcontentloaded`, not `networkidle`;
-4. before/after screenshots for entry, domain, guided brief, build, reveal, save,
-   and engagement states;
-5. zero new console errors attributable to the product;
-6. a final design and AI-slop score recorded in this document.
+### Quality gates
+
+- `npm run qa`: passed on 2026-08-08 with 62 test files and 572 tests, plus
+  successful Turbopack and webpack production builds. ESLint reports one
+  pre-existing unused-variable warning and no errors.
+- Desktop Playwright: 20 tests passed.
+- Folloze visual verification: 2 tests passed, including an artifact capture
+  run.
+- Focused guided-entry and wireframe contracts: 17 tests passed.
+- Clean Chromium session at 1440 × 1000: no console errors and no HTTP responses
+  at or above 400 after the analytics-origin correction.
+
+### Visual evidence
+
+| State | Evidence |
+| --- | --- |
+| Entry | [`../output/design-uplift-v2/after/entry.png`](../output/design-uplift-v2/after/entry.png) |
+| Domain | [`../output/design-uplift-v2/after/domain.png`](../output/design-uplift-v2/after/domain.png) |
+| Brand payoff | [`../output/design-uplift-v2/after/domain-ready.png`](../output/design-uplift-v2/after/domain-ready.png) |
+| Guided brief | [`../output/design-uplift-v2/after/guided.png`](../output/design-uplift-v2/after/guided.png) |
+| Recommended audience | [`../output/design-uplift-v2/after/audience.png`](../output/design-uplift-v2/after/audience.png) |
+| Build | [`../output/design-uplift-v2/after/build.png`](../output/design-uplift-v2/after/build.png) |
+| Reveal | [`../output/design-uplift-v2/after/reveal.png`](../output/design-uplift-v2/after/reveal.png) |
+| Save | [`../output/design-uplift-v2/after/save.png`](../output/design-uplift-v2/after/save.png) |
+| Engagement | [`../output/design-uplift-v2/after/engagement.png`](../output/design-uplift-v2/after/engagement.png) |
+
+### Final assessment
+
+- **Design score: A-.** The first viewport is decisive, the guided flow has one
+  task hierarchy, the customer preview owns the reveal, and save/engagement
+  moments now communicate value instead of configuration.
+- **AI-slop score: A-.** Real experience proof, specific motion language,
+  verified brand ownership, restrained processing visuals, and removal of
+  generic violet/product-theater treatments make the experience feel authored.
+- **Goodwill score: 89/100.** Preview-before-email, honest progress, concise
+  disclosure, visible real activity, and progressive refinement materially
+  increase trust. The remaining goodwill risk is operational rather than visual:
+  production latency and external integration configuration must continue to be
+  measured against D-026.
