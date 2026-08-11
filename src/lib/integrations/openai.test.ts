@@ -336,6 +336,29 @@ describe("supplemental public source ingestion", () => {
 });
 
 describe("deterministic experience copy", () => {
+  it("builds the reported event campaign without a schema failure", () => {
+    const eventSource =
+      "September 18 at 11am CT. The product team will build a campaign landing page live and explain the workflow from brief to published experience";
+    const answers = {
+      audience: "Demand generation and campaign teams",
+      objective: "Drive registrations",
+      campaignType: "event" as const,
+      eventSource,
+      promotedOffer: "Product Experience Launch",
+      promotedOfferConfirmed: true,
+      offerSourceConfirmed: false
+    };
+
+    const { context, draft } = draftFor("campaign", answers);
+
+    expect(eventSource.length).toBeGreaterThan(72);
+    expect(context.brief.campaignRegister).toBe("campaign-event");
+    expect(experienceDraftSchema.safeParse(draft).success).toBe(true);
+    expect(draft.eyebrow.length).toBeLessThanOrEqual(52);
+    expect(draft.persuasionFramework?.opening.eyebrow.length).toBeLessThanOrEqual(60);
+    expect(draft.primaryCta).toMatch(/register|place/i);
+  });
+
   it("keeps the full 103-character audience hypothesis while generating a schema-safe role label", () => {
     const incidentAudience =
       "Automation architects and platform owners designing resilient automation platforms and business systems";

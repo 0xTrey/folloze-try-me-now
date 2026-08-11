@@ -775,7 +775,7 @@ export function deterministicDraft(input: {
     return finalize({
       ...common,
       title: trimSentence(`${eventContext} | ${brand.companyName}`, 90),
-      eyebrow: trimSentence(`${brand.companyName} ${registration ? "at" : "after"} ${eventContext}`, 72),
+      eyebrow: trimSentence(`${brand.companyName} ${registration ? "at" : "after"} ${eventContext}`, 52),
       headline: trimSentence(
         registration
           ? `See ${profile.offerLabel.toLowerCase()} in action at ${eventContext}.`
