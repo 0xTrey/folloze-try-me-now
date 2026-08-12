@@ -18,7 +18,7 @@ export interface WriteOnceDestination {
 }
 export type MigrationKind = "session" | "lead" | "upload" | "upload-status";
 type ExpectedItem = Readonly<{ sourceIdentityHash: string; destinationRef: string; bytes: number; kind: MigrationKind }>;
-export type CheckpointItem = Readonly<{ sourceIdentityHash: string; destinationRef: string; kind: MigrationKind; bytes: number; sha256: string; state: "copied" | "mapped" | "failed"; objectOutcome?: Exclude<WriteOutcome, "conflict">; mappingOutcome?: Exclude<WriteOutcome, "conflict">; errorCode?: SafeErrorCode }>;
+export type CheckpointItem = Readonly<{ sourceIdentityHash: string; destinationRef: string; kind: MigrationKind; bytes: number; sha256: string; state: "copying" | "copied" | "mapped" | "failed"; writeAheadOwnership?: boolean; objectOutcome?: Exclude<WriteOutcome, "conflict">; mappingOutcome?: Exclude<WriteOutcome, "conflict">; errorCode?: SafeErrorCode }>;
 export type MigrationCheckpoint = Readonly<{ snapshotRef: string; snapshotDigest: string; expected: Readonly<{ objects: number; bytes: number; identities: readonly ExpectedItem[] }>; cursorRef?: string; items: readonly CheckpointItem[] }>;
 export interface MigrationCheckpointStore { load(): Promise<MigrationCheckpoint | null>; save(checkpoint: MigrationCheckpoint): Promise<void>; }
 export type MigrationOptions = Readonly<{ dryRun?: boolean; checkpoint?: MigrationCheckpointStore; cursorResolver?: CursorResolver; pageSize?: number }>;
@@ -29,6 +29,9 @@ const hash = (value: string | Uint8Array) => createHash("sha256").update(value).
 const refFor = (prefix: string, identityHash: string) => hash(`${prefix}:${identityHash}`);
 const isHex = (value: string) => /^[a-f0-9]{64}$/.test(value);
 const isKind = (value: string): value is MigrationKind => ["session", "lead", "upload", "upload-status"].includes(value);
+const isState = (value: unknown): value is CheckpointItem["state"] => value === "copying" || value === "copied" || value === "mapped" || value === "failed";
+const isStoredOutcome = (value: unknown): value is Exclude<WriteOutcome, "conflict"> | undefined => value === undefined || value === "inserted" || value === "exact-existing";
+const isOutcome = (value: unknown): value is WriteOutcome => value === "inserted" || value === "exact-existing" || value === "conflict";
 const safeContentType = (value?: string) => value && /^[\w.+-]+\/[\w.+-]+$/.test(value) ? value : "application/octet-stream";
 const safeCodes = ["unsupported_source_object", "source_size_mismatch", "destination_collision", "mapping_conflict", "source_page_exceeds_limit", "source_transient", "source_missing", "mapping_unavailable", "migration_failed"] as const;
 export type SafeErrorCode = (typeof safeCodes)[number];
@@ -36,7 +39,8 @@ const safeCode = (error: unknown): SafeErrorCode => { const candidate = error in
 const add = (totals: Totals, bytes: number) => { if (!Number.isSafeInteger(bytes) || bytes < 0 || totals.bytes > Number.MAX_SAFE_INTEGER - bytes || totals.objects === Number.MAX_SAFE_INTEGER) throw new Error("byte_sum_overflow"); totals.objects++; totals.bytes += bytes; };
 
 export function planBlobObject(object: BlobObject): PlannedObject {
-  const session = /^try-me\/sessions\/([A-Za-z0-9_-]{20,64})\.json$/.exec(object.key), lead = /^try-me\/leads\/([A-Za-z0-9_-]{20,64})\.json$/.exec(object.key), upload = /^try-me\/uploads\/([A-Za-z0-9_-]{20,64})\/([0-9a-f-]{36})\.pdf$/i.exec(object.key), status = /^try-me\/upload-status\/([A-Za-z0-9_-]{20,64})\/([0-9a-f-]{36})\.json$/i.exec(object.key), match = session ?? lead ?? upload ?? status;
+  const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+  const session = /^try-me\/sessions\/([A-Za-z0-9_-]{20,64})\.json$/.exec(object.key), lead = /^try-me\/leads\/([A-Za-z0-9_-]{20,64})\.json$/.exec(object.key), upload = new RegExp(`^try-me/uploads/([A-Za-z0-9_-]{20,64})/(${uuid})\\.pdf$`, "i").exec(object.key), status = new RegExp(`^try-me/upload-status/([A-Za-z0-9_-]{20,64})/(${uuid})\\.json$`, "i").exec(object.key), match = session ?? lead ?? upload ?? status;
   if (!match || !Number.isSafeInteger(object.size) || object.size < 0) throw new Error("unsupported_source_object");
   const sourceIdentity = object.key, sourceIdentityHash = hash(sourceIdentity);
   return { object, kind: session ? "session" : lead ? "lead" : upload ? "upload" : "upload-status", sessionId: match[1], uploadId: upload?.[2] ?? status?.[2], sourceIdentity, sourceIdentityHash, destinationKey: sourceIdentity, destinationRef: refFor("destination", sourceIdentityHash), cursorRef: refFor("cursor", hash(object.cursor)) };
@@ -48,7 +52,7 @@ function validateCheckpoint(checkpoint: MigrationCheckpoint | null) {
   const expected = new Set<string>(), items = new Map<string, CheckpointItem>(), totals: Totals = { objects: 0, bytes: 0 };
   for (const expectedItem of checkpoint.expected.identities) { if (!isHex(expectedItem.sourceIdentityHash) || expectedItem.destinationRef !== refFor("destination", expectedItem.sourceIdentityHash) || !isKind(expectedItem.kind) || expected.has(expectedItem.sourceIdentityHash)) throw new Error("malformed_checkpoint"); expected.add(expectedItem.sourceIdentityHash); add(totals, expectedItem.bytes); }
   if (totals.objects !== checkpoint.expected.objects || totals.bytes !== checkpoint.expected.bytes) throw new Error("malformed_checkpoint");
-  for (const item of checkpoint.items) { if (!expected.has(item.sourceIdentityHash) || items.has(item.sourceIdentityHash) || item.destinationRef !== refFor("destination", item.sourceIdentityHash) || !isKind(item.kind) || !isHex(item.sha256) || !Number.isSafeInteger(item.bytes) || item.bytes < 0 || (item.errorCode !== undefined && !safeCodes.includes(item.errorCode)) || (item.state !== "failed" && item.errorCode !== undefined) || (item.state === "failed" && !item.errorCode)) throw new Error("malformed_checkpoint"); items.set(item.sourceIdentityHash, item); }
+  for (const item of checkpoint.items) { if (!expected.has(item.sourceIdentityHash) || items.has(item.sourceIdentityHash) || item.destinationRef !== refFor("destination", item.sourceIdentityHash) || !isKind(item.kind) || !isState(item.state) || (item.writeAheadOwnership !== undefined && typeof item.writeAheadOwnership !== "boolean") || !isStoredOutcome(item.objectOutcome) || !isStoredOutcome(item.mappingOutcome) || !isHex(item.sha256) || !Number.isSafeInteger(item.bytes) || item.bytes < 0 || (item.errorCode !== undefined && !safeCodes.includes(item.errorCode)) || (item.state !== "failed" && item.errorCode !== undefined) || (item.state === "failed" && !item.errorCode)) throw new Error("malformed_checkpoint"); items.set(item.sourceIdentityHash, item); }
   return items;
 }
 async function enumerate(source: ReadOnlyBlobSource, pageSize: number) {
@@ -71,19 +75,27 @@ export async function migrateBlobSnapshot(source: ReadOnlyBlobSource, destinatio
       const { body, sha256 } = await bytesAndHash(await source.read(planned.object)); if (body.byteLength !== planned.object.size) throw new Error("source_size_mismatch");
       if (mode === "dry-run") { add(observed, body.byteLength); continue; }
       await options.cursorResolver?.remember(planned.cursorRef, planned.object.cursor);
+      const previous = items.get(planned.sourceIdentityHash);
+      // Write intent before the irreversible object call. A checkpoint store must
+      // atomically retain this intent before the adapter is allowed to write.
+      const intent: CheckpointItem = { sourceIdentityHash: planned.sourceIdentityHash, destinationRef: planned.destinationRef, kind: planned.kind, bytes: body.byteLength, sha256, state: "copying", writeAheadOwnership: true, objectOutcome: previous?.objectOutcome };
+      items.set(planned.sourceIdentityHash, intent); checkpoint = { ...checkpoint, cursorRef: planned.cursorRef, items: [...items.values()] }; await save(options.checkpoint, checkpoint);
       const objectOutcome = await destination.putIfAbsent({ key: planned.destinationKey, body, sha256, contentType: safeContentType(planned.object.contentType), cacheControl: "private, no-store", access: "private" });
+      if (!isOutcome(objectOutcome)) throw new Error("migration_failed");
       if (objectOutcome === "conflict") { collisions++; throw new Error("destination_collision"); }
-      const previous = items.get(planned.sourceIdentityHash); if (objectOutcome === "inserted") copied++; else if (previous?.state === "mapped") resumed++;
+      if (objectOutcome === "inserted") copied++; else if (previous?.state === "mapped") resumed++;
       // Preserve creation provenance when retrying a copied-but-unmapped item.
-      const effectiveObjectOutcome = previous?.objectOutcome === "inserted" ? "inserted" : objectOutcome;
+      const effectiveObjectOutcome = previous?.objectOutcome === "inserted" || (previous?.state === "copying" && previous.writeAheadOwnership && objectOutcome === "exact-existing") ? "inserted" : objectOutcome;
       const copiedItem: CheckpointItem = { sourceIdentityHash: planned.sourceIdentityHash, destinationRef: planned.destinationRef, kind: planned.kind, bytes: body.byteLength, sha256, state: "copied", objectOutcome: effectiveObjectOutcome };
       items.set(planned.sourceIdentityHash, copiedItem); checkpoint = { ...checkpoint, cursorRef: planned.cursorRef, items: [...items.values()] }; await save(options.checkpoint, checkpoint);
       const mappingOutcome = await destination.putMappingIfAbsent({ sourceIdentity: planned.sourceIdentity, sourceIdentityHash: planned.sourceIdentityHash, kind: planned.kind, sessionId: planned.sessionId, uploadId: planned.uploadId, destinationKey: planned.destinationKey, sha256, bytes: body.byteLength });
+      if (!isOutcome(mappingOutcome)) throw new Error("migration_failed");
       if (mappingOutcome === "conflict") throw new Error("mapping_conflict");
-      items.set(planned.sourceIdentityHash, { ...copiedItem, state: "mapped", mappingOutcome }); checkpoint = { ...checkpoint, items: [...items.values()] }; await save(options.checkpoint, checkpoint); add(observed, body.byteLength);
+      const effectiveMappingOutcome = previous?.mappingOutcome === "inserted" ? "inserted" : mappingOutcome;
+      items.set(planned.sourceIdentityHash, { ...copiedItem, state: "mapped", mappingOutcome: effectiveMappingOutcome }); checkpoint = { ...checkpoint, items: [...items.values()] }; await save(options.checkpoint, checkpoint); add(observed, body.byteLength);
     } catch (error) { const code = safeCode(error); failures.push({ sourceIdentityHash: planned.sourceIdentityHash, code }); if (mode === "apply") { const previous = items.get(planned.sourceIdentityHash); items.set(planned.sourceIdentityHash, { sourceIdentityHash: planned.sourceIdentityHash, destinationRef: planned.destinationRef, kind: planned.kind, bytes: previous?.bytes ?? 0, sha256: previous?.sha256 ?? hash("failed"), state: "failed", errorCode: code, objectOutcome: previous?.objectOutcome, mappingOutcome: previous?.mappingOutcome }); checkpoint = { ...checkpoint, items: [...items.values()] }; await save(options.checkpoint, checkpoint); } }
   }
   const reconciled = mode === "apply" && failures.length === 0 && observed.objects === sourceTotals.objects && observed.bytes === sourceTotals.bytes;
-  const rollback = [...items.values()].filter((item) => item.state === "mapped" && (item.objectOutcome === "inserted" || item.mappingOutcome === "inserted")).map((item) => ({ sourceIdentityHash: item.sourceIdentityHash, destinationRef: item.destinationRef, objectCreated: item.objectOutcome === "inserted", mappingCreated: item.mappingOutcome === "inserted" }));
+  const rollback = [...items.values()].filter((item) => item.objectOutcome === "inserted" || item.mappingOutcome === "inserted").map((item) => ({ sourceIdentityHash: item.sourceIdentityHash, destinationRef: item.destinationRef, objectCreated: item.objectOutcome === "inserted", mappingCreated: item.mappingOutcome === "inserted" }));
   return mode === "dry-run" ? { mode, reconciled: false, snapshot: { source: sourceTotals, projectedDestination: observed }, runDelta: { copied: 0, resumed: 0, collisions: 0, failures }, rollback: [] } : { mode, reconciled, snapshot: { source: sourceTotals, observedDestination: observed }, runDelta: { copied, resumed, collisions, failures }, rollback };
 }
