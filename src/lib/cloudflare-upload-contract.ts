@@ -42,10 +42,6 @@ export async function claimUploadStatus(adapter: DirectUploadAdapter, identity: 
   if (snapshot.value.status === "processing") return "in-progress" as const;
   return (await adapter.compareAndSet(statusKey(identity.sessionId, identity.uploadId), snapshot.version, { status: "processing" })) === "applied" ? "claimed" as const : "conflict" as const;
 }
-export async function reserveSession(adapter: DirectUploadAdapter, sessionId: string, session: Versioned<{ sourceUploadId?: string }>, uploadId: string) {
-  if (session.value.sourceUploadId && session.value.sourceUploadId !== uploadId) return "conflict" as const;
-  return (await adapter.compareAndSet(sessionKey(sessionId), session.version, { sourceUploadId: uploadId })) === "applied" ? "reserved" as const : "conflict" as const;
-}
 export async function patchSessionAfterUpload(adapter: SessionPatchAdapter, sessionId: string, uploadId: string, maxRetries = 3) {
   for (let attempt = 0; attempt < maxRetries; attempt += 1) {
     const session = await adapter.readSession(sessionId);
