@@ -1054,17 +1054,17 @@ export interface ExpirySaveValuePanelProps {
   onSave: () => void;
 }
 
-export function ExpirySaveValuePanel({ expiresLabel, url, sellerName, targetName, headline, email, status = "idle", error, benefits = ["Permanent live URL", "Email delivery", "Engagement-ready experience"], onEmailChange, onSave }: ExpirySaveValuePanelProps) {
+export function ExpirySaveValuePanel({ expiresLabel, url, sellerName, targetName, headline, email, status = "idle", error, benefits = ["Permanent app-hosted URL", "Copy-and-share access", "Engagement-ready experience"], onEmailChange, onSave }: ExpirySaveValuePanelProps) {
   const submit = (event: FormEvent) => { event.preventDefault(); onSave(); };
   return (
     <section className={classes(styles.savePanel, status === "saved" && styles.isSaved)} aria-labelledby="save-value-title">
-      <div className={styles.saveCopy}><span>{status === "saved" ? "Experience secured" : "Keep what you built"}</span><h3 id="save-value-title">{status === "saved" ? "Your experience is ready to share." : "Save your live experience."}</h3><p>{status === "saved" ? "Your permanent experience is ready." : "Email the link to yourself and keep this buyer experience available."}</p><ul>{benefits.map((benefit) => <li key={benefit}><Check size={13} />{benefit}</li>)}</ul></div>
+      <div className={styles.saveCopy}><span>{status === "saved" ? "Experience secured" : "Keep what you built"}</span><h3 id="save-value-title">{status === "saved" ? "Your experience is ready to share." : "Save your live experience."}</h3><p>{status === "saved" ? "Your permanent experience is ready." : "Use your business email to keep this app-hosted buyer experience available and ready to share."}</p><ul>{benefits.map((benefit) => <li key={benefit}><Check size={13} />{benefit}</li>)}</ul></div>
       <div className={styles.saveExperiencePreview} aria-label={`Preview of ${headline}`}>
         <div><span className={styles.saveBrandLine}><i aria-hidden="true" />{targetName ? `${sellerName} for ${targetName}` : sellerName}</span><strong>{headline}</strong></div>
       </div>
       <div className={styles.saveUrlRow}><code title={url}>{url}</code><button type="button" className={styles.tertiaryAction} onClick={() => void navigator.clipboard?.writeText(url)} aria-label="Copy preview URL"><Copy size={14} />Copy</button></div>
       <div className={styles.expiryClock}><Clock size={16} /><span>{status === "saved" ? "Saved" : `Private preview · expires in ${expiresLabel}`}</span></div>
-      {status !== "saved" && <form className={styles.saveForm} onSubmit={submit}><label><span>Business email</span><div><Mail size={16} /><input type="email" required value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@company.com" /></div></label><button type="submit" className={styles.primaryAction} disabled={status === "saving"}>{status === "saving" ? "Saving…" : "Email me this link"}</button>{error && <small role="alert">{error}</small>}<p>No newsletter signup. Your email is used only to save and deliver this experience.</p></form>}
+      {status !== "saved" && <form className={styles.saveForm} onSubmit={submit}><label><span>Business email</span><div><Mail size={16} /><input type="email" required value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@company.com" /></div></label><button type="submit" className={styles.primaryAction} disabled={status === "saving"}>{status === "saving" ? "Saving…" : "Save this experience"}</button>{error && <small role="alert">{error}</small>}<p>No newsletter signup. Your business email records this request and saves the app-hosted experience.</p></form>}
     </section>
   );
 }

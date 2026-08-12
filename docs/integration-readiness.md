@@ -1,20 +1,23 @@
 # Folloze Try Me Now integration readiness
 
-This inventory separates what the current visual MVP demonstrates from what must exist before public production traffic. “Configured” means credentials are present; it does not mean an end-to-end path has passed its launch gate.
+This inventory separates the authoritative short-term Vercel bridge from the additional evidence required before broad external lead-generation traffic. “Configured” means a health or source check reports the integration ready; it does not mean an end-to-end write path has passed its launch gate.
 
 ## Verified deployment checkpoint
 
 | Checkpoint | Evidence | Current state |
 | --- | --- | --- |
-| Canonical Vercel alias | <https://folloze-try-me-now.vercel.app> | Deployed visual MVP. |
+| Canonical Vercel alias | <https://folloze-try-me-now.vercel.app> | Authoritative short-term host; anonymous root and health routes returned `200` in the 2026-08-12 read-only audit. |
+| Deployment and source identity | Vercel deployment `dpl_5iXiuESmpgrEgdGt6jwr1XKqVDEg`; source `7732dfe9acc6b712015b593a8944fa9c1603203e` | All 441 deployed source files matched source bytes. Current default `ce6569db8d3668234a6695bca4b76d7edf0ca327` adds inactive Cloudflare migration scaffolding/tests without changing the Vercel runtime. |
 | Session persistence | Private Vercel Blob | Deployed store; session reads bypass cache, TTL is stored in the JSON wrapper, and ETag `ifMatch` protects updates with up to five retries. |
-| Generation | `GENERATION_MODE=fixture` | OpenAI generation is not active. |
-| Brand | `BRAND_MODE=fast` | Safe fast extractor active; remote Brand Harvester disabled. |
+| Required runtime health | `/api/health` | Durable sessions, durable leads, OpenAI, and distributed rate limits all reported ready with no blockers. No provider data or write path was exercised. |
+| Generation | OpenAI | Reported connected by production health; an authorized generation smoke remains a separate checkpoint. |
+| Brand | Safe fast extractor with configured enrichment | Reported production-capable; remote Brand Harvester remains disabled. |
 | Folloze integration | `FOLLOZE_MODE=disabled` | Remote Folloze MCP disabled. |
-| Transactional email | `EMAIL_MODE=console` | Resend disabled; current send path is skipped. |
+| Transactional email | `EMAIL_MODE=console` | Resend disconnected; the current send path is skipped and the UI promises app-hosted save/share rather than delivery. |
+| Cloudflare migration | Draft source-only work | Not activated in Vercel runtime, routes, configuration, bindings, DNS, or production resources. |
 | Folloze draft-save proof | Board `249022`, theme `4`, [designer URL](https://app.folloze.com/app/board/249022/designer) | Draft saved separately through the local MCP. It is unpublished and no anonymous public URL is confirmed. |
 
-The public Vercel alias, the private Blob session store, and the Folloze draft board are separate checkpoints. None of them proves the remote publish-and-email claim path.
+The public Vercel alias, the private Blob session store, an app-hosted claim, email delivery, and a Folloze draft or publication are separate checkpoints. The read-only audit proves the anonymous surface, source identity, and health snapshot; it does not prove a write-capable generation, claim readback, email delivery, or Folloze publication.
 
 ## Current versus needed
 

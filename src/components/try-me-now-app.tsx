@@ -2662,7 +2662,7 @@ export function SaveExperienceDialog({
           error={error}
           onEmailChange={onEmailChange}
           onSave={onSave}
-          benefits={["Permanent live URL", "Email delivery", "Engagement-ready experience"]}
+          benefits={["Permanent app-hosted URL", "Copy-and-share access", "Engagement-ready experience"]}
         />
       </section>
     </div>,
