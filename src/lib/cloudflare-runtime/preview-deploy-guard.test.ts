@@ -89,9 +89,9 @@ const metadataFixtures = () => ({
       ],
     },
   },
-  scripts: api([{ id: "try-me-now-upload-adapter-preview", routes: [] as Array<{ pattern: string }> }]),
+  scripts: api([{ id: "try-me-now-upload-adapter-preview", routes: null as null | Array<{ pattern: string }> }]),
   subdomain: api({ enabled: false, previews_enabled: false }),
-  domains: api([] as Array<{ hostname: string }>),
+  domains: { success: true, errors: null as null | Array<{ code: number; message: string }>, messages: [], result: [] as Array<{ hostname: string }> },
   schedules: api({ schedules: [] as Array<{ cron: string }> }),
   deployment: { versions: [{ version_id: versionId, percentage: 100 }] },
 });
@@ -131,6 +131,18 @@ describe("post-deploy metadata verification", () => {
       const result = run(verify, verifyArgs(dir));
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toContain("no public route or cron");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("also accepts an explicit empty zone-routes array", () => {
+    const fixtures = metadataFixtures();
+    fixtures.scripts.result[0].routes = [];
+    const dir = writeFixtures(fixtures);
+    try {
+      const result = run(verify, verifyArgs(dir));
+      expect(result.status, result.stderr).toBe(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -181,11 +193,29 @@ describe("post-deploy metadata verification", () => {
     ["enabled selector", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.version.resources.bindings[0].text = "enabled"; }],
     ["wrong D1", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.version.resources.bindings[1].database_id = "00000000-0000-0000-0000-000000000000"; }],
     ["queue handler", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.version.resources.script.handlers.push("queue"); }],
-    ["zone route", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.scripts.result[0].routes.push({ pattern: "example.com/*" }); }],
+    ["zone route", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.scripts.result[0].routes = [{ pattern: "example.com/*" }]; }],
+    ["missing zone-routes field", (fixture: ReturnType<typeof metadataFixtures>) => { delete (fixture.scripts.result[0] as { routes?: unknown }).routes; }],
+    ["malformed zone-routes field", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.scripts.result[0].routes = {} as never; }],
     ["workers.dev URL", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.subdomain.result.enabled = true; }],
     ["custom domain", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.domains.result.push({ hostname: "example.com" }); }],
     ["cron trigger", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.schedules.result.schedules.push({ cron: "* * * * *" }); }],
   ])("rejects post-deploy %s metadata", (_label, mutate) => {
+    const fixtures = metadataFixtures();
+    mutate(fixtures);
+    const dir = writeFixtures(fixtures);
+    try {
+      expect(run(verify, verifyArgs(dir)).status).not.toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["missing API errors", (fixture: ReturnType<typeof metadataFixtures>) => { delete (fixture.domains as { errors?: unknown }).errors; }],
+    ["malformed API errors", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.domains.errors = {} as never; }],
+    ["reported API error", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.domains.errors = [{ code: 1000, message: "synthetic failure" }]; }],
+    ["unsuccessful API response", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.domains.success = false; }],
+  ])("rejects %s metadata envelopes", (_label, mutate) => {
     const fixtures = metadataFixtures();
     mutate(fixtures);
     const dir = writeFixtures(fixtures);

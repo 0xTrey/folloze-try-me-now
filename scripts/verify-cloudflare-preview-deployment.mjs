@@ -58,7 +58,9 @@ const [version, scripts, subdomain, domains, schedules] = await Promise.all([
   jsonFile(values.schedules),
 ]);
 const envelope = (value, label) => {
-  assert(value?.success === true && Array.isArray(value.errors) && value.errors.length === 0, `${label} API metadata request failed`);
+  const errors = value?.errors;
+  const successfulErrors = errors === null || (Array.isArray(errors) && errors.length === 0);
+  assert(value?.success === true && Object.hasOwn(value, "errors") && successfulErrors, `${label} API metadata request failed`);
   return value.result;
 };
 
@@ -84,7 +86,10 @@ assert(binding("EXTRACTION_QUEUE", "queue").queue_name === "folloze-try-me-now-e
 const scriptsResult = envelope(scripts, "scripts");
 assert(Array.isArray(scriptsResult), "scripts metadata result must be an array");
 const deployedScript = scriptsResult.filter((script) => script.id === WORKER_NAME);
-assert(deployedScript.length === 1 && Array.isArray(deployedScript[0].routes) && deployedScript[0].routes.length === 0, "deployed Worker must have no zone routes");
+assert(deployedScript.length === 1, "deployed Worker must be present exactly once in scripts metadata");
+assert(Object.hasOwn(deployedScript[0], "routes"), "deployed Worker scripts metadata must include zone routes");
+const zoneRoutes = deployedScript[0].routes;
+assert(zoneRoutes === null || (Array.isArray(zoneRoutes) && zoneRoutes.length === 0), "deployed Worker must have no zone routes");
 const subdomainResult = envelope(subdomain, "subdomain");
 assert(subdomainResult?.enabled === false && subdomainResult?.previews_enabled === false, "workers.dev and preview URLs must remain disabled remotely");
 const domainsResult = envelope(domains, "domains");
