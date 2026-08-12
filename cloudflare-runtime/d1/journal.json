@@ -1,0 +1,6 @@
+{
+  "journal": "try-me-now-cloudflare-d1",
+  "migrations": [
+    { "id": "0001_create_cf_upload_adapter.sql", "description": "inactive upload adapter schema" }
+  ]
+}
