@@ -348,6 +348,31 @@ describe("SaveExperienceDialog", () => {
     expect(onClose).toHaveBeenCalledOnce();
     expect(onSave).not.toHaveBeenCalled();
   });
+
+  it("does not advertise disconnected email delivery as part of an app-hosted save", () => {
+    render(
+      <SaveExperienceDialog
+        open
+        expiresLabel="24:00"
+        url="https://experience.example/jitterbit-for-cisco"
+        sellerName="Jitterbit"
+        targetName="Cisco"
+        headline="Connect Cisco workflows without losing control."
+        email=""
+        status="idle"
+        onEmailChange={vi.fn()}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Permanent app-hosted URL")).toBeInTheDocument();
+    expect(screen.getByText("Copy-and-share access")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save this experience" })).toBeInTheDocument();
+    expect(screen.getByText("No newsletter signup. Your business email records this request and saves the app-hosted experience.")).toBeInTheDocument();
+    expect(screen.queryByText(/email delivery/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/email (?:me|the link)|deliver this experience/i)).not.toBeInTheDocument();
+  });
 });
 
 describe("guided campaign workspace", () => {

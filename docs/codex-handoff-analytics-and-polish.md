@@ -90,7 +90,7 @@ Acceptance: two sessions open in two tabs can each edit and claim independently;
 
 ## 5. CI on GitHub Actions
 
-Purpose, for the record: the repo has `npm run qa` (lint, typecheck, 187 unit tests, both builds) but nothing runs it automatically. CI is a GitHub robot that runs that exact command on every push and marks the commit red if anything fails. With an agent committing rapidly to this repo, this is the tripwire that catches a broken state before it reaches a demo. During the 2026-07-31 audit the working tree was observed mid-edit with 3 failing tests; CI makes that visible immediately instead of accidentally.
+Purpose, for the record: the repo has `npm run qa` (lint, typecheck, tests, and both builds) and CI runs that exact command on every push, marking the commit red if anything fails. The 2026-08-12 source-only Vercel handoff baseline is 680 Vitest checks across 76 files; the older 187-test figure described the earlier 2026-07-31 snapshot. With an agent committing rapidly to this repo, CI is the tripwire that catches a broken state before it reaches a demo. During the 2026-07-31 audit the working tree was observed mid-edit with 3 failing tests; CI makes that visible immediately instead of accidentally.
 
 - Add `.github/workflows/qa.yml`: on push and pull request, Node 22, `npm ci`, `npm run qa`.
 - Unit tests and builds only. Playwright browser tests can be a separate optional job later; do not block on them now.

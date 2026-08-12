@@ -576,7 +576,7 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByLabelText("Preview of Connect Cisco workflows without losing control.")).toHaveTextContent("Jitterbit for Cisco");
     expect(screen.getByText("https://experience.example/jitterbit-for-cisco")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Business email"), { target: { value: "buyer@company.com" } });
-    fireEvent.submit(screen.getByRole("button", { name: "Email me this link" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Save this experience" }).closest("form")!);
     fireEvent.click(screen.getByRole("button", { name: "Open experience" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy experience URL" }));
     expect(onEmail).toHaveBeenCalledWith("buyer@company.com");

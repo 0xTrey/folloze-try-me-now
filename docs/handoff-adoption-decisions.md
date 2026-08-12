@@ -8,6 +8,14 @@ Inputs:
 - `docs/codex-handoff-analytics-and-polish.md`
 - `docs/ux-v2-build-plan.md`
 
+## 2026-08-12 Vercel stabilization decision
+
+- Vercel remains the authoritative short-term host at <https://folloze-try-me-now.vercel.app>. The read-only audit mapped the live deployment to exact source and found its required health checks ready.
+- A claim preserves a persistent app-hosted experience. While Resend is disconnected, the UI promises save and copy/share access only; it does not promise email delivery or native Folloze publication.
+- Cloudflare migration work remains draft, source-only, and inactive. It does not change the Vercel runtime, routes, configuration, resources, or production state.
+- The source-only handoff branch passes 680 Vitest checks across 76 files and both production builds; CI retains its separate browser regression suite.
+- Broad external lead-generation handoff still requires an explicitly authorized write-capable generation and claim readback. This source-only stabilization does not deploy or exercise provider data.
+
 ## Decision rule
 
 Adopt recommendations that improve the public preview, grounding, analytics proof, or future architecture without changing claim, Folloze draft, publish, or production semantics. Hold lifecycle mutations until the product behavior is explicit and independently testable.
@@ -53,6 +61,6 @@ Adopt recommendations that improve the public preview, grounding, analytics proo
 
 - No OpenAI key, provider secret, cookie, or token enters browser code, generated HTML, git, logs, or lead exports.
 - Anonymous previews remain temporary and private-by-URL.
-- Email save, Folloze draft creation, Folloze publish, anonymous public verification, and production deployment remain separate checkpoints.
+- App-hosted save, optional email delivery, Folloze draft creation, Folloze publish, anonymous public verification, and production deployment remain separate checkpoints.
 - Simulated analytics are always labeled and never mixed into durable real-event records.
 - Production is not changed by this branch.
