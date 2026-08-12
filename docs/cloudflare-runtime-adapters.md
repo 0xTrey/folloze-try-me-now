@@ -30,7 +30,18 @@ The main Queue is bound only as a producer so the adapter type can be reviewed
 against the real preview resource. The DLQ is recorded in
 `preview-resources.json` but deliberately unbound: this Worker has no Queue
 handler, and attaching a consumer would create a live message-delivery path.
-No migration was applied and no object, row, or message was written.
+Neither this PR workflow nor the root operator's verification applied a
+migration or performed a D1, R2, or Queue write.
+
+The root operator verified the resource metadata through a fixed-allowlist,
+read-only Cloudflare API check at `2026-08-12T15:32:00Z`. D1 existed with the
+configured name/ID and `num_tables=0`; its reported 12,288-byte file size is
+platform metadata, not a claim that the database is zero bytes. R2 existed in
+`WNAM` with the `Standard` storage class, and verification performed no write;
+its object count was not queried, so this receipt makes no bucket-emptiness
+claim. The main Queue (`09ced95b4e8f4966909e5a56ae06f6f6`) and DLQ
+(`5f23c07419764acab5963ad02145d491`) each reported zero producers and zero
+consumers. Those binding counts are not a Queue message-count claim.
 
 ### Rollback and deletion order
 

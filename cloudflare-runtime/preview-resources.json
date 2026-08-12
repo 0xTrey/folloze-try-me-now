@@ -1,25 +1,42 @@
 {
   "scope": "preview-only",
-  "source": "operator-provided task input",
-  "live_verification_performed": false,
-  "reported_initial_state": "empty-and-unbound",
+  "source": "root operator Cloudflare API verification",
+  "live_verification_performed": true,
+  "observed_at": "2026-08-12T15:32:00Z",
+  "verification_writes_performed": false,
   "resources": {
     "d1": {
       "binding": "UPLOAD_DB",
       "name": "folloze-try-me-now-preview",
-      "id": "f5a087e1-018e-4586-8a71-21b58b4ddb01"
+      "id": "f5a087e1-018e-4586-8a71-21b58b4ddb01",
+      "exists": true,
+      "num_tables": 0,
+      "file_size_bytes": 12288,
+      "file_size_note": "Cloudflare-reported platform metadata; not a claim that the database is zero bytes."
     },
     "r2": {
       "binding": "UPLOADS",
-      "name": "folloze-try-me-now-uploads-preview"
+      "name": "folloze-try-me-now-uploads-preview",
+      "exists": true,
+      "location": "WNAM",
+      "storage_class": "Standard",
+      "object_count_queried": false
     },
     "queue": {
       "binding": "EXTRACTION_QUEUE",
-      "name": "folloze-try-me-now-extraction-preview"
+      "name": "folloze-try-me-now-extraction-preview",
+      "id": "09ced95b4e8f4966909e5a56ae06f6f6",
+      "exists": true,
+      "producers": 0,
+      "consumers": 0
     },
     "dead_letter_queue": {
       "binding": null,
       "name": "folloze-try-me-now-extraction-dlq-preview",
+      "id": "5f23c07419764acab5963ad02145d491",
+      "exists": true,
+      "producers": 0,
+      "consumers": 0,
       "reason": "Deferred until the isolated Worker implements and tests a queue handler."
     }
   }

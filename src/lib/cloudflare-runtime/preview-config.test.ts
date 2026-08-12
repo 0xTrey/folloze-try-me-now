@@ -44,17 +44,46 @@ describe("preview-only Cloudflare resource bindings", () => {
     expect(JSON.stringify(config)).not.toMatch(/(?:^|[-_])prod(?:uction)?(?:[-_]|$)/i);
   });
 
-  it("records the supplied empty/unbound receipt and intentionally leaves the DLQ unbound", async () => {
+  it("records the verified resource metadata without claiming unqueried contents", async () => {
     const receipt = JSON.parse(await readFile(rootFile("preview-resources.json"), "utf8"));
     expect(receipt).toMatchObject({
       scope: "preview-only",
-      source: "operator-provided task input",
-      live_verification_performed: false,
-      reported_initial_state: "empty-and-unbound",
+      source: "root operator Cloudflare API verification",
+      live_verification_performed: true,
+      observed_at: "2026-08-12T15:32:00Z",
+      verification_writes_performed: false,
       resources: {
-        d1: { id: "f5a087e1-018e-4586-8a71-21b58b4ddb01" },
-        dead_letter_queue: { binding: null, name: "folloze-try-me-now-extraction-dlq-preview" },
+        d1: {
+          name: "folloze-try-me-now-preview",
+          id: "f5a087e1-018e-4586-8a71-21b58b4ddb01",
+          exists: true,
+          num_tables: 0,
+          file_size_bytes: 12288,
+        },
+        r2: {
+          name: "folloze-try-me-now-uploads-preview",
+          exists: true,
+          location: "WNAM",
+          storage_class: "Standard",
+          object_count_queried: false,
+        },
+        queue: {
+          name: "folloze-try-me-now-extraction-preview",
+          id: "09ced95b4e8f4966909e5a56ae06f6f6",
+          producers: 0,
+          consumers: 0,
+        },
+        dead_letter_queue: {
+          binding: null,
+          name: "folloze-try-me-now-extraction-dlq-preview",
+          id: "5f23c07419764acab5963ad02145d491",
+          producers: 0,
+          consumers: 0,
+        },
       },
     });
+    expect(receipt).not.toHaveProperty("reported_initial_state");
+    expect(receipt.resources.d1.file_size_note).toContain("not a claim that the database is zero bytes");
+    expect(receipt.resources.r2).not.toHaveProperty("object_count");
   });
 });
