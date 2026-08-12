@@ -1,4 +1,4 @@
--- Inactive Cloudflare adapter persistence. Apply only with an explicitly authorized Worker migration run.
+-- D1-only migration. Never run through scripts/migrate-leads.mjs (Neon).
 CREATE TABLE IF NOT EXISTS cf_upload_capabilities (
   nonce TEXT PRIMARY KEY, session_id TEXT NOT NULL, upload_id TEXT NOT NULL,
   object_key TEXT NOT NULL, status_key TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL,
