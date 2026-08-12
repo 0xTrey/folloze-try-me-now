@@ -13,7 +13,9 @@ The Vercel adapter lists only `try-me/` using private reads and validates exact
 byte counts/SHA-256 through the core engine. The destination uses private R2 and
 unapplied D1 migration `0002`; object and mapping ownership receipts are opaque,
 deterministic, queryable, and required for rollback. Mapping plus its receipt are
-one D1 batch. There is no deletion command, no runtime selector, no binding, and
+one D1 batch: the receipt is conditionally inserted only after an exact field
+match, and ownership comes from the mapping's durable `created_run_token`, never
+from D1 batch row counts. There is no deletion command, no runtime selector, no binding, and
 no D1 migration application in this change.
 
 Activation prerequisites: create a blank preview R2/D1 pair; independently apply
