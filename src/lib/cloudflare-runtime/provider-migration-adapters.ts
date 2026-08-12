@@ -17,13 +17,46 @@ export class VercelBlobReadAdapter implements ReadOnlyBlobSource {
 }
 
 const receipt = (ref: string, ownership: "created" | "preexisting"): OwnershipReceipt => ({ receiptRef: ref, ownership });
+const normalizeContentType = (value?: string) => (value || "application/octet-stream").trim().toLowerCase();
+type ObjectReceiptRow = { ownership: unknown; sha256: unknown; content_type: unknown };
+const validOwnership = (value: unknown): value is "created" | "preexisting" => value === "created" || value === "preexisting";
 /** R2 object writes plus D1-owned mapping receipts. Inert until separately instantiated by the CLI. */
 export class CloudflareR2D1MigrationDestination implements WriteOnceDestination {
   constructor(private readonly r2: R2Bucket, private readonly db: D1Database) {}
-  async lookupObjectReceipt({ ownershipToken, receiptRef }: { ownershipToken: string; receiptRef: string }) { const row = await this.db.prepare("SELECT ownership FROM cf_migration_object_receipts WHERE run_token = ? AND receipt_ref = ?").bind(ownershipToken, receiptRef).first<{ ownership: "created" | "preexisting" }>(); return row ? receipt(receiptRef, row.ownership) : null; }
+  async lookupObjectReceipt({ ownershipToken, receiptRef }: { ownershipToken: string; receiptRef: string }) { const row = await this.objectReceiptRow(ownershipToken, receiptRef); return row ? receipt(receiptRef, row.ownership) : null; }
   async lookupMappingReceipt({ ownershipToken, receiptRef }: { ownershipToken: string; receiptRef: string }) { const row = await this.db.prepare("SELECT ownership FROM cf_migration_mapping_receipts WHERE run_token = ? AND receipt_ref = ?").bind(ownershipToken, receiptRef).first<{ ownership: "created" | "preexisting" }>(); return row && (row.ownership === "created" || row.ownership === "preexisting") ? receipt(receiptRef, row.ownership) : null; }
-  async putIfAbsent(input: Parameters<WriteOnceDestination["putIfAbsent"]>[0]) { const existing = await this.lookupObjectReceipt(input); if (existing) return existing; if (!this.r2.put) throw new Error("migration_failed"); const head = await this.r2.head(input.key); if (head) { if (head.size !== input.body.byteLength || head.httpMetadata?.contentType !== input.contentType) return "conflict" as const; await this.db.prepare("INSERT OR IGNORE INTO cf_migration_object_receipts (run_token, receipt_ref, ownership) VALUES (?, ?, 'preexisting')").bind(input.ownershipToken, input.receiptRef).run(); return receipt(input.receiptRef, "preexisting"); }
-    await this.r2.put(input.key, input.body, { httpMetadata: { contentType: input.contentType }, customMetadata: { sha256: input.sha256 } }); await this.db.prepare("INSERT OR IGNORE INTO cf_migration_object_receipts (run_token, receipt_ref, ownership) VALUES (?, ?, 'created')").bind(input.ownershipToken, input.receiptRef).run(); return receipt(input.receiptRef, "created"); }
+  async putIfAbsent(input: Parameters<WriteOnceDestination["putIfAbsent"]>[0]) {
+    if (!this.r2.put) throw new Error("migration_failed");
+    const metadata = { sha256: input.sha256, ownershipRunToken: input.ownershipToken, objectReceiptRef: input.receiptRef };
+    let put: Awaited<ReturnType<NonNullable<R2Bucket["put"]>>>;
+    let object: Awaited<ReturnType<R2Bucket["head"]>>;
+    try { put = await this.r2.put(input.key, input.body, { onlyIf: { etagDoesNotMatch: "*" }, httpMetadata: { contentType: input.contentType }, customMetadata: metadata, sha256: input.sha256 }); object = put ?? await this.r2.head(input.key); } catch { throw new Error("migration_failed"); }
+    if (!object) throw new Error("migration_failed");
+    const exact = object.size === input.body.byteLength && normalizeContentType(object.httpMetadata?.contentType) === normalizeContentType(input.contentType) && object.customMetadata?.sha256 === input.sha256;
+    if (!exact) return "conflict";
+    const ownerToken = object.customMetadata?.ownershipRunToken;
+    const ownerRef = object.customMetadata?.objectReceiptRef;
+    // A receipt is all-or-nothing. A different or malformed receipt is never a
+    // safe basis for preexisting ownership, even when payload bytes match.
+    if ((ownerToken === undefined) !== (ownerRef === undefined)) throw new Error("migration_failed");
+    if (ownerToken !== undefined && (ownerToken !== input.ownershipToken || ownerRef !== input.receiptRef)) return "conflict";
+    const ownership = ownerToken === input.ownershipToken ? "created" : "preexisting";
+    await this.ensureObjectReceipt(input.ownershipToken, input.receiptRef, ownership, input.sha256, normalizeContentType(input.contentType));
+    return receipt(input.receiptRef, ownership);
+  }
+  private async objectReceiptRow(runToken: string, receiptRef: string): Promise<{ ownership: "created" | "preexisting"; sha256: string; contentType: string } | null> {
+    const row = await this.db.prepare("SELECT ownership, sha256, content_type FROM cf_migration_object_receipts WHERE run_token = ? AND receipt_ref = ?").bind(runToken, receiptRef).first<ObjectReceiptRow>();
+    if (!row) return null;
+    if (!validOwnership(row.ownership) || typeof row.sha256 !== "string" || typeof row.content_type !== "string") throw new Error("migration_failed");
+    return { ownership: row.ownership, sha256: row.sha256, contentType: row.content_type };
+  }
+  private async ensureObjectReceipt(runToken: string, receiptRef: string, ownership: "created" | "preexisting", sha256: string, contentType: string) {
+    const matches = (row: { ownership: "created" | "preexisting"; sha256: string; contentType: string } | null) => row && row.ownership === ownership && row.sha256 === sha256 && row.contentType === contentType;
+    const prior = await this.objectReceiptRow(runToken, receiptRef);
+    if (prior) { if (!matches(prior)) throw new Error("migration_failed"); return; }
+    const written = await this.db.prepare("INSERT OR IGNORE INTO cf_migration_object_receipts (run_token, receipt_ref, ownership, sha256, content_type) VALUES (?, ?, ?, ?, ?)").bind(runToken, receiptRef, ownership, sha256, contentType).run();
+    if (written.meta?.changes !== 1 && !matches(await this.objectReceiptRow(runToken, receiptRef))) throw new Error("migration_failed");
+  }
   async putMappingIfAbsent(input: Parameters<WriteOnceDestination["putMappingIfAbsent"]>[0]) {
     const prior = await this.lookupMappingReceipt(input); if (prior) return prior;
     if (!this.db.batch) throw new Error("migration_failed");

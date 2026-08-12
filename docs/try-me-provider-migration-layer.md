@@ -10,9 +10,15 @@ Secret names for that future harness only: `BLOB_READ_WRITE_TOKEN`,
 `CLOUDFLARE_API_TOKEN`, and a checkpoint encryption key. Never put values in Git.
 
 The Vercel adapter lists only `try-me/` using private reads and validates exact
-byte counts/SHA-256 through the core engine. The destination uses private R2 and
-unapplied D1 migration `0002`; object and mapping ownership receipts are opaque,
-deterministic, queryable, and required for rollback. Mapping plus its receipt are
+byte counts/SHA-256 through the core engine. The destination uses conditional R2
+`put` (`etagDoesNotMatch: "*"`) with normalized content type, SHA-256, and opaque
+ownership metadata. That metadata is the durable object receipt across a crash
+before D1 is updated; retry heads and validates it before idempotently recording
+the matching D1 receipt. A payload-equal object without that metadata is
+preexisting, while mismatched or malformed ownership metadata fails closed.
+The unapplied D1 migration `0002` binds receipt ownership to SHA-256 and content
+type; object and mapping receipts are opaque, deterministic, queryable, and
+required for rollback. Mapping plus its receipt are
 one D1 batch: the receipt is conditionally inserted only after an exact field
 match, and ownership comes from the mapping's durable `created_run_token`, never
 from D1 batch row counts. There is no deletion command, no runtime selector, no binding, and
