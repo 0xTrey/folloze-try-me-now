@@ -1,29 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { claimUploadStatus, reserveSession, uploadObjectKey, validateAuthorization, validateCallback, type DirectUploadAdapter } from "@/lib/cloudflare-upload-contract";
-
-const sessionId = "abcdefghijklmnopqrst";
-const uploadId = "11111111-1111-4111-8111-111111111111";
-const pathname = uploadObjectKey(sessionId, uploadId);
-const adapter = (outcome: "applied" | "conflict"): DirectUploadAdapter => ({
-  authorize: async () => ({ uploadUrl: "https://example.invalid", expiresAt: 1 }),
-  compareAndSet: async () => outcome
-});
-
-describe("Cloudflare direct-upload parity contract", () => {
-  it("authorizes only the browser origin and exact session-scoped object key", () => {
-    expect(() => validateAuthorization({ sessionId, uploadId, pathname, origin: "https://app.example" }, "https://app.example")).not.toThrow();
-    expect(() => validateAuthorization({ sessionId, uploadId, pathname, origin: "https://evil.example" }, "https://app.example")).toThrow("cross_origin_upload");
-  });
-  it("rejects callback path substitution", () => {
-    expect(() => validateCallback({ sessionId, uploadId, pathname: `${pathname}.other` })).toThrow("upload_path_mismatch");
-  });
-  it("treats terminal callbacks as replay and processing callbacks as in-progress", () => {
-    expect(claimUploadStatus({ value: { status: "complete" }, version: "1" })).toBe("replay");
-    expect(claimUploadStatus({ value: { status: "processing" }, version: "1" })).toBe("in-progress");
-  });
-  it("requires CAS for session reservation and surfaces conflicts", async () => {
-    await expect(reserveSession(adapter("applied"), { value: {}, version: "1" }, uploadId)).resolves.toBe("reserved");
-    await expect(reserveSession(adapter("conflict"), { value: {}, version: "1" }, uploadId)).resolves.toBe("conflict");
-    await expect(reserveSession(adapter("applied"), { value: { sourceUploadId: "other" }, version: "1" }, uploadId)).resolves.toBe("conflict");
-  });
+import { describe, expect, it, vi } from "vitest";
+import { CALLBACK_MAX_SECONDS, beginUpload, claimUploadStatus, handoffAfterClaim, reserveSession, scheduledJobs, statusObjectKey, uploadObjectKey, validateCallback, type DirectUploadAdapter } from "@/lib/cloudflare-upload-contract";
+const s="abcdefghijklmnopqrst", u="11111111-1111-4111-8111-111111111111", path=uploadObjectKey(s,u);
+const adapter=(cas:"applied"|"conflict"="applied"):DirectUploadAdapter=>({authorizeUpload:vi.fn(async()=>({uploadUrl:"https://example.invalid",expiresAt:1})),compareAndSet:vi.fn(async()=>cas),enqueueExtraction:vi.fn(async()=>{})});
+const auth=(allowed=true)=>({canEdit:vi.fn(async()=>allowed),getSession:vi.fn(async()=>({id:s,acceptsPdf:true}))});
+describe("Cloudflare direct-upload parity contract",()=>{
+ it("authorizes editor and authoritative session before signing",async()=>{const a=adapter(), x=auth(); await expect(beginUpload(a,x,{sessionId:s,uploadId:u,origin:"https://app",expectedOrigin:"https://app",pathname:path,statusPath:statusObjectKey(s,u)})).resolves.toBeTruthy(); await expect(beginUpload(a,auth(false),{sessionId:s,uploadId:u,origin:"https://app",expectedOrigin:"https://app",pathname:path,statusPath:statusObjectKey(s,u)})).rejects.toThrow("editor_inactive");});
+ it("rejects a self-consistent callback from another session",()=>expect(()=>validateCallback({sessionId:s,uploadId:u},{sessionId:"other",uploadId:u,pathname:uploadObjectKey("other",u)})).toThrow("upload_path_mismatch"));
+ it("uses session-specific CAS for winner loser replay",async()=>{const win=adapter(); await expect(claimUploadStatus(win,{sessionId:s,uploadId:u},{value:{status:"pending"},version:"1"})).resolves.toBe("claimed"); expect(vi.mocked(win.compareAndSet)).toHaveBeenCalledWith(`upload-status:${s}:${u}`,"1",{status:"processing"}); await expect(claimUploadStatus(adapter("conflict"),{sessionId:s,uploadId:u},{value:{status:"pending"},version:"1"})).resolves.toBe("conflict"); await expect(claimUploadStatus(adapter(),{sessionId:s,uploadId:u},{value:{status:"complete"},version:"1"})).resolves.toBe("replay");});
+ it("isolates session reservations",async()=>{const a=adapter(); await reserveSession(a,s,{value:{},version:"1"},u); await reserveSession(a,"other",{value:{},version:"1"},u); expect(vi.mocked(a.compareAndSet)).toHaveBeenNthCalledWith(1,`session:${s}`,"1",{sourceUploadId:u}); expect(vi.mocked(a.compareAndSet)).toHaveBeenNthCalledWith(2,"session:other","1",{sourceUploadId:u});});
+ it("queues post-claim work within the callback budget",async()=>{const a=adapter(); await handoffAfterClaim(a,{sessionId:s,uploadId:u},CALLBACK_MAX_SECONDS); expect(a.enqueueExtraction).toHaveBeenCalled(); await expect(handoffAfterClaim(a,{sessionId:s,uploadId:u},301)).rejects.toThrow("callback_duration_exceeded");});
+ it("preserves exact scheduled reconciliation mapping",()=>expect(scheduledJobs).toEqual([{name:"upload-cleanup",cron:"*/15 * * * *"},{name:"lead-reconciliation",cron:"*/5 * * * *"},{name:"trace-cleanup",cron:"17 3 * * *"}]));
 });
