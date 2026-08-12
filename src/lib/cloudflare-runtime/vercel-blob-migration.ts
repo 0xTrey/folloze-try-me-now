@@ -9,17 +9,19 @@ export interface ReadOnlyBlobSource {
 }
 /** Stores raw cursors outside serialized checkpoints; never returns them in reports. */
 export interface CursorResolver { remember(cursorRef: string, cursor: string): Promise<void>; resolve(cursorRef: string): Promise<string | undefined>; }
-export type WriteOutcome = "inserted" | "exact-existing" | "conflict";
+export type OwnershipReceipt = Readonly<{ receiptRef: string; ownership: "created" | "preexisting" }>;
 export interface WriteOnceDestination {
-  /** Adapter verifies content hash/bytes before returning exact-existing. */
-  putIfAbsent(input: Readonly<{ key: string; body: Uint8Array; sha256: string; contentType: string; cacheControl: string; access: "private" }>): Promise<WriteOutcome>;
-  /** Adapter verifies all identity/hash/bytes fields before returning exact-existing. */
-  putMappingIfAbsent(input: Readonly<{ sourceIdentity: string; sourceIdentityHash: string; kind: MigrationKind; sessionId?: string; uploadId?: string; destinationKey: string; sha256: string; bytes: number }>): Promise<WriteOutcome>;
+  /** Atomic write plus durable ownership receipt, keyed by the opaque token/ref. */
+  putIfAbsent(input: Readonly<{ key: string; body: Uint8Array; sha256: string; contentType: string; cacheControl: string; access: "private"; ownershipToken: string; receiptRef: string }>): Promise<OwnershipReceipt | "conflict">;
+  lookupObjectReceipt(input: Readonly<{ ownershipToken: string; receiptRef: string }>): Promise<OwnershipReceipt | null>;
+  /** Mapping insert and its receipt must commit atomically in the destination ledger. */
+  putMappingIfAbsent(input: Readonly<{ sourceIdentity: string; sourceIdentityHash: string; kind: MigrationKind; sessionId?: string; uploadId?: string; destinationKey: string; sha256: string; bytes: number; ownershipToken: string; receiptRef: string }>): Promise<OwnershipReceipt | "conflict">;
+  lookupMappingReceipt(input: Readonly<{ ownershipToken: string; receiptRef: string }>): Promise<OwnershipReceipt | null>;
 }
 export type MigrationKind = "session" | "lead" | "upload" | "upload-status";
 type ExpectedItem = Readonly<{ sourceIdentityHash: string; destinationRef: string; bytes: number; kind: MigrationKind }>;
-export type CheckpointItem = Readonly<{ sourceIdentityHash: string; destinationRef: string; kind: MigrationKind; bytes: number; sha256: string; state: "copying" | "copied" | "mapped" | "failed"; writeAheadOwnership?: boolean; objectOutcome?: Exclude<WriteOutcome, "conflict">; mappingOutcome?: Exclude<WriteOutcome, "conflict">; errorCode?: SafeErrorCode }>;
-export type MigrationCheckpoint = Readonly<{ snapshotRef: string; snapshotDigest: string; expected: Readonly<{ objects: number; bytes: number; identities: readonly ExpectedItem[] }>; cursorRef?: string; items: readonly CheckpointItem[] }>;
+export type CheckpointItem = Readonly<{ sourceIdentityHash: string; destinationRef: string; kind: MigrationKind; bytes: number; sha256: string; state: "copied" | "mapped" | "failed"; objectReceiptRef?: string; mappingReceiptRef?: string; errorCode?: SafeErrorCode }>;
+export type MigrationCheckpoint = Readonly<{ snapshotRef: string; snapshotDigest: string; ownershipRunToken: string; expected: Readonly<{ objects: number; bytes: number; identities: readonly ExpectedItem[] }>; cursorRef?: string; items: readonly CheckpointItem[] }>;
 export interface MigrationCheckpointStore { load(): Promise<MigrationCheckpoint | null>; save(checkpoint: MigrationCheckpoint): Promise<void>; }
 export type MigrationOptions = Readonly<{ dryRun?: boolean; checkpoint?: MigrationCheckpointStore; cursorResolver?: CursorResolver; pageSize?: number }>;
 type Totals = { objects: number; bytes: number };
@@ -29,9 +31,8 @@ const hash = (value: string | Uint8Array) => createHash("sha256").update(value).
 const refFor = (prefix: string, identityHash: string) => hash(`${prefix}:${identityHash}`);
 const isHex = (value: string) => /^[a-f0-9]{64}$/.test(value);
 const isKind = (value: string): value is MigrationKind => ["session", "lead", "upload", "upload-status"].includes(value);
-const isState = (value: unknown): value is CheckpointItem["state"] => value === "copying" || value === "copied" || value === "mapped" || value === "failed";
-const isStoredOutcome = (value: unknown): value is Exclude<WriteOutcome, "conflict"> | undefined => value === undefined || value === "inserted" || value === "exact-existing";
-const isOutcome = (value: unknown): value is WriteOutcome => value === "inserted" || value === "exact-existing" || value === "conflict";
+const isState = (value: unknown): value is CheckpointItem["state"] => value === "copied" || value === "mapped" || value === "failed";
+const isReceipt = (value: unknown, expected: string): value is OwnershipReceipt => Boolean(value && typeof value === "object" && (value as OwnershipReceipt).receiptRef === expected && isHex((value as OwnershipReceipt).receiptRef) && ((value as OwnershipReceipt).ownership === "created" || (value as OwnershipReceipt).ownership === "preexisting"));
 const safeContentType = (value?: string) => value && /^[\w.+-]+\/[\w.+-]+$/.test(value) ? value : "application/octet-stream";
 const safeCodes = ["unsupported_source_object", "source_size_mismatch", "destination_collision", "mapping_conflict", "source_page_exceeds_limit", "source_transient", "source_missing", "mapping_unavailable", "migration_failed"] as const;
 export type SafeErrorCode = (typeof safeCodes)[number];
@@ -48,11 +49,11 @@ export function planBlobObject(object: BlobObject): PlannedObject {
 async function bytesAndHash(stream: AsyncIterable<Uint8Array>) { const chunks: Uint8Array[] = []; let length = 0; const digest = createHash("sha256"); for await (const chunk of stream) { const value = new Uint8Array(chunk); if (length > Number.MAX_SAFE_INTEGER - value.byteLength) throw new Error("byte_sum_overflow"); chunks.push(value); length += value.byteLength; digest.update(value); } const body = new Uint8Array(length); let offset = 0; for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; } return { body, sha256: digest.digest("hex") }; }
 function validateCheckpoint(checkpoint: MigrationCheckpoint | null) {
   if (!checkpoint) return new Map<string, CheckpointItem>();
-  if (!isHex(checkpoint.snapshotRef) || !isHex(checkpoint.snapshotDigest) || !Number.isSafeInteger(checkpoint.expected.objects) || !Number.isSafeInteger(checkpoint.expected.bytes) || checkpoint.expected.objects <= 0 || checkpoint.expected.bytes < 0 || (checkpoint.cursorRef !== undefined && !isHex(checkpoint.cursorRef))) throw new Error("malformed_checkpoint");
+  if (!isHex(checkpoint.snapshotRef) || !isHex(checkpoint.snapshotDigest) || !isHex(checkpoint.ownershipRunToken) || !Number.isSafeInteger(checkpoint.expected.objects) || !Number.isSafeInteger(checkpoint.expected.bytes) || checkpoint.expected.objects <= 0 || checkpoint.expected.bytes < 0 || (checkpoint.cursorRef !== undefined && !isHex(checkpoint.cursorRef))) throw new Error("malformed_checkpoint");
   const expected = new Set<string>(), items = new Map<string, CheckpointItem>(), totals: Totals = { objects: 0, bytes: 0 };
   for (const expectedItem of checkpoint.expected.identities) { if (!isHex(expectedItem.sourceIdentityHash) || expectedItem.destinationRef !== refFor("destination", expectedItem.sourceIdentityHash) || !isKind(expectedItem.kind) || expected.has(expectedItem.sourceIdentityHash)) throw new Error("malformed_checkpoint"); expected.add(expectedItem.sourceIdentityHash); add(totals, expectedItem.bytes); }
   if (totals.objects !== checkpoint.expected.objects || totals.bytes !== checkpoint.expected.bytes) throw new Error("malformed_checkpoint");
-  for (const item of checkpoint.items) { if (!expected.has(item.sourceIdentityHash) || items.has(item.sourceIdentityHash) || item.destinationRef !== refFor("destination", item.sourceIdentityHash) || !isKind(item.kind) || !isState(item.state) || (item.writeAheadOwnership !== undefined && typeof item.writeAheadOwnership !== "boolean") || !isStoredOutcome(item.objectOutcome) || !isStoredOutcome(item.mappingOutcome) || !isHex(item.sha256) || !Number.isSafeInteger(item.bytes) || item.bytes < 0 || (item.errorCode !== undefined && !safeCodes.includes(item.errorCode)) || (item.state !== "failed" && item.errorCode !== undefined) || (item.state === "failed" && !item.errorCode)) throw new Error("malformed_checkpoint"); items.set(item.sourceIdentityHash, item); }
+  for (const item of checkpoint.items) { if (!expected.has(item.sourceIdentityHash) || items.has(item.sourceIdentityHash) || item.destinationRef !== refFor("destination", item.sourceIdentityHash) || !isKind(item.kind) || !isState(item.state) || (item.objectReceiptRef !== undefined && !isHex(item.objectReceiptRef)) || (item.mappingReceiptRef !== undefined && !isHex(item.mappingReceiptRef)) || !isHex(item.sha256) || !Number.isSafeInteger(item.bytes) || item.bytes < 0 || (item.errorCode !== undefined && !safeCodes.includes(item.errorCode)) || (item.state !== "failed" && item.errorCode !== undefined) || (item.state === "failed" && !item.errorCode)) throw new Error("malformed_checkpoint"); items.set(item.sourceIdentityHash, item); }
   return items;
 }
 async function enumerate(source: ReadOnlyBlobSource, pageSize: number) {
@@ -69,33 +70,29 @@ export async function migrateBlobSnapshot(source: ReadOnlyBlobSource, destinatio
   const mode = options.dryRun ?? true ? "dry-run" : "apply", snapshot = await source.snapshot(), snapshotRef = refFor("snapshot", hash(snapshot.id)); if (!isHex(snapshot.digest)) throw new Error("invalid_snapshot");
   const { all, totals: sourceTotals } = await enumerate(source, options.pageSize ?? 1000), expected = expectedFor(all, sourceTotals), prior = await options.checkpoint?.load() ?? null, items = validateCheckpoint(prior);
   if (prior && (prior.snapshotRef !== snapshotRef || prior.snapshotDigest !== snapshot.digest || !sameExpected(prior.expected, expected))) throw new Error("stale_checkpoint");
-  let checkpoint: MigrationCheckpoint = prior ?? { snapshotRef, snapshotDigest: snapshot.digest, expected, items: [] }, copied = 0, resumed = 0, collisions = 0; const observed: Totals = { objects: 0, bytes: 0 }, failures: { sourceIdentityHash: string; code: SafeErrorCode }[] = [];
+  const ownershipRunToken = refFor("ownership-run", hash(`${snapshotRef}:${snapshot.digest}`));
+  if (prior && prior.ownershipRunToken !== ownershipRunToken) throw new Error("stale_checkpoint");
+  let checkpoint: MigrationCheckpoint = prior ?? { snapshotRef, snapshotDigest: snapshot.digest, ownershipRunToken, expected, items: [] }, copied = 0, resumed = 0, collisions = 0; const observed: Totals = { objects: 0, bytes: 0 }, failures: { sourceIdentityHash: string; code: SafeErrorCode }[] = [], receipts = new Map<string, { object?: OwnershipReceipt; mapping?: OwnershipReceipt }>();
   for (const planned of all) {
     try {
       const { body, sha256 } = await bytesAndHash(await source.read(planned.object)); if (body.byteLength !== planned.object.size) throw new Error("source_size_mismatch");
       if (mode === "dry-run") { add(observed, body.byteLength); continue; }
       await options.cursorResolver?.remember(planned.cursorRef, planned.object.cursor);
-      const previous = items.get(planned.sourceIdentityHash);
-      // Write intent before the irreversible object call. A checkpoint store must
-      // atomically retain this intent before the adapter is allowed to write.
-      const intent: CheckpointItem = { sourceIdentityHash: planned.sourceIdentityHash, destinationRef: planned.destinationRef, kind: planned.kind, bytes: body.byteLength, sha256, state: "copying", writeAheadOwnership: true, objectOutcome: previous?.objectOutcome };
-      items.set(planned.sourceIdentityHash, intent); checkpoint = { ...checkpoint, cursorRef: planned.cursorRef, items: [...items.values()] }; await save(options.checkpoint, checkpoint);
-      const objectOutcome = await destination.putIfAbsent({ key: planned.destinationKey, body, sha256, contentType: safeContentType(planned.object.contentType), cacheControl: "private, no-store", access: "private" });
-      if (!isOutcome(objectOutcome)) throw new Error("migration_failed");
-      if (objectOutcome === "conflict") { collisions++; throw new Error("destination_collision"); }
-      if (objectOutcome === "inserted") copied++; else if (previous?.state === "mapped") resumed++;
-      // Preserve creation provenance when retrying a copied-but-unmapped item.
-      const effectiveObjectOutcome = previous?.objectOutcome === "inserted" || (previous?.state === "copying" && previous.writeAheadOwnership && objectOutcome === "exact-existing") ? "inserted" : objectOutcome;
-      const copiedItem: CheckpointItem = { sourceIdentityHash: planned.sourceIdentityHash, destinationRef: planned.destinationRef, kind: planned.kind, bytes: body.byteLength, sha256, state: "copied", objectOutcome: effectiveObjectOutcome };
+      const previous = items.get(planned.sourceIdentityHash), objectReceiptRef = refFor("object-receipt", hash(`${ownershipRunToken}:${planned.sourceIdentityHash}`)), mappingReceiptRef = refFor("mapping-receipt", hash(`${ownershipRunToken}:${planned.sourceIdentityHash}`));
+      let objectReceipt: OwnershipReceipt | "conflict" | null = await destination.lookupObjectReceipt({ ownershipToken: ownershipRunToken, receiptRef: objectReceiptRef });
+      if (objectReceipt === null) objectReceipt = await destination.putIfAbsent({ key: planned.destinationKey, body, sha256, contentType: safeContentType(planned.object.contentType), cacheControl: "private, no-store", access: "private", ownershipToken: ownershipRunToken, receiptRef: objectReceiptRef });
+      if (objectReceipt === "conflict") { collisions++; throw new Error("destination_collision"); }
+      if (!isReceipt(objectReceipt, objectReceiptRef)) throw new Error("migration_failed"); receipts.set(planned.sourceIdentityHash, { object: objectReceipt }); if (objectReceipt.ownership === "created") copied++; else if (previous?.state === "mapped") resumed++;
+      const copiedItem: CheckpointItem = { sourceIdentityHash: planned.sourceIdentityHash, destinationRef: planned.destinationRef, kind: planned.kind, bytes: body.byteLength, sha256, state: "copied", objectReceiptRef };
       items.set(planned.sourceIdentityHash, copiedItem); checkpoint = { ...checkpoint, cursorRef: planned.cursorRef, items: [...items.values()] }; await save(options.checkpoint, checkpoint);
-      const mappingOutcome = await destination.putMappingIfAbsent({ sourceIdentity: planned.sourceIdentity, sourceIdentityHash: planned.sourceIdentityHash, kind: planned.kind, sessionId: planned.sessionId, uploadId: planned.uploadId, destinationKey: planned.destinationKey, sha256, bytes: body.byteLength });
-      if (!isOutcome(mappingOutcome)) throw new Error("migration_failed");
-      if (mappingOutcome === "conflict") throw new Error("mapping_conflict");
-      const effectiveMappingOutcome = previous?.mappingOutcome === "inserted" ? "inserted" : mappingOutcome;
-      items.set(planned.sourceIdentityHash, { ...copiedItem, state: "mapped", mappingOutcome: effectiveMappingOutcome }); checkpoint = { ...checkpoint, items: [...items.values()] }; await save(options.checkpoint, checkpoint); add(observed, body.byteLength);
-    } catch (error) { const code = safeCode(error); failures.push({ sourceIdentityHash: planned.sourceIdentityHash, code }); if (mode === "apply") { const previous = items.get(planned.sourceIdentityHash); items.set(planned.sourceIdentityHash, { sourceIdentityHash: planned.sourceIdentityHash, destinationRef: planned.destinationRef, kind: planned.kind, bytes: previous?.bytes ?? 0, sha256: previous?.sha256 ?? hash("failed"), state: "failed", errorCode: code, objectOutcome: previous?.objectOutcome, mappingOutcome: previous?.mappingOutcome }); checkpoint = { ...checkpoint, items: [...items.values()] }; await save(options.checkpoint, checkpoint); } }
+      let mappingReceipt: OwnershipReceipt | "conflict" | null = await destination.lookupMappingReceipt({ ownershipToken: ownershipRunToken, receiptRef: mappingReceiptRef });
+      if (mappingReceipt === null) mappingReceipt = await destination.putMappingIfAbsent({ sourceIdentity: planned.sourceIdentity, sourceIdentityHash: planned.sourceIdentityHash, kind: planned.kind, sessionId: planned.sessionId, uploadId: planned.uploadId, destinationKey: planned.destinationKey, sha256, bytes: body.byteLength, ownershipToken: ownershipRunToken, receiptRef: mappingReceiptRef });
+      if (mappingReceipt === "conflict") throw new Error("mapping_conflict");
+      if (!isReceipt(mappingReceipt, mappingReceiptRef)) throw new Error("migration_failed"); receipts.set(planned.sourceIdentityHash, { object: objectReceipt, mapping: mappingReceipt });
+      items.set(planned.sourceIdentityHash, { ...copiedItem, state: "mapped", mappingReceiptRef }); checkpoint = { ...checkpoint, items: [...items.values()] }; await save(options.checkpoint, checkpoint); add(observed, body.byteLength);
+    } catch (error) { const code = safeCode(error); failures.push({ sourceIdentityHash: planned.sourceIdentityHash, code }); if (mode === "apply") { const previous = items.get(planned.sourceIdentityHash); items.set(planned.sourceIdentityHash, { sourceIdentityHash: planned.sourceIdentityHash, destinationRef: planned.destinationRef, kind: planned.kind, bytes: previous?.bytes ?? 0, sha256: previous?.sha256 ?? hash("failed"), state: "failed", errorCode: code, objectReceiptRef: previous?.objectReceiptRef, mappingReceiptRef: previous?.mappingReceiptRef }); checkpoint = { ...checkpoint, items: [...items.values()] }; await save(options.checkpoint, checkpoint); } }
   }
   const reconciled = mode === "apply" && failures.length === 0 && observed.objects === sourceTotals.objects && observed.bytes === sourceTotals.bytes;
-  const rollback = [...items.values()].filter((item) => item.objectOutcome === "inserted" || item.mappingOutcome === "inserted").map((item) => ({ sourceIdentityHash: item.sourceIdentityHash, destinationRef: item.destinationRef, objectCreated: item.objectOutcome === "inserted", mappingCreated: item.mappingOutcome === "inserted" }));
+  const rollback = [...items.values()].map((item) => { const receipt = receipts.get(item.sourceIdentityHash); return { sourceIdentityHash: item.sourceIdentityHash, destinationRef: item.destinationRef, objectCreated: receipt?.object?.ownership === "created", mappingCreated: receipt?.mapping?.ownership === "created" }; }).filter((item) => item.objectCreated || item.mappingCreated);
   return mode === "dry-run" ? { mode, reconciled: false, snapshot: { source: sourceTotals, projectedDestination: observed }, runDelta: { copied: 0, resumed: 0, collisions: 0, failures }, rollback: [] } : { mode, reconciled, snapshot: { source: sourceTotals, observedDestination: observed }, runDelta: { copied, resumed, collisions, failures }, rollback };
 }
