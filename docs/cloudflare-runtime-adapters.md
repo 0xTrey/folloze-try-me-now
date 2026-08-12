@@ -15,3 +15,30 @@ journaled `0001_create_cf_upload_adapter.sql`, wire a separate authenticated rou
 and verify rollback by setting the selector back to disabled. None is included
 in this PR. The Neon lead runner only reads `db/migrations`, which intentionally
 contains no Cloudflare D1 migration.
+
+## Preview resource bindings
+
+`cloudflare-runtime/wrangler.preview.jsonc` is the only configuration that
+names the already-created preview resources. It keeps
+`ADAPTER_ENABLED=disabled`, disables automatic Worker and version preview URLs,
+and declares no routes, custom domains, cron triggers, or Queue consumer. The
+Worker exports only `fetch`; while disabled it returns `404 Not found` without
+reading or writing D1, R2, or Queue. D1 uses the dedicated `d1/migrations`
+directory and `cf_upload_adapter_migrations` journal table.
+
+The main Queue is bound only as a producer so the adapter type can be reviewed
+against the real preview resource. The DLQ is recorded in
+`preview-resources.json` but deliberately unbound: this Worker has no Queue
+handler, and attaching a consumer would create a live message-delivery path.
+No migration was applied and no object, row, or message was written.
+
+### Rollback and deletion order
+
+For this config-only change, rollback is simply reverting the preview config;
+there is no deployed external state to unwind. If a later authorized rollout
+creates bindings or traffic, keep the selector disabled, remove any routes,
+cron triggers, and consumer first, then remove the producer binding. After
+confirming both Queues are empty, delete the main Queue and then its DLQ. Verify
+and empty R2 before deleting the bucket. Export/verify D1 last, then delete the
+database; D1 is retained until the end because it is the authoritative status
+and outcome ledger.

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "try-me-now-upload-adapter-preview",
+  "main": "worker.ts",
+  "compatibility_date": "2026-08-12",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "ADAPTER_ENABLED": "disabled"
+  },
+  "d1_databases": [
+    {
+      "binding": "UPLOAD_DB",
+      "database_name": "folloze-try-me-now-preview",
+      "database_id": "f5a087e1-018e-4586-8a71-21b58b4ddb01",
+      "preview_database_id": "f5a087e1-018e-4586-8a71-21b58b4ddb01",
+      "migrations_dir": "d1/migrations",
+      "migrations_table": "cf_upload_adapter_migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS",
+      "bucket_name": "folloze-try-me-now-uploads-preview",
+      "preview_bucket_name": "folloze-try-me-now-uploads-preview"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "EXTRACTION_QUEUE",
+        "queue": "folloze-try-me-now-extraction-preview"
+      }
+    ]
+  }
+}

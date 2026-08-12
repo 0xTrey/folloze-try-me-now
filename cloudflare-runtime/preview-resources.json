@@ -1,0 +1,26 @@
+{
+  "scope": "preview-only",
+  "source": "operator-provided task input",
+  "live_verification_performed": false,
+  "reported_initial_state": "empty-and-unbound",
+  "resources": {
+    "d1": {
+      "binding": "UPLOAD_DB",
+      "name": "folloze-try-me-now-preview",
+      "id": "f5a087e1-018e-4586-8a71-21b58b4ddb01"
+    },
+    "r2": {
+      "binding": "UPLOADS",
+      "name": "folloze-try-me-now-uploads-preview"
+    },
+    "queue": {
+      "binding": "EXTRACTION_QUEUE",
+      "name": "folloze-try-me-now-extraction-preview"
+    },
+    "dead_letter_queue": {
+      "binding": null,
+      "name": "folloze-try-me-now-extraction-dlq-preview",
+      "reason": "Deferred until the isolated Worker implements and tests a queue handler."
+    }
+  }
+}
