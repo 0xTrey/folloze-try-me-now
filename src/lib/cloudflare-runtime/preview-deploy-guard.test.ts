@@ -69,6 +69,7 @@ describe("disabled preview deploy preflight", () => {
 });
 
 const versionId = "11111111-1111-4111-8111-111111111111";
+const otherVersionId = "22222222-2222-4222-8222-222222222222";
 const tag = "0123456789abcdef0123456789abcdef01234567";
 const api = <T,>(result: T) => ({ success: true, errors: [], messages: [], result });
 const metadataFixtures = () => ({
@@ -92,6 +93,7 @@ const metadataFixtures = () => ({
   subdomain: api({ enabled: false, previews_enabled: false }),
   domains: api([] as Array<{ hostname: string }>),
   schedules: api({ schedules: [] as Array<{ cron: string }> }),
+  deployment: { versions: [{ version_id: versionId, percentage: 100 }] },
 });
 
 const writeFixtures = (fixtures: ReturnType<typeof metadataFixtures>) => {
@@ -109,6 +111,7 @@ const verifyArgs = (dir: string) => [
   "--expected-tag", tag,
   "--expected-version", versionId,
 ];
+const activeArgs = (dir: string) => ["active", "--deployment", join(dir, "deployment.json"), "--expected-version", versionId];
 
 describe("post-deploy metadata verification", () => {
   it("selects the exact commit-tagged Wrangler version", () => {
@@ -128,6 +131,47 @@ describe("post-deploy metadata verification", () => {
       const result = run(verify, verifyArgs(dir));
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toContain("no public route or cron");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("requires the verified version as the sole active deployment at 100%", () => {
+    const dir = writeFixtures(metadataFixtures());
+    try {
+      const result = run(verify, activeArgs(dir));
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("sole version at 100%");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a safe tagged version when a different version is active", () => {
+    const fixtures = metadataFixtures();
+    fixtures.deployment.versions[0].version_id = otherVersionId;
+    const dir = writeFixtures(fixtures);
+    try {
+      const selected = run(verify, ["select", "--versions", join(dir, "versions.json"), "--expected-tag", tag]);
+      expect(selected.status, selected.stderr).toBe(0);
+      expect(selected.stdout.trim()).toBe(versionId);
+      const active = run(verify, activeArgs(dir));
+      expect(active.status).not.toBe(0);
+      expect(active.stderr).toContain("expected verified version is not the active deployment");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["split traffic", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.deployment.versions.push({ version_id: otherVersionId, percentage: 10 }); fixture.deployment.versions[0].percentage = 90; }],
+    ["partial traffic", (fixture: ReturnType<typeof metadataFixtures>) => { fixture.deployment.versions[0].percentage = 99; }],
+  ])("rejects %s active-deployment metadata", (_label, mutate) => {
+    const fixtures = metadataFixtures();
+    mutate(fixtures);
+    const dir = writeFixtures(fixtures);
+    try {
+      expect(run(verify, activeArgs(dir)).status).not.toBe(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

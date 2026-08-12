@@ -81,12 +81,15 @@ Deployment creates an account-only Worker version. It does not add a Worker
 route, custom domain, workers.dev URL, version preview URL, cron, or Queue
 consumer. After upload, Wrangler selects the one version tagged with the exact
 Git commit, workflow run, and attempt and reads that version's handler and
-binding metadata. Four
-allowlisted Cloudflare metadata GETs then verify the script has no zone routes,
-the subdomain and preview URL switches are off, there are no custom domains,
-and there are no cron triggers. The temporary metadata is neither printed nor
-uploaded. No D1, R2, Queue, application-data, or Worker-content endpoint is
-called.
+binding metadata. Four allowlisted direct Cloudflare metadata GETs then verify
+the script has no zone routes, the subdomain and preview URL switches are off,
+there are no custom domains, and there are no cron triggers. Only after those
+checks pass, pinned Wrangler reads the current deployment status and requires
+the verified version to be the sole active version at exactly 100% traffic.
+The workflow does not treat the existence of a safe tagged version as proof
+that it is active; a concurrent deployment observed by this final check fails
+the run. The temporary metadata is neither printed nor uploaded. No D1, R2,
+Queue, application-data, or Worker-content endpoint is called.
 
 For a subsequent deployment, roll back only to a previously verified disabled
 version:

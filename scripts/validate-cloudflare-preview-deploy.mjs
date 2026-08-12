@@ -102,12 +102,26 @@ assert(workflow.includes("CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN
 assert(workflow.includes("CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}"), "workflow must use the named environment variable");
 assert(workflow.includes('WRANGLER_VERSION: "4.122.0"'), "Wrangler must remain pinned to 4.122.0");
 
-const deployLines = lines.filter((line) => line.includes('"wrangler@${WRANGLER_VERSION}" deploy'));
+const deployLines = lines.filter((line) => line.includes('"wrangler@${WRANGLER_VERSION}" deploy '));
 assert(deployLines.length === 2, "workflow must contain exactly one dry-run and one deployment command");
 assert(deployLines.filter((line) => line.includes("--dry-run")).length === 1, "exactly one Wrangler dry-run is required");
 assert(deployLines.every((line) => line.includes('--config "${WRANGLER_CONFIG}"') && line.includes("--strict") && line.includes("--autoconfig=false")), "Wrangler deploy commands must use the exact config, strict mode, and no autoconfig");
 assert(deployLines.find((line) => !line.includes("--dry-run"))?.includes('--tag "${VERSION_TAG}"'), "deployment must use the unique commit/run/attempt tag");
 assert(!/(wrangler[^\n]*(?:\bd1\b|\br2\b|\bqueues?\b)|migrations?\s+apply|\/d1\/|\/r2\/|\/queues\/)/i.test(workflow), "workflow may not invoke migration or resource/data commands");
+
+const wranglerLines = lines.filter((line) => line.includes('"wrangler@${WRANGLER_VERSION}"'));
+const allowedWranglerRequests = [" deploy --dry-run ", " deploy --strict ", " versions list ", " versions view ", " deployments status "];
+assert(wranglerLines.length === allowedWranglerRequests.length, "workflow must contain only the five allowlisted Wrangler requests");
+for (const line of wranglerLines) {
+  const matching = allowedWranglerRequests.filter((request) => line.includes(request));
+  assert(matching.length === 1, `non-allowlisted or ambiguous Wrangler request: ${line.trim()}`);
+}
+const metadataWranglerLines = wranglerLines.filter((line) => line.includes(" versions ") || line.includes(" deployments status "));
+assert(metadataWranglerLines.length === 3 && metadataWranglerLines.every((line) => line.includes('--name "${WORKER_NAME}"') && line.includes('--config "${WRANGLER_CONFIG}"') && line.includes("--json")), "Wrangler metadata requests must be JSON reads for the exact Worker/config");
+const versionVerificationIndex = lines.findIndex((line) => line.includes("verify-cloudflare-preview-deployment.mjs verify --version"));
+const activeStatusIndex = lines.findIndex((line) => line.includes('"wrangler@${WRANGLER_VERSION}" deployments status'));
+const activeVerificationIndex = lines.findIndex((line) => line.includes("verify-cloudflare-preview-deployment.mjs active --deployment"));
+assert(versionVerificationIndex >= 0 && activeStatusIndex > versionVerificationIndex && activeVerificationIndex > activeStatusIndex, "active deployment status must be read and verified after version metadata verification");
 
 const apiLines = lines.filter((line) => line.includes("https://api.cloudflare.com"));
 const allowedMetadataPaths = [
@@ -116,7 +130,7 @@ const allowedMetadataPaths = [
   "/workers/scripts/${WORKER_NAME}/schedules\"",
   "/workers/domains?service=${WORKER_NAME}\"",
 ];
-assert(apiLines.length === allowedMetadataPaths.length, "post-deploy must use only the four allowlisted metadata requests");
+assert(apiLines.length === allowedMetadataPaths.length, "post-deploy must use only the four allowlisted direct API metadata requests");
 for (const line of apiLines) assert(allowedMetadataPaths.some((path) => line.includes(path)), `non-allowlisted Cloudflare API request: ${line.trim()}`);
 
 process.stdout.write("preview deploy preflight passed: manual-only, disabled, fetch-only, no public route/cron/consumer, preview bindings only\n");

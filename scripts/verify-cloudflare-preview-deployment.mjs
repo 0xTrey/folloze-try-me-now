@@ -10,7 +10,7 @@ const jsonFile = async (path) => JSON.parse(await readFile(path, "utf8"));
 const tagOf = (version) => version.annotations?.["workers/tag"];
 
 const [mode, ...args] = process.argv.slice(2);
-assert(mode === "select" || mode === "verify", "first argument must be select or verify");
+assert(mode === "select" || mode === "verify" || mode === "active", "first argument must be select, verify, or active");
 
 if (mode === "select") {
   const { values } = parseArgs({ args, options: { versions: { type: "string" }, "expected-tag": { type: "string" } } });
@@ -20,6 +20,19 @@ if (mode === "select") {
   const matching = versions.filter((version) => tagOf(version) === values["expected-tag"]);
   assert(matching.length === 1 && UUID.test(matching[0].id), "exactly one tagged deployed version must be present");
   process.stdout.write(`${matching[0].id}\n`);
+  process.exit(0);
+}
+
+if (mode === "active") {
+  const { values } = parseArgs({ args, options: { deployment: { type: "string" }, "expected-version": { type: "string" } } });
+  assert(values.deployment && values["expected-version"], "active requires --deployment and --expected-version");
+  const deployment = await jsonFile(values.deployment);
+  assert(Array.isArray(deployment?.versions), "Wrangler deployment status must include a versions array");
+  assert(deployment.versions.length === 1, "active deployment must contain exactly one version");
+  const [active] = deployment.versions;
+  assert(active.version_id === values["expected-version"] && UUID.test(active.version_id), "expected verified version is not the active deployment");
+  assert(active.percentage === 100, "expected verified version must receive exactly 100% of traffic");
+  process.stdout.write(`verified active deployment: ${active.version_id} is the sole version at 100%\n`);
   process.exit(0);
 }
 
