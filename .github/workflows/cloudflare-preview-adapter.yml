@@ -1,0 +1,147 @@
+name: Deploy disabled Cloudflare preview adapter
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type deploy-disabled-preview to confirm the inert preview deployment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-preview-adapter-deploy
+  cancel-in-progress: false
+
+env:
+  CI: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+  WRANGLER_VERSION: "4.122.0"
+  WRANGLER_CONFIG: cloudflare-runtime/wrangler.preview.jsonc
+  WORKER_NAME: try-me-now-upload-adapter-preview
+  VERSION_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  verify:
+    name: Verify disabled preview package
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Require reviewed default branch and explicit confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "${GITHUB_REF}" = "refs/heads/codex/visual-v1"
+          test "${CONFIRMATION}" = "deploy-disabled-preview"
+
+      - name: Check out exact revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Use pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run fail-closed preview validators
+        run: |
+          node cloudflare-runtime/validate-preview-config.mjs
+          node scripts/validate-cloudflare-preview-deploy.mjs
+
+      - name: Run focused Cloudflare preview tests
+        run: npm exec -- vitest run src/lib/cloudflare-runtime/preview-config.test.ts src/lib/cloudflare-runtime/preview-deploy-guard.test.ts
+
+      - name: Run typecheck, full tests, and production build
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+
+  deploy:
+    name: Deploy disabled account-only Worker
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: cloudflare-preview
+    steps:
+      - name: Check out verified revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Use pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Require named Cloudflare credentials and rerun preflight
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "${CLOUDFLARE_API_TOKEN}"
+          test -n "${CLOUDFLARE_ACCOUNT_ID}"
+          node cloudflare-runtime/validate-preview-config.mjs
+          node scripts/validate-cloudflare-preview-deploy.mjs
+
+      - name: Compile exact preview config without uploading
+        run: npx --yes "wrangler@${WRANGLER_VERSION}" deploy --dry-run --strict --autoconfig=false --config "${WRANGLER_CONFIG}" --outdir "${RUNNER_TEMP}/wrangler-preview-dry-run"
+
+      - name: Deploy disabled preview Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes "wrangler@${WRANGLER_VERSION}" deploy --strict --autoconfig=false --config "${WRANGLER_CONFIG}" --tag "${VERSION_TAG}" --message "Manual disabled preview deployment ${GITHUB_SHA}"
+
+      - name: Resolve exact deployed version
+        id: deployed
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes "wrangler@${WRANGLER_VERSION}" versions list --name "${WORKER_NAME}" --config "${WRANGLER_CONFIG}" --json > "${RUNNER_TEMP}/versions.json"
+          version_id="$(node scripts/verify-cloudflare-preview-deployment.mjs select --versions "${RUNNER_TEMP}/versions.json" --expected-tag "${VERSION_TAG}")"
+          printf 'version_id=%s\n' "${version_id}" >> "${GITHUB_OUTPUT}"
+
+      - name: Read deployed script and routing metadata only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_ID: ${{ steps.deployed.outputs.version_id }}
+        run: |
+          npx --yes "wrangler@${WRANGLER_VERSION}" versions view "${VERSION_ID}" --name "${WORKER_NAME}" --config "${WRANGLER_CONFIG}" --json > "${RUNNER_TEMP}/version.json"
+          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts" > "${RUNNER_TEMP}/scripts.json"
+          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/subdomain" > "${RUNNER_TEMP}/subdomain.json"
+          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/schedules" > "${RUNNER_TEMP}/schedules.json"
+          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains?service=${WORKER_NAME}" > "${RUNNER_TEMP}/domains.json"
+
+      - name: Verify disabled version, bindings, and no-public-route contract
+        env:
+          VERSION_ID: ${{ steps.deployed.outputs.version_id }}
+        run: node scripts/verify-cloudflare-preview-deployment.mjs verify --version "${RUNNER_TEMP}/version.json" --scripts "${RUNNER_TEMP}/scripts.json" --subdomain "${RUNNER_TEMP}/subdomain.json" --domains "${RUNNER_TEMP}/domains.json" --schedules "${RUNNER_TEMP}/schedules.json" --expected-tag "${VERSION_TAG}" --expected-version "${VERSION_ID}"
+
+      - name: Record rollback command
+        run: |
+          {
+            echo '### Disabled preview deployment'
+            echo
+            echo 'This workflow configured no public route, workers.dev URL, preview URL, custom domain, cron, or Queue consumer.'
+            echo
+            echo 'Rollback a subsequent deployment only to a previously verified disabled version:'
+            echo '```sh'
+            echo 'npx --yes wrangler@4.122.0 rollback <PREVIOUS_DISABLED_VERSION_ID> --name try-me-now-upload-adapter-preview --config cloudflare-runtime/wrangler.preview.jsonc --message "Rollback disabled preview Worker" --yes'
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
