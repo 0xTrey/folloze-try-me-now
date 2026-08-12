@@ -15,6 +15,10 @@ export interface DirectUploadAdapter {
   enqueueExtraction(input: UploadIdentity): Promise<void>;
 }
 export interface UploadAuthorizer { canEdit(sessionId: string): Promise<boolean>; getSession(sessionId: string): Promise<{ id: string; acceptsPdf: boolean } | null>; }
+export interface SessionPatchAdapter {
+  readSession(sessionId: string): Promise<Versioned<Record<string, unknown>> | null>;
+  compareAndSet<T>(key: string, expectedVersion: string, value: T): Promise<"applied" | "conflict">;
+}
 export const uploadObjectKey = (sessionId: string, uploadId: string) => `try-me/uploads/${sessionId}/${uploadId}.pdf`;
 export const statusObjectKey = (sessionId: string, uploadId: string) => `try-me/upload-status/${sessionId}/${uploadId}.json`;
 const sessionKey = (sessionId: string) => `session:${sessionId}`;
@@ -41,6 +45,17 @@ export async function claimUploadStatus(adapter: DirectUploadAdapter, identity: 
 export async function reserveSession(adapter: DirectUploadAdapter, sessionId: string, session: Versioned<{ sourceUploadId?: string }>, uploadId: string) {
   if (session.value.sourceUploadId && session.value.sourceUploadId !== uploadId) return "conflict" as const;
   return (await adapter.compareAndSet(sessionKey(sessionId), session.version, { sourceUploadId: uploadId })) === "applied" ? "reserved" as const : "conflict" as const;
+}
+export async function patchSessionAfterUpload(adapter: SessionPatchAdapter, sessionId: string, uploadId: string, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    const session = await adapter.readSession(sessionId);
+    if (!session) throw new Error("session_missing");
+    const currentUpload = session.value.sourceUploadId;
+    if (typeof currentUpload === "string" && currentUpload !== uploadId) return "conflict" as const;
+    const next = { ...session.value, sourceUploadId: uploadId };
+    if ((await adapter.compareAndSet(sessionKey(sessionId), session.version, next)) === "applied") return "patched" as const;
+  }
+  return "conflict" as const;
 }
 export async function handoffAfterClaim(adapter: DirectUploadAdapter, identity: UploadIdentity, elapsedSeconds: number) {
   if (elapsedSeconds > CALLBACK_MAX_SECONDS) throw new Error("callback_duration_exceeded");

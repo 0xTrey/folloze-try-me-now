@@ -47,6 +47,7 @@ export class MockRuntime {
 
   issue(input: Identity & { nonce: string; now: number }): Capability {
     if (this.capabilities.has(input.nonce)) throw new Error("capability_exists");
+    if (this.states.has(statusKey(input.sessionId, input.uploadId))) throw new Error("upload_identity_exists");
     const capability: Capability = { ...input, objectKey: objectKey(input.sessionId, input.uploadId), statusKey: statusKey(input.sessionId, input.uploadId), mime: "application/pdf", maxBytes: this.maxPdfBytes, expiresAt: input.now + CAPABILITY_TTL_MS, writeOnce: true };
     this.capabilities.set(capability.nonce, capability);
     this.states.set(capability.statusKey, { status: "pending", version: 1, attempts: 0 });
