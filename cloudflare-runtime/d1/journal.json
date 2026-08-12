@@ -1,6 +1,7 @@
 {
   "journal": "try-me-now-cloudflare-d1",
   "migrations": [
-    { "id": "0001_create_cf_upload_adapter.sql", "description": "inactive upload adapter schema" }
+    { "id": "0001_create_cf_upload_adapter.sql", "description": "inactive upload adapter schema" },
+    { "id": "0002_create_migration_receipts.sql", "description": "unapplied provider migration ownership receipts" }
   ]
 }
