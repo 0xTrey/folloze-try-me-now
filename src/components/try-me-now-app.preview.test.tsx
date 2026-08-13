@@ -478,6 +478,15 @@ describe("guided campaign workspace", () => {
     expect(screen.getByText(/swap in your company at the end/i)).toBeInTheDocument();
   });
 
+  it("routes the third starting path into the existing event campaign engine", () => {
+    const onSelect = vi.fn();
+    render(<UseCasePortals onSelect={onSelect} />);
+
+    expect(screen.queryByText("Turn content into an experience")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Build an event experience/i }));
+    expect(onSelect).toHaveBeenCalledWith("campaign", "event");
+  });
+
   it("collects a named campaign offer and optional public source before audience selection", () => {
     const onPatch = vi.fn().mockResolvedValue(undefined);
     const campaignSession = {

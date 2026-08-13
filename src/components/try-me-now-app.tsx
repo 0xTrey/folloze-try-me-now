@@ -7,8 +7,8 @@ import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   ArrowRight,
-  BookOpen,
   Building2,
+  CalendarDays,
   Check,
   CircleCheck,
   ChevronDown,
@@ -55,6 +55,12 @@ import {
   type CtaValue,
   type EntryPathOption
 } from "@/components/try-me-now-enhancements";
+import {
+  StreamingBriefComposer,
+  type StreamingBriefAnswer,
+  type StreamingBriefQuestion,
+  type StreamingBriefReceipt
+} from "@/components/streaming-brief-composer";
 
 import type {
   AudienceRecommendation,
@@ -195,6 +201,8 @@ type BuildMoment = {
   icon: typeof Globe2;
 };
 
+type CampaignEntryMode = "campaign" | "event";
+
 const useCaseContent: Record<
   UseCase,
   {
@@ -233,13 +241,13 @@ const useCaseContent: Record<
   },
   content: {
     number: "03",
-    kicker: "Content",
-    title: "Turn content into an experience",
-    description: "Add a public URL or PDF. Folloze keeps the facts and builds an interactive buyer experience.",
-    cta: "Make content interactive",
-    domainTitle: "Who owns this content?",
-    domainBody: "Enter the company domain. We will start matching its logo, colors, and public brand cues right away.",
-    icon: BookOpen,
+    kicker: "Event promotion",
+    title: "Promote a field event or webinar",
+    description: "Add the event and audience. Folloze builds a branded registration journey with a clear reason to attend.",
+    cta: "Build an event experience",
+    domainTitle: "Who is hosting this event?",
+    domainBody: "Enter the company domain. We will match the host brand while you tell us what you are promoting.",
+    icon: CalendarDays,
     className: "portalTerminal"
   }
 };
@@ -305,18 +313,17 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
   content: {
     id: "content",
     index: "03",
-    eyebrow: "Content",
-    title: "Turn content into an experience",
-    description: "Add a public URL or PDF. Folloze keeps the facts and builds an interactive buyer experience.",
-    actionLabel: "Make content interactive",
-    exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
-    exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
-    demoSteps: ["URL or PDF", "Buyer lens", "Interactive experience"],
-    previewImage: "/entry/cisco-hmf-runtime-discovery-poster.webp",
-    previewVideo: "https://images.folloze.com/video/upload/c_scale,w_720,q_auto:eco,f_mp4/v1777151497/zgkmcphemqnjt3ivxifq.mp4",
-    previewAlt: "Cisco Secure Workload application map from the Hybrid Mesh Firewall experience",
-    accent: "#11d175",
-    tone: "ink"
+    eyebrow: "Event promotion",
+    title: "Promote a field event or webinar",
+    description: "Add the event and audience. Folloze builds a branded registration journey with a clear reason to attend.",
+    actionLabel: "Build an event experience",
+    exampleLabel: "See an event experience",
+    exampleUrl: "https://engage.folloze.com/688711",
+    demoSteps: ["Event + audience", "Reason to attend", "Registration experience"],
+    previewImage: "/entry/event-promotion-preview.svg",
+    previewAlt: "Event promotion page with date, speaker, agenda, and registration path",
+    accent: "#E85D45",
+    tone: "paper"
   }
 };
 
@@ -493,6 +500,78 @@ function campaignOfferPrompt(type: SessionAnswers["campaignType"]): {
     placeholder: "Your product or solution",
     sourceLabel: "Product page or source URL",
     sourcePlaceholder: "https://yourcompany.com/product"
+  };
+}
+
+function conciseIntentLabel(value: string, fallback: string): string {
+  const normalized = value.trim();
+  if (isCampaignOfferSourceUrl(normalized)) {
+    const url = new URL(normalized);
+    const slug = decodeURIComponent(url.pathname.split("/").filter(Boolean).at(-1) ?? "")
+      .replace(/[-_]+/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+      .replace(/\bAi\b/g, "AI");
+    return (slug || fallback).slice(0, 160);
+  }
+  const firstThought = normalized.split(/(?:[.!?]\s|\n)/, 1)[0]?.trim() || fallback;
+  return firstThought.slice(0, 160);
+}
+
+function streamingCampaignQuestions(
+  mode: CampaignEntryMode,
+  audienceSuggestions: readonly string[]
+): StreamingBriefQuestion[] {
+  return [
+    {
+      id: "intent",
+      label: mode === "event" ? "Event" : "Campaign",
+      prompt: mode === "event" ? "What event are you promoting?" : "What are you taking to market?",
+      hint: mode === "event"
+        ? "Paste the event page or describe the webinar or field event in one sentence."
+        : "Paste a product page or describe the offer and outcome in one sentence.",
+      placeholder: mode === "event"
+        ? "A September customer webinar for revenue leaders about…"
+        : "Launch our AI platform for operations leaders who need…",
+      required: true
+    },
+    {
+      id: "audience",
+      label: "Audience",
+      prompt: "Who should this reach?",
+      hint: "Choose a company-fit recommendation or describe the buyer group in your own words.",
+      choices: audienceSuggestions.slice(0, 3),
+      placeholder: mode === "event" ? "Revenue and demand generation leaders" : "Enterprise marketing leaders",
+      required: true
+    }
+  ];
+}
+
+export function streamingCampaignPatchForIntent(
+  value: string,
+  mode: CampaignEntryMode
+): SessionAnswers {
+  const interpretation = interpretConversationalBrief(value, "campaign");
+  const publicUrl = interpretation.sourceUrl?.value;
+  const inferredType = mode === "event"
+    ? "event"
+    : interpretation.campaignType?.value === "demand"
+      ? "demand"
+      : interpretation.campaignType?.value === "event"
+        ? "event"
+        : "product";
+  const eventIntent = inferredType === "event";
+  const promotedOffer = conciseIntentLabel(
+    interpretation.offer?.value || value,
+    eventIntent ? "Your event" : "Your campaign"
+  );
+  return {
+    campaignType: inferredType,
+    promotedOffer,
+    promotedOfferConfirmed: true,
+    objective: eventIntent ? "Drive registrations" : inferredType === "demand" ? "Generate demand" : "Launch or announce",
+    messageBelief: value.trim().slice(0, 240),
+    ...(eventIntent ? { eventSource: (publicUrl || promotedOffer).slice(0, 1000), ctaType: "register" } : {}),
+    ...(publicUrl ? { offerSourceUrl: publicUrl, offerSourceConfirmed: true } : {})
   };
 }
 
@@ -1392,7 +1471,7 @@ export function UseCasePortals({
   onWatchBuild,
   disabled = false
 }: {
-  onSelect: (value: UseCase) => void;
+  onSelect: (value: UseCase, campaignMode?: CampaignEntryMode) => void;
   onWatchBuild?: () => void;
   disabled?: boolean;
 }) {
@@ -1407,8 +1486,14 @@ export function UseCasePortals({
             description: useCaseContent[key].description
           }}
           disabled={disabled}
-          onSelect={onSelect}
-          onExampleOpen={(useCase) => track("example_opened", { useCase })}
+          onSelect={(selected) => onSelect(
+            selected === "content" ? "campaign" : selected,
+            selected === "content" ? "event" : selected === "campaign" ? "campaign" : undefined
+          )}
+          onExampleOpen={(selected) => track("example_opened", {
+            useCase: selected === "content" ? "campaign" : selected,
+            ...(selected === "content" ? { entryMode: "event" } : {})
+          })}
         />
       ))}
       {onWatchBuild && (
@@ -1425,6 +1510,7 @@ export function UseCasePortals({
 
 function DomainStart({
   useCase,
+  campaignMode,
   domain,
   onDomain,
   onBack,
@@ -1434,6 +1520,7 @@ function DomainStart({
   error
 }: {
   useCase: UseCase;
+  campaignMode?: CampaignEntryMode;
   domain: string;
   onDomain: (value: string) => void;
   onBack: () => void;
@@ -1442,7 +1529,7 @@ function DomainStart({
   preflightStatus: "idle" | "scheduled" | "starting" | "started" | "failed";
   error?: string;
 }) {
-  const portal = useCaseContent[useCase];
+  const portal = campaignMode === "event" ? useCaseContent.content : useCaseContent[useCase];
   const normalizedDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
   const domainReady = likelyDomain.test(normalizedDomain);
   const preflightActive = preflightStatus === "starting" || preflightStatus === "started";
@@ -1465,7 +1552,7 @@ function DomainStart({
             ? "Pause briefly and we will begin matching the public brand automatically."
             : "Enter a company domain to start the brand match.");
   return (
-    <section className="domainStage">
+    <section className={`domainStage ${useCase === "campaign" ? "isStreamingDomain" : ""}`}>
       <button className="textBack buttonTertiary" type="button" onClick={onBack}><ArrowLeft size={16} />Choose another path</button>
       <div className="domainStageGrid">
         <div className="domainPrompt">
@@ -2767,6 +2854,8 @@ function SignalDrawer({ events, revealedAt, onClose }: { events: ClientEvent[]; 
 export function TryMeNowApp() {
   const interactionReady = true;
   const [useCase, setUseCase] = useState<UseCase>();
+  const [campaignEntryMode, setCampaignEntryMode] = useState<CampaignEntryMode>("campaign");
+  const [streamingAnswers, setStreamingAnswers] = useState<StreamingBriefAnswer[]>([]);
   const [domain, setDomain] = useState("");
   const [session, setSession] = useState<PublicTryMeSession>();
   const [answers, setAnswers] = useState<SessionAnswers>({});
@@ -2848,8 +2937,10 @@ export function TryMeNowApp() {
     track("build_started", { useCase: session.useCase });
   }, [session]);
 
-  const selectUseCase = useCallback((selected: UseCase) => {
+  const selectUseCase = useCallback((selected: UseCase, selectedCampaignMode?: CampaignEntryMode) => {
     setUseCase(selected);
+    setCampaignEntryMode(selectedCampaignMode ?? "campaign");
+    setStreamingAnswers([]);
     setDomain("");
     setSession(undefined);
     setAnswers({});
@@ -2885,6 +2976,8 @@ export function TryMeNowApp() {
   const resetExperience = useCallback(() => {
     resetProductAnalyticsVisitor();
     setUseCase(undefined);
+    setCampaignEntryMode("campaign");
+    setStreamingAnswers([]);
     setDomain("");
     setSession(undefined);
     setAnswers({});
@@ -2962,24 +3055,30 @@ export function TryMeNowApp() {
     setError("");
     try {
       const confirmedSession = await preflightCoordinator.confirm(selectedUseCase, normalized);
-      setSession(confirmedSession);
-      setAnswers(confirmedSession.answers);
-      setProductAnalyticsSessionId(confirmedSession.id);
+      const seededSession = selectedUseCase === "campaign" && campaignEntryMode === "event"
+        ? (await api<{ session: PublicTryMeSession }>(`/api/sessions/${confirmedSession.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ campaignType: "event", objective: "Drive registrations" })
+          })).session
+        : confirmedSession;
+      setSession(seededSession);
+      setAnswers(seededSession.answers);
+      setProductAnalyticsSessionId(seededSession.id);
       captureProductEvent("session_created", {
         category: "workflow",
         outcome: "success",
-        sessionId: confirmedSession.id,
-        properties: { use_case: confirmedSession.useCase }
+        sessionId: seededSession.id,
+        properties: { use_case: seededSession.useCase, entry_mode: campaignEntryMode }
       });
-      track("domain_confirmed", { useCase: selectedUseCase });
-      track("domain_submitted", { useCase: selectedUseCase });
+      track("domain_confirmed", { useCase: selectedUseCase, entryMode: campaignEntryMode });
+      track("domain_submitted", { useCase: selectedUseCase, entryMode: campaignEntryMode });
     } catch (startError) {
       startedDomain.current = undefined;
       setError(startError instanceof Error ? startError.message : "We could not start the build.");
     } finally {
       setIsStarting(false);
     }
-  }, [preflightCoordinator]);
+  }, [campaignEntryMode, preflightCoordinator]);
 
   useEffect(() => {
     if (!session) return;
@@ -3366,6 +3465,80 @@ export function TryMeNowApp() {
     }
   };
 
+  const streamingMode: CampaignEntryMode = campaignEntryMode === "event" || answers.campaignType === "event"
+    ? "event"
+    : "campaign";
+  const streamingQuestions = session?.useCase === "campaign"
+    ? streamingCampaignQuestions(streamingMode, session.audienceSuggestions)
+    : [];
+  const canonicalStreamingAnswers: StreamingBriefAnswer[] = [...streamingAnswers];
+  if (!canonicalStreamingAnswers.some((answer) => answer.questionId === "intent") && answers.promotedOffer) {
+    canonicalStreamingAnswers.push({
+      questionId: "intent",
+      label: streamingMode === "event" ? "Event" : "Campaign",
+      value: answers.promotedOffer
+    });
+  }
+  if (!canonicalStreamingAnswers.some((answer) => answer.questionId === "audience") && answers.audience) {
+    canonicalStreamingAnswers.push({
+      questionId: "audience",
+      label: "Audience",
+      value: answers.audience === "Other" ? answers.customAudience || "Other" : answers.audience
+    });
+  }
+  const streamingCurrentQuestionId = !canonicalStreamingAnswers.some((answer) => answer.questionId === "intent")
+    ? "intent"
+    : !canonicalStreamingAnswers.some((answer) => answer.questionId === "audience")
+      ? "audience"
+      : undefined;
+  const streamingReceipts: StreamingBriefReceipt[] = session ? [
+    {
+      id: "brand",
+      label: session.brand ? `${brandNameFor(session)} matched` : "Matching the host brand",
+      detail: session.brand
+        ? "Official identity, logo, and visual cues are shaping the page."
+        : `Reading public brand signals from ${session.companyDomain}.`,
+      state: session.brand ? "complete" as const : "working" as const
+    },
+    ...(canonicalStreamingAnswers.some((answer) => answer.questionId === "intent") ? [{
+      id: "story",
+      label: streamingMode === "event" ? "Event direction captured" : "Campaign direction captured",
+      detail: "Folloze is organizing the promise, proof, and next step.",
+      state: "complete" as const
+    }] : []),
+    ...(session.experience ? [{
+      id: "preview",
+      label: "Interactive preview ready",
+      detail: session.experience.readiness === "provisional"
+        ? "The first page is ready while the quality pass continues."
+        : "The buyer experience is ready to explore.",
+      state: "complete" as const
+    }] : [])
+  ].slice(-3) : [];
+
+  const handleStreamingAnswer = (answer: StreamingBriefAnswer) => {
+    if (!session || session.useCase !== "campaign") return;
+    setStreamingAnswers((current) => [
+      ...current.filter((candidate) => candidate.questionId !== answer.questionId),
+      answer
+    ]);
+    track("field_interacted", {
+      useCase: session.useCase,
+      entryMode: streamingMode,
+      field: `streaming_${answer.questionId}`
+    });
+    if (answer.questionId === "audience") {
+      const recommended = session.audienceSuggestions.includes(answer.value);
+      void patchAnswers(recommended
+        ? { audience: answer.value }
+        : { audience: "Other", customAudience: answer.value });
+      return;
+    }
+    const patch = streamingCampaignPatchForIntent(answer.value, streamingMode);
+    if (patch.campaignType === "event") setCampaignEntryMode("event");
+    void patchAnswers(patch);
+  };
+
   const claim = async (email: string) => {
     if (!session) return;
     setClaimStatus("saving");
@@ -3396,7 +3569,16 @@ export function TryMeNowApp() {
     }
   };
 
-  const isReveal = Boolean(session?.experience);
+  const campaignStreamingBriefComplete = Boolean(
+    session?.useCase === "campaign"
+      && campaignIntakeComplete(session)
+      && answers.audience
+      && answers.objective
+  );
+  const keepStreamingBriefOpen = Boolean(
+    session?.useCase === "campaign" && !campaignStreamingBriefComplete
+  );
+  const isReveal = Boolean(session?.experience && !keepStreamingBriefOpen);
   const isProvisionalPreview = Boolean(
     session?.experience && (
       session.experience.readiness === "provisional" ||
@@ -3493,9 +3675,13 @@ export function TryMeNowApp() {
       {useCase && !session && (
         <DomainStart
           useCase={useCase}
+          campaignMode={campaignEntryMode}
           domain={domain}
           onDomain={updateDomain}
-          onBack={() => setUseCase(undefined)}
+          onBack={() => {
+            setUseCase(undefined);
+            setCampaignEntryMode("campaign");
+          }}
           onContinue={() => void startSession(useCase, domain)}
           isStarting={isStarting}
           preflightStatus={preflightStatus}
@@ -3504,33 +3690,52 @@ export function TryMeNowApp() {
       )}
 
       {session && !isReveal && buildPanelCopy && (
-        <section className="workbench">
+        <section className={`workbench ${session.useCase === "campaign" ? "streamingWorkbench" : ""}`}>
           <div className="mobileStatus"><button type="button" aria-expanded={showProcess} aria-controls="mobile-process-dialog" onClick={() => setShowProcess(true)}><span className="liveDot" /><strong>{buildPanelCopy.mobileLabel}</strong><span>{buildPanelCopy.mobileStep}</span><ChevronDown size={15} /></button></div>
           <div className="briefPanel">
             <div className="guidedWorkspaceInner">
               <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
-              <ConversationThread session={session} onRestart={resetExperience} />
-              <ProgressiveQuestions
-                session={session}
-                answers={answers}
-                isSaving={isSaving}
-                pdfUpload={pdfUpload}
-                onPatch={patchAnswers}
-                onBackgroundPatch={patchAnswersInBackground}
-                onWorkspacePatch={patchWorkspace}
-                onUpload={uploadPdf}
-              />
-              {!(session.useCase === "abm" && !answers.targetDomain) && (
-                <IntentComposer
-                  session={session}
-                  answers={answers}
-                  isSaving={isSaving}
-                  pdfUpload={pdfUpload}
-                  onPatch={patchAnswers}
-                  onUpload={uploadPdf}
+              {session.useCase === "campaign" ? (
+                <StreamingBriefComposer
+                  mode={streamingMode}
+                  questions={streamingQuestions}
+                  currentQuestionId={streamingCurrentQuestionId}
+                  answers={canonicalStreamingAnswers}
+                  receipts={streamingReceipts}
+                  brief={{
+                    Company: brandNameFor(session),
+                    Experience: streamingMode === "event" ? "Event promotion" : "Campaign landing page",
+                    Offer: answers.promotedOffer,
+                    Audience: answers.audience === "Other" ? answers.customAudience : answers.audience,
+                    Goal: answers.objective
+                  }}
+                  disabled={isSaving}
+                  onAnswer={handleStreamingAnswer}
                 />
+              ) : (
+                <>
+                  <ConversationThread session={session} onRestart={resetExperience} />
+                  <ProgressiveQuestions
+                    session={session}
+                    answers={answers}
+                    isSaving={isSaving}
+                    pdfUpload={pdfUpload}
+                    onPatch={patchAnswers}
+                    onBackgroundPatch={patchAnswersInBackground}
+                    onWorkspacePatch={patchWorkspace}
+                    onUpload={uploadPdf}
+                  />
+                  {!(session.useCase === "abm" && !answers.targetDomain) && <IntentComposer
+                    session={session}
+                    answers={answers}
+                    isSaving={isSaving}
+                    pdfUpload={pdfUpload}
+                    onPatch={patchAnswers}
+                    onUpload={uploadPdf}
+                  />}
+                </>
               )}
-              <div className="brandLockStage">
+              {session.useCase !== "campaign" && <div className="brandLockStage">
                 <InstantBrandLockStrip
                   status={!session.brand ? "scanning" : session.stages.brand.status === "fallback" || session.brand.readiness?.status === "incomplete" ? "fallback" : "locked"}
                   brand={session.brand ? {
@@ -3547,12 +3752,12 @@ export function TryMeNowApp() {
                   } : { companyName: displayNameFromDomain(session.companyDomain), domain: session.companyDomain }}
                   onInspect={() => setShowProcess(true)}
                 />
-              </div>
+              </div>}
               {error && <div className="inlineError" role="alert">{error}</div>}
               {connectionError && <div className="connectionNotice" role="status"><LoaderCircle className="spin" size={15} />{connectionError}</div>}
             </div>
           </div>
-          <aside className="processRail">
+          <aside className="processRail" hidden={session.useCase === "campaign"}>
             <CampaignOverviewRail session={session} />
           </aside>
         </section>

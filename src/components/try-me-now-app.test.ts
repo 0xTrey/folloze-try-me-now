@@ -18,7 +18,8 @@ import {
   preservePreviewDuringRegeneration,
   previewBoundaryScrollDelta,
   recommendedObjectiveFor,
-  shouldAutoConfirmSource
+  shouldAutoConfirmSource,
+  streamingCampaignPatchForIntent
 } from "./try-me-now-app";
 
 function brand(domain: string, companyName: string): PublicBrandProfile {
@@ -117,10 +118,35 @@ describe("Try Me Now experience copy", () => {
       previewAlt: "ServiceNow-branded AI platform campaign landing page"
     });
     expect(entryPathOptions.content).toMatchObject({
-      exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
-      exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
-      previewImage: "/entry/cisco-hmf-runtime-discovery-poster.webp",
-      previewVideo: "https://images.folloze.com/video/upload/c_scale,w_720,q_auto:eco,f_mp4/v1777151497/zgkmcphemqnjt3ivxifq.mp4"
+      eyebrow: "Event promotion",
+      title: "Promote a field event or webinar",
+      actionLabel: "Build an event experience",
+      exampleLabel: "See an event experience",
+      exampleUrl: "https://engage.folloze.com/688711",
+      previewImage: "/entry/event-promotion-preview.svg"
+    });
+  });
+
+  it("turns one event sentence into the existing event campaign contract", () => {
+    expect(streamingCampaignPatchForIntent(
+      "Promote our September 18 AI Buyer Journey webinar for enterprise marketing leaders.",
+      "event"
+    )).toMatchObject({
+      campaignType: "event",
+      promotedOffer: "September 18 AI Buyer Journey webinar",
+      eventSource: "September 18 AI Buyer Journey webinar",
+      objective: "Drive registrations",
+      ctaType: "register"
+    });
+  });
+
+  it("accepts a public product URL as the whole first campaign answer", () => {
+    expect(streamingCampaignPatchForIntent("https://example.com/ai-control-tower", "campaign")).toMatchObject({
+      campaignType: "product",
+      promotedOffer: "AI Control Tower",
+      offerSourceUrl: "https://example.com/ai-control-tower",
+      offerSourceConfirmed: true,
+      objective: "Launch or announce"
     });
   });
 
