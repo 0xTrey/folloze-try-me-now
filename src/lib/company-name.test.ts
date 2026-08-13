@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
+import {
+  fallbackCompanyName,
+  normalizeCompanyDisplayName,
+  resolvePublicCompanyName
+} from "@/lib/company-name";
 
 describe("public company name resolution", () => {
   it("repairs mixed-case brands even when public metadata flattens the casing", () => {
@@ -13,6 +17,17 @@ describe("public company name resolution", () => {
       })
     ).toBe("ServiceNow");
     expect(fallbackCompanyName("hubspot.com")).toBe("HubSpot");
+    expect(fallbackCompanyName("datadog.com")).toBe("Datadog");
+    expect(fallbackCompanyName("datadoghq.com")).toBe("Datadog");
+    expect(normalizeCompanyDisplayName("Datadoghq", "datadoghq.com")).toBe("Datadog");
+    expect(
+      resolvePublicCompanyName({
+        domain: "datadog.com",
+        html: "",
+        ogSiteName: "DataDog",
+        title: "DataDog cloud monitoring"
+      })
+    ).toBe("Datadog");
   });
 
   it("uses the registrable parent brand for regional subdomains", () => {

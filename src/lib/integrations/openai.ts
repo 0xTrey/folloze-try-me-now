@@ -1164,6 +1164,9 @@ export function experienceQualityFailure(input: {
     ...draft.sections.flatMap((section) => [section.headline, section.body])
   ];
   if (declarativeFields.some(endsMidThought)) return "copy_quality_incomplete_thought";
+  if (/\bpersona\s*(?:\d+|[:\[{(])/i.test(visibleCopy)) {
+    return "copy_quality_persona_placeholder";
+  }
   if (/\bat\s+(?:[\p{L}\p{N}-]+\s+){1,7}at\b/iu.test(visibleCopy)) {
     return "copy_quality_repeated_preposition";
   }

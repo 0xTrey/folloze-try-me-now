@@ -18,7 +18,8 @@ import {
   PreviewUpdateNotice,
   ProgressiveQuestions,
   SaveExperienceDialog,
-  SourceUnderstandingSummary
+  SourceUnderstandingSummary,
+  UseCasePortals
 } from "./try-me-now-app";
 
 afterEach(() => {
@@ -456,6 +457,27 @@ describe("guided campaign workspace", () => {
     expect(screen.queryByText("Product campaign")).not.toBeInTheDocument();
   });
 
+  it("makes every Live Brief row reopen the existing preview controls", () => {
+    const onEdit = vi.fn();
+    render(<CampaignOverviewRail session={readySession} onEdit={onEdit} />);
+
+    for (const label of ["Building as", "Who it is for", "What it is about", "Buyer group", "What they should do"]) {
+      fireEvent.click(screen.getByRole("button", { name: `Edit ${label}` }));
+    }
+
+    expect(onEdit.mock.calls.map(([field]) => field)).toEqual(["seller", "target", "offer", "audience", "objective"]);
+  });
+
+  it("offers a zero-typing worked example without replacing the three starting paths", () => {
+    const onWatchBuild = vi.fn();
+    render(<UseCasePortals onSelect={vi.fn()} onWatchBuild={onWatchBuild} />);
+
+    expect(document.querySelectorAll(".entryPathRail > *")).toHaveLength(4);
+    fireEvent.click(screen.getByRole("button", { name: /Watch one build/i }));
+    expect(onWatchBuild).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/swap in your company at the end/i)).toBeInTheDocument();
+  });
+
   it("collects a named campaign offer and optional public source before audience selection", () => {
     const onPatch = vi.fn().mockResolvedValue(undefined);
     const campaignSession = {
@@ -519,7 +541,9 @@ describe("guided campaign workspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Product or solution/i }));
     const continueButton = screen.getByRole("button", { name: "Use this campaign" });
-    expect(continueButton).toBeDisabled();
+    expect(continueButton).toBeEnabled();
+    fireEvent.click(continueButton);
+    expect(screen.getByRole("alert")).toHaveTextContent("Add an offer name or a public offer URL before continuing.");
 
     fireEvent.change(screen.getByLabelText(/Product page or source URL/i), {
       target: { value: "https://6sense.com/platform/revvyai/" }

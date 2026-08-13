@@ -781,6 +781,8 @@ export interface ClaimState {
 export interface SessionAnalyticsIdentity {
   visitorId: string;
   browserSessionId: string;
+  /** Bounded landing attribution only; no referrer path or raw query string. */
+  utm?: Partial<Record<"source" | "medium" | "campaign" | "term" | "content", string>>;
 }
 
 export interface TryMeSession {

@@ -27,6 +27,14 @@ export interface AudienceSuggestionContext {
   objective?: string;
 }
 
+export interface AudienceRecommendationRationaleInput {
+  label: string;
+  sellerName?: string;
+  targetName?: string;
+  offerLabel?: string;
+  evidenceSignal?: string;
+}
+
 interface CategoryProfile {
   signals: RegExp;
   audiences: readonly [string, string, string, string];
@@ -1039,6 +1047,45 @@ function contextualizeAudienceSuggestions(
 }
 
 /**
+ * Produces the short buyer-facing explanation shown beside an audience
+ * recommendation. Evidence text is intentionally summarized by the caller;
+ * this helper keeps the rendered result to one complete sentence.
+ */
+export function audienceRecommendationRationale(input: AudienceRecommendationRationaleInput): string {
+  const role = input.label.replace(/\s+/g, " ").trim() || "this group";
+  const target = input.targetName?.replace(/\s+/g, " ").trim();
+  const seller = input.sellerName?.replace(/\s+/g, " ").trim();
+  const offer = input.offerLabel?.replace(/\s+/g, " ").trim();
+  const signal = input.evidenceSignal?.replace(/\s+/g, " ").replace(/[.!?]+$/g, "").trim();
+  const offering = offer || (seller ? `${possessiveCompanyName(seller)} offering` : "the offer");
+
+  if (target && signal) {
+    return `Recommended for ${target} because its ${signal} context makes ${role} relevant to evaluating ${offering}.`;
+  }
+  if (target) return `Recommended for ${target} because ${role} can help evaluate ${offering}.`;
+  if (seller && signal) {
+    return `Recommended because ${possessiveCompanyName(seller)} public ${signal} context makes ${role} relevant to evaluating ${offering}.`;
+  }
+  return `Recommended because ${role} can help evaluate ${offering}.`;
+}
+
+function isCloudCostOffer(context: AudienceSuggestionContext): boolean {
+  return /\b(?:cloud\s*)?(?:cost|spend|finops|fin-ops|cloud economics)\b/i.test(
+    context.promotedOffer ?? ""
+  );
+}
+
+function cloudCostAudienceSuggestions(target?: BrandProfile): string[] {
+  const targetContext = target ? ` in ${target.companyName}'s cloud environment` : "";
+  return [
+    `Cloud cost and FinOps leaders managing cloud spend${targetContext}`,
+    `Finance and technology leaders accountable for cloud cost governance${targetContext}`,
+    `Platform operations owners optimizing cloud usage and cost${targetContext}`,
+    `Engineering leaders aligning cloud reliability with cost discipline${targetContext}`
+  ].map(boundedAudience);
+}
+
+/**
  * Before a target is known, category roles are a useful seller-side fallback.
  * Once public target context is harvested, each option is recomposed from the
  * seller's offer category and a public target operating theme.
@@ -1049,6 +1096,9 @@ export function audienceSuggestionsFor(
   context: AudienceSuggestionContext = {}
 ): string[] {
   const sellerCategory = identifyBrandCategory(brand);
+  if (isCloudCostOffer(context)) {
+    return contextualizeAudienceSuggestions(cloudCostAudienceSuggestions(target), brand, context);
+  }
   if (!target) {
     return contextualizeAudienceSuggestions([...profiles[sellerCategory].audiences], brand, context);
   }

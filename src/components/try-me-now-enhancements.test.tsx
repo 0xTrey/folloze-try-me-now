@@ -17,11 +17,13 @@ import {
   ExperienceBlockControl,
   ExperienceVariantCards,
   ExpirySaveValuePanel,
+  ExpiredFreshLinkCapture,
   FollozeValueReceipt,
   InstantBrandLockStrip,
   MessageDirectionControl,
   PersonalizationQualityReceipt,
   prepareAnalyticsSignals,
+  shouldShowEngagementFinale,
   ProgressiveArtifactStream,
   SavedExperienceCockpit,
   supportingSignalLabel,
@@ -583,5 +585,35 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(onSave).toHaveBeenCalledOnce();
     expect(onOpen).toHaveBeenCalledOnce();
     expect(onCopy).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the compact engagement panel and adds its full-width finale after five events or save", () => {
+    const signals = Array.from({ length: 5 }, (_, index) => ({ id: `signal-${index}`, label: `Signal ${index + 1}`, detail: "Preview activity", atLabel: "Now" }));
+    render(<AnalyticsSignalPanel open signals={signals} onClose={vi.fn()} />);
+
+    expect(screen.getByRole("heading", { name: "Your activity in this preview" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your experience is ready for the next move." })).toBeInTheDocument();
+    expect(screen.getByText("Folloze builds the campaign, activates it across your accounts, and captures the signal that shows what's working.")).toBeInTheDocument();
+    expect(shouldShowEngagementFinale({ eventCount: 4 })).toBe(false);
+    expect(shouldShowEngagementFinale({ eventCount: 5 })).toBe(true);
+    expect(shouldShowEngagementFinale({ eventCount: 0, isSaved: true })).toBe(true);
+  });
+
+  it("shows a five-minute save nudge and keeps a fresh-link capture strictly post-expiry", () => {
+    const onEmailChange = vi.fn();
+    const onRequestFreshLink = vi.fn();
+    const { rerender } = render(
+      <ExpirySaveValuePanel expiresLabel="5:00" remainingSeconds={300} url="https://experience.example/preview" sellerName="Folloze" headline="Buyer journey" email="" onEmailChange={onEmailChange} onSave={vi.fn()} />
+    );
+    expect(screen.getByText("5:00")).toBeInTheDocument();
+    expect(screen.getByText("left to save this preview.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Want a fresh link?" })).not.toBeInTheDocument();
+
+    rerender(<ExpiredFreshLinkCapture expired email="" onEmailChange={onEmailChange} onRequestFreshLink={onRequestFreshLink} />);
+    fireEvent.change(screen.getByLabelText("Business email"), { target: { value: "buyer@company.com" } });
+    fireEvent.submit(screen.getByRole("button", { name: "Request a fresh link" }).closest("form")!);
+    expect(screen.getByRole("heading", { name: "Want a fresh link?" })).toBeInTheDocument();
+    expect(onEmailChange).toHaveBeenCalledWith("buyer@company.com");
+    expect(onRequestFreshLink).toHaveBeenCalledOnce();
   });
 });

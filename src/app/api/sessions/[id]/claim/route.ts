@@ -7,6 +7,8 @@ import {
   startServerOperation
 } from "@/lib/http";
 import { canEditSession, claimSession } from "@/lib/orchestrator";
+import { syncMarketoLead } from "@/lib/integrations/marketo";
+import { getSession } from "@/lib/session-store";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { assertBusinessEmail, claimSchema } from "@/lib/validation";
 
@@ -31,6 +33,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const { email: submittedEmail } = claimSchema.parse(await request.json());
     const email = assertBusinessEmail(submittedEmail);
     const { traceId, ...result } = await claimSession(id, email);
+    // CRM delivery is intentionally post-response and best-effort: a tenant
+    // outage or incomplete custom-activity setup can never unsave an experience.
+    void Promise.resolve().then(async () => {
+      const session = await getSession(id);
+      if (session?.status === "claimed") await syncMarketoLead({ email, session });
+    }).catch(() => undefined);
     trace.setTraceId(traceId);
     return NextResponse.json(result, {
       headers: { ...noStoreHeaders, ...trace.complete(200, { publishMode: result.publishMode }) }

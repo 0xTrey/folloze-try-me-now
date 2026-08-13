@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Instrument_Sans, Inter } from "next/font/google";
+import Script from "next/script";
+
+import { config } from "@/lib/config";
 
 import "./globals.css";
 
@@ -24,9 +27,17 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const munchkinId = config.marketoMunchkinId;
   return (
     <html lang="en">
-      <body className={`${instrumentSans.variable} ${inter.variable}`}>{children}</body>
+      <body className={`${instrumentSans.variable} ${inter.variable}`}>
+        {children}
+        {munchkinId && (
+          <Script id="marketo-munchkin" strategy="afterInteractive">
+            {`(function(id){var s=document.createElement('script');s.async=true;s.src='https://munchkin.marketo.net/munchkin.js';s.onload=function(){if(window.Munchkin)window.Munchkin.init(id)};document.head.appendChild(s)})(${JSON.stringify(munchkinId)});`}
+          </Script>
+        )}
+      </body>
     </html>
   );
 }

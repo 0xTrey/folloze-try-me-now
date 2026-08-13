@@ -1,7 +1,8 @@
 import { companyDomainStem } from "@/lib/domain-identity";
 
 const MIXED_CASE_COMPANY_NAMES: Readonly<Record<string, string>> = Object.freeze({
-  datadog: "DataDog",
+  datadog: "Datadog",
+  datadoghq: "Datadog",
   docusign: "DocuSign",
   github: "GitHub",
   hubspot: "HubSpot",
@@ -93,6 +94,14 @@ export function fallbackCompanyName(domain: string): string {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+/** Canonicalizes a provider-supplied label after all brand sources merge. */
+export function normalizeCompanyDisplayName(value: string | undefined, domain: string): string {
+  const cleaned = value ? cleanCandidate(value) : "";
+  const knownName = MIXED_CASE_COMPANY_NAMES[entityKey(domainRoot(domain))]
+    ?? MIXED_CASE_COMPANY_NAMES[entityKey(cleaned)];
+  return knownName ?? (cleaned || fallbackCompanyName(domain));
 }
 
 export function resolvePublicCompanyName(input: {

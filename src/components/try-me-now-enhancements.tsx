@@ -567,7 +567,6 @@ export function ProgressiveArtifactStream({ artifacts, headline = "Your experien
   const running = artifacts.find((artifact) => artifact.status === "running");
   const queued = artifacts.find((artifact) => artifact.status === "queued");
   const focus = failed ?? running ?? queued ?? artifacts.at(-1);
-  const focusIndex = focus ? artifacts.findIndex((artifact) => artifact.id === focus.id) + 1 : 0;
   const complete = Boolean(artifacts.length) && ready === artifacts.length;
   const finalAssembly = Boolean(running && focus?.id === "experience");
   const preserveFinalAssemblyHeight = finalAssembly
@@ -910,6 +909,8 @@ export interface AnalyticsSignalPanelProps {
   sessionId?: string;
   audienceLabel?: string;
   exampleSignals?: AnalyticsSignal[];
+  /** Set only after the visitor saves; it never gates the initial build. */
+  isSaved?: boolean;
   onClose: () => void;
 }
 
@@ -921,6 +922,7 @@ export function AnalyticsSignalPanel({
   sessionId,
   audienceLabel,
   exampleSignals,
+  isSaved = false,
   onClose
 }: AnalyticsSignalPanelProps) {
   const ref = useModalAccess(open, onClose);
@@ -976,8 +978,36 @@ export function AnalyticsSignalPanel({
           </section>
         </details>
         <div className={styles.signalValue}><BarChart3 size={20} /><p>In a live campaign, these signals can route to campaign and sales systems so the next move starts with context.</p></div>
+        {shouldShowEngagementFinale({ eventCount: liveSignals.length, isSaved }) && (
+          <EngagementFeedFinale eventCount={liveSignals.length} isSaved={isSaved} />
+        )}
       </aside>
     </div>
+  );
+}
+
+export function shouldShowEngagementFinale({ eventCount, isSaved = false }: { eventCount: number; isSaved?: boolean }): boolean {
+  return isSaved || eventCount >= 5;
+}
+
+export interface EngagementFeedFinaleProps {
+  eventCount: number;
+  isSaved?: boolean;
+}
+
+/** A full-width close to the compact engagement panel once the story has earned it. */
+export function EngagementFeedFinale({ eventCount, isSaved = false }: EngagementFeedFinaleProps) {
+  return (
+    <section className={styles.engagementFinale} aria-labelledby="engagement-finale-title" data-trigger={isSaved ? "saved" : "five-events"}>
+      <span className={styles.eyebrow}>{isSaved ? "Saved experience" : `${eventCount} live signals`}</span>
+      <h3 id="engagement-finale-title">Your experience is ready for the next move.</h3>
+      <p>Folloze builds the campaign, activates it across your accounts, and captures the signal that shows what&apos;s working.</p>
+      <ol className={styles.operatingRecap} aria-label="Build, Activate, Signal recap">
+        <li><strong>Build</strong><span>Your buyer experience is ready to use.</span></li>
+        <li><strong>Activate</strong><span>Share it with the people and accounts you want to reach.</span></li>
+        <li><strong>Signal</strong><span>See what they explore so follow-up starts with context.</span></li>
+      </ol>
+    </section>
   );
 }
 
@@ -1050,11 +1080,12 @@ export interface ExpirySaveValuePanelProps {
   status?: "idle" | "saving" | "saved" | "error";
   error?: string;
   benefits?: string[];
+  remainingSeconds?: number;
   onEmailChange: (email: string) => void;
   onSave: () => void;
 }
 
-export function ExpirySaveValuePanel({ expiresLabel, url, sellerName, targetName, headline, email, status = "idle", error, benefits = ["Permanent app-hosted URL", "Copy-and-share access", "Engagement-ready experience"], onEmailChange, onSave }: ExpirySaveValuePanelProps) {
+export function ExpirySaveValuePanel({ expiresLabel, url, sellerName, targetName, headline, email, status = "idle", error, benefits = ["Permanent app-hosted URL", "Copy-and-share access", "Engagement-ready experience"], remainingSeconds, onEmailChange, onSave }: ExpirySaveValuePanelProps) {
   const submit = (event: FormEvent) => { event.preventDefault(); onSave(); };
   return (
     <section className={classes(styles.savePanel, status === "saved" && styles.isSaved)} aria-labelledby="save-value-title">
@@ -1064,7 +1095,46 @@ export function ExpirySaveValuePanel({ expiresLabel, url, sellerName, targetName
       </div>
       <div className={styles.saveUrlRow}><code title={url}>{url}</code><button type="button" className={styles.tertiaryAction} onClick={() => void navigator.clipboard?.writeText(url)} aria-label="Copy preview URL"><Copy size={14} />Copy</button></div>
       <div className={styles.expiryClock}><Clock size={16} /><span>{status === "saved" ? "Saved" : `Private preview · expires in ${expiresLabel}`}</span></div>
+      {status !== "saved" && <ExpiryNudge remainingSeconds={remainingSeconds} />}
       {status !== "saved" && <form className={styles.saveForm} onSubmit={submit}><label><span>Business email</span><div><Mail size={16} /><input type="email" required value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@company.com" /></div></label><button type="submit" className={styles.primaryAction} disabled={status === "saving"}>{status === "saving" ? "Saving…" : "Save this experience"}</button>{error && <small role="alert">{error}</small>}<p>No newsletter signup. Your business email records this request and saves the app-hosted experience.</p></form>}
+    </section>
+  );
+}
+
+export function isFiveMinuteExpiryWindow(remainingSeconds: number | undefined): boolean {
+  return typeof remainingSeconds === "number" && remainingSeconds > 0 && remainingSeconds <= 300;
+}
+
+export function ExpiryNudge({ remainingSeconds }: { remainingSeconds?: number }) {
+  if (!isFiveMinuteExpiryWindow(remainingSeconds)) return null;
+  const secondsRemaining = remainingSeconds ?? 0;
+  const minutes = Math.floor(secondsRemaining / 60);
+  const seconds = String(secondsRemaining % 60).padStart(2, "0");
+  return <p className={styles.expiryNudge} role="status"><Clock size={14} /><strong>{minutes}:{seconds}</strong> left to save this preview.</p>;
+}
+
+export interface ExpiredFreshLinkCaptureProps {
+  expired: boolean;
+  email: string;
+  status?: "idle" | "saving" | "sent" | "error";
+  error?: string;
+  onEmailChange: (email: string) => void;
+  onRequestFreshLink: () => void;
+}
+
+/** Render only after expiry; initial build and preview remain ungated. */
+export function ExpiredFreshLinkCapture({ expired, email, status = "idle", error, onEmailChange, onRequestFreshLink }: ExpiredFreshLinkCaptureProps) {
+  if (!expired) return null;
+  return (
+    <section className={styles.freshLinkCapture} aria-labelledby="fresh-link-title" data-availability="expired">
+      <span className={styles.eyebrow}>Preview expired</span>
+      <h2 id="fresh-link-title">Want a fresh link?</h2>
+      <p>This temporary preview has expired. Enter your business email and we&apos;ll help you start a fresh one.</p>
+      <form onSubmit={(event) => { event.preventDefault(); onRequestFreshLink(); }}>
+        <label><span>Business email</span><input type="email" required value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@company.com" /></label>
+        <button type="submit" className={styles.primaryAction} disabled={status === "saving"}>{status === "saving" ? "Requesting…" : status === "sent" ? "Fresh link requested" : "Request a fresh link"}</button>
+      </form>
+      {error && <p className={styles.freshLinkError} role="alert">{error}</p>}
     </section>
   );
 }
@@ -1112,7 +1182,10 @@ export type EnhancementComponent =
   | typeof AssetPicker
   | typeof AnalyticsSignalToast
   | typeof AnalyticsSignalPanel
+  | typeof EngagementFeedFinale
   | typeof FollozeValueReceipt
   | typeof PersonalizationQualityReceipt
   | typeof ExpirySaveValuePanel
+  | typeof ExpiryNudge
+  | typeof ExpiredFreshLinkCapture
   | typeof SavedExperienceCockpit;

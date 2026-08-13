@@ -100,3 +100,36 @@ describe("trimmed-empty production configuration", () => {
     expect(config.appUrl).toBe("https://try.example.com");
   });
 });
+
+describe("Marketo configuration", () => {
+  it("is disabled by default and does not infer credentials from ambient environment", async () => {
+    const { config, hasMarketo } = await import("@/lib/config");
+    expect(config.marketoMode).toBe("disabled");
+    expect(hasMarketo).toBe(false);
+  });
+
+  it("keeps Munchkin as an optional public identifier separate from REST sync", async () => {
+    const config = await configFor({ NEXT_PUBLIC_MARKETO_MUNCHKIN_ID: "123-ABC-456" });
+    expect(config.marketoMunchkinId).toBe("123-ABC-456");
+    expect(config.marketoMode).toBe("disabled");
+  });
+
+  it("rejects malformed Munchkin identifiers before they reach generated scripts", async () => {
+    const config = await configFor({ NEXT_PUBLIC_MARKETO_MUNCHKIN_ID: "</script>" });
+    expect(config.marketoMunchkinId).toBeUndefined();
+  });
+
+  it("will not send credentials to a non-Marketo endpoint", async () => {
+    const { hasMarketo } = await import("@/lib/config");
+    expect(hasMarketo).toBe(false);
+    const configured = await configFor({
+      MARKETO_MODE: "sync",
+      MARKETO_REST_ENDPOINT: "https://example.com",
+      MARKETO_CLIENT_ID: "client",
+      MARKETO_CLIENT_SECRET: "secret"
+    });
+    expect(configured.marketoEndpoint).toBe("https://example.com");
+    const reloaded = await import("@/lib/config");
+    expect(reloaded.hasMarketo).toBe(false);
+  });
+});

@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import {
   assessBrandIdentity,
+  audienceRecommendationRationale,
   audienceSuggestionsFor,
   narrativeProfileFor,
   withBrandIdentity
@@ -220,7 +221,8 @@ function audienceRecommendationsFor(
   suggestions: string[],
   seller: BrandProfile | undefined,
   target: BrandProfile | undefined,
-  evidenceItems: SessionEvidenceItem[]
+  evidenceItems: SessionEvidenceItem[],
+  answers?: SessionAnswers
 ) {
   const evidenceBrand = target ?? seller;
   const evidenceDomain = evidenceBrand?.domain.toLocaleLowerCase().replace(/^www\./, "");
@@ -268,17 +270,16 @@ function audienceRecommendationsFor(
         sellerIdentity?.confirmationStatus === "confirmed" &&
         usableEvidence.length
     );
-    const sellerMechanism = sellerProfile?.offerLabel.toLocaleLowerCase() ?? "offering";
     return {
       id: stableId("audience", seller?.domain, target?.domain, label),
       label,
-      rationale: companySpecific
-        ? `${target!.companyName}'s public focus: ${evidenceFocus}. That ${evidenceSignal || "operating context"} evidence makes this group relevant to evaluating ${seller!.companyName}'s ${sellerMechanism}.`
-        : sellerSpecific
-          ? `${seller!.companyName}'s public evidence: ${evidenceFocus}. That ${evidenceSignal || "operating context"} signal makes this group relevant to the ${sellerMechanism}.`
-        : target
-          ? `A role hypothesis for ${target.companyName}; confirm the account identity and public evidence before using it in the story.`
-          : `A seller-category starting point until a target account and its public evidence are available.`,
+      rationale: audienceRecommendationRationale({
+        label,
+        sellerName: seller?.companyName,
+        targetName: target?.companyName,
+        offerLabel: answers?.promotedOffer ?? sellerProfile?.offerLabel,
+        evidenceSignal: evidenceSignal || undefined
+      }),
       evidenceItemIds: evidence ? [evidence.id] : [],
       confidence: companySpecific || sellerSpecific
         ? (usableEvidence.length >= 2 ? "high" : "medium")
@@ -333,9 +334,10 @@ function syncExperienceFoundation(session: TryMeSession): void {
   );
   session.audienceRecommendations = audienceRecommendationsFor(
     session.audienceSuggestions,
-    session.brand,
-    session.targetBrand,
-    session.evidenceItems
+      session.brand,
+      session.targetBrand,
+      session.evidenceItems,
+      session.answers
   );
   const harvestedAssets = assetsFor(session.brand, session.targetBrand);
   // A brand refresh may replace the harvested asset inventory while a curator
@@ -852,6 +854,35 @@ export function isGenerationReady(useCase: UseCase, answers: SessionAnswers): bo
     );
   }
   return Boolean(answers.sourceUrl || answers.sourceName);
+}
+
+/**
+ * The first preview may begin as soon as the submitted company domain(s) have
+ * resolved to safe brand identities.  These defaults are deliberately
+ * ephemeral: they are used to render an unclaimable preview, never written to
+ * the buyer's answers, and any explicit answer replaces them on the next pass.
+ */
+function isProvisionalGenerationReady(session: TryMeSession): boolean {
+  const identityReady = (brand: BrandProfile | undefined) => Boolean(
+    brand && brand.identity?.confirmationStatus !== "needs-confirmation" &&
+    brand.identity?.confirmationStatus !== "rejected"
+  );
+  if (!identityReady(session.brand)) return false;
+  // Content Magic is source-authoritative. A seller domain alone must never
+  // produce a source-free content experience.
+  if (session.useCase === "content") return isGenerationReady(session.useCase, session.answers);
+  return session.useCase !== "abm" || identityReady(session.targetBrand);
+}
+
+function provisionalAnswersFor(session: TryMeSession): SessionAnswers {
+  const audience = session.answers.customAudience || session.answers.audience ||
+    session.audienceSuggestions[0] || "Business and revenue leaders";
+  return {
+    ...session.answers,
+    audience,
+    customAudience: session.answers.customAudience,
+    objective: session.answers.objective || "Book a meeting"
+  };
 }
 
 export async function createSession(
@@ -1784,7 +1815,8 @@ export async function patchSessionAnswers(
   if (!updated) throw new Error("This temporary experience has expired.");
   return {
     session: toPublicSession(updated),
-    shouldGenerate: isGenerationReady(updated.useCase, updated.answers),
+    shouldGenerate:
+      isGenerationReady(updated.useCase, updated.answers) || isProvisionalGenerationReady(updated),
     traceId: traceIdForSession(updated)
   };
 }
@@ -1855,7 +1887,8 @@ export async function patchSessionWorkspace(
         session.audienceSuggestions,
         session.brand,
         session.targetBrand,
-        session.evidenceItems
+        session.evidenceItems,
+        session.answers
       );
       appendEvent(session, "account_evidence_curated", {
         pinned: session.evidenceItems.filter((item) => item.disposition === "pinned").length,
@@ -1942,7 +1975,8 @@ export async function patchSessionWorkspace(
   if (!updated) throw new Error("This temporary experience has expired.");
   return {
     session: toPublicSession(updated),
-    shouldGenerate: isGenerationReady(updated.useCase, updated.answers),
+    shouldGenerate:
+      isGenerationReady(updated.useCase, updated.answers) || isProvisionalGenerationReady(updated),
     traceId: traceIdForSession(updated)
   };
 }
@@ -2246,7 +2280,10 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     if (session.blockControls?.length) {
       session.blockControls = normalizeCoreBlockControls(session.blockControls);
     }
-    if (!isGenerationReady(session.useCase, session.answers)) return session;
+    if (
+      !isGenerationReady(session.useCase, session.answers) &&
+      !isProvisionalGenerationReady(session)
+    ) return session;
     if (
       session.status === "claimed" ||
       (session.status === "preview_ready_unclaimed" &&
@@ -2379,16 +2416,17 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     // Existing final previews remain visible during later regenerations.
     if (!latest.experience) {
       const provisionalStartedAt = Date.now();
+      const answers = provisionalAnswersFor(latest);
       const provisionalDraft = deterministicDraft({
         brand: selectedBrands.brand,
         targetBrand: selectedBrands.targetBrand,
         useCase: latest.useCase,
-        answers: latest.answers,
+        answers,
         sourceArtifact: latest.sourceArtifact
       });
       const provisionalArtifact = assembleExperienceArtifact({
         id,
-        session: latest,
+        session: { ...latest, answers },
         draft: provisionalDraft,
         brand: selectedBrands.brand,
         targetBrand: selectedBrands.targetBrand,
@@ -2479,7 +2517,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
             brand: selectedBrands.brand,
             targetBrand: selectedBrands.targetBrand,
             useCase: latest.useCase,
-            answers: latest.answers,
+            answers: provisionalAnswersFor(latest),
             sourceArtifact: latest.sourceArtifact
           }),
           source: "deterministic-fallback" as const,
@@ -2490,7 +2528,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           brand: selectedBrands.brand,
           targetBrand: selectedBrands.targetBrand,
           useCase: latest.useCase,
-          answers: latest.answers,
+          answers: provisionalAnswersFor(latest),
           sourceArtifact: latest.sourceArtifact
         });
     const trustFallbackReason = generationTrustFailureFor({
@@ -2498,7 +2536,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       brand: selectedBrands.brand,
       targetBrand: selectedBrands.targetBrand,
       useCase: latest.useCase,
-      answers: latest.answers
+      answers: provisionalAnswersFor(latest)
     });
     if (trustFallbackReason && generated.source === "openai") {
       generated = {
@@ -2506,7 +2544,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           brand: selectedBrands.brand,
           targetBrand: selectedBrands.targetBrand,
           useCase: latest.useCase,
-          answers: latest.answers,
+          answers: provisionalAnswersFor(latest),
           sourceArtifact: latest.sourceArtifact
         }),
         source: "deterministic-fallback",
@@ -2516,7 +2554,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     }
     const finalArtifact = assembleExperienceArtifact({
       id,
-      session: latest,
+      session: { ...latest, answers: provisionalAnswersFor(latest) },
       draft: generated.draft,
       brand: selectedBrands.brand,
       targetBrand: selectedBrands.targetBrand,
@@ -2577,10 +2615,11 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         }
         session.brand = brand;
         session.targetBrand = targetBrand;
+        const finalIsProvisional = !isGenerationReady(session.useCase, session.answers);
         session.experience = {
           ...finalArtifact.webDraft,
           html: finalArtifact.html,
-          readiness: "final",
+          readiness: finalIsProvisional ? "provisional" : "final",
           generationSource: generated.source,
           artifactRevision: session.revision + 1,
           artifactDigest: createHash("sha256").update(finalArtifact.html).digest("hex")
@@ -2588,7 +2627,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         session.experienceSpecRevision = finalArtifact.experienceSpec.revision;
         session.experienceSpec = finalArtifact.experienceSpec;
         session.qualityReceipt = finalArtifact.qualityReceipt;
-        session.status = "preview_ready_unclaimed";
+        session.status = finalIsProvisional ? "preview_provisional" : "preview_ready_unclaimed";
         session.expiresAt = new Date(readyAt + config.sessionTtlSeconds * 1000).toISOString();
         session.stages.story = {
           status: generated.source === "openai" ? "complete" : "fallback",
@@ -2625,14 +2664,16 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           durationMs: finalArtifact.renderDurationMs,
           artifactRevision: session.revision + 1
         });
-        appendEvent(session, "preview_ready", {
-          attemptId,
-          artifactRevision: session.revision + 1,
-          provisionalToFinalMs: Number.isFinite(provisionalReadyTimestamp)
-            ? Math.max(0, readyAt - provisionalReadyTimestamp)
-            : 0,
-          submissionToPreviewMs: Math.max(0, readyAt - Date.parse(session.createdAt))
-        });
+        if (!finalIsProvisional) {
+          appendEvent(session, "preview_ready", {
+            attemptId,
+            artifactRevision: session.revision + 1,
+            provisionalToFinalMs: Number.isFinite(provisionalReadyTimestamp)
+              ? Math.max(0, readyAt - provisionalReadyTimestamp)
+              : 0,
+            submissionToPreviewMs: Math.max(0, readyAt - Date.parse(session.createdAt))
+          });
+        }
         return session;
       },
       { ttlSeconds: config.sessionTtlSeconds }
@@ -2748,7 +2789,8 @@ export async function recoverSessionWork(id: string): Promise<void> {
     }
 
     const storyCanResume =
-      isGenerationReady(session.useCase, session.answers) &&
+      (isGenerationReady(session.useCase, session.answers) ||
+        isProvisionalGenerationReady(session)) &&
       (session.stages.story.status === "pending" ||
         (session.stages.story.status === "running" &&
           isStale(session.stages.story.startedAt, 60_000)));

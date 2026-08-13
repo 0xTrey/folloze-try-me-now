@@ -9,6 +9,8 @@ const oneOf = <T extends string>(value: string | undefined, choices: readonly T[
 const nonEmptyFromEnv = (value: string | undefined, fallback: string): string =>
   value?.trim() || fallback;
 
+const marketoMunchkinId = process.env.NEXT_PUBLIC_MARKETO_MUNCHKIN_ID?.trim() ?? "";
+
 const vercelHost = nonEmptyFromEnv(
   process.env.VERCEL_PROJECT_PRODUCTION_URL,
   process.env.VERCEL_URL?.trim() ?? ""
@@ -32,6 +34,12 @@ export const config = {
   ),
   follozeMode: oneOf(process.env.FOLLOZE_MODE, ["disabled", "draft", "publish"] as const, "disabled"),
   emailMode: oneOf(process.env.EMAIL_MODE, ["console", "resend"] as const, "console"),
+  marketoMode: oneOf(process.env.MARKETO_MODE, ["disabled", "sync"] as const, "disabled"),
+  marketoEndpoint: nonEmptyFromEnv(process.env.MARKETO_REST_ENDPOINT, "").replace(/\/$/, ""),
+  marketoMunchkinId: /^\d{3}-[A-Za-z0-9]{3}-\d{3}$/.test(marketoMunchkinId)
+    ? marketoMunchkinId.toUpperCase()
+    : undefined,
+  marketoCustomActivityTypeId: intFromEnv(process.env.MARKETO_CUSTOM_ACTIVITY_TYPE_ID, 0) || undefined,
   openAIModel: nonEmptyFromEnv(process.env.OPENAI_MODEL, "gpt-5.6-terra"),
   generationTimeoutMs: Math.min(
     Math.max(intFromEnv(process.env.TRY_ME_GENERATION_TIMEOUT_MS, 30_000), 10_000),
@@ -93,3 +101,7 @@ export const canPublishFolloze =
   config.follozeMode === "publish" &&
   Boolean(process.env.FOLLOZE_MCP_SERVER_URL && process.env.FOLLOZE_MCP_AUTH_TOKEN);
 export const hasResend = config.emailMode === "resend" && Boolean(process.env.RESEND_API_KEY);
+export const hasMarketo =
+  config.marketoMode === "sync" &&
+  /^https:\/\/[a-z0-9-]+\.mktorest\.com$/i.test(config.marketoEndpoint) &&
+  Boolean(process.env.MARKETO_CLIENT_ID && process.env.MARKETO_CLIENT_SECRET);

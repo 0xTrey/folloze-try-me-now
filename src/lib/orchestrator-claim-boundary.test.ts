@@ -302,6 +302,47 @@ describe("anonymous preview and claim publication boundary", () => {
     );
   });
 
+  it("starts a default-backed, unclaimable preview after the confirmed domain is ready", async () => {
+    const pending = session({ id: "domain-confirmed-default-preview" });
+    delete pending.answers.audience;
+    delete pending.answers.objective;
+    pending.brand = {
+      ...brand,
+      identity: {
+        expectedDomain: "jitterbit.com",
+        canonicalDomain: "jitterbit.com",
+        canonicalName: "Jitterbit",
+        confirmationStatus: "confirmed",
+        confidence: "high",
+        reasons: [],
+        provenance: []
+      }
+    };
+    pending.audienceSuggestions = ["Integration and automation leaders"];
+    await putSession(pending);
+
+    await runStoryStage(pending.id);
+
+    const stored = await getSession(pending.id);
+    expect(stored).toMatchObject({
+      status: "preview_provisional",
+      experience: { readiness: "provisional" }
+    });
+    expect(stored?.answers).not.toHaveProperty("audience");
+    expect(stored?.answers).not.toHaveProperty("objective");
+    expect(generateExperienceDraft).toHaveBeenCalledWith(expect.objectContaining({
+      answers: expect.objectContaining({
+        audience: expect.any(String),
+        objective: "Book a meeting"
+      })
+    }));
+    const preview = stored?.events.find((event) => event.name === "preview_provisional_ready");
+    expect(Number(preview?.meta?.generationEligibleToPreviewMs)).toBeLessThan(10_000);
+    await expect(claimSession(pending.id, "buyer@example.com")).rejects.toMatchObject({
+      code: "claim_not_ready"
+    });
+  });
+
   it("discards a late refinement after the buyer brief changes", async () => {
     const pending = session({ id: "provisional-stale-refinement" });
     await putSession(pending);

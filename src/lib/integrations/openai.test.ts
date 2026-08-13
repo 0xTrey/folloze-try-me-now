@@ -1188,6 +1188,40 @@ describe("deterministic experience copy", () => {
     ).toBe("copy_quality_incomplete_thought");
   });
 
+  it("normalizes lowercase ai and rejects persona splices or ellipses in buyer-facing copy", () => {
+    const answers = {
+      targetDomain: "cisco.com",
+      audience: "AI platform leaders",
+      objective: "Book a meeting"
+    };
+    const { context, draft } = draftFor("abm", answers, {
+      ...cisco,
+      publicTopics: ["ai operations", "Security", "Data center"]
+    });
+
+    expect(draft.subhead).toContain("AI platform leaders");
+    expect(
+      experienceQualityFailure({
+        draft: { ...draft, narrativeArc: "Persona 2: evaluate the integration boundary" },
+        brand: jitterbit,
+        targetBrand: cisco,
+        useCase: "abm",
+        answers,
+        context
+      })
+    ).toBe("copy_quality_persona_placeholder");
+    expect(
+      experienceQualityFailure({
+        draft: { ...draft, thesisBody: "Connect the systems, workflow, and result..." },
+        brand: jitterbit,
+        targetBrand: cisco,
+        useCase: "abm",
+        answers,
+        context
+      })
+    ).toBe("copy_quality_incomplete_thought");
+  });
+
   it("rejects a harvested heading spliced into a sentence", () => {
     const answers = {
       targetDomain: "cisco.com",

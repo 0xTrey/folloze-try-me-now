@@ -975,9 +975,9 @@ function getWhyCopy(session: PublicTryMeSession): { key: string; title: string; 
 function track(action: ProductEventName, detail: Record<string, string | number | boolean> = {}) {
   if (typeof window === "undefined") return;
   captureProductEvent(action, {
-    category: ["domain_submitted", "field_interacted", "campaign_type_selected"].includes(action)
+    category: ["domain_submitted", "domain_confirmed", "field_interacted", "campaign_type_selected", "audience_confirmed", "goal_confirmed"].includes(action)
       ? "input"
-      : ["experience_claimed", "claim_started", "claim_completed", "claim_failed"].includes(action)
+      : ["experience_claimed", "claim_started", "claim_completed", "claim_failed", "save_opened", "save_completed"].includes(action)
         ? "conversion"
         : action.endsWith("_failed")
           ? "error"
@@ -1329,7 +1329,13 @@ function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
   return (["seller", "target", "offer", "audience", "objective"] as OverviewFieldKey[]).map((key) => rows[key]);
 }
 
-export function CampaignOverviewRail({ session }: { session: PublicTryMeSession }) {
+export function CampaignOverviewRail({
+  session,
+  onEdit
+}: {
+  session: PublicTryMeSession;
+  onEdit?: (field: OverviewFieldKey) => void;
+}) {
   const rows = overviewRowsFor(session);
   const moments = buildMoments(session);
   const activeMoment = moments.find((moment) => moment.status === "running")
@@ -1351,14 +1357,22 @@ export function CampaignOverviewRail({ session }: { session: PublicTryMeSession 
           const Icon = row.icon;
           const complete = Boolean(row.value);
           return (
-            <div className={`overviewField ${complete ? "is-complete" : "is-current"}`} data-overview-field={row.key} key={row.key}>
+            <button
+              className={`overviewField ${complete ? "is-complete" : "is-current"}`}
+              data-overview-field={row.key}
+              key={row.key}
+              type="button"
+              onClick={() => onEdit?.(row.key)}
+              aria-label={onEdit ? `Edit ${row.label}` : undefined}
+              disabled={!onEdit}
+            >
               <span className="overviewFieldIcon" aria-hidden="true"><Icon size={17} /></span>
               <div>
                 <span>{row.label}</span>
                 <strong>{row.value || "Waiting for this signal"}</strong>
               </div>
               <span className="overviewFieldState" aria-label={complete ? "Done" : "Next signal"} title={complete ? "Done" : "Next signal"}>{complete ? <Check size={14} /> : <ArrowRight size={14} />}</span>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -1373,11 +1387,13 @@ export function CampaignOverviewRail({ session }: { session: PublicTryMeSession 
   );
 }
 
-function UseCasePortals({
+export function UseCasePortals({
   onSelect,
+  onWatchBuild,
   disabled = false
 }: {
   onSelect: (value: UseCase) => void;
+  onWatchBuild?: () => void;
   disabled?: boolean;
 }) {
   return (
@@ -1395,6 +1411,14 @@ function UseCasePortals({
           onExampleOpen={(useCase) => track("example_opened", { useCase })}
         />
       ))}
+      {onWatchBuild && (
+        <button className="watchBuildEntry" type="button" disabled={disabled} onClick={onWatchBuild}>
+          <span><span className="liveDot" />Worked example</span>
+          <strong>Watch one build</strong>
+          <small>Follow a real campaign build first. You can swap in your company at the end.</small>
+          <ArrowRight size={16} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }
@@ -1882,6 +1906,7 @@ export function ProgressiveQuestions({
     answers.sourceName ? "pdf" : answers.sourceUrl ? "url" : answers.messageBelief ? "text" : "url"
   );
   const [productDescription, setProductDescription] = useState(answers.messageBelief ?? "");
+  const [campaignSubmitError, setCampaignSubmitError] = useState("");
   const [isChangingProductSource, setIsChangingProductSource] = useState(false);
   const [productResearchStartRevision, setProductResearchStartRevision] = useState<number>();
   const backgroundPatchRef = useRef(onBackgroundPatch ?? onPatch);
@@ -2036,18 +2061,40 @@ export function ProgressiveQuestions({
         ) : choice ? (
           <label className={`lineInput campaignSourceInput ${hasValidOfferSource ? "isReady" : ""}`}><span>{offerPrompt.sourceLabel}</span><div><ExternalLink size={19} /><input value={offerSourceValue} onChange={(event) => setFieldValues((current) => ({ ...current, "campaign-offer-source": event.target.value }))} placeholder={offerPrompt.sourcePlaceholder} /></div>{offerSourceValue.trim() && !validOfferSource ? <small className="fieldError">Use a public HTTPS URL.</small> : hasValidOfferSource ? <small className={`campaignSourceGuidance isReady is-${offerResearchStatus ?? "queued"}`} role="status" aria-live="polite">{offerResearchStatus === "ready" ? <CircleCheck size={14} /> : offerResearchStatus === "failed" ? <Search size={14} /> : <LoaderCircle className="spin" size={14} />}{offerResearchCopy}</small> : <small className="campaignSourceGuidance">Add either a name above or a URL here. A URL lets us identify and research the offer for you.</small>}</label>
         ) : null}
+        {campaignSubmitError && <p className="fieldError campaignSubmitError" role="alert">{campaignSubmitError}</p>}
         <button
           className="buttonPrimary"
           type="button"
-          disabled={!choice || !offerRequirementMet || !validOfferSource || (choice === "event" && !hasExistingEventContext && eventContextValue.trim().length < 8) || isSaving}
-          onClick={() => void onPatch({
-            campaignType: choice,
-            promotedOffer: offerValue.trim() || undefined,
-            promotedOfferConfirmed: true,
-            offerSourceUrl: choice !== "event" && offerSourceValue.trim() ? offerSourceValue.trim() : undefined,
-            offerSourceConfirmed: choice !== "event" && Boolean(offerSourceValue.trim()),
-            eventSource: choice === "event" && eventContextValue.trim() ? eventContextValue.trim() : undefined
-          })}
+          disabled={isSaving}
+          onClick={() => {
+            if (!choice) {
+              setCampaignSubmitError("Choose a campaign format to continue.");
+              return;
+            }
+            if (!validOfferSource) {
+              setCampaignSubmitError("Use a public HTTPS URL, or remove it and name the offer instead.");
+              return;
+            }
+            if (!offerRequirementMet) {
+              setCampaignSubmitError(choice === "event"
+                ? "Add the event or webinar name before continuing."
+                : "Add an offer name or a public offer URL before continuing.");
+              return;
+            }
+            if (choice === "event" && !hasExistingEventContext && eventContextValue.trim().length < 8) {
+              setCampaignSubmitError("Add event details so Folloze can build the registration path.");
+              return;
+            }
+            setCampaignSubmitError("");
+            void onPatch({
+              campaignType: choice,
+              promotedOffer: offerValue.trim() || undefined,
+              promotedOfferConfirmed: true,
+              offerSourceUrl: choice !== "event" && offerSourceValue.trim() ? offerSourceValue.trim() : undefined,
+              offerSourceConfirmed: choice !== "event" && Boolean(offerSourceValue.trim()),
+              eventSource: choice === "event" && eventContextValue.trim() ? eventContextValue.trim() : undefined
+            });
+          }}
         >
           Use this campaign<ArrowRight size={17} />
         </button>
@@ -2625,6 +2672,7 @@ export function SaveExperienceDialog({
   sellerName,
   targetName,
   headline,
+  remainingSeconds,
   email,
   status,
   error,
@@ -2638,6 +2686,7 @@ export function SaveExperienceDialog({
   sellerName: string;
   targetName?: string;
   headline: string;
+  remainingSeconds?: number;
   email: string;
   status: "idle" | "saving" | "saved" | "error";
   error?: string;
@@ -2657,6 +2706,7 @@ export function SaveExperienceDialog({
           sellerName={sellerName}
           targetName={targetName}
           headline={headline}
+          remainingSeconds={remainingSeconds}
           email={email}
           status={status}
           error={error}
@@ -2715,7 +2765,7 @@ function SignalDrawer({ events, revealedAt, onClose }: { events: ClientEvent[]; 
 }
 
 export function TryMeNowApp() {
-  const [interactionReady, setInteractionReady] = useState(false);
+  const interactionReady = true;
   const [useCase, setUseCase] = useState<UseCase>();
   const [domain, setDomain] = useState("");
   const [session, setSession] = useState<PublicTryMeSession>();
@@ -2744,12 +2794,15 @@ export function TryMeNowApp() {
   const initialPreviewScrolled = useRef(false);
   const analyticsPromptedSession = useRef<string | undefined>(undefined);
   const endJourneyRevealSession = useRef<string | undefined>(undefined);
+  const engagementFinaleShownSession = useRef<string | undefined>(undefined);
   const ctaSessionSignature = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const tunedSession = useRef<string | undefined>(undefined);
   const patchRequestRef = useRef(0);
   const persistedSectionSignals = useRef(new Set<string>());
   const lastTrackedStatus = useRef<string | undefined>(undefined);
+  const buildTrackedSession = useRef<string | undefined>(undefined);
+  const previewScrolledSession = useRef<string | undefined>(undefined);
   const activePreflightKey = useRef<string | undefined>(undefined);
   const [preflightCoordinator] = useState(() => (
     new SellerBrandPreflightCoordinator(
@@ -2769,8 +2822,6 @@ export function TryMeNowApp() {
 
   useEffect(() => {
     initializeProductAnalytics();
-    const frame = window.requestAnimationFrame(() => setInteractionReady(true));
-    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -2788,6 +2839,13 @@ export function TryMeNowApp() {
       sessionId: session.id,
       properties: { status: session.status, use_case: session.useCase }
     });
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || buildTrackedSession.current === session.id) return;
+    if (session.stages.story.status !== "running" && session.status !== "generating") return;
+    buildTrackedSession.current = session.id;
+    track("build_started", { useCase: session.useCase });
   }, [session]);
 
   const selectUseCase = useCallback((selected: UseCase) => {
@@ -2815,8 +2873,12 @@ export function TryMeNowApp() {
     initialPreviewScrolled.current = false;
     analyticsPromptedSession.current = undefined;
     endJourneyRevealSession.current = undefined;
+    engagementFinaleShownSession.current = undefined;
     ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
+    buildTrackedSession.current = undefined;
+    previewScrolledSession.current = undefined;
+    track("path_selected", { useCase: selected });
     track("use_case_selected", { useCase: selected });
   }, []);
 
@@ -2848,8 +2910,11 @@ export function TryMeNowApp() {
     initialPreviewScrolled.current = false;
     analyticsPromptedSession.current = undefined;
     endJourneyRevealSession.current = undefined;
+    engagementFinaleShownSession.current = undefined;
     ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
+    buildTrackedSession.current = undefined;
+    previewScrolledSession.current = undefined;
   }, []);
 
   const closeAnalyticsPanel = useCallback(() => setShowAnalyticsPanel(false), []);
@@ -2906,6 +2971,7 @@ export function TryMeNowApp() {
         sessionId: confirmedSession.id,
         properties: { use_case: confirmedSession.useCase }
       });
+      track("domain_confirmed", { useCase: selectedUseCase });
       track("domain_submitted", { useCase: selectedUseCase });
     } catch (startError) {
       startedDomain.current = undefined;
@@ -2982,6 +3048,14 @@ export function TryMeNowApp() {
     tunedSession.current = session.id;
     setTuneOpen(false);
   }, [session?.experience, session?.id, session?.status]);
+
+  useEffect(() => {
+    if (!session?.experience || clientEvents.length < 5) return;
+    if (engagementFinaleShownSession.current === session.id) return;
+    engagementFinaleShownSession.current = session.id;
+    setShowAnalyticsToast(false);
+    setShowAnalyticsPanel(true);
+  }, [clientEvents.length, session?.experience, session?.id]);
 
   useEffect(() => {
     if (session?.status !== "preview_ready_unclaimed" || !session.expiresAt) return;
@@ -3091,6 +3165,10 @@ export function TryMeNowApp() {
         && persistedSectionSignals.current.has(sectionSignalKey);
       if (!duplicateSectionView) {
         if (event.data.action === "section_view") persistedSectionSignals.current.add(sectionSignalKey);
+        if (event.data.action === "section_view" && previewScrolledSession.current !== session.id) {
+          previewScrolledSession.current = session.id;
+          track("preview_scrolled", { useCase: session.useCase });
+        }
         captureProductEvent("preview_interaction", {
           category: event.data.action === "cta_click" ? "conversion" : "interaction",
           sessionId: session.id,
@@ -3125,6 +3203,12 @@ export function TryMeNowApp() {
       const nextSession = await confirmHighConfidenceSource(result.session);
       setSession((current) => preservePreviewDuringRegeneration(current, nextSession));
       setAnswers(nextSession.answers);
+      if (typeof patch.audience === "string" && patch.audience.trim()) {
+        track("audience_confirmed", { useCase: session.useCase });
+      }
+      if (typeof patch.objective === "string" && patch.objective.trim()) {
+        track("goal_confirmed", { useCase: session.useCase });
+      }
     } catch (patchError) {
       setError(patchError instanceof Error ? patchError.message : "We could not save that answer.");
     } finally {
@@ -3295,8 +3379,11 @@ export function TryMeNowApp() {
       setSession(result.session);
       setClaimStatus("saved");
       setShowSavePrompt(false);
+      engagementFinaleShownSession.current = result.session.id;
+      setShowAnalyticsPanel(true);
       identifyProductVisitor(email);
       track("claim_completed", { useCase: result.session.useCase });
+      track("save_completed", { useCase: result.session.useCase });
       track("experience_claimed", { useCase: result.session.useCase });
     } catch (claimFailure) {
       const message = claimFailure instanceof Error ? claimFailure.message : "We could not save this experience.";
@@ -3389,7 +3476,16 @@ export function TryMeNowApp() {
               <span><ShieldCheck size={14} />Preview first. Save when ready.</span>
             </div>
           </div>
-          <UseCasePortals onSelect={selectUseCase} disabled={!interactionReady} />
+          <UseCasePortals
+            onSelect={selectUseCase}
+            onWatchBuild={() => {
+              const exampleDomain = "folloze.com";
+              setUseCase("campaign");
+              setDomain(exampleDomain);
+              void startSession("campaign", exampleDomain);
+            }}
+            disabled={!interactionReady}
+          />
           <div className="entryFooter">Start with a company domain. Explore the result before sharing your email.</div>
         </section>
       )}
@@ -3414,14 +3510,6 @@ export function TryMeNowApp() {
             <div className="guidedWorkspaceInner">
               <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
               <ConversationThread session={session} onRestart={resetExperience} />
-              <IntentComposer
-                session={session}
-                answers={answers}
-                isSaving={isSaving}
-                pdfUpload={pdfUpload}
-                onPatch={patchAnswers}
-                onUpload={uploadPdf}
-              />
               <ProgressiveQuestions
                 session={session}
                 answers={answers}
@@ -3432,6 +3520,16 @@ export function TryMeNowApp() {
                 onWorkspacePatch={patchWorkspace}
                 onUpload={uploadPdf}
               />
+              {!(session.useCase === "abm" && !answers.targetDomain) && (
+                <IntentComposer
+                  session={session}
+                  answers={answers}
+                  isSaving={isSaving}
+                  pdfUpload={pdfUpload}
+                  onPatch={patchAnswers}
+                  onUpload={uploadPdf}
+                />
+              )}
               <div className="brandLockStage">
                 <InstantBrandLockStrip
                   status={!session.brand ? "scanning" : session.stages.brand.status === "fallback" || session.brand.readiness?.status === "incomplete" ? "fallback" : "locked"}
@@ -3483,7 +3581,10 @@ export function TryMeNowApp() {
               {session.status === "claimed" ? (
                 <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
               ) : canSaveExperience ? (
-                <button className="buttonPrimary" type="button" onClick={() => setShowSavePrompt(true)}><Mail size={16} />Save this preview</button>
+                <button className="buttonPrimary" type="button" onClick={() => {
+                  track("save_opened", { useCase: session.useCase });
+                  setShowSavePrompt(true);
+                }}><Mail size={16} />Save this preview</button>
               ) : (
                 <span className="buttonPrimary" role="status"><LoaderCircle className="spin" size={16} />Quality pass running</span>
               )}
@@ -3598,8 +3699,38 @@ export function TryMeNowApp() {
                 {isProvisionalPreview ? "Explore the working preview" : "Explore the full experience"}<ArrowRight size={16} />
               </a>
             </div>
+            <aside className="revealRail">
+              <CampaignOverviewRail
+                session={session}
+                onEdit={() => {
+                  setTuneOpen(true);
+                  window.requestAnimationFrame(() => {
+                    document.querySelector<HTMLElement>(isProvisionalPreview ? ".provisionalBriefEditor" : ".experienceControlDeck")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  });
+                }}
+              />
+            </aside>
           </div>
           <div className="revealFooter"><span>{session.status === "claimed" ? "Saved URL" : "Temporary URL"}</span><code>{session.liveUrl || session.temporaryUrl}</code><span>{session.status === "claimed" ? "Saved" : isProvisionalPreview ? "Quality pass in progress" : "Expires 30 minutes after generation"}</span></div>
+          {isProvisionalPreview && tuneOpen && (
+            <section className="provisionalBriefEditor" aria-labelledby="provisional-brief-title">
+              <div className="provisionalBriefEditorIntro">
+                <span className="sectionKicker">One signal at a time</span>
+                <h2 id="provisional-brief-title">Improve the live preview.</h2>
+                <p>Answer the next useful question. Folloze keeps the current page visible while it updates.</p>
+              </div>
+              <ProgressiveQuestions
+                session={session}
+                answers={answers}
+                isSaving={isSaving}
+                onPatch={patchAnswers}
+                onBackgroundPatch={patchAnswersInBackground}
+                onWorkspacePatch={patchWorkspace}
+                onUpload={uploadPdf}
+                pdfUpload={pdfUpload}
+              />
+            </section>
+          )}
         </section>
       )}
 
@@ -3614,6 +3745,7 @@ export function TryMeNowApp() {
         sellerName={brandNameFor(session)}
         targetName={session.useCase === "abm" ? targetNameFor(session) : undefined}
         headline={session.experience?.headline || `${brandNameFor(session)} experience`}
+        remainingSeconds={previewSecondsRemaining}
         email={claimEmail}
         status={claimStatus}
         error={claimError}
@@ -3628,6 +3760,7 @@ export function TryMeNowApp() {
       engagedSeconds={engagementSeconds}
       sessionId={session?.id}
       audienceLabel={answers.customAudience || answers.audience}
+      isSaved={session?.status === "claimed"}
       onClose={closeAnalyticsPanel}
     />
     </>

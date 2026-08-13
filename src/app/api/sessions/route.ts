@@ -2,7 +2,7 @@ import { after, NextRequest, NextResponse } from "next/server";
 
 import { apiError, noStoreHeaders, startServerOperation } from "@/lib/http";
 import { createSession, runBrandStage } from "@/lib/orchestrator";
-import { analyticsIdentityFromRequest } from "@/lib/product-analytics";
+import { analyticsIdentityWithAttributionFromRequest } from "@/lib/product-analytics";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { createSessionSchema } from "@/lib/validation";
 
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const input = createSessionSchema.parse(await request.json());
     const created = await createSession({
       ...input,
-      analytics: analyticsIdentityFromRequest(request)
+      analytics: analyticsIdentityWithAttributionFromRequest(request)
     });
     trace.setSessionId(created.session.id);
     trace.setTraceId(created.traceId);

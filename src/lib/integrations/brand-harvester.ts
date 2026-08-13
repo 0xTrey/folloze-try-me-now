@@ -11,7 +11,11 @@ import {
   isBrandfetchLogoApiUrl
 } from "@/lib/brandfetch-logo";
 import { withBrandReadiness } from "@/lib/brand-readiness";
-import { fallbackCompanyName, resolvePublicCompanyName } from "@/lib/company-name";
+import {
+  fallbackCompanyName,
+  normalizeCompanyDisplayName,
+  resolvePublicCompanyName
+} from "@/lib/company-name";
 import {
   companyDomainStem,
   registrableCompanyDomain,
@@ -100,7 +104,7 @@ function canonicalCompanyName(value: string, domain: string): string {
     const prefix = words.slice(0, length).join(" ");
     if (domainKey && entityKey(prefix) === domainKey) return prefix;
   }
-  return cleaned;
+  return normalizeCompanyDisplayName(cleaned, domain);
 }
 
 function attr(tag: string, name: string): string | undefined {
@@ -2862,6 +2866,10 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
     };
     const finalCandidate: BrandProfile = {
       ...logoApiCandidate,
+      companyName: normalizeCompanyDisplayName(
+        logoApiCandidate.companyName,
+        logoApiCandidate.canonicalDomain ?? domain
+      ),
       diagnostics: {
         ...logoApiCandidate.diagnostics,
         logo: finalLogoReceipt,

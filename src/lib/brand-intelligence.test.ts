@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   assessBrandIdentity,
   audienceOfferContextLabel,
+  audienceRecommendationRationale,
   audienceSuggestionsFor,
   identifyBrandCategory,
   narrativeProfileFor
@@ -99,6 +100,61 @@ describe("company-specific audience intelligence", () => {
       })
     ).toEqual(audienceSuggestionsFor(jitterbit));
     expect(audienceOfferContextLabel(jitterbit)).toBeUndefined();
+  });
+
+  it("recommends cloud-cost owners for a Datadog cloud-cost offer with one-sentence rationale", () => {
+    const datadog = brand({
+      domain: "datadog.com",
+      companyName: "Datadog",
+      description: "Cloud monitoring, observability, security, and cloud cost management."
+    });
+    const audiences = audienceSuggestionsFor(datadog, undefined, {
+      promotedOffer: "Cloud Cost Management",
+      campaignType: "product",
+      objective: "Launch a product"
+    });
+    const rationale = audienceRecommendationRationale({
+      label: audiences[0],
+      sellerName: datadog.companyName,
+      offerLabel: "Cloud Cost Management"
+    });
+
+    expect(audiences).toHaveLength(4);
+    expect(audiences[0]).toMatch(/cloud cost|finops/i);
+    expect(audiences.every((audience) => /Cloud Cost Management/i.test(audience))).toBe(true);
+    expect(rationale).toBe(
+      `Recommended because ${audiences[0]} can help evaluate Cloud Cost Management.`
+    );
+    expect(rationale.match(/[.!?]/g)).toHaveLength(1);
+  });
+
+  it("uses the target's public operating language for Snowflake to Nike recommendations", () => {
+    const snowflake = brand({
+      domain: "snowflake.com",
+      companyName: "Snowflake",
+      description: "Cloud data platform, data engineering, analytics, and AI."
+    });
+    const nike = brand({
+      domain: "nike.com",
+      companyName: "Nike",
+      description: "Digital commerce, retail, consumer experiences, and product innovation.",
+      publicTopics: ["Digital commerce", "Consumer experiences", "Retail operations"]
+    });
+
+    const audiences = audienceSuggestionsFor(snowflake, nike);
+    const rationale = audienceRecommendationRationale({
+      label: audiences[0],
+      sellerName: snowflake.companyName,
+      targetName: nike.companyName,
+      offerLabel: "Snowflake's data platform",
+      evidenceSignal: "digital commerce"
+    });
+
+    expect(audiences.join(" ")).toMatch(/commerce|retail|consumer/i);
+    expect(rationale).toBe(
+      `Recommended for Nike because its digital commerce context makes ${audiences[0]} relevant to evaluating Snowflake's data platform.`
+    );
+    expect(rationale.match(/[.!?]/g)).toHaveLength(1);
   });
 
   it("keeps matching story vocabulary grounded in the same category", () => {

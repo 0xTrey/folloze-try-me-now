@@ -7,7 +7,7 @@ import {
   sanitizeObservabilityText,
   supportRefForTraceId
 } from "@/lib/observability";
-import type { SessionAnswers, TryMeSession, UseCase } from "@/lib/types";
+import type { SessionAnalyticsIdentity, SessionAnswers, TryMeSession, UseCase } from "@/lib/types";
 
 export const PRODUCT_EVENT_NAMES = [
   "analytics_panel_opened",
@@ -17,24 +17,32 @@ export const PRODUCT_EVENT_NAMES = [
   "browser_error",
   "brand_logo_failed",
   "brand_logo_rendered",
+  "build_started",
   "campaign_type_selected",
   "claim_completed",
   "claim_failed",
   "claim_started",
   "domain_submitted",
+  "domain_confirmed",
   "example_opened",
   "experience_claimed",
   "experience_revealed",
   "field_interacted",
   "page_viewed",
+  "path_selected",
   "pdf_upload_completed",
   "pdf_upload_failed",
   "pdf_upload_started",
   "preview_interaction",
   "preview_rendered",
+  "preview_scrolled",
   "research_started",
   "session_created",
   "session_status_changed",
+  "audience_confirmed",
+  "goal_confirmed",
+  "save_opened",
+  "save_completed",
   "ui_click",
   "unhandled_rejection",
   "use_case_selected",
@@ -404,4 +412,16 @@ export function analyticsIdentityFromRequest(request: Request): AnalyticsIdentit
     browserSessionId: request.headers.get("x-try-me-browser-session-id")
   });
   return parsed.success ? parsed.data : undefined;
+}
+
+export function analyticsIdentityWithAttributionFromRequest(request: Request):
+  | (AnalyticsIdentity & { utm?: SessionAnalyticsIdentity["utm"] })
+  | undefined {
+  const identity = analyticsIdentityFromRequest(request);
+  if (!identity) return undefined;
+  const entries = (["source", "medium", "campaign", "term", "content"] as const)
+    .map((key) => [key, request.headers.get(`x-try-me-utm-${key}`)?.trim()] as const)
+    .filter((entry): entry is readonly [typeof entry[0], string] =>
+      Boolean(entry[1] && entry[1].length <= 160 && !entry[1].includes("@")));
+  return entries.length ? { ...identity, utm: Object.fromEntries(entries) } : identity;
 }

@@ -16,6 +16,7 @@ import type {
   SessionAnswers,
   UseCase
 } from "@/lib/types";
+import { config } from "@/lib/config";
 import {
   brandDesignDNAFor,
   brandPresentationFor
@@ -29,6 +30,31 @@ const escapeHtml = (value: string) =>
 
 const safeColor = (value: string, fallback: string) =>
   /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : fallback;
+
+const NEUTRAL_PREVIEW_PALETTE = {
+  primary: "#202124",
+  accent: "#5F6368",
+  surface: "#FFFFFF",
+  softSurface: "#F6F7F8",
+  supportingAccent: "#80868B",
+  lightText: "#202124",
+  mutedText: "#5F6368",
+  divider: "#DADCE0",
+  focus: "#3C4043"
+} as const;
+
+const neutralPreviewNotice =
+  "Brand colors are not yet verified; this preview uses a neutral treatment.";
+
+/**
+ * A known-low palette must never inherit the renderer's generic indigo. Keep
+ * unknown legacy profiles renderable, but make an explicit low-confidence
+ * receipt authoritative whenever one is available.
+ */
+function requiresNeutralPreviewTreatment(brand: BrandProfile): boolean {
+  const palette = brand.diagnostics?.palette;
+  return palette?.confidence === "low" || palette?.strategy === "fallback" || brand.readiness?.paletteReady === false;
+}
 
 const safePixelValue = (value: number | undefined, fallback: number, min: number, max: number) =>
   typeof value === "number" && Number.isFinite(value)
@@ -298,29 +324,34 @@ export function renderExperienceHtml(input: {
   const selectedCtaStyle = ctaStyle(input.answers);
   const designDna = brandDesignDNAFor(brand);
   const presentation = brandPresentationFor(brand);
-  const heroTheme = designDna?.theme?.hero ?? presentation?.heroTheme ?? "light";
-  const candidatePrimary = safeColor(brand.primaryColor, "#1C293F");
+  const neutralPreview = requiresNeutralPreviewTreatment(brand);
+  const trustedDesignDna = neutralPreview ? undefined : designDna;
+  const trustedPresentation = neutralPreview ? undefined : presentation;
+  const heroTheme = trustedDesignDna?.theme?.hero ?? trustedPresentation?.heroTheme ?? "light";
+  const candidatePrimary = neutralPreview
+    ? NEUTRAL_PREVIEW_PALETTE.primary
+    : safeColor(brand.primaryColor, "#1C293F");
   const primary = colorLuminance(candidatePrimary) < 0.42 ? candidatePrimary : "#1C293F";
-  const accent = safeColor(brand.accentColor, "#5B5BFF");
-  const surface = safeColor(brand.surfaceColor, "#FFFFFF");
+  const accent = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.accent : safeColor(brand.accentColor, "#5B5BFF");
+  const surface = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.surface : safeColor(brand.surfaceColor, "#FFFFFF");
   const onAccent = colorLuminance(accent) > 0.42 ? "#071428" : "#FFFFFF";
-  const darkSurface = safeColor(designDna?.colors?.darkSurface ?? presentation?.darkSurfaceColor ?? primary, primary);
-  const softSurface = safeColor(designDna?.colors?.softSurface ?? presentation?.softSurfaceColor ?? surface, surface);
-  const supportingAccent = safeColor(designDna?.colors?.supportingAccent ?? presentation?.supportingAccentColor ?? accent, accent);
+  const darkSurface = neutralPreview ? primary : safeColor(trustedDesignDna?.colors?.darkSurface ?? trustedPresentation?.darkSurfaceColor ?? primary, primary);
+  const softSurface = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.softSurface : safeColor(trustedDesignDna?.colors?.softSurface ?? trustedPresentation?.softSurfaceColor ?? surface, surface);
+  const supportingAccent = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.supportingAccent : safeColor(trustedDesignDna?.colors?.supportingAccent ?? trustedPresentation?.supportingAccentColor ?? accent, accent);
   const lightSurfaceAccent = safeColor(
-    designDna?.colors?.lightSurfaceAccent ?? presentation?.lightSurfaceAccentColor ?? accent,
+    neutralPreview ? accent : trustedDesignDna?.colors?.lightSurfaceAccent ?? trustedPresentation?.lightSurfaceAccentColor ?? accent,
     accent
   );
-  const lightText = safeColor(designDna?.colors?.lightText ?? presentation?.lightTextColor ?? "#20324B", "#20324B");
-  const mutedText = safeColor(designDna?.colors?.mutedText ?? presentation?.mutedTextColor ?? "#66778D", "#66778D");
-  const dividerColor = safeColor(designDna?.colors?.divider ?? presentation?.dividerColor ?? "#DCE3E9", "#DCE3E9");
-  const buttonBackground = safeColor(designDna?.buttons?.primaryBackground ?? presentation?.primaryButtonBackground ?? accent, accent);
-  const buttonText = safeColor(designDna?.buttons?.primaryText ?? presentation?.primaryButtonText ?? onAccent, onAccent);
-  const buttonHover = safeColor(designDna?.buttons?.primaryHover ?? presentation?.primaryButtonHover ?? accent, accent);
-  const buttonActive = safeColor(designDna?.buttons?.primaryActive ?? presentation?.primaryButtonActive ?? buttonHover, buttonHover);
-  const secondaryButtonBorder = safeColor(designDna?.buttons?.secondaryBorder ?? presentation?.secondaryButtonBorder ?? accent, accent);
-  const secondaryButtonText = safeColor(designDna?.buttons?.secondaryText ?? presentation?.secondaryButtonText ?? primary, primary);
-  const focusColor = safeColor(designDna?.colors?.focus ?? presentation?.focusColor ?? accent, accent);
+  const lightText = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.lightText : safeColor(trustedDesignDna?.colors?.lightText ?? trustedPresentation?.lightTextColor ?? "#20324B", "#20324B");
+  const mutedText = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.mutedText : safeColor(trustedDesignDna?.colors?.mutedText ?? trustedPresentation?.mutedTextColor ?? "#66778D", "#66778D");
+  const dividerColor = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.divider : safeColor(trustedDesignDna?.colors?.divider ?? trustedPresentation?.dividerColor ?? "#DCE3E9", "#DCE3E9");
+  const buttonBackground = neutralPreview ? accent : safeColor(trustedDesignDna?.buttons?.primaryBackground ?? trustedPresentation?.primaryButtonBackground ?? accent, accent);
+  const buttonText = neutralPreview ? "#FFFFFF" : safeColor(trustedDesignDna?.buttons?.primaryText ?? trustedPresentation?.primaryButtonText ?? onAccent, onAccent);
+  const buttonHover = neutralPreview ? "#3C4043" : safeColor(trustedDesignDna?.buttons?.primaryHover ?? trustedPresentation?.primaryButtonHover ?? accent, accent);
+  const buttonActive = neutralPreview ? "#202124" : safeColor(trustedDesignDna?.buttons?.primaryActive ?? trustedPresentation?.primaryButtonActive ?? buttonHover, buttonHover);
+  const secondaryButtonBorder = neutralPreview ? accent : safeColor(trustedDesignDna?.buttons?.secondaryBorder ?? trustedPresentation?.secondaryButtonBorder ?? accent, accent);
+  const secondaryButtonText = neutralPreview ? primary : safeColor(trustedDesignDna?.buttons?.secondaryText ?? trustedPresentation?.secondaryButtonText ?? primary, primary);
+  const focusColor = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.focus : safeColor(trustedDesignDna?.colors?.focus ?? trustedPresentation?.focusColor ?? accent, accent);
   const buttonRadius = safePixelValue(designDna?.buttons?.radiusPx ?? presentation?.buttonRadiusPx, 999, 0, 999);
   const buttonHeight = safePixelValue(designDna?.buttons?.heightPx ?? presentation?.buttonHeightPx, 52, 36, 80);
   const buttonBorderWidth = safePixelValue(designDna?.buttons?.borderWidthPx ?? presentation?.buttonBorderWidthPx, 1, 0, 4);
@@ -621,7 +652,7 @@ export function renderExperienceHtml(input: {
     ${fontFace(displayFontName, brand.displayFontUrl, input.fontDeliveryUrls?.display, "400 800")}
     ${fontFace(bodyFontName, brand.bodyFontUrl, input.fontDeliveryUrls?.body, "300 800")}
     :root{color-scheme:light;--brand-ink:${primary};--brand-accent:${accent};--brand-accent-on-light:${lightSurfaceAccent};--brand-surface:${surface};--brand-on-accent:${onAccent};--brand-dark:${darkSurface};--brand-soft-surface:${softSurface};--brand-support:${supportingAccent};--brand-button-bg:${buttonBackground};--brand-button-text:${buttonText};--brand-button-hover:${buttonHover};--brand-button-active:${buttonActive};--brand-secondary-border:${secondaryButtonBorder};--brand-secondary-text:${secondaryButtonText};--brand-focus:${focusColor};--button-radius:${buttonRadius}px;--button-height:${buttonHeight}px;--button-border-width:${buttonBorderWidth}px;--card-radius:${cardRadius}px;--card-border-width:${cardBorderWidth}px;--brand-card-shadow:${cardShadow};--content-max-width:${contentMaxWidth}px;--section-block:${sectionBlock}px;--grid-gap:${gridGap}px;--heading-weight:${headingWeight};--body-weight:${bodyWeight};--heading-tracking:${headingTracking}em;--heading-line-height:${headingLineHeight};--text:${lightText};--muted:${mutedText};--line:${dividerColor};--soft:color-mix(in srgb,var(--brand-soft-surface) 68%,var(--brand-surface));--display:${displayFont};--body:${bodyFont}}
-    .media.media .media-fallback{padding:clamp(24px,5vw,54px);display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:22px;background:linear-gradient(145deg,color-mix(in srgb,var(--brand-accent) 12%,var(--brand-surface)),var(--brand-surface) 58%,color-mix(in srgb,var(--brand-ink) 10%,var(--brand-surface)));color:var(--brand-ink);text-align:left}
+    .media.media .media-fallback{padding:clamp(24px,5vw,54px);display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:22px;background:linear-gradient(145deg,color-mix(in srgb,var(--brand-accent) 12%,var(--brand-surface)),var(--brand-surface) 58%,color-mix(in srgb,var(--brand-ink) 10%,var(--brand-surface)));color:var(--brand-ink);text-align:left}.preview-brand-notice{margin:0;padding:8px clamp(22px,6vw,96px);border-bottom:1px solid var(--line);background:var(--brand-soft-surface);color:var(--muted);font-size:12px;line-height:1.4}.preview-brand-notice strong{color:var(--brand-ink)}
     .media.media .media-fallback:before,.media.media .media-fallback:after{display:none}
     .media.media .media-fallback>span{position:static;width:auto;height:auto;border:0;border-radius:0;transform:none}
     .media.media .media-fallback-kicker{font-size:11px;font-weight:850;letter-spacing:.15em;text-transform:uppercase}
@@ -663,7 +694,7 @@ export function renderExperienceHtml(input: {
     body.brand-hero-dark .hero .eyebrow,.close .eyebrow{color:var(--brand-accent)}
   </style>
 </head>
-<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} visual-grammar-${visualGrammar.id} motion-${visualGrammar.motionProfile} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}" data-visual-grammar="${visualGrammar.id}" data-motion-profile="${visualGrammar.motionProfile}" data-hero-media-role="${visualGrammar.heroMediaRole}" data-proof-device="${visualGrammar.proofDevice}" data-cadence="${visualGrammar.cadence}" data-close-treatment="${visualGrammar.closeTreatment}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}"${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
+<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} visual-grammar-${visualGrammar.id} motion-${visualGrammar.motionProfile} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}" data-visual-grammar="${visualGrammar.id}" data-motion-profile="${visualGrammar.motionProfile}" data-hero-media-role="${visualGrammar.heroMediaRole}" data-proof-device="${visualGrammar.proofDevice}" data-cadence="${visualGrammar.cadence}" data-close-treatment="${visualGrammar.closeTreatment}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}" data-brand-palette-treatment="${neutralPreview ? "neutral-fallback" : "verified-or-legacy"}"${neutralPreview ? ` data-brand-warning="palette-confidence-low" data-brand-warning-copy="${escapeHtml(neutralPreviewNotice)}"` : ""}${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
 <button class="skip-link" type="button" data-scroll-target="main-content">Skip to experience</button>
 <div class="shell">
   <header class="nav">
@@ -673,6 +704,7 @@ export function renderExperienceHtml(input: {
     </div>
     <button type="button" class="nav-action" data-scroll-target="next-step" data-flz-cta-id="header-next-step">${escapeHtml(framework?.nextStep.ctaLabel ?? draft.sectionLabels.close)}</button>
   </header>
+  ${neutralPreview ? `<aside class="preview-brand-notice" data-brand-warning-copy role="note"><strong>Preview treatment:</strong> ${escapeHtml(neutralPreviewNotice)}</aside>` : ""}
   <nav class="journey-nav" aria-label="Experience journey" data-flz-journey-nav>
     <div class="journey-nav-inner">
       <span class="journey-nav-title" aria-hidden="true"><strong>${escapeHtml(template.heroLabel)}</strong><small>${escapeHtml(contextLabel)}</small></span>
@@ -708,6 +740,8 @@ export function renderExperienceHtml(input: {
 <script data-flz-runtime>
   (function(){
     var body=document.body;
+    var marketoMunchkinId=${JSON.stringify(config.marketoMunchkinId ?? "")};
+    if(marketoMunchkinId){try{var marketoScript=document.createElement('script');marketoScript.async=true;marketoScript.src='https://munchkin.marketo.net/munchkin.js';marketoScript.onload=function(){if(window.Munchkin)window.Munchkin.init(marketoMunchkinId)};document.head.appendChild(marketoScript)}catch(_marketoError){}}
     var reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var allowedEvents={anchor_click:true,cta_click:true,topic_select:true,signature_select:true,question_select:true,section_view:true,section_dwell:true,page_heartbeat:true,experience_view:true,fullscreen_change:true,editable_block_select:true};
     var durableEvents={anchor_click:true,cta_click:true,topic_select:true,signature_select:true,question_select:true,section_dwell:true,page_heartbeat:true,experience_view:true};

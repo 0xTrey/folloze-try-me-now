@@ -96,8 +96,8 @@ describe("target-aware ABM audience orchestration", () => {
             source === "seller-target-synthesis" && evidenceItemIds.length > 0
         )
       ).toBe(true);
-      expect(harvested?.audienceRecommendations?.[0]?.rationale).toContain(
-        "Cisco's public focus:"
+      expect(harvested?.audienceRecommendations?.[0]?.rationale).toMatch(
+        /^Recommended for Cisco because its .+ context makes .+ relevant to evaluating .+\.$/
       );
       expect(harvested?.audienceRecommendations?.[0]?.rationale).not.toContain(
         "public public"
@@ -230,8 +230,8 @@ describe("seller-evidence audience orchestration", () => {
               evidenceItemIds.every((evidenceId) => evidenceIds.has(evidenceId))
           )
         ).toBe(true);
-        expect(harvested?.audienceRecommendations?.[0]?.rationale).toContain(
-          "Jitterbit's public evidence:"
+        expect(harvested?.audienceRecommendations?.[0]?.rationale).toMatch(
+          /^Recommended because Jitterbit's public .+ context makes .+ relevant to evaluating .+\.$/
         );
         expect(harvested?.audienceRecommendations?.[0]?.targetName).toBeUndefined();
       } finally {

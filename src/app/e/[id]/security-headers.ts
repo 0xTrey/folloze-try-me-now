@@ -9,7 +9,12 @@ export function nonceExperienceRuntime(html: string, nonce: string): string {
 }
 
 export function experienceDocumentHeaders(nonce?: string) {
-  const scriptSource = nonce ? `'nonce-${nonce}'` : "'none'";
+  const marketoEnabled = Boolean(config.marketoMunchkinId);
+  const scriptSource = nonce
+    ? `'nonce-${nonce}'${marketoEnabled ? " https://munchkin.marketo.net" : ""}`
+    : "'none'";
+  const marketoImageSource = marketoEnabled ? " https://munchkin.marketo.net" : "";
+  const marketoConnectSource = marketoEnabled ? " https://munchkin.marketo.net" : "";
   return {
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "private, no-store, max-age=0",
@@ -18,6 +23,7 @@ export function experienceDocumentHeaders(nonce?: string) {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
     "Content-Security-Policy":
-      `default-src 'none'; img-src 'self' data: https://cdn.brandfetch.io; font-src 'self' https: data: http://localhost:* http://127.0.0.1:*; style-src 'unsafe-inline' https:; script-src ${scriptSource}; connect-src 'self'; frame-ancestors 'self' https://*.folloze.com http://localhost:*; object-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'`
+      `default-src 'none'; img-src 'self' data: https://cdn.brandfetch.io${marketoImageSource}; font-src 'self' https: data: http://localhost:* http://127.0.0.1:*; style-src 'unsafe-inline' https:; script-src ${scriptSource}; connect-src 'self'${marketoConnectSource}; frame-ancestors 'self' https://*.folloze.com http://localhost:*; object-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'`
   };
 }
+import { config } from "@/lib/config";

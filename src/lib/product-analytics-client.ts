@@ -77,12 +77,18 @@ export function productAnalyticsIdentity(): {
 
 export function productAnalyticsHeaders(): Record<string, string> {
   const identity = productAnalyticsIdentity();
-  return identity
-    ? {
+  if (!identity) return {};
+  const attribution = typeof window === "undefined" ? undefined : landingContext()?.utm;
+  return {
         "X-Try-Me-Visitor-Id": identity.visitorId,
-        "X-Try-Me-Browser-Session-Id": identity.browserSessionId
-      }
-    : {};
+        "X-Try-Me-Browser-Session-Id": identity.browserSessionId,
+        ...Object.fromEntries(Object.entries(attribution ?? {}).filter((entry): entry is [string, string] =>
+          typeof entry[1] === "string"
+        ).map(([key, value]) => [
+          `X-Try-Me-Utm-${key}`,
+          value
+        ]))
+      };
 }
 
 function safeText(value: string, max = 160): string {

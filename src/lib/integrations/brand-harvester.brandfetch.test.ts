@@ -26,6 +26,9 @@ const samsungSvg = new TextEncoder().encode(
 const fordSvg = new TextEncoder().encode(
   '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ford wordmark" viewBox="0 0 220 82"><title>Ford</title><path fill="#00095B" d="M1 1h218v80H1z"/></svg>'
 );
+const snowflakeSvg = new TextEncoder().encode(
+  '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Snowflake logo" viewBox="0 0 220 64"><title>Snowflake</title><path fill="#29B5E8" d="M1 1h218v62H1z"/></svg>'
+);
 const validWordmarkPng = new Uint8Array(readFileSync(join(
   process.cwd(),
   "public",
@@ -186,6 +189,43 @@ describe("Brandfetch Logo API and Brand API enrichment", () => {
         logo: { strategy: "official-remote-portable" },
         palette: { strategy: "brandfetch", confidence: "high" }
       }
+    });
+  });
+
+  it("uses Snowflake's Brandfetch wordmark and verified blue palette when first-party harvest is unavailable", async () => {
+    const snowflakeBrandAsset = "https://cdn.brandfetch.io/idSnowflake/theme/dark/logo.svg?c=asset_client_12345";
+    safeFetchMocks.fetchPinnedPublicBytes.mockResolvedValue({
+      status: 200,
+      headers: { "content-type": "image/svg+xml" },
+      bytes: snowflakeSvg,
+      finalUrl: new URL(snowflakeBrandAsset),
+      truncated: false
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      name: "Snowflake",
+      domain: "snowflake.com",
+      colors: [{ hex: "#11567F" }, { hex: "#29B5E8" }, { hex: "#FFFFFF" }],
+      logos: [{
+        type: "logo",
+        theme: "dark",
+        formats: [{ src: snowflakeBrandAsset, format: "svg" }]
+      }]
+    }), { status: 200, headers: { "content-type": "application/json" } })));
+
+    const profile = await harvestBrand("snowflake.com");
+
+    expect(profile).toMatchObject({
+      companyName: "Snowflake",
+      logoUrl: snowflakeBrandAsset,
+      logoUrlOnDark: snowflakeBrandAsset,
+      primaryColor: "#11567F",
+      accentColor: "#29B5E8",
+      surfaceColor: "#FFFFFF",
+      diagnostics: {
+        logo: { strategy: "brandfetch-brand-api", selectedSource: "brandfetch" },
+        palette: { strategy: "brandfetch", confidence: "high" }
+      },
+      readiness: { paletteReady: true }
     });
   });
 

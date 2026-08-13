@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { TryMeSession } from "@/lib/types";
 
 import {
+  analyticsIdentityWithAttributionFromRequest,
   clearMemoryProductAnalyticsForTest,
   getMemoryProductEventsForTest,
   getMemoryProductSessionForTest,
@@ -35,6 +36,18 @@ describe("first-party product analytics", () => {
     await expect(recordProductEvents(events)).resolves.toBe(1);
     await expect(recordProductEvents(events)).resolves.toBe(0);
     expect(getMemoryProductEventsForTest()).toHaveLength(1);
+  });
+
+  it("captures bounded UTM attribution with the server-side session identity", () => {
+    const request = new Request("https://try.example/api/sessions", { headers: {
+      "X-Try-Me-Visitor-Id": identity.visitorId,
+      "X-Try-Me-Browser-Session-Id": identity.browserSessionId,
+      "X-Try-Me-Utm-Source": "linkedin",
+      "X-Try-Me-Utm-Campaign": "fall-launch"
+    } });
+    expect(analyticsIdentityWithAttributionFromRequest(request)).toMatchObject({
+      ...identity, utm: { source: "linkedin", campaign: "fall-launch" }
+    });
   });
 
   it("accepts generated-preview interactions as bounded product events", () => {

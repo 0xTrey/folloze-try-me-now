@@ -149,6 +149,51 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("HarmonyTitle-HeroImage-Ring.jpg");
   });
 
+  it("uses a neutral, explained preview treatment when palette evidence is explicitly low", () => {
+    const lowConfidenceHtml = renderExperienceHtml({
+      draft,
+      brand: {
+        ...brand,
+        primaryColor: "#FF00AA",
+        accentColor: "#5B5BFF",
+        diagnostics: {
+          logo: {
+            strategy: "official-remote-portable",
+            imageCandidateCount: 1,
+            rejectedImageCount: 0,
+            inlineSvgCandidateCount: 0
+          },
+          palette: {
+            strategy: "fallback",
+            confidence: "low",
+            candidateCount: 0,
+            semanticCandidateCount: 0,
+            rejectedCandidateCount: 0,
+            gradientCandidateCount: 0
+          }
+        },
+        readiness: {
+          status: "incomplete",
+          identityReady: true,
+          logoReady: true,
+          paletteReady: false,
+          designReady: false,
+          sourceEvidenceReady: true,
+          reasons: ["Source-owned semantic colors are incomplete."]
+        }
+      },
+      useCase: "campaign",
+      answers: {}
+    });
+
+    expect(lowConfidenceHtml).toContain('data-brand-palette-treatment="neutral-fallback"');
+    expect(lowConfidenceHtml).toContain('data-brand-warning="palette-confidence-low"');
+    expect(lowConfidenceHtml).toContain("Brand colors are not yet verified; this preview uses a neutral treatment.");
+    expect(lowConfidenceHtml).toContain("--brand-ink:#202124");
+    expect(lowConfidenceHtml).toContain("--brand-accent:#5F6368");
+    expect(lowConfidenceHtml).not.toContain("--brand-accent:#5B5BFF");
+  });
+
   it("exposes a bounded visual grammar without letting it alter copy or CTA intent", () => {
     expect(html).toContain('data-visual-grammar="editorial-split"');
     expect(html).toContain('data-motion-profile="quiet"');
