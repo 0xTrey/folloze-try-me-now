@@ -48,12 +48,38 @@ Integration activation is explicit: `GENERATION_MODE`, `BRAND_MODE`, `FOLLOZE_MO
 | Checkpoint | Current evidence | State |
 | --- | --- | --- |
 | Canonical public app | <https://folloze-try-me-now.vercel.app> | Deployed visual MVP alias. |
+| Production release control | GitHub `0xTrey/folloze-try-me-now`; default branch `codex/visual-v1`; release branch `production` at commit `3508192dd9b939f361b554daf787d068249ee8f6` | Vercel project `prj_fHr6Gqwm7pWu0x50l8BbHFrxl2HN` tracks `production`. Deployment `dpl_A2yXTCjzShZN5w4jaxDCCEoBX9DD` is READY and PROMOTED at the same commit. |
 | Deployed session persistence | Private Vercel Blob | Active; uncached reads, wrapper TTL, and ETag optimistic concurrency are implemented. |
 | Generation | `GENERATION_MODE=fixture` | OpenAI generation is not active. |
 | Brand | `BRAND_MODE=fast` | Safe fast extractor active; remote Brand Harvester is not active. |
 | Folloze draft | Board `249022`, theme `4`, [designer](https://app.folloze.com/app/board/249022/designer) | Draft saved through the local MCP. Unpublished; no anonymous public URL is confirmed. |
 | Remote Folloze publication | `FOLLOZE_MODE=disabled` | Remote MCP publication is not active. The draft checkpoint above is separate from the deployed app. |
 | Transactional email | `EMAIL_MODE=console` | Resend delivery is not active. |
+
+The canonical alias, root route, and health route were not moved when the
+release branch was corrected. Vercel remains authoritative under D-037.
+Cloudflare migration PR #8 was closed and deferred without activation. Future
+releases must record the active immutable deployment and the intended rollback
+deployment before alias promotion. GitHub rulesets are unavailable for this
+private repository on the current plan, so the `production` branch is protected
+by explicit release process rather than a repository-enforced rule. Do not make
+the repository public or change billing to work around that limitation.
+
+### Current environment-isolation exception
+
+The Vercel Blob credential record `OLN6KznFtGWi5tv2` and attachment
+`spc_EbvOuhAVZDA9VogW` for store `store_T1kKcqGRP50E2S2h` currently span
+Production, Preview, and Development. A value-blind target restriction was
+tested and rolled back because the store attachment still reported all three
+environments. No object or credential value was read, copied, or deleted.
+
+This is a tracked data-boundary gap, not evidence of an incident. The durable
+remediation is to attach separate non-production Blob storage, move preview and
+development workloads to it, verify those bindings, and then rotate the shared
+credential. Changing environment-target metadata alone is not revocation, and
+historical preview deployments may retain deployment-time credentials. No
+storage mutation or credential rotation occurs solely because this document
+records the gap.
 
 ## Production target
 
@@ -225,7 +251,10 @@ It must reject arbitrary HTML, arbitrary fetch URLs, user-selected Folloze tool 
 
 ## Environment contract
 
-Production configuration is server-only unless prefixed `NEXT_PUBLIC_`. Secrets must be separate across preview and production deployments.
+Production configuration is server-only unless prefixed `NEXT_PUBLIC_`. Secrets
+and stateful storage must be separate across preview and production deployments.
+The current Blob attachment exception is documented above and must be resolved
+before environment isolation can be claimed.
 
 | Variable | Required for production | Contract |
 | --- | --- | --- |

@@ -92,6 +92,35 @@ the surface.
     accessible contrast, reduced motion, visible focus, and one contextual secondary
     action per state.
 
+## Approved generated-preview direction, 2026-08-12
+
+This addendum extends outcome 25 and records D-036. It is an approved design
+contract for the next generated-preview implementation pass, not a claim that the
+renderer changed as part of this documentation update.
+
+1. Separate message, composition, brand authority, and visual direction so each
+   concern is inspectable and the model never invents arbitrary CSS.
+2. Harvest semantic visual roles with provenance and confidence, including type,
+   surfaces, buttons, spacing, imagery, component treatment, and motion.
+3. Make seller or publisher brand authority explicit; keep target-account visual
+   influence local and restrained unless an explicit target-led mode is approved.
+4. Apply semantic palette roles and usage budgets so accent remains meaningful
+   instead of flooding headings, sections, dividers, controls, and imagery.
+5. Give each section one job and one dominant visual idea while preserving the
+   seven-section persuasion story for account and campaign experiences.
+6. Treat the first viewport as one poster-like composition with one authentic
+   visual anchor and no empty or decorative hero card.
+7. Match verified imagery to its declared role, and switch to an intentional
+   type-led or diagram-led grammar when the required asset is weak or absent.
+8. Control typography, density, grid, and section cadence so the full-page view
+   retains readable hierarchy and alternates visual compression with release.
+9. Use visual review as a soft diagnostic. Always render the best honest artifact;
+   retain it while a bounded repair or rerun may improve defects. Visual scores do
+   not gate preview, claim, save, or publication.
+
+The full contract is
+[`generated-experience-visual-direction.md`](./generated-experience-visual-direction.md).
+
 ## Non-regression boundaries
 
 These changes must not alter generation fingerprints, brand readiness, source

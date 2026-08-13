@@ -2,7 +2,7 @@
 
 Status: Draft launch contract
 
-Last updated: 2026-08-04
+Last updated: 2026-08-12
 
 Product requirements: [`product-requirements.md`](./product-requirements.md)
 
@@ -28,6 +28,10 @@ analytics story.
 - A failed dependency produces an honest fallback or recoverable error.
 - No secret, Folloze credential, OpenAI key, or email address is exposed to the
   browser or application logs.
+- Vercel is the authoritative host. Production releases originate from the
+  intentional `production` branch and preserve immutable deployment evidence.
+- Production and non-production stateful resources must be isolated before that
+  boundary is reported as launch-ready.
 
 ## Rollout phases
 
@@ -248,11 +252,20 @@ These items do not block local implementation, but they block public launch:
 | Privacy and consent | Approved privacy copy plus separate optional marketing consent | Legal/Marketing |
 | Claimed retention | Persist until administrative removal for V1 | Product/Legal |
 | Analytics story | Clearly labeled example analytics until a real embed is approved | Product |
-| Public host | Vercel production project; Cloudflare may support edge/browser services | Engineering |
+| Public host | Vercel project `prj_fHr6Gqwm7pWu0x50l8BbHFrxl2HN`; `production` is the release branch. Cloudflare migration work is deferred unless Trey explicitly changes the decision. | Engineering |
+| Blob environment isolation | Separate non-production Blob store and attachment, followed by verification and credential rotation that includes historical previews | Engineering/Security |
 | Support ownership | Named incident and prospect-response owners | GTM/Engineering |
 
 ## Rollback and incident behavior
 
+- Before every production release, record the current immutable deployment as
+  the rollback candidate, verify the proposed deployment at its immutable URL,
+  and promote the alias only after release checks pass.
+- Treat `production` as a controlled release branch. Private-repo rulesets are
+  unavailable on the current GitHub plan; do not make the repo public or change
+  billing as a workaround, and do not push casually to the branch.
+- Do not reopen or activate a Cloudflare migration during rollback. Roll back by
+  promoting the pinned Vercel deployment unless Trey explicitly changes hosts.
 - Disable new generation before taking down already claimed experiences.
 - Preserve successful claims when email or lead routing is degraded.
 - Fall back to the temporary app-hosted preview if Folloze publishing is

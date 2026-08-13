@@ -2,7 +2,7 @@
 
 Status: active product design baseline  
 Owner: Trey Harnden  
-Last reconciled: 2026-08-09
+Last reconciled: 2026-08-12
 
 ## Product design promise
 
@@ -107,6 +107,41 @@ given state.
 - Email appears only after a final preview has demonstrated value.
 - Save language describes the gain: keep the link, receive it by email, and retain
   engagement signals.
+
+## Generated-experience visual direction
+
+The generated page uses the detailed contract in
+[`docs/generated-experience-visual-direction.md`](./docs/generated-experience-visual-direction.md).
+The governing product decision is D-036.
+
+- Keep message, composition, brand authority, and visual direction as separate,
+  inspectable artifacts. The model may choose from bounded options; it does not
+  invent arbitrary CSS.
+- Harvest semantic roles, not a bag of colors. Every applied typography, color,
+  surface, button, grid, imagery, and motion decision needs provenance and
+  confidence.
+- The seller or publisher owns the page system. A target account contributes
+  verified context and a restrained lockup, not an accidental whole-page reskin.
+- Use brand ink and neutral surfaces for hierarchy. Accent color is scarce and
+  purposeful; it does not simultaneously control headings, large backgrounds,
+  buttons, dividers, labels, and illustration.
+- Each section has one job and one dominant visual idea. The seven-section account
+  and campaign story remains promise, urgency, proof, exploration, mechanism,
+  team relevance, and next step.
+- The first viewport is a poster: one lockup, one short promise, one supporting
+  sentence, one CTA group, and one authentic visual anchor. No empty media card.
+- Imagery must match its declared role and remain legible in a full-page capture.
+  Missing or weak media selects an intentional type-led or diagram-led treatment.
+- Alternate compression and release across the page. Repeated layouts, tiny type,
+  decorative cards, and long stretches without a visual anchor are defects.
+- Visual review is advisory and repair-oriented. It never withholds, blanks, or
+  removes an otherwise valid preview. A weak result remains visible while one
+  bounded repair or rerun may improve it.
+
+Visual scoring does not control preview, claim, save, or publication readiness.
+Source safety, valid artifacts, lifecycle state, and explicit claim rules remain
+separate product gates. If visual evidence is incomplete, render the best honest
+evidence-backed treatment available and keep refining it.
 
 ## Content and voice
 

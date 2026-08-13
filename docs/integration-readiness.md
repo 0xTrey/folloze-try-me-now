@@ -1,23 +1,24 @@
 # Folloze Try Me Now integration readiness
 
-This inventory separates the authoritative short-term Vercel bridge from the additional evidence required before broad external lead-generation traffic. “Configured” means a health or source check reports the integration ready; it does not mean an end-to-end write path has passed its launch gate.
+This inventory separates what the current visual MVP demonstrates from what must exist before public production traffic. “Configured” means credentials are present; it does not mean an end-to-end path has passed its launch gate.
 
 ## Verified deployment checkpoint
 
 | Checkpoint | Evidence | Current state |
 | --- | --- | --- |
-| Canonical Vercel alias | <https://folloze-try-me-now.vercel.app> | Authoritative short-term host; anonymous root and health routes returned `200` in the 2026-08-12 read-only audit. |
-| Deployment and source identity | Vercel deployment `dpl_5iXiuESmpgrEgdGt6jwr1XKqVDEg`; source `7732dfe9acc6b712015b593a8944fa9c1603203e` | All 441 deployed source files matched source bytes. Current default `ce6569db8d3668234a6695bca4b76d7edf0ca327` adds inactive Cloudflare migration scaffolding/tests without changing the Vercel runtime. |
+| Canonical Vercel alias | <https://folloze-try-me-now.vercel.app> | Deployed visual MVP. |
+| Production release control | GitHub default branch `codex/visual-v1`; release branch `production` at `3508192dd9b939f361b554daf787d068249ee8f6`; Vercel deployment `dpl_A2yXTCjzShZN5w4jaxDCCEoBX9DD` | READY and PROMOTED in project `prj_fHr6Gqwm7pWu0x50l8BbHFrxl2HN`, which tracks `production`. Canonical alias and health route remained unchanged. |
 | Session persistence | Private Vercel Blob | Deployed store; session reads bypass cache, TTL is stored in the JSON wrapper, and ETag `ifMatch` protects updates with up to five retries. |
-| Required runtime health | `/api/health` | Durable sessions, durable leads, OpenAI, and distributed rate limits all reported ready with no blockers. No provider data or write path was exercised. |
-| Generation | OpenAI | Reported connected by production health; an authorized generation smoke remains a separate checkpoint. |
-| Brand | Safe fast extractor with configured enrichment | Reported production-capable; remote Brand Harvester remains disabled. |
+| Generation | `GENERATION_MODE=fixture` | OpenAI generation is not active. |
+| Brand | `BRAND_MODE=fast` | Safe fast extractor active; remote Brand Harvester disabled. |
 | Folloze integration | `FOLLOZE_MODE=disabled` | Remote Folloze MCP disabled. |
-| Transactional email | `EMAIL_MODE=console` | Resend disconnected; the current send path is skipped and the UI promises app-hosted save/share rather than delivery. |
-| Cloudflare migration | Draft source-only work | Not activated in Vercel runtime, routes, configuration, bindings, DNS, or production resources. |
+| Transactional email | `EMAIL_MODE=console` | Resend disabled; current send path is skipped. |
 | Folloze draft-save proof | Board `249022`, theme `4`, [designer URL](https://app.folloze.com/app/board/249022/designer) | Draft saved separately through the local MCP. It is unpublished and no anonymous public URL is confirmed. |
 
-The public Vercel alias, the private Blob session store, an app-hosted claim, email delivery, and a Folloze draft or publication are separate checkpoints. The read-only audit proves the anonymous surface, source identity, and health snapshot; it does not prove a write-capable generation, claim readback, email delivery, or Folloze publication.
+The public Vercel alias, the immutable Vercel deployment, the private Blob
+session store, and the Folloze draft board are separate checkpoints. None of
+them proves the remote publish-and-email claim path. Vercel is the authoritative
+host; closed Cloudflare migration PR #8 was never activated and remains deferred.
 
 ## Current versus needed
 
@@ -26,6 +27,7 @@ The public Vercel alias, the private Blob session store, an app-hosted claim, em
 | Web runtime | Next.js application with a temporary experience route and polling UI, deployed at the canonical Vercel alias. | Hardened Vercel runtime with production service bindings, deployment protections, and strict readiness. | Run production-equivalent browser and failure QA; deployment alone is not a launch gate. |
 | Background execution | Brand and story work start through Next.js `after()`. Claim work runs synchronously in the request. | Vercel Workflow for brand, generation, cleanup, publish, and email with retry and dead-letter visibility. | Implement durable workflows, stage leases, idempotency, cancellation, and retry tests. |
 | Active session state | Private Vercel Blob is deployed. It stores `{ value, expiresAt }`, reads uncached, lazily deletes expired entries, and uses ETag `ifMatch` with five optimistic retries. Blob takes precedence if Redis is also configured. Redis-only is supported as a compatibility mode but is not production-safe because it lacks atomic revision/CAS writes; process memory is the local fallback. | Shared active-state infrastructure with atomic revisions, distributed stage fencing, TTLs, and locks; Blob remains artifact storage. | Preserve Blob CAS until an atomic Redis revision contract exists, exercise multi-instance conflicts, and implement scheduled rather than read-triggered cleanup. |
+| Environment storage boundary | Blob credential record `OLN6KznFtGWi5tv2` and attachment `spc_EbvOuhAVZDA9VogW` for store `store_T1kKcqGRP50E2S2h` span Production, Preview, and Development. A value-blind target restriction was rolled back after the attachment still reported all three environments. No object or credential value was read, copied, or deleted. | Separate production and non-production Blob stores and credentials, with preview/development moved and verified before rotating the shared credential. | Provision and attach a non-production store, verify environment routing and cleanup, rotate the shared credential, and account for historical preview deployments that may retain deployment-time credentials. Metadata targeting alone is not revocation. |
 | Claimed system of record | Neon Postgres adapter and additive `try_me_leads` migration are implemented with idempotent `session_id` upsert; private Blob remains the no-database fallback. The schema is migrated and `DATABASE_URL` is attached to Vercel Preview, but deployed claim readback is not yet verified. | Postgres lead, publication, and email ledger; Redis becomes an expiring projection. | Verify a Preview claim readback before launch, bind Production only with explicit approval, and define backup, retention, access, and lead-routing policy. |
 | Generated artifacts | Generated HTML is embedded inside the private Blob session JSON rather than stored as a separately versioned artifact. | Versioned private Blob artifacts addressed by session, revision, and digest. | Split session projection from artifacts, add authorization, scheduled cleanup, integrity checks, and retention jobs. |
 | Company brand | Explicit `BRAND_MODE=remote` plus a URL activates the authenticated service. The deployed `fast` mode uses a bounded server-side HTML extractor with static fallback on failure. | Controlled-egress Brand Harvester service, with the safe extractor only as an explicitly reported degraded mode. | Deploy the service, harden DNS/redirect handling, authenticate it, define normalized response schema, and load-test latency. |
@@ -74,7 +76,7 @@ These names already exist in `.env.example`. The “current behavior if missing�
 | `EMAIL_MODE` | Email integration selection | Defaults to `console`; an ambient Resend key alone does not activate delivery. | Set `resend` with a verified sender. |
 | `OPENAI_API_KEY` | Copy generation, PDF upload, MCP invocation | The selected integration is not connected; fixture generation remains deterministic. | Required server secret for OpenAI generation and remote MCP invocation. |
 | `OPENAI_MODEL` | OpenAI generation and MCP invocation | Uses configured default. | Pin and verify a supported model in every environment. |
-| `BLOB_READ_WRITE_TOKEN` | Deployed session store | Falls through to Redis-only compatibility mode, then local process memory. | Already connected for the MVP; retain for CAS-protected sessions and private versioned artifacts. |
+| `BLOB_READ_WRITE_TOKEN` | Deployed session store | Falls through to Redis-only compatibility mode, then local process memory. | Connected for the MVP, but the current attachment spans production and non-production. Preserve production availability while provisioning a separate non-production store; rotate only after bindings and historical-deployment exposure are addressed. |
 | `DATABASE_URL` | Durable claim/publication/email ledger | Falls back to a private Blob lead record, then local memory. | Use pooled runtime credentials; run migrations separately and define retention/access ownership. |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Rate limiting and Redis-only session compatibility | Blob remains the session store when connected; Redis still provides distributed rate limits. Redis-only sessions do not satisfy production readiness. | Both required for distributed rate limits; an eventual Redis session store must add atomic revision/CAS writes before it can replace Blob. |
 | `BRAND_HARVESTER_URL` | Company/target brand | Remote mode is not connected. Fast mode does not require it. | Required for `BRAND_MODE=remote`. |
@@ -117,7 +119,9 @@ Vercel Workflow may add platform-managed variables during integration. Use the g
 ### Vercel, Redis, Blob, and Postgres
 
 - Preserve the connected private Blob store for the visual MVP while separating session projections from versioned artifacts.
-- Use separate preview and production resources or namespaces.
+- Provision a separate non-production Blob store and attachment for Preview and Development; do not treat an environment-target metadata edit as credential revocation.
+- Verify non-production routing and cleanup, then rotate the previously shared credential. Historical preview deployments may retain deployment-time values and must be included in the revocation plan.
+- Use separate preview and production resources or namespaces for every stateful dependency.
 - Install/configure Vercel Workflow and verify a workflow survives redeploy and function termination.
 - Preserve the current Blob ETag compare-and-set behavior during migration; add atomic Redis revision writes, locks, and idempotency records.
 - Add scheduled private Blob lifecycle cleanup; the current wrapper TTL is enforced lazily on read.
@@ -161,6 +165,8 @@ Vercel Workflow may add platform-managed variables during integration. Use the g
 ## Launch decision checklist
 
 - [ ] Production uses explicit `GENERATION_MODE=openai`, an approved `BRAND_MODE`, `FOLLOZE_MODE=publish`, and `EMAIL_MODE=resend`; contradictory or missing credentials fail readiness.
+- [ ] Releases originate from the intentional `production` branch, record the immutable production and rollback deployment IDs, and verify the deployment before alias promotion.
+- [ ] Production Blob storage and credentials are isolated from Preview and Development; historical previews are included in any credential-rotation plan.
 - [ ] Brand and story work survive function termination and deployment.
 - [ ] A stale generation cannot overwrite the active revision.
 - [ ] PDF and OpenAI files are removed on expiry according to policy.

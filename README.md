@@ -19,21 +19,22 @@ Every path exposes the same four intelligence layers while the visitor keeps mov
 - Message strategy
 - Experience composition
 
-Work begins progressively. Brand extraction starts as soon as the company domain is accepted; the app does not wait for the full brief. A temporary URL appears immediately, and an unclaimed ready preview expires after 30 minutes. Unclaimed previews stay cache-only and never trigger Folloze publication. A business email claims the experience, records the lead, and turns the temporary preview into a persistent app-hosted URL. It does not imply Folloze publication or email delivery while those integrations are disabled.
+Work begins progressively. Brand extraction starts as soon as the company domain is accepted; the app does not wait for the full brief. A temporary URL appears immediately, and an unclaimed ready preview expires after 30 minutes. Unclaimed previews stay cache-only and never trigger Folloze publication. A business email claims the experience, records the lead, and becomes the only publication boundary.
 
 ## Current checkpoint
 
 | Surface | State |
 | --- | --- |
 | Local source and visual QA | Complete; desktop, mobile, 320px, reduced motion, error, claim, and signal states exercised. |
-| Automated QA | 680 Vitest checks across 76 files plus generated-experience Playwright checks cover copy, brands, responsive layouts, keyboard tabs, failure fallbacks, and lead capture. |
-| Public Vercel app | Vercel is the authoritative short-term host at <https://folloze-try-me-now.vercel.app>. The 2026-08-12 read-only audit tied deployment `dpl_5iXiuESmpgrEgdGt6jwr1XKqVDEg` byte-for-byte to source `7732dfe9acc6b712015b593a8944fa9c1603203e`; the current default branch adds only inactive Cloudflare migration scaffolding and tests. |
-| Session durability | Connected private Vercel Blob store with uncached reads, wrapper TTL, and optimistic ETag updates. Blob remains the session store when Redis is also configured; Redis can still provide distributed rate limits. |
+| Automated QA | 187 unit tests plus generated-experience Playwright checks cover copy, brands, responsive layouts, keyboard tabs, failure fallbacks, and lead capture. |
+| Public Vercel app | Deployed at <https://folloze-try-me-now.vercel.app>. |
+| Release control | Vercel is authoritative. GitHub's default branch remains `codex/visual-v1`; production tracks the intentional `production` release branch. Pinned commit and deployment evidence are recorded in [Architecture](docs/architecture.md). |
+| Session durability | Connected private Vercel Blob store with uncached reads, wrapper TTL, and optimistic ETag updates. Blob remains the session store when Redis is also configured. Its current attachment spans Production, Preview, and Development; separate non-production storage and later credential rotation are tracked in [Integration readiness](docs/integration-readiness.md). |
 | Brand | Brand-aware fast extractor now rejects unrelated logos and badges, ranks semantic palette roles, discovers live font faces, and selects multiple contextual visual assets; the full remote Brand Harvester is still a later option. |
-| Generation | The 2026-08-12 production health snapshot reported OpenAI connected and all required readiness checks true. The read-only audit did not create a session or run a write-capable generation. |
+| Generation | Fresh schema-constrained OpenAI generation is implemented and live-tested across ABM, demand, product, event-registration, and Content Magic. The project key remains server-only. Production promotion follows the controlled Vercel release branch and immutable-deployment verification contract. |
 | Folloze | Local integration test saved unpublished Board `249022`; remote publish is disabled. |
-| Email | Claim persistence works, but production reports console mode with Resend disconnected. The product promises an app-hosted save/share URL, not email delivery. |
-| Lead ledger | Production health reports the Neon Postgres durable lead ledger and distributed rate limits ready. The audit accessed no lead data; an explicitly authorized generation-and-claim readback remains a separate launch checkpoint. |
+| Email | Claim persistence works; Resend delivery is disabled, so fixture claims do not send mail. |
+| Lead ledger | Neon Postgres adapter, additive migration, idempotent `session_id` upsert, and private Blob fallback are implemented. The schema is migrated and `DATABASE_URL` is attached to Vercel Preview; deployed claim readback remains a separate verification checkpoint. |
 
 The Folloze designer URL is <https://app.folloze.com/app/board/249022/designer>. It proves a draft save only. The board is not published and has no verified anonymous URL.
 
@@ -104,4 +105,4 @@ npm run qa
 - [June 1 source recovery](docs/research/2026-06-01-source-recovery.md)
 - [Folloze brand harvest](research/brand-harvest/folloze-home/brand.json)
 
-The visual MVP deliberately separates demo proof from launch readiness. Vercel remains the authoritative short-term host; Cloudflare migration work remains draft and inactive. A controlled marketing walkthrough is supported by the current public surface and health snapshot. Broad external lead generation still requires an explicitly authorized generation-and-claim readback, operational lead-routing/retention ownership, and either verified Resend delivery or continued UI language that promises app-hosted save/share only. Native Folloze publication remains a separate future gate requiring a narrow gateway and anonymous readback.
+The visual MVP deliberately separates demo proof from launch readiness. Public production still needs explicit promotion of the server-side OpenAI configuration, the narrow Folloze MCP publish gateway with anonymous readback, Resend sender, distributed abuse controls, durable workflow execution, production database binding, and operational lead-routing/retention ownership.
