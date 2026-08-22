@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Building2,
-  CalendarDays,
   Check,
   CircleCheck,
   ChevronDown,
@@ -57,6 +56,7 @@ import {
 } from "@/components/try-me-now-enhancements";
 import {
   StreamingBriefComposer,
+  type StreamingAudienceFinding,
   type StreamingBriefAnswer,
   type StreamingBriefQuestion,
   type StreamingBriefReceipt
@@ -64,6 +64,7 @@ import {
 
 import type {
   AudienceRecommendation,
+  BriefFieldProvenance,
   ExperienceBlockControl as SessionExperienceBlockControl,
   PublicTryMeSession,
   SessionEvidenceItem,
@@ -241,13 +242,13 @@ const useCaseContent: Record<
   },
   content: {
     number: "03",
-    kicker: "Event promotion",
-    title: "Promote a field event or webinar",
-    description: "Add the event and audience. Folloze builds a branded registration journey with a clear reason to attend.",
-    cta: "Build an event experience",
-    domainTitle: "Who is hosting this event?",
-    domainBody: "Enter the company domain. We will match the host brand while you tell us what you are promoting.",
-    icon: CalendarDays,
+    kicker: "Content",
+    title: "Make content interactive",
+    description: "Add a public URL or PDF. Folloze turns the source into a guided, buyer-ready experience.",
+    cta: "Make content interactive",
+    domainTitle: "Who owns this content?",
+    domainBody: "Enter the company domain. We will match the source brand while you tell us which content should do more work.",
+    icon: FileText,
     className: "portalTerminal"
   }
 };
@@ -313,17 +314,17 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
   content: {
     id: "content",
     index: "03",
-    eyebrow: "Event promotion",
-    title: "Promote a field event or webinar",
-    description: "Add the event and audience. Folloze builds a branded registration journey with a clear reason to attend.",
-    actionLabel: "Build an event experience",
-    exampleLabel: "See an event experience",
-    exampleUrl: "https://engage.folloze.com/688711",
-    demoSteps: ["Event + audience", "Reason to attend", "Registration experience"],
-    previewImage: "/entry/event-promotion-preview.svg",
-    previewAlt: "Event promotion page with date, speaker, agenda, and registration path",
-    accent: "#E85D45",
-    tone: "paper"
+    eyebrow: "Content",
+    title: "Make content interactive",
+    description: "Turn a public URL or PDF into a guided, source-grounded buyer experience.",
+    actionLabel: "Make content interactive",
+    exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
+    exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
+    demoSteps: ["Public URL or PDF", "Source understanding", "Interactive experience"],
+    previewImage: "/entry/content-preview.webp",
+    previewAlt: "Cisco Hybrid Mesh Firewall report transformed into an interactive content experience",
+    accent: "#091019",
+    tone: "ink"
   }
 };
 
@@ -517,9 +518,12 @@ function conciseIntentLabel(value: string, fallback: string): string {
   return firstThought.slice(0, 160);
 }
 
-function streamingCampaignQuestions(
+export const STREAMING_BRIEF_SKIP_THRESHOLD = 3;
+
+export function streamingCampaignQuestions(
   mode: CampaignEntryMode,
-  audienceSuggestions: readonly string[]
+  audienceSuggestions: readonly string[],
+  objectiveChoices: readonly string[] = []
 ): StreamingBriefQuestion[] {
   return [
     {
@@ -541,6 +545,15 @@ function streamingCampaignQuestions(
       hint: "Choose a company-fit recommendation or describe the buyer group in your own words.",
       choices: audienceSuggestions.slice(0, 3),
       placeholder: mode === "event" ? "Revenue and demand generation leaders" : "Enterprise marketing leaders",
+      required: true
+    },
+    {
+      id: "goal",
+      label: "Goal",
+      prompt: "What should this experience achieve?",
+      hint: "Pick a goal or type the outcome you want buyers to take.",
+      choices: objectiveChoices.slice(0, 4),
+      placeholder: mode === "event" ? "Drive registrations" : "Launch or announce",
       required: true
     }
   ];
@@ -568,10 +581,30 @@ export function streamingCampaignPatchForIntent(
     campaignType: inferredType,
     promotedOffer,
     promotedOfferConfirmed: true,
-    objective: eventIntent ? "Drive registrations" : inferredType === "demand" ? "Generate demand" : "Launch or announce",
     messageBelief: value.trim().slice(0, 240),
     ...(eventIntent ? { eventSource: (publicUrl || promotedOffer).slice(0, 1000), ctaType: "register" } : {}),
     ...(publicUrl ? { offerSourceUrl: publicUrl, offerSourceConfirmed: true } : {})
+  };
+}
+
+export function streamingCampaignSkipPatch(
+  session: Pick<PublicTryMeSession, "useCase" | "answers" | "audienceSuggestions" | "audienceRecommendations" | "campaignOfferSource">,
+  mode: CampaignEntryMode
+): SessionAnswers {
+  const inferredAudience = session.answers.customAudience
+    || (session.answers.audience && session.answers.audience !== "Other" ? session.answers.audience : undefined)
+    || session.audienceRecommendations?.[0]?.label
+    || session.audienceSuggestions[0];
+  const inferredOffer = campaignOfferFor(session);
+  return {
+    ...(session.answers.campaignType ? {} : { campaignType: mode === "event" ? "event" : "product" }),
+    ...(session.answers.promotedOffer || !inferredOffer
+      ? {}
+      : { promotedOffer: inferredOffer, promotedOfferConfirmed: true }),
+    ...(session.answers.audience || !inferredAudience
+      ? {}
+      : { audience: inferredAudience }),
+    ...(session.answers.objective ? {} : { objective: recommendedObjectiveFor(session) })
   };
 }
 
@@ -1327,24 +1360,50 @@ type OverviewRow = {
   label: string;
   detail: string;
   value?: string;
+  provenance?: BriefFieldProvenance;
   required: boolean;
   icon: typeof Building2;
 };
 
-function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
+export function briefProvenanceLabel(provenance: BriefFieldProvenance): string {
+  switch (provenance) {
+    case "user":
+      return "You said";
+    case "inferred":
+      return "We inferred";
+    case "research":
+      return "Public research";
+    default: {
+      const exhaustive: never = provenance;
+      return exhaustive;
+    }
+  }
+}
+
+function inferredAudienceFor(session: PublicTryMeSession): string | undefined {
+  if (session.answers.audience) return audienceFor(session);
+  return session.audienceRecommendations?.[0]?.label || session.audienceSuggestions[0];
+}
+
+export function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
   const briefFields = session.campaignBrief?.fields;
   const sourceValue = session.answers.sourceTitle
     || session.answers.sourceName?.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ")
     || (session.answers.sourceUrl ? "Public content URL" : undefined);
+  const inferredAudience = inferredAudienceFor(session);
   const offerValue = briefFields?.offer?.value
-    || session.answers.promotedOffer
+    || campaignOfferFor(session)
     || (session.useCase === "content" ? sourceValue : undefined);
+  const objectiveValue = briefFields?.objective?.value
+    || session.answers.objective
+    || recommendedObjectiveFor(session);
   const rows: Record<OverviewFieldKey, OverviewRow> = {
     seller: {
       key: "seller",
       label: briefFields?.seller?.label || "Building as",
       detail: "Brand and identity",
       value: briefFields?.seller?.value || brandNameFor(session),
+      provenance: briefFields?.seller?.provenance || (session.brand ? "research" : "inferred"),
       required: true,
       icon: Building2
     },
@@ -1353,6 +1412,9 @@ function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
       label: briefFields?.target?.label || "Building for",
       detail: "Target account",
       value: briefFields?.target?.value || (session.answers.targetDomain ? targetNameFor(session) : undefined),
+      provenance: briefFields?.target?.provenance
+        || (session.answers.targetDomain ? "user" : undefined)
+        || (session.targetBrand ? "research" : undefined),
       required: session.useCase === "abm",
       icon: Target
     },
@@ -1361,6 +1423,10 @@ function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
       label: session.useCase === "content" ? "Source content" : briefFields?.offer?.label || "Promoting",
       detail: session.useCase === "content" ? "Factual source" : "Campaign offer",
       value: offerValue,
+      provenance: briefFields?.offer?.provenance
+        || (session.answers.promotedOffer ? "user" : undefined)
+        || (session.campaignOfferSource?.title ? "research" : undefined)
+        || (offerValue ? "inferred" : undefined),
       required: session.useCase !== "abm",
       icon: FileText
     },
@@ -1368,7 +1434,10 @@ function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
       key: "audience",
       label: briefFields?.audience?.label || "For",
       detail: "Buyer persona",
-      value: briefFields?.audience?.value || (session.answers.audience ? audienceFor(session) : undefined),
+      value: briefFields?.audience?.value || inferredAudience,
+      provenance: briefFields?.audience?.provenance
+        || (session.answers.audience ? "user" : undefined)
+        || (inferredAudience ? "inferred" : undefined),
       required: true,
       icon: Users
     },
@@ -1376,7 +1445,10 @@ function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
       key: "objective",
       label: briefFields?.objective?.label || "To achieve",
       detail: "Desired outcome",
-      value: briefFields?.objective?.value || session.answers.objective,
+      value: objectiveValue,
+      provenance: briefFields?.objective?.provenance
+        || (session.answers.objective ? "user" : undefined)
+        || (objectiveValue ? "inferred" : undefined),
       required: true,
       icon: Gauge
     }
@@ -1390,7 +1462,10 @@ function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
       key: "target",
       label: "Who it is for",
       detail: "Intended buyer",
-      value: briefFields?.target?.value || (session.answers.audience ? audienceFor(session) : undefined),
+      value: briefFields?.target?.value || inferredAudience,
+      provenance: briefFields?.target?.provenance
+        || (session.answers.audience ? "user" : undefined)
+        || (inferredAudience ? "inferred" : undefined),
       required: true,
       icon: Target
     };
@@ -1408,6 +1483,53 @@ function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
   return (["seller", "target", "offer", "audience", "objective"] as OverviewFieldKey[]).map((key) => rows[key]);
 }
 
+export function liveBriefFilledCount(session: PublicTryMeSession): number {
+  return overviewRowsFor(session).filter((row) => Boolean(row.value)).length;
+}
+
+export function canSkipStreamingCampaign(session: PublicTryMeSession): boolean {
+  if (session.useCase !== "campaign") return false;
+  return liveBriefFilledCount(session) >= STREAMING_BRIEF_SKIP_THRESHOLD
+    && Boolean(campaignOfferFor(session));
+}
+
+export function audienceHubFindingsFor(session: PublicTryMeSession): StreamingAudienceFinding[] {
+  if (session.audienceLens?.findings.length) {
+    return session.audienceLens.findings.slice(0, 3).map((finding) => ({
+      id: finding.id,
+      label: finding.label,
+      text: finding.text
+    }));
+  }
+  return (session.evidenceItems ?? [])
+    .filter((item) => item.disposition !== "excluded")
+    .slice(0, 3)
+    .map((item) => ({
+      id: item.id,
+      label: item.label,
+      text: item.text
+    }));
+}
+
+function overviewQuestionFor(field: OverviewFieldKey, useCase: UseCase): string | undefined {
+  switch (field) {
+    case "offer":
+      return useCase === "abm" ? undefined : "intent";
+    case "target":
+      return useCase === "abm" ? undefined : "audience";
+    case "audience":
+      return "audience";
+    case "objective":
+      return "goal";
+    case "seller":
+      return undefined;
+    default: {
+      const exhaustive: never = field;
+      return exhaustive;
+    }
+  }
+}
+
 export function CampaignOverviewRail({
   session,
   onEdit
@@ -1416,11 +1538,14 @@ export function CampaignOverviewRail({
   onEdit?: (field: OverviewFieldKey) => void;
 }) {
   const rows = overviewRowsFor(session);
+  const filledCount = rows.filter((row) => Boolean(row.value)).length;
+  const findings = audienceHubFindingsFor(session);
   const moments = buildMoments(session);
   const activeMoment = moments.find((moment) => moment.status === "running")
     || moments.find((moment) => moment.status === "pending")
     || moments.at(-1);
   const waitingForInput = activeMoment?.status === "pending";
+  const hubName = session.useCase === "abm" ? targetNameFor(session) : brandNameFor(session);
 
   return (
     <section className="campaignOverview liveBriefRail" aria-labelledby="campaign-overview-title" data-live-brief="true">
@@ -1429,6 +1554,9 @@ export function CampaignOverviewRail({
           <span className="sectionKicker">Live brief</span>
           <h2 id="campaign-overview-title">What Folloze is building</h2>
         </div>
+        <span className="overviewCount" data-overview-count={`${filledCount}/${rows.length}`}>
+          {filledCount} of {rows.length}
+        </span>
       </div>
       <p className="campaignOverviewIntro">The experience updates from these simple signals. Change a choice whenever you need to.</p>
       <div className="overviewFieldList" aria-label="Live experience brief">
@@ -1449,12 +1577,29 @@ export function CampaignOverviewRail({
               <div>
                 <span>{row.label}</span>
                 <strong>{row.value || "Waiting for this signal"}</strong>
+                {complete && row.provenance && (
+                  <em className="overviewFieldProvenance">{briefProvenanceLabel(row.provenance)}</em>
+                )}
               </div>
               <span className="overviewFieldState" aria-label={complete ? "Done" : "Next signal"} title={complete ? "Done" : "Next signal"}>{complete ? <Check size={14} /> : <ArrowRight size={14} />}</span>
             </button>
           );
         })}
       </div>
+      {findings.length > 0 && (
+        <section className="audienceHubLite" aria-labelledby="audience-hub-lite-title">
+          <span className="sectionKicker">Audience Hub</span>
+          <h3 id="audience-hub-lite-title">What we know about {hubName}</h3>
+          <ul>
+            {findings.map((finding) => (
+              <li key={finding.id}>
+                <small>{finding.label}</small>
+                <p>{finding.text}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {activeMoment && (
         <div className={`overviewNow is-${activeMoment.status} ${waitingForInput ? "is-waiting" : ""}`} role="status" aria-live="polite">
           <span>{!waitingForInput && <span className="liveDot" />}{waitingForInput ? "Ready for your next choice" : "Folloze is working"}</span>
@@ -1486,13 +1631,9 @@ export function UseCasePortals({
             description: useCaseContent[key].description
           }}
           disabled={disabled}
-          onSelect={(selected) => onSelect(
-            selected === "content" ? "campaign" : selected,
-            selected === "content" ? "event" : selected === "campaign" ? "campaign" : undefined
-          )}
+          onSelect={(selected) => onSelect(selected, selected === "campaign" ? "campaign" : undefined)}
           onExampleOpen={(selected) => track("example_opened", {
-            useCase: selected === "content" ? "campaign" : selected,
-            ...(selected === "content" ? { entryMode: "event" } : {})
+            useCase: selected,
           })}
         />
       ))}
@@ -2856,6 +2997,8 @@ export function TryMeNowApp() {
   const [useCase, setUseCase] = useState<UseCase>();
   const [campaignEntryMode, setCampaignEntryMode] = useState<CampaignEntryMode>("campaign");
   const [streamingAnswers, setStreamingAnswers] = useState<StreamingBriefAnswer[]>([]);
+  const [streamingFocusId, setStreamingFocusId] = useState<string>();
+  const [streamingPreviewRequested, setStreamingPreviewRequested] = useState(false);
   const [domain, setDomain] = useState("");
   const [session, setSession] = useState<PublicTryMeSession>();
   const [answers, setAnswers] = useState<SessionAnswers>({});
@@ -2941,6 +3084,8 @@ export function TryMeNowApp() {
     setUseCase(selected);
     setCampaignEntryMode(selectedCampaignMode ?? "campaign");
     setStreamingAnswers([]);
+    setStreamingFocusId(undefined);
+    setStreamingPreviewRequested(false);
     setDomain("");
     setSession(undefined);
     setAnswers({});
@@ -2978,6 +3123,8 @@ export function TryMeNowApp() {
     setUseCase(undefined);
     setCampaignEntryMode("campaign");
     setStreamingAnswers([]);
+    setStreamingFocusId(undefined);
+    setStreamingPreviewRequested(false);
     setDomain("");
     setSession(undefined);
     setAnswers({});
@@ -3468,8 +3615,13 @@ export function TryMeNowApp() {
   const streamingMode: CampaignEntryMode = campaignEntryMode === "event" || answers.campaignType === "event"
     ? "event"
     : "campaign";
+  const recommendedObjective = session ? recommendedObjectiveFor(session) : "Generate demand";
   const streamingQuestions = session?.useCase === "campaign"
-    ? streamingCampaignQuestions(streamingMode, session.audienceSuggestions)
+    ? streamingCampaignQuestions(
+      streamingMode,
+      session.audienceSuggestions,
+      [recommendedObjective, ...objectives.campaign.filter((objective) => objective !== recommendedObjective)]
+    )
     : [];
   const canonicalStreamingAnswers: StreamingBriefAnswer[] = [...streamingAnswers];
   if (!canonicalStreamingAnswers.some((answer) => answer.questionId === "intent") && answers.promotedOffer) {
@@ -3486,11 +3638,19 @@ export function TryMeNowApp() {
       value: answers.audience === "Other" ? answers.customAudience || "Other" : answers.audience
     });
   }
-  const streamingCurrentQuestionId = !canonicalStreamingAnswers.some((answer) => answer.questionId === "intent")
-    ? "intent"
-    : !canonicalStreamingAnswers.some((answer) => answer.questionId === "audience")
-      ? "audience"
-      : undefined;
+  if (!canonicalStreamingAnswers.some((answer) => answer.questionId === "goal") && answers.objective) {
+    canonicalStreamingAnswers.push({
+      questionId: "goal",
+      label: "Goal",
+      value: answers.objective
+    });
+  }
+  const nextStreamingQuestionId = streamingQuestions.find((question) => (
+    !canonicalStreamingAnswers.some((answer) => answer.questionId === question.id)
+  ))?.id;
+  const streamingCurrentQuestionId = streamingFocusId && streamingQuestions.some((question) => question.id === streamingFocusId)
+    ? streamingFocusId
+    : nextStreamingQuestionId;
   const streamingReceipts: StreamingBriefReceipt[] = session ? [
     {
       id: "brand",
@@ -3515,6 +3675,7 @@ export function TryMeNowApp() {
       state: "complete" as const
     }] : [])
   ].slice(-3) : [];
+  const canSkipStreaming = Boolean(session && canSkipStreamingCampaign(session));
 
   const handleStreamingAnswer = (answer: StreamingBriefAnswer) => {
     if (!session || session.useCase !== "campaign") return;
@@ -3522,6 +3683,7 @@ export function TryMeNowApp() {
       ...current.filter((candidate) => candidate.questionId !== answer.questionId),
       answer
     ]);
+    setStreamingFocusId(undefined);
     track("field_interacted", {
       useCase: session.useCase,
       entryMode: streamingMode,
@@ -3534,9 +3696,24 @@ export function TryMeNowApp() {
         : { audience: "Other", customAudience: answer.value });
       return;
     }
+    if (answer.questionId === "goal") {
+      void patchAnswers({ objective: answer.value });
+      return;
+    }
     const patch = streamingCampaignPatchForIntent(answer.value, streamingMode);
     if (patch.campaignType === "event") setCampaignEntryMode("event");
     void patchAnswers(patch);
+  };
+
+  const skipStreamingBrief = () => {
+    if (!session || session.useCase !== "campaign") return;
+    setStreamingPreviewRequested(true);
+    track("field_interacted", {
+      useCase: session.useCase,
+      entryMode: streamingMode,
+      field: "streaming_skip_preview"
+    });
+    void patchAnswers(streamingCampaignSkipPatch(session, streamingMode));
   };
 
   const claim = async (email: string) => {
@@ -3569,14 +3746,14 @@ export function TryMeNowApp() {
     }
   };
 
-  const campaignStreamingBriefComplete = Boolean(
-    session?.useCase === "campaign"
-      && campaignIntakeComplete(session)
-      && answers.audience
-      && answers.objective
-  );
+  const allStreamingQuestionsAnswered = streamingQuestions.length > 0
+    && streamingQuestions.every((question) => (
+      canonicalStreamingAnswers.some((answer) => answer.questionId === question.id)
+    ));
   const keepStreamingBriefOpen = Boolean(
-    session?.useCase === "campaign" && !campaignStreamingBriefComplete
+    session?.useCase === "campaign"
+    && !streamingPreviewRequested
+    && !allStreamingQuestionsAnswered
   );
   const isReveal = Boolean(session?.experience && !keepStreamingBriefOpen);
   const isProvisionalPreview = Boolean(
@@ -3709,8 +3886,12 @@ export function TryMeNowApp() {
                     Audience: answers.audience === "Other" ? answers.customAudience : answers.audience,
                     Goal: answers.objective
                   }}
+                  canSkip={canSkipStreaming}
+                  skipLabel="Skip to preview"
                   disabled={isSaving}
                   onAnswer={handleStreamingAnswer}
+                  onStepChange={setStreamingFocusId}
+                  onSkip={skipStreamingBrief}
                 />
               ) : (
                 <>
@@ -3735,7 +3916,7 @@ export function TryMeNowApp() {
                   />}
                 </>
               )}
-              {session.useCase !== "campaign" && <div className="brandLockStage">
+              <div className="brandLockStage">
                 <InstantBrandLockStrip
                   status={!session.brand ? "scanning" : session.stages.brand.status === "fallback" || session.brand.readiness?.status === "incomplete" ? "fallback" : "locked"}
                   brand={session.brand ? {
@@ -3752,13 +3933,30 @@ export function TryMeNowApp() {
                   } : { companyName: displayNameFromDomain(session.companyDomain), domain: session.companyDomain }}
                   onInspect={() => setShowProcess(true)}
                 />
-              </div>}
+              </div>
               {error && <div className="inlineError" role="alert">{error}</div>}
               {connectionError && <div className="connectionNotice" role="status"><LoaderCircle className="spin" size={15} />{connectionError}</div>}
             </div>
           </div>
-          <aside className="processRail" hidden={session.useCase === "campaign"}>
-            <CampaignOverviewRail session={session} />
+          {session.useCase === "campaign" && (
+            <div className="buildPanel streamingPreviewPanel">
+              <div className="buildTop">
+                <span className="sectionKicker">{session.experience ? "Live preview" : "Brand lock"}</span>
+                <strong>{session.experience ? "The page stays visible while the brief improves." : buildPanelCopy.headline}</strong>
+              </div>
+              <AssemblyPreview session={session} iframeRef={previewFrameRef} />
+            </div>
+          )}
+          <aside className="processRail">
+            <CampaignOverviewRail
+              session={session}
+              onEdit={session.useCase === "campaign"
+                ? (field) => {
+                  const questionId = overviewQuestionFor(field, session.useCase);
+                  if (questionId) setStreamingFocusId(questionId);
+                }
+                : undefined}
+            />
           </aside>
         </section>
       )}

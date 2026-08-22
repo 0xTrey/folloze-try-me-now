@@ -846,6 +846,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .liveBriefRail { position: sticky; top: 18px; }
 .campaignOverviewHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .campaignOverviewHeader h2 { margin: 6px 0 0; font: 600 23px/1.05 var(--font-display),sans-serif; letter-spacing: -.03em; }
+.overviewCount {
+  min-width: 64px;
+  padding: 7px 10px;
+  color: var(--fz-action);
+  border: 1px solid var(--fz-border);
+  border-radius: 999px;
+  background: var(--fz-accent-tint);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+}
 .overviewCount { min-width: 39px; height: 39px; display: grid; place-items: center; color: var(--fz-accent); border: 1px solid #d8ecfa; border-radius: 50%; background: var(--fz-accent-tint); font-size:11px; font-weight: 800; }
 .campaignOverviewIntro { margin: 12px 0 18px; color: var(--fz-muted-strong); font-size:11px; line-height: 1.55; }
 .overviewFieldList { display: grid; gap: 8px; }
@@ -863,9 +877,40 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .briefNextSignal { align-items: flex-start; flex-direction: column; gap: 4px; }
 }
 .overviewField.is-current .overviewFieldIcon { color: var(--fz-accent); background: var(--fz-accent-tint); }
-.overviewField > div > span,.overviewField > div > strong { display: block; }
+.overviewField > div > span,.overviewField > div > strong,.overviewField > div > em { display: block; }
 .overviewField > div > span { color: var(--fz-muted-strong); font-size:11px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
 .overviewField > div > strong { margin-top: 4px; overflow: hidden; color: var(--fz-ink); font-size:11px; line-height: 1.3; text-overflow: ellipsis; }
+.overviewFieldProvenance {
+  margin-top: 3px;
+  color: var(--fz-muted-strong);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.audienceHubLite {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--fz-border);
+  border-radius: 16px;
+  background: var(--fz-canvas);
+}
+.audienceHubLite h3 {
+  margin: 6px 0 10px;
+  font: 620 16px/1.2 var(--font-display),sans-serif;
+  letter-spacing: -.02em;
+}
+.audienceHubLite ul { margin: 0; padding: 0; display: grid; gap: 8px; list-style: none; }
+.audienceHubLite li { padding: 10px 12px; border-radius: 12px; background: #fff; }
+.audienceHubLite small {
+  color: var(--fz-muted-strong);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.audienceHubLite p { margin: 4px 0 0; color: var(--fz-body); font-size: 12px; line-height: 1.45; }
 .overviewField.is-pending > div > strong { color: #8a98ad; font-weight: 560; }
 .overviewField.is-optional { border-style: dashed; background: rgba(255,255,255,.58); }
 .overviewField.is-optional .overviewFieldIcon { color: #7d8ba0; background: #f0f2f6; }
@@ -1003,22 +1048,61 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .isStreamingDomain .domainPromise { max-width:570px;margin:22px auto 0;text-align:left; }
 .isStreamingDomain .domainInput { width:min(100%,620px);margin:0 auto;padding:24px;border-radius:20px;box-shadow:0 22px 64px rgba(7,20,40,.09); }
 
-.streamingWorkbench { display:block;min-height:calc(100vh - 72px);background:radial-gradient(circle at 50% 0,rgba(0,119,255,.07),transparent 34%),#f8fbfd; }
-.streamingWorkbench .mobileStatus,.streamingWorkbench .processRail { display:none!important; }
-.streamingWorkbench .briefPanel { width:100%;min-height:calc(100vh - 72px);padding:clamp(28px,4vw,58px) 24px 72px;border:0;background:transparent; }
-.streamingWorkbench .guidedWorkspaceInner { width:min(100%,900px);margin:0 auto; }
-.streamingWorkbench .briefHeader { width:min(100%,900px);margin:0 auto 18px; }
-.streamingWorkbench .connectionNotice,.streamingWorkbench .inlineError { width:min(100%,900px);margin:14px auto 0; }
+.streamingWorkbench {
+  display: grid;
+  grid-template-columns: minmax(320px, .92fr) minmax(420px, 1.2fr) minmax(280px, .72fr);
+  min-height: calc(100vh - 72px);
+  background:
+    radial-gradient(circle at 12% 0, rgba(0, 119, 255, .07), transparent 34%),
+    #f8fbfd;
+}
+.streamingWorkbench .briefPanel {
+  padding: clamp(24px, 3vw, 40px) 22px 48px;
+  border-right: 1px solid var(--fz-border);
+  background: transparent;
+}
+.streamingWorkbench .guidedWorkspaceInner { width: min(100%, 760px); margin: 0; }
+.streamingWorkbench .buildPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: clamp(24px, 3vw, 40px) 22px 48px;
+  background: #fff;
+}
+.streamingWorkbench .buildTop { display: grid; gap: 6px; }
+.streamingWorkbench .buildTop strong {
+  font: 620 20px/1.2 var(--font-display), sans-serif;
+  letter-spacing: -.03em;
+}
+.streamingWorkbench .processRail {
+  display: flex;
+  background: #fff;
+}
+.streamingWorkbench .connectionNotice,
+.streamingWorkbench .inlineError { width: min(100%, 760px); margin: 14px 0 0; }
 
-@media (max-width:820px) {
-  .domainStage.isStreamingDomain { padding:28px 18px 60px; }
-  .isStreamingDomain .textBack { margin-bottom:30px; }
-  .isStreamingDomain .domainPrompt { text-align:left; }
-  .isStreamingDomain .domainPrompt h2 { font-size:clamp(43px,12vw,58px); }
-  .isStreamingDomain .domainPrompt>p,.isStreamingDomain .domainPromise { margin-inline:0; }
-  .streamingWorkbench { min-height:calc(100vh - 66px); }
-  .streamingWorkbench .briefPanel { min-height:calc(100vh - 66px);padding:24px 0 52px; }
-  .streamingWorkbench .briefHeader { padding:0 18px; }
+@media (max-width: 820px) {
+  .domainStage.isStreamingDomain { padding: 28px 18px 60px; }
+  .isStreamingDomain .textBack { margin-bottom: 30px; }
+  .isStreamingDomain .domainPrompt { text-align: left; }
+  .isStreamingDomain .domainPrompt h2 { font-size: clamp(43px, 12vw, 58px); }
+  .isStreamingDomain .domainPrompt > p,
+  .isStreamingDomain .domainPromise { margin-inline: 0; }
+  .streamingWorkbench {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 66px);
+  }
+  .streamingWorkbench .briefPanel { min-height: 0; padding: 24px 0 28px; border-right: 0; }
+  .streamingWorkbench .briefHeader { padding: 0 18px; }
+  .streamingWorkbench .buildPanel { order: 3; padding: 8px 18px 36px; }
+  .streamingWorkbench .processRail {
+    display: block !important;
+    order: 2;
+    padding: 8px 18px 24px;
+    border-left: 0;
+    border-top: 1px solid var(--fz-border);
+  }
 }
 
 /* V3 prospect shell: the generated page is the product, not a QA dashboard. */

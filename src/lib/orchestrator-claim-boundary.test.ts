@@ -409,7 +409,8 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(stored?.experienceSpec?.cta).toEqual({
       intent: "book-meeting",
       style: "outline",
-      label: draft.primaryCta
+      label: draft.primaryCta,
+      actionId: "primary-conversion"
     });
     expect(stored?.experience?.html).toContain('data-cta-style="outline"');
   });

@@ -95,11 +95,19 @@ export const hasBrandfetchLogoApi =
 export const hasBrandfetchBrandApi =
   ["fallback", "enrich"].includes(config.brandfetchMode) &&
   validBrandfetchApiKey;
-export const hasRemoteFolloze =
-  config.follozeMode !== "disabled" && Boolean(process.env.FOLLOZE_MCP_SERVER_URL);
-export const canPublishFolloze =
-  config.follozeMode === "publish" &&
-  Boolean(process.env.FOLLOZE_MCP_SERVER_URL && process.env.FOLLOZE_MCP_AUTH_TOKEN);
+/**
+ * The public Try Me Now runtime is intentionally HTML-only. Keep the
+ * Folloze configuration and integration code available for a future,
+ * separately authorized internal handoff, but do not allow deployment
+ * environment variables to turn this public app into a Folloze writer.
+ */
+export const publicRuntimeCapabilities = Object.freeze({
+  appHostedHtmlOnly: true,
+  follozeWritesEnabled: false,
+  follozePublishEnabled: false
+});
+export const hasRemoteFolloze = false;
+export const canPublishFolloze = false;
 export const hasResend = config.emailMode === "resend" && Boolean(process.env.RESEND_API_KEY);
 export const hasMarketo =
   config.marketoMode === "sync" &&

@@ -240,7 +240,7 @@ describe("campaign contract", () => {
     const spec = buildExperienceSpec(current, draft, seller, target);
 
     expect(spec).toMatchObject({
-      schemaVersion: "1.0",
+      schemaVersion: "2.0",
       revision: 4,
       sourceBriefRevision: current.campaignBrief?.revision,
       sourceBriefFingerprint: current.campaignBrief?.fingerprint,
@@ -270,13 +270,14 @@ describe("campaign contract", () => {
         offer: { name: "Jitterbit Harmony", sourceHost: "jitterbit.com" }
       },
       renderers: {
-        web: { status: "ready" },
-        folloze: { status: "not-requested" }
+        web: { status: "ready", hosting: "app" },
+        folloze: { status: "disabled", reason: "public-runtime-html-only" }
       },
       cta: {
         intent: "explore",
         style: "solid",
-        label: "Plan the architecture session"
+        label: "Plan the architecture session",
+        actionId: "primary-conversion"
       },
       wireframeSelection: {
         family: "account",
@@ -287,6 +288,23 @@ describe("campaign contract", () => {
       }
     });
     expect(spec.artifactDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(spec.route).toEqual({ kind: "abm" });
+    expect(spec.compositionRecipe).toMatchObject({
+      family: "account",
+      archetypeId: "account-technical",
+      compositionId: "workflow-spine",
+      selectedBy: "system",
+      locked: true
+    });
+    expect(spec.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "primary-conversion",
+          actionType: "external-link",
+          destination: "https://jitterbit.com/harmony/"
+        })
+      ])
+    );
     expect(spec.brandTokens.designDna).toEqual(seller.designDna);
     expect(spec.brandTokens.designDna).not.toBe(seller.designDna);
     expect(spec.brandTokens.designReceipt).toMatchObject({
@@ -318,7 +336,7 @@ describe("campaign contract", () => {
       confirmedAt: expect.any(String)
     });
     expect(projection.experienceSpec).toMatchObject({
-      schemaVersion: "1.0",
+      schemaVersion: "2.0",
       sourceBriefRevision: current.campaignBrief?.revision,
       sectionCount: 3,
       wireframeSelection: {

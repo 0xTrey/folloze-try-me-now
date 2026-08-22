@@ -7,7 +7,7 @@ import {
   patchSessionAnswers,
   patchSessionWorkspace,
   recordPreviewInteraction,
-  runSourceIntelligenceStage
+  runPreviewEnrichmentWave
 } from "@/lib/orchestrator";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { supportRefForTraceId } from "@/lib/observability";
@@ -25,7 +25,7 @@ vi.mock("@/lib/orchestrator", () => ({
   patchSessionWorkspace: vi.fn(),
   recordPreviewInteraction: vi.fn(),
   recoverSessionWork: vi.fn(),
-  runSourceIntelligenceStage: vi.fn(),
+  runPreviewEnrichmentWave: vi.fn(),
   runStoryStage: vi.fn(),
   runTargetBrandStage: vi.fn()
 }));
@@ -131,7 +131,7 @@ describe("session workspace API", () => {
       .find((callback) => typeof callback === "function");
     expect(sourceCallback).toBeTypeOf("function");
     await (sourceCallback as () => Promise<void>)();
-    expect(runSourceIntelligenceStage).toHaveBeenCalledWith(sessionId);
+    expect(runPreviewEnrichmentWave).toHaveBeenCalledWith(sessionId, { includeStory: false });
   });
 
   it("starts offer intelligence as soon as a campaign product URL is submitted", async () => {
@@ -144,7 +144,7 @@ describe("session workspace API", () => {
       .find((callback) => typeof callback === "function");
     expect(sourceCallback).toBeTypeOf("function");
     await (sourceCallback as () => Promise<void>)();
-    expect(runSourceIntelligenceStage).toHaveBeenCalledWith(sessionId);
+    expect(runPreviewEnrichmentWave).toHaveBeenCalledWith(sessionId, { includeStory: false });
   });
 
   it("accepts one coherent workspace mutation for creative controls", async () => {

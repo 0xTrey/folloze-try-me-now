@@ -455,6 +455,43 @@ describe("guided campaign workspace", () => {
     expect(screen.getByLabelText("Live experience brief")).toBeInTheDocument();
     expect(document.querySelector('[data-overview-field="offer"]')).toHaveTextContent("Waiting for this signal");
     expect(screen.queryByText("Product campaign")).not.toBeInTheDocument();
+    expect(document.querySelector('[data-overview-field="objective"]')).toHaveTextContent("Launch or announce");
+    expect(document.querySelector('[data-overview-field="objective"]')).toHaveTextContent("We inferred");
+  });
+
+  it("shows a Live Brief count and Audience Hub findings during intake", () => {
+    render(
+      <CampaignOverviewRail
+        session={{
+          ...readySession,
+          status: "collecting",
+          experience: undefined,
+          answers: { campaignType: "product", promotedOffer: "Jitterbit Harmony" },
+          audienceSuggestions: ["Enterprise architects"],
+          audienceLens: {
+            status: "ready",
+            accountDomain: "jitterbit.com",
+            accountName: "Jitterbit",
+            preparedAt: "2026-07-31T10:00:00.000Z",
+            findings: [
+              {
+                id: "priority-1",
+                category: "priority",
+                label: "Priorities",
+                text: "Give revenue teams a branded buyer path they can share.",
+                citationUrl: "https://jitterbit.com",
+                disposition: "available"
+              }
+            ]
+          }
+        }}
+      />
+    );
+
+    expect(document.querySelector("[data-overview-count]")).toHaveTextContent("5 of 5");
+    expect(screen.getByRole("heading", { name: "What we know about Jitterbit" })).toBeInTheDocument();
+    expect(screen.getByText(/branded buyer path/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument();
   });
 
   it("makes every Live Brief row reopen the existing preview controls", () => {
@@ -478,13 +515,12 @@ describe("guided campaign workspace", () => {
     expect(screen.getByText(/swap in your company at the end/i)).toBeInTheDocument();
   });
 
-  it("routes the third starting path into the existing event campaign engine", () => {
+  it("routes the third starting path into Content Magic", () => {
     const onSelect = vi.fn();
     render(<UseCasePortals onSelect={onSelect} />);
 
-    expect(screen.queryByText("Turn content into an experience")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Build an event experience/i }));
-    expect(onSelect).toHaveBeenCalledWith("campaign", "event");
+    fireEvent.click(screen.getByRole("button", { name: /Make content interactive/i }));
+    expect(onSelect).toHaveBeenCalledWith("content", undefined);
   });
 
   it("collects a named campaign offer and optional public source before audience selection", () => {

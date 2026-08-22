@@ -5,6 +5,7 @@ import {
   buildMoments,
   audienceRecommendationCopy,
   campaignIntakeComplete,
+  canSkipStreamingCampaign,
   ctaValueForSession,
   describePreviewAnalyticsEvent,
   entryPathOptions,
@@ -14,12 +15,16 @@ import {
   getRevealCopy,
   getRevealShellHeadline,
   isCampaignOfferSourceUrl,
+  liveBriefFilledCount,
   objectiveContextPrompt,
+  overviewRowsFor,
   preservePreviewDuringRegeneration,
   previewBoundaryScrollDelta,
   recommendedObjectiveFor,
   shouldAutoConfirmSource,
-  streamingCampaignPatchForIntent
+  streamingCampaignPatchForIntent,
+  streamingCampaignQuestions,
+  streamingCampaignSkipPatch
 } from "./try-me-now-app";
 
 function brand(domain: string, companyName: string): PublicBrandProfile {
@@ -118,34 +123,69 @@ describe("Try Me Now experience copy", () => {
       previewAlt: "ServiceNow-branded AI platform campaign landing page"
     });
     expect(entryPathOptions.content).toMatchObject({
-      eyebrow: "Event promotion",
-      title: "Promote a field event or webinar",
-      actionLabel: "Build an event experience",
-      exampleLabel: "See an event experience",
-      exampleUrl: "https://engage.folloze.com/688711",
-      previewImage: "/entry/event-promotion-preview.svg"
+      eyebrow: "Content",
+      title: "Make content interactive",
+      actionLabel: "Make content interactive",
+      exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
+      exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
+      previewImage: "/entry/content-preview.webp"
     });
   });
 
   it("turns one event sentence into the existing event campaign contract", () => {
-    expect(streamingCampaignPatchForIntent(
+    const patch = streamingCampaignPatchForIntent(
       "Promote our September 18 AI Buyer Journey webinar for enterprise marketing leaders.",
       "event"
-    )).toMatchObject({
+    );
+    expect(patch).toMatchObject({
       campaignType: "event",
       promotedOffer: "September 18 AI Buyer Journey webinar",
       eventSource: "September 18 AI Buyer Journey webinar",
-      objective: "Drive registrations",
       ctaType: "register"
     });
+    expect(patch.objective).toBeUndefined();
   });
 
   it("accepts a public product URL as the whole first campaign answer", () => {
-    expect(streamingCampaignPatchForIntent("https://example.com/ai-control-tower", "campaign")).toMatchObject({
+    const patch = streamingCampaignPatchForIntent("https://example.com/ai-control-tower", "campaign");
+    expect(patch).toMatchObject({
       campaignType: "product",
       promotedOffer: "AI Control Tower",
       offerSourceUrl: "https://example.com/ai-control-tower",
-      offerSourceConfirmed: true,
+      offerSourceConfirmed: true
+    });
+    expect(patch.objective).toBeUndefined();
+  });
+
+  it("asks a goal after offer and audience instead of committing an inferred objective", () => {
+    const questions = streamingCampaignQuestions("campaign", ["Enterprise architects"], ["Launch or announce", "Generate demand"]);
+    expect(questions.map((question) => question.id)).toEqual(["intent", "audience", "goal"]);
+    expect(questions[2]?.choices).toContain("Launch or announce");
+  });
+
+  it("fills inferred Live Brief rows instead of leaving them waiting", () => {
+    const rows = overviewRowsFor(session("campaign", {
+      answers: { campaignType: "product", promotedOffer: "Harmony" },
+      audienceSuggestions: ["Data and AI platform leaders"]
+    }));
+    expect(rows.find((row) => row.key === "offer")?.value).toBe("Harmony");
+    expect(rows.find((row) => row.key === "audience")?.value).toBe("Data and AI platform leaders");
+    expect(rows.find((row) => row.key === "audience")?.provenance).toBe("inferred");
+    expect(rows.find((row) => row.key === "objective")?.value).toBe("Launch or announce");
+    expect(rows.find((row) => row.key === "objective")?.provenance).toBe("inferred");
+    expect(rows.some((row) => !row.value && row.key !== "offer")).toBe(false);
+  });
+
+  it("lets the visitor skip to preview once three signals include a named offer", () => {
+    expect(canSkipStreamingCampaign(session("campaign"))).toBe(false);
+    expect(liveBriefFilledCount(session("campaign"))).toBeGreaterThanOrEqual(2);
+    const readyToSkip = session("campaign", {
+      answers: { campaignType: "product", promotedOffer: "Harmony" },
+      audienceSuggestions: ["Enterprise architects"]
+    });
+    expect(canSkipStreamingCampaign(readyToSkip)).toBe(true);
+    expect(streamingCampaignSkipPatch(readyToSkip, "campaign")).toMatchObject({
+      audience: "Enterprise architects",
       objective: "Launch or announce"
     });
   });

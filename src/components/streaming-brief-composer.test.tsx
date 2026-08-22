@@ -7,54 +7,77 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StreamingBriefComposer } from "./streaming-brief-composer";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+});
 
 const questions = [
-  { id: "format", label: "Campaign format", prompt: "What are you taking to market?", choices: ["Product launch", "Demand campaign"], required: true },
-  { id: "audience", label: "Buyer group", prompt: "Who should this reach?", placeholder: "Enterprise architects", required: true }
+  {
+    id: "intent",
+    label: "Campaign",
+    prompt: "What are you taking to market?",
+    required: true
+  },
+  {
+    id: "audience",
+    label: "Audience",
+    prompt: "Who should this reach?",
+    choices: ["Enterprise architects", "Revenue leaders"],
+    required: true
+  },
+  {
+    id: "goal",
+    label: "Goal",
+    prompt: "What should this experience achieve?",
+    choices: ["Launch or announce", "Generate demand"],
+    required: true
+  }
 ] as const;
 
 describe("StreamingBriefComposer", () => {
-  it("submits the current raw answer and renders it as a compact prior message", () => {
+  it("shows one question at a time and collapses finished answers", () => {
     const onAnswer = vi.fn();
-    const { rerender } = render(
-      <StreamingBriefComposer mode="campaign" questions={questions} currentQuestionId="format" answers={[]} onAnswer={onAnswer} />
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Product launch" }));
-    expect(onAnswer).toHaveBeenCalledWith({ questionId: "format", label: "Campaign format", value: "Product launch" });
-
-    rerender(<StreamingBriefComposer mode="campaign" questions={questions} currentQuestionId="audience" answers={[{ questionId: "format", label: "Campaign format", value: "Product launch" }]} onAnswer={onAnswer} />);
-    expect(screen.getByText("Product launch")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: /Who should this reach/i })).toBeInTheDocument();
-  });
-
-  it("uses event-specific copy, streams truthful receipts, and exposes a collapsed Live Brief", () => {
+    const onStepChange = vi.fn();
     render(
       <StreamingBriefComposer
-        mode="event"
+        mode="campaign"
         questions={questions}
-        currentQuestionId="format"
-        answers={[]}
-        receipts={[{ id: "identity", label: "Brand matched", detail: "Public company cues are ready.", state: "complete" }]}
-        brief={{ Offer: "Architecture Summit", Audience: "IT leaders" }}
-        onAnswer={vi.fn()}
+        currentQuestionId="audience"
+        answers={[{ questionId: "intent", label: "Campaign", value: "Harmony for operations leaders" }]}
+        canSkip
+        onAnswer={onAnswer}
+        onStepChange={onStepChange}
+        onSkip={vi.fn()}
       />
     );
 
-    expect(screen.getByText(/reason to attend/i)).toBeInTheDocument();
-    expect(screen.getByLabelText("Live build progress")).toHaveTextContent("Public company cues are ready.");
-    const brief = screen.getByText(/Live Brief/i).closest("details")!;
-    expect(brief).not.toHaveAttribute("open");
-    fireEvent.click(screen.getByText(/Live Brief/i));
-    expect(screen.getByText("Architecture Summit")).toBeInTheDocument();
+    expect(screen.queryByText("What are you taking to market?")).not.toBeInTheDocument();
+    expect(screen.getByText("Who should this reach?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Harmony for operations leaders/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Harmony for operations leaders/i }));
+    expect(onStepChange).toHaveBeenCalledWith("intent");
+    fireEvent.click(screen.getByRole("button", { name: "Enterprise architects" }));
+    expect(onAnswer).toHaveBeenCalledWith({
+      questionId: "audience",
+      label: "Audience",
+      value: "Enterprise architects"
+    });
   });
 
-  it("lets the parent change the one visible question without mutating raw data", () => {
-    const onStepChange = vi.fn();
-    render(<StreamingBriefComposer mode="campaign" questions={questions} currentQuestionId="format" answers={[]} onAnswer={vi.fn()} onStepChange={onStepChange} />);
+  it("keeps skip to preview disabled until the brief is viable", () => {
+    const onSkip = vi.fn();
+    render(
+      <StreamingBriefComposer
+        mode="campaign"
+        questions={questions}
+        currentQuestionId="intent"
+        answers={[]}
+        canSkip={false}
+        onAnswer={vi.fn()}
+        onSkip={onSkip}
+      />
+    );
 
-    fireEvent.change(screen.getByLabelText("Change brief question"), { target: { value: "audience" } });
-    expect(onStepChange).toHaveBeenCalledWith("audience");
+    expect(screen.getByRole("button", { name: "Skip to preview" })).toBeDisabled();
   });
 });

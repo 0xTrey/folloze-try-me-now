@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 
 import { apiError, noStoreHeaders, startServerOperation } from "@/lib/http";
-import { createSession, runBrandStage } from "@/lib/orchestrator";
+import { createSession, runPreviewEnrichmentWave } from "@/lib/orchestrator";
 import { analyticsIdentityWithAttributionFromRequest } from "@/lib/product-analytics";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { createSessionSchema } from "@/lib/validation";
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     });
     trace.setSessionId(created.session.id);
     trace.setTraceId(created.traceId);
-    after(() => runBrandStage(created.session.id));
+    after(() => runPreviewEnrichmentWave(created.session.id, { includeStory: false }));
     const response = NextResponse.json(
       { session: created.session },
       {

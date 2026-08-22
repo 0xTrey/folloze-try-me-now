@@ -201,7 +201,7 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain('data-proof-device="narrative"');
     expect(html).toContain('data-close-treatment="working-session"');
     expect(html).toContain("Connect systems. Automate workflows. Keep AI accountable.");
-    expect(html).toContain('data-flz-cta-id="hero-primary"');
+    expect(html).toContain('data-experience-action="primary-conversion"');
   });
 
   it("does not repeat the hero asset as a generic lens placeholder", () => {
@@ -428,8 +428,8 @@ describe("renderExperienceHtml", () => {
     expect(html.match(/<button[^>]*role="tab"/g)).toHaveLength(3);
     expect(html.match(/class="lens-panel"/g)).toHaveLength(3);
     expect(html.match(/<article class="journey-card resource-card/g)).toHaveLength(3);
-    expect(html).toContain("flzAnalytic('cta_click'");
-    expect(html).toContain("flzAnalytic('anchor_click'");
+    expect(html).toContain("data-action-event=\"cta_click\"");
+    expect(html).toContain("||'anchor_click'");
     expect(html).toContain("flzAnalytic('topic_select'");
     expect(html).toContain("ArrowRight");
     expect(html).toContain("aria-selected");
@@ -514,7 +514,7 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("action!=='page_heartbeat'&&action!=='section_dwell'");
   });
 
-  it("uses content provenance without turning the preview into a live source CTA", () => {
+  it("uses a verified source action without leaking tracking parameters", () => {
     const content = renderExperienceHtml({
       draft: {
         ...draft,
@@ -527,16 +527,29 @@ describe("renderExperienceHtml", () => {
       answers: {
         sourceUrl: "https://example.com/guides/automation?utm_source=private#section",
         sourceName: "Automation guide"
-      }
+      },
+      actions: [
+        {
+          id: "primary-conversion",
+          purpose: "source-continuity",
+          label: "Open the source",
+          actionType: "external-link",
+          destination: "https://example.com/guides/automation",
+          access: "public",
+          analyticsEvent: "cta_click",
+          analyticsOwner: "try-me-now",
+          verification: "verified"
+        }
+      ]
     });
 
     expect(content).toContain('data-template-family="content-source"');
     expect(content).toContain('data-source-reference="Automation guide"');
     expect(content).toContain("Built from Automation guide.");
     expect(content.match(/<article class="journey-card resource-card/g)).toHaveLength(3);
-    expect(content).not.toContain('href="https://example.com/guides/automation"');
+    expect(content).toContain('href="https://example.com/guides/automation"');
     expect(content.match(/class="actions"/g)).toHaveLength(1);
-    expect(content.match(/class="primary" data-demo-cta/g)).toHaveLength(2);
+    expect(content.match(/class="primary" data-experience-action="primary-conversion"/g)).toHaveLength(2);
     expect(content).not.toContain('class="secondary"');
     expect(content).not.toContain("utm_source=private");
     expect(content).not.toContain("#section");
@@ -806,7 +819,7 @@ describe("renderExperienceHtml", () => {
     expect(html).not.toContain("How should buyers explore the enterprise automation guide?");
   });
 
-  it("renders all five registers through backend-selected archetypes with shared primitives and preview-only CTAs", () => {
+  it("renders all five registers through backend-selected archetypes with shared primitives and functional actions", () => {
     const target: BrandProfile = {
       ...brand,
       domain: "cisco.com",
@@ -913,7 +926,7 @@ describe("renderExperienceHtml", () => {
         expect(output).toContain("framework-seven");
         expect(output).not.toContain('class="signature signature-canonical"');
         expect(fingerprint.signatureButtons).toBeUndefined();
-        expect(fingerprint.resourceCards).toBeUndefined();
+        expect(fingerprint.resourceCards).toBe(3);
         expect(fingerprint.journeyOrder).toEqual([
           "experience-overview",
           "credibility-anchor",
@@ -921,6 +934,7 @@ describe("renderExperienceHtml", () => {
           "starting-points",
           "outcome-mechanism",
           "team-value",
+          "supporting-resources",
           "next-step"
         ]);
         expect(output).not.toMatch(/Account thesis|Decision paths|Supporting proof/);
@@ -931,10 +945,10 @@ describe("renderExperienceHtml", () => {
         expect(fingerprint.resourceCards).toBe(3);
       }
     }
-    expect(fingerprints[0]?.sectionOrder).toEqual([]);
-    expect(fingerprints[1]?.sectionOrder).toEqual([]);
-    expect(fingerprints[2]?.sectionOrder).toEqual([]);
-    expect(fingerprints[3]?.sectionOrder).toEqual([]);
+    expect(fingerprints[0]?.sectionOrder).toEqual(["supporting-resources"]);
+    expect(fingerprints[1]?.sectionOrder).toEqual(["supporting-resources"]);
+    expect(fingerprints[2]?.sectionOrder).toEqual(["supporting-resources"]);
+    expect(fingerprints[3]?.sectionOrder).toEqual(["supporting-resources"]);
     expect(fingerprints[4]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
   });
 
@@ -984,13 +998,14 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain(`>${draft.primaryCta}</button>`);
   });
 
-  it("keeps the configured CTA as an in-preview style demonstration without a live destination", () => {
-    expect(html).toContain('data-demo-cta="true" data-flz-cta-id="hero-primary"');
-    expect(html).toContain('data-demo-cta="true" data-flz-cta-id="close-primary"');
-    expect(html).not.toMatch(/data-scroll-target="[^"]+"[^>]+data-flz-cta-id="hero-primary"/);
-    expect(html).not.toMatch(/<a class="primary"[^>]+data-flz-cta-id="close-primary"/);
+  it("gives every primary CTA a typed, functional in-experience fallback", () => {
+    expect(html.match(/data-experience-action="primary-conversion"/g)).toHaveLength(2);
+    expect(
+      html.match(/data-experience-action="primary-conversion"[^>]*data-scroll-target="supporting-resources"/g)
+    ).toHaveLength(2);
+    expect(html).not.toContain('data-demo-cta="true"');
     expect(html).not.toContain("window.location=");
     expect(html).not.toContain("showSignal(");
-    expect(html).toContain("window.flzAnalytic('cta_click'");
+    expect(html).toContain("data-action-event=\"cta_click\"");
   });
 });

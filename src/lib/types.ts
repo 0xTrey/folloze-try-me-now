@@ -1,5 +1,6 @@
 import type { SourceArtifact } from "@/lib/content-intelligence";
 import type { WireframeSelectionV1 } from "@/lib/generation/wireframe-library";
+import type { WorkerReceipt } from "@/lib/orchestration/worker-types";
 
 export const USE_CASES = ["abm", "campaign", "content"] as const;
 export const EXPERIENCE_MODES = ["custom", "example"] as const;
@@ -653,6 +654,40 @@ export interface ExperienceContentItem {
   sourceCitationIds: string[];
   sourceLabel?: string;
   illustrative?: boolean;
+  /** Resolves to a typed, testable action in ExperienceSpecV2. */
+  actionId?: string;
+}
+
+export type ExperienceRouteKind = "abm" | "campaign" | "content-magic";
+export type ExperienceActionType = "external-link" | "scroll" | "content-dialog";
+export type ExperienceActionAccess = "public" | "email-claim";
+export type ExperienceActionVerification = "verified" | "fallback";
+
+/**
+ * A buyer-visible control must have a real behavior. Presentation-only CTA
+ * buttons are intentionally not representable in V2.
+ */
+export interface ExperienceActionContract {
+  id: string;
+  purpose: "primary-conversion" | "source-continuity" | "guided-exploration";
+  label: string;
+  actionType: ExperienceActionType;
+  destination: string;
+  access: ExperienceActionAccess;
+  analyticsEvent: "cta_click" | "topic_select";
+  analyticsOwner: "try-me-now";
+  verification: ExperienceActionVerification;
+  contentItemId?: string;
+  fallbackReason?: string;
+}
+
+export interface ExperienceContentContract {
+  contentItemId: string;
+  actionId: string;
+  sourceContinuity: "public-source" | "in-experience-detail";
+  responsive: true;
+  accessibleLabel: string;
+  verification: ExperienceActionVerification;
 }
 
 export interface ExperienceSourceIntelligence {
@@ -753,15 +788,48 @@ export interface ExperienceSpecV1 {
   };
 }
 
-export type PublicExperienceSpecSummary = Pick<
-  ExperienceSpecV1,
-  | "schemaVersion"
-  | "revision"
-  | "sourceBriefRevision"
-  | "artifactDigest"
-  | "renderers"
-  | "wireframeSelection"
-> & {
+/**
+ * Canonical app-hosted HTML contract. V2 makes route ownership and every
+ * visible action explicit while preserving the existing draft and renderer
+ * inputs. Folloze mutation is outside the public Try Me Now runtime.
+ */
+export interface ExperienceSpecV2
+  extends Omit<ExperienceSpecV1, "schemaVersion" | "cta" | "renderers"> {
+  schemaVersion: "2.0";
+  route: {
+    kind: ExperienceRouteKind;
+    campaignSubtype?: "product" | "demand" | "launch" | "event" | "webinar" | "replay";
+  };
+  compositionRecipe: {
+    family: WireframeSelectionV1["family"];
+    archetypeId: string;
+    compositionId: string;
+    selectedBy: "system";
+    locked: true;
+  };
+  actions: ExperienceActionContract[];
+  contentContracts: ExperienceContentContract[];
+  cta: {
+    intent: CtaType;
+    style: CtaStyle;
+    label: string;
+    actionId: string;
+  };
+  renderers: {
+    web: { status: "ready"; hosting: "app" };
+    folloze: { status: "disabled"; reason: "public-runtime-html-only" };
+  };
+}
+
+export type ExperienceSpec = ExperienceSpecV1 | ExperienceSpecV2;
+
+export type PublicExperienceSpecSummary = {
+  schemaVersion: ExperienceSpec["schemaVersion"];
+  revision: number;
+  sourceBriefRevision: number;
+  artifactDigest: string;
+  renderers: ExperienceSpec["renderers"];
+  wireframeSelection?: WireframeSelectionV1;
   sectionCount: number;
   contentItemCount: number;
   sourceStatus?: ExperienceSourceIntelligence["status"];
@@ -828,7 +896,9 @@ export interface TryMeSession {
   campaignOfferSource?: CampaignOfferSource;
   curatedSections?: CuratedSectionControl[];
   experienceSpecRevision?: number;
-  experienceSpec?: ExperienceSpecV1;
+  experienceSpec?: ExperienceSpec;
+  /** Server-side worker lifecycle receipts for latency, fallback, and QA review. */
+  workerReceipts?: WorkerReceipt[];
   experience?: ExperienceModel;
   claim?: ClaimState;
   events: SessionEvent[];
@@ -849,6 +919,7 @@ export type PublicTryMeSession = Omit<
   | "experience"
   | "experienceSpec"
   | "experienceSpecRevision"
+  | "workerReceipts"
   | "campaignOfferSource"
   | "stages"
   | "targetBrand"

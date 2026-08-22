@@ -8,6 +8,7 @@ import {
   hasOpenAI,
   hasRemoteBrandHarvester,
   hasRemoteFolloze,
+  publicRuntimeCapabilities,
   hasResend
 } from "@/lib/config";
 import { isDurableLeadStoreMode, leadStoreMode } from "@/lib/lead-store";
@@ -49,7 +50,8 @@ export function GET() {
     lifecycle: {
       anonymousPreviewTtlSeconds: config.sessionTtlSeconds,
       leadCreatedOnBusinessEmailClaimOnly: true,
-      previewSavePublishSeparated: true
+      previewSavePublishSeparated: true,
+      publicRuntimeCapabilities
     },
     services: {
       sessionStore: sessionStoreMode,

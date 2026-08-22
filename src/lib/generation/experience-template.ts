@@ -12,6 +12,7 @@ import type { WireframeSelectionV1 } from "@/lib/generation/wireframe-library";
 import { isImageDeliveryPath } from "@/lib/image-delivery";
 import type {
   BrandProfile,
+  ExperienceActionContract,
   ExperienceContentItem,
   SessionAnswers,
   UseCase
@@ -306,6 +307,23 @@ function editableBlock(blockId: string, kind: string): string {
   return `data-flz-editable="true" data-flz-block-id="${escapeHtml(blockId)}" data-flz-block-kind="${escapeHtml(kind)}"`;
 }
 
+function actionControl(
+  action: ExperienceActionContract,
+  className: string,
+  editable: string,
+  label?: string
+): string {
+  const copy = escapeHtml(label ?? action.label);
+  const common = `class="${className}" data-experience-action="${escapeHtml(action.id)}" data-action-event="${escapeHtml(action.analyticsEvent)}" data-flz-cta-id="${escapeHtml(action.id)}" ${editable}`;
+  if (action.actionType === "external-link") {
+    return `<a ${common} href="${escapeHtml(action.destination)}" target="_blank" rel="noopener noreferrer">${copy}</a>`;
+  }
+  if (action.actionType === "scroll") {
+    return `<button type="button" ${common} data-scroll-target="${escapeHtml(action.destination.replace(/^#/, ""))}">${copy}</button>`;
+  }
+  return `<button type="button" ${common} data-content-dialog="${escapeHtml(action.destination.replace(/^#/, ""))}">${copy}</button>`;
+}
+
 export function renderExperienceHtml(input: {
   draft: ExperienceDraft;
   brand: BrandProfile;
@@ -316,9 +334,23 @@ export function renderExperienceHtml(input: {
   fontDeliveryUrls?: { display?: string; body?: string };
   qualityReceipt?: unknown;
   contentItems?: ExperienceContentItem[];
+  actions?: ExperienceActionContract[];
   wireframeSelection?: WireframeSelectionV1;
 }): string {
   const { draft, brand, targetBrand } = input;
+  const actionById = new Map((input.actions ?? []).map((action) => [action.id, action]));
+  const primaryAction = actionById.get("primary-conversion") ?? {
+    id: "primary-conversion",
+    purpose: "guided-exploration",
+    label: draft.primaryCta,
+    actionType: "scroll",
+    destination: "#supporting-resources",
+    access: "public",
+    analyticsEvent: "cta_click",
+    analyticsOwner: "try-me-now",
+    verification: "fallback",
+    fallbackReason: "Legacy renderer input did not include a V2 action contract."
+  } satisfies ExperienceActionContract;
   const selectedVariant = "standard";
   const selectedStyle = styleVariant(input.answers);
   const selectedCtaStyle = ctaStyle(input.answers);
@@ -539,12 +571,38 @@ export function renderExperienceHtml(input: {
       }));
   const resourceCards = resourceItems
     .map(
-      (item, index) => `<article class="journey-card resource-card" data-source-reference="${escapeHtml(sourceReference)}" data-content-item-id="${escapeHtml(item.id)}" data-content-item-kind="${escapeHtml(item.kind)}">
+      (item, index) => {
+        const action = (item.actionId ? actionById.get(item.actionId) : undefined) ?? {
+          id: `content-detail-${index + 1}`,
+          purpose: "guided-exploration",
+          label: item.actionLabel,
+          actionType: "content-dialog",
+          destination: `#content-detail-${index + 1}`,
+          access: "public",
+          analyticsEvent: "topic_select",
+          analyticsOwner: "try-me-now",
+          verification: "fallback",
+          contentItemId: item.id,
+          fallbackReason: "Legacy content item uses an in-experience detail."
+        } satisfies ExperienceActionContract;
+        return `<article class="journey-card resource-card" data-source-reference="${escapeHtml(sourceReference)}" data-content-item-id="${escapeHtml(item.id)}" data-content-item-kind="${escapeHtml(item.kind)}">
         <div class="journey-index" aria-hidden="true">0${index + 1}</div>
         <div class="journey-copy"><p class="eyebrow" ${editableBlock(`resource.${index}.eyebrow`, "eyebrow")}>${escapeHtml(item.eyebrow)}</p><h3 ${editableBlock(`resource.${index}.headline`, "proof-point")}>${escapeHtml(item.title)}</h3><p ${editableBlock(`resource.${index}.body`, "body")}>${escapeHtml(item.summary)}</p>${item.sourceLabel ? `<p class="source-citation">${escapeHtml(item.sourceLabel)}</p>` : ""}</div>
-        <button type="button" class="journey-action" data-resource-lens-index="${index % draft.sections.length}" data-flz-cta-id="resource-${index}">${escapeHtml(item.actionLabel)} <span aria-hidden="true">→</span></button>
-      </article>`
+        ${actionControl(action, "journey-action", "", `${item.actionLabel} →`)}
+      </article>`;
+      }
     )
+    .join("");
+  const contentDialogs = resourceItems
+    .map((item, index) => {
+      const action = item.actionId ? actionById.get(item.actionId) : undefined;
+      const dialogId =
+        action?.actionType === "content-dialog"
+          ? action.destination.replace(/^#/, "")
+          : `content-detail-${index + 1}`;
+      if (action && action.actionType !== "content-dialog") return "";
+      return `<dialog class="content-detail" id="${escapeHtml(dialogId)}" aria-labelledby="${escapeHtml(dialogId)}-title"><form method="dialog"><button class="dialog-close" value="close" aria-label="Close content detail">×</button><p class="eyebrow">${escapeHtml(item.eyebrow)}</p><h3 id="${escapeHtml(dialogId)}-title">${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p>${item.sourceLabel ? `<p class="source-citation">${escapeHtml(item.sourceLabel)}</p>` : ""}<button class="primary" value="close">Continue exploring</button></form></dialog>`;
+    })
     .join("");
 
   const regions: Record<ExperiencePrimitive, string> = {
@@ -626,17 +684,17 @@ export function renderExperienceHtml(input: {
             (role, index) => `<article ${evidenceAttribute(role.evidenceIds)}><span class="role-index">0${index + 1}</span><h3 ${editableBlock(`teamValue.${index}.role`, "role")}>${escapeHtml(role.role)}</h3><dl><div><dt>Decision</dt><dd ${editableBlock(`teamValue.${index}.decision`, "body")}>${escapeHtml(role.decision)}</dd></div><div><dt>Risk</dt><dd ${editableBlock(`teamValue.${index}.risk`, "body")}>${escapeHtml(role.risk)}</dd></div><div><dt>Value</dt><dd ${editableBlock(`teamValue.${index}.benefit`, "body")}>${escapeHtml(role.benefit)}</dd></div><div><dt>Evidence needed</dt><dd ${editableBlock(`teamValue.${index}.evidence`, "evidence")}>${escapeHtml(role.evidenceNeeded)}</dd></div></dl></article>`
           )
           .join("")}</div>
-      </section>`
+      </section>${regions.resources}`
     : "";
   const pageFlow = framework ? frameworkFlow : `${signatureMoment}${experienceFlow}`;
   const closeMarkup = framework
     ? `<section class="close framework-close" id="next-step" data-journey-section="next-step" ${evidenceAttribute(framework.nextStep.evidenceIds)} aria-labelledby="next-step-heading">
         <div><p class="eyebrow" ${editableBlock("nextStep.eyebrow", "section-label")}>${escapeHtml(framework.nextStep.eyebrow)}</p><h2 id="next-step-heading" ${editableBlock("nextStep.headline", "headline")}>${escapeHtml(framework.nextStep.headline)}</h2><p ${editableBlock("nextStep.body", "body")}>${escapeHtml(framework.nextStep.body)}</p></div>
-        <div class="next-step-panel"><dl><div><dt>Scope</dt><dd>${escapeHtml(framework.nextStep.scope)}</dd></div><div><dt>Activity</dt><dd>${escapeHtml(framework.nextStep.activity)}</dd></div><div><dt>You leave with</dt><dd>${escapeHtml(framework.nextStep.deliverable)}</dd></div><div><dt>Decision</dt><dd>${escapeHtml(framework.nextStep.resultingDecision)}</dd></div></dl><button type="button" class="primary" data-demo-cta="true" data-flz-cta-id="close-primary" ${editableBlock("nextStep.ctaLabel", "cta")}>${escapeHtml(framework.nextStep.ctaLabel)}</button></div>
+        <div class="next-step-panel"><dl><div><dt>Scope</dt><dd>${escapeHtml(framework.nextStep.scope)}</dd></div><div><dt>Activity</dt><dd>${escapeHtml(framework.nextStep.activity)}</dd></div><div><dt>You leave with</dt><dd>${escapeHtml(framework.nextStep.deliverable)}</dd></div><div><dt>Decision</dt><dd>${escapeHtml(framework.nextStep.resultingDecision)}</dd></div></dl>${actionControl(primaryAction, "primary", editableBlock("nextStep.ctaLabel", "cta"), framework.nextStep.ctaLabel)}</div>
       </section>`
     : `<section class="close" id="next-step" data-journey-section="next-step" aria-labelledby="next-step-heading">
         <div><p class="eyebrow" ${editableBlock("close.label", "section-label")}>${escapeHtml(draft.sectionLabels.close)}</p><h2 id="next-step-heading" ${editableBlock("close.headline", "headline")}>${escapeHtml(draft.closingHeadline)}</h2><p ${editableBlock("close.body", "body")}>${escapeHtml(draft.closingBody)}</p></div>
-        <button type="button" class="primary" data-demo-cta="true" data-flz-cta-id="close-primary" ${editableBlock("close.primaryCta", "cta")}>${escapeHtml(draft.primaryCta)}</button>
+        ${actionControl(primaryAction, "primary", editableBlock("close.primaryCta", "cta"), draft.primaryCta)}
       </section>`;
 
   return `<!doctype html>
@@ -692,6 +750,7 @@ export function renderExperienceHtml(input: {
     .nav-action:hover,.nav-action:focus-visible,.fullscreen-control:hover,.fullscreen-control:focus-visible,.fullscreen-control[aria-pressed="true"],.signature-canonical button:hover,.signature-canonical button:focus-visible,.journey-action:hover,.journey-action:focus-visible,.footer a:hover,.footer a:focus-visible{color:var(--brand-accent-on-light)}
     body.cta-outline .primary,body.cta-text .primary{color:var(--brand-accent-on-light)}
     body.brand-hero-dark .hero .eyebrow,.close .eyebrow{color:var(--brand-accent)}
+    .content-detail{width:min(620px,calc(100vw - 32px));padding:0;border:1px solid var(--line);border-radius:var(--card-radius);background:var(--brand-surface);color:var(--brand-ink);box-shadow:0 32px 96px color-mix(in srgb,var(--brand-ink) 30%,transparent)}.content-detail::backdrop{background:color-mix(in srgb,var(--brand-ink) 64%,transparent);backdrop-filter:blur(5px)}.content-detail form{position:relative;padding:clamp(28px,5vw,52px)}.content-detail h3{margin:0;font:var(--heading-weight) clamp(30px,4vw,48px)/1.05 var(--display);letter-spacing:var(--heading-tracking)}.content-detail p:not(.eyebrow){margin:20px 0;color:var(--text);font-size:17px}.content-detail .dialog-close{position:absolute;right:16px;top:14px;width:42px;height:42px;border:1px solid var(--line);border-radius:999px;background:var(--brand-surface);color:var(--brand-ink);cursor:pointer;font-size:24px}.content-detail .primary{margin-top:12px}
   </style>
 </head>
 <body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} visual-grammar-${visualGrammar.id} motion-${visualGrammar.motionProfile} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}" data-visual-grammar="${visualGrammar.id}" data-motion-profile="${visualGrammar.motionProfile}" data-hero-media-role="${visualGrammar.heroMediaRole}" data-proof-device="${visualGrammar.proofDevice}" data-cadence="${visualGrammar.cadence}" data-close-treatment="${visualGrammar.closeTreatment}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}" data-brand-palette-treatment="${neutralPreview ? "neutral-fallback" : "verified-or-legacy"}"${neutralPreview ? ` data-brand-warning="palette-confidence-low" data-brand-warning-copy="${escapeHtml(neutralPreviewNotice)}"` : ""}${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
@@ -722,7 +781,7 @@ export function renderExperienceHtml(input: {
         <h1 id="experience-headline" ${editableBlock("hero.headline", "headline")}>${escapeHtml(framework?.opening.headline ?? draft.headline)}</h1>
         <p class="subhead" ${editableBlock("hero.subhead", "subhead")}>${escapeHtml(framework?.opening.body ?? draft.subhead)}</p>
         <div class="actions">
-          <button type="button" class="primary" data-demo-cta="true" data-flz-cta-id="hero-primary" ${editableBlock("hero.primaryCta", "cta")}>${escapeHtml(framework?.opening.ctaLabel ?? draft.primaryCta)}</button>
+          ${actionControl(primaryAction, "primary", editableBlock("hero.primaryCta", "cta"), framework?.opening.ctaLabel ?? draft.primaryCta)}
         </div>
         <span class="context-note" ${editableBlock("hero.audience", "audience")}>For ${escapeHtml(draft.audienceLabel)}</span>
       </div>
@@ -734,6 +793,7 @@ export function renderExperienceHtml(input: {
     </section>
     ${pageFlow}
     ${closeMarkup}
+    ${contentDialogs}
   </main>
   <footer class="footer"><span>${escapeHtml(contextLabel)}</span><a href="${escapeHtml(vendorUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(brand.domain)}</a></footer>
 </div>
@@ -858,7 +918,8 @@ export function renderExperienceHtml(input: {
         var target=this.getAttribute('data-scroll-target');
         var node=target&&document.getElementById(target);
         var area=this.closest('.journey-nav')?'journey-nav':this.closest('.nav')?'header':this.classList.contains('skip-link')?'skip-link':'hero';
-        window.flzAnalytic('anchor_click',{area:area,targetId:target,ctaId:this.getAttribute('data-flz-cta-id')||undefined});
+        var actionEvent=this.getAttribute('data-action-event')||'anchor_click';
+        window.flzAnalytic(actionEvent,{area:area,targetId:target,ctaId:this.getAttribute('data-flz-cta-id')||undefined});
         if(node){node.scrollIntoView({behavior:reducedMotion?'auto':'smooth',block:'start'});setActiveSection(target);if(this.classList.contains('skip-link'))node.focus({preventScroll:true})}
       });
     });
@@ -868,13 +929,15 @@ export function renderExperienceHtml(input: {
         var area=this.closest('.close')?'close':this.closest('.footer')?'footer':'hero';
         var hrefHost;
         try{hrefHost=new URL(this.href).hostname}catch(_urlError){}
-        window.flzAnalytic('cta_click',{area:area,ctaId:this.getAttribute('data-flz-cta-id')||'external-link',hrefHost:hrefHost});
+        window.flzAnalytic(this.getAttribute('data-action-event')||'cta_click',{area:area,ctaId:this.getAttribute('data-flz-cta-id')||'external-link',hrefHost:hrefHost});
       });
     });
-    document.querySelectorAll('[data-demo-cta]').forEach(function(control){
+    document.querySelectorAll('[data-content-dialog]').forEach(function(control){
       control.addEventListener('click',function(){
-        var area=this.closest('.hero')?'hero':'close';
-        window.flzAnalytic('cta_click',{area:area,ctaId:this.getAttribute('data-flz-cta-id')||'cta-style-preview'});
+        var dialogId=this.getAttribute('data-content-dialog');
+        var dialog=dialogId&&document.getElementById(dialogId);
+        window.flzAnalytic(this.getAttribute('data-action-event')||'topic_select',{area:'resources',ctaId:this.getAttribute('data-flz-cta-id')||undefined});
+        if(dialog&&typeof dialog.showModal==='function')dialog.showModal();
       });
     });
 

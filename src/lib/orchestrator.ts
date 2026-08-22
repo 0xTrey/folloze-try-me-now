@@ -53,6 +53,13 @@ import {
 } from "@/lib/session-store";
 import { appendEvent } from "@/lib/telemetry";
 import { traceIdForSession } from "@/lib/trace-store";
+import { runPreviewWorkerWave } from "@/lib/orchestration/preview-worker-coordinator";
+import { createSingleFlight } from "@/lib/orchestration/single-flight";
+import type {
+  PreviewWorkerTask,
+  WorkerExecution,
+  WorkerReceipt
+} from "@/lib/orchestration/worker-types";
 import type {
   BrandProfile,
   ClaimResult,
@@ -78,6 +85,10 @@ import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 const STORY_GENERATION_LEASE_SECONDS = 90;
 const STORY_GENERATION_STALE_MS = STORY_GENERATION_LEASE_SECONDS * 1_000;
 const sourceIntelligenceControllers = new Map<string, AbortController>();
+const sourceArtifactSingleFlight = createSingleFlight<string, SourceArtifact>(
+  (value) => createHash("sha256").update(value).digest("hex")
+);
+const activePreviewFingerprints = new Map<string, string>();
 
 function opaqueId(): string {
   return randomBytes(24).toString("base64url");
@@ -556,6 +567,63 @@ function storyInputFingerprint(session: TryMeSession): string {
     .digest("hex");
 }
 
+function previewInputFingerprint(session: TryMeSession): string {
+  return createHash("sha256")
+    .update(JSON.stringify({
+      useCase: session.useCase,
+      companyDomain: session.companyDomain,
+      answers: session.answers,
+      selectedAudienceRecommendationId: session.selectedAudienceRecommendationId,
+      sourceConfirmation: session.sourceConfirmation?.status,
+      blockControls: session.blockControls,
+      curatedSections: session.curatedSections
+    }))
+    .digest("hex");
+}
+
+function confidenceScore(value: "high" | "medium" | "low" | undefined): number | undefined {
+  if (value === "high") return 1;
+  if (value === "medium") return 0.7;
+  if (value === "low") return 0.35;
+  return undefined;
+}
+
+function boundedWorkerReceipts(
+  prior: WorkerReceipt[] | undefined,
+  executions: WorkerExecution<unknown>[]
+): WorkerReceipt[] {
+  const next = [...(prior ?? []), ...executions.map(({ receipt }) => receipt)];
+  return next.slice(-48);
+}
+
+async function persistWorkerExecutions(
+  id: string,
+  fingerprint: string,
+  executions: WorkerExecution<unknown>[]
+): Promise<void> {
+  await updateSession(id, (session) => {
+    session.workerReceipts = boundedWorkerReceipts(session.workerReceipts, executions);
+    appendEvent(session, "preview_worker_wave_completed", {
+      fingerprint: fingerprint.slice(0, 16),
+      completed: executions.filter(({ receipt }) => receipt.status === "completed").length,
+      fallback: executions.filter(({ receipt }) => receipt.status === "fallback").length,
+      timedOut: executions.filter(({ receipt }) => receipt.status === "timed_out").length,
+      failed: executions.filter(({ receipt }) => receipt.status === "failed").length,
+      stale: executions.filter(({ receipt }) => receipt.status === "stale").length
+    });
+    return session;
+  });
+}
+
+function fetchSourceArtifactSingleFlight(
+  sourceUrl: string,
+  options: { signal?: AbortSignal; timeoutMs: number; maxBytes: number }
+): Promise<SourceArtifact> {
+  return sourceArtifactSingleFlight.run(sourceUrl, () =>
+    fetchPublicUrlSourceArtifact(sourceUrl, options)
+  );
+}
+
 function generationTrustFailureFor(input: {
   draft: ExperienceDraft;
   brand: BrandProfile;
@@ -783,6 +851,7 @@ function assembleExperienceArtifact(input: {
     fontDeliveryUrls: fontDeliveryUrls(input.id, input.brand),
     qualityReceipt,
     contentItems: experienceSpec.contentItems,
+    actions: experienceSpec.actions,
     wireframeSelection: experienceSpec.wireframeSelection
   });
   return {
@@ -1034,7 +1103,10 @@ function hasTerminalStoryFailure(
   return session?.status === "generation_failed" || session?.stages.story.status === "failed";
 }
 
-export async function runBrandStage(id: string): Promise<void> {
+export async function runBrandStage(
+  id: string,
+  options: { resumeStory?: boolean } = {}
+): Promise<void> {
   assertProductionSessionStore();
   const current = await getSession(id);
   if (!current || !needsBrandRefresh(current)) return;
@@ -1042,13 +1114,17 @@ export async function runBrandStage(id: string): Promise<void> {
   const lease = await acquireSessionLease(id, "seller-brand", 30);
   if (!lease) return;
   try {
-    await runBrandStageUnlocked(id, expectedDomain);
+    await runBrandStageUnlocked(id, expectedDomain, options);
   } finally {
     await releaseLeaseSafely(lease, id, "seller_brand");
   }
 }
 
-async function runBrandStageUnlocked(id: string, expectedDomain: string): Promise<void> {
+async function runBrandStageUnlocked(
+  id: string,
+  expectedDomain: string,
+  options: { resumeStory?: boolean }
+): Promise<void> {
   const attemptId = opaqueId();
   let shouldHarvest = false;
   await updateSession(id, (session) => {
@@ -1184,10 +1260,13 @@ async function runBrandStageUnlocked(id: string, expectedDomain: string): Promis
       return session;
     });
   }
-  await resumeStoryAfterBrandStage(id);
+  if (options.resumeStory !== false) await resumeStoryAfterBrandStage(id);
 }
 
-export async function runTargetBrandStage(id: string): Promise<void> {
+export async function runTargetBrandStage(
+  id: string,
+  options: { resumeStory?: boolean } = {}
+): Promise<void> {
   assertProductionSessionStore();
   const current = await getSession(id);
   const expectedDomain = current?.answers.targetDomain;
@@ -1201,13 +1280,17 @@ export async function runTargetBrandStage(id: string): Promise<void> {
   const lease = await acquireSessionLease(id, `target-brand:${expectedDomain}`, 30);
   if (!lease) return;
   try {
-    await runTargetBrandStageUnlocked(id, expectedDomain);
+    await runTargetBrandStageUnlocked(id, expectedDomain, options);
   } finally {
     await releaseLeaseSafely(lease, id, "target_brand");
   }
 }
 
-async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): Promise<void> {
+async function runTargetBrandStageUnlocked(
+  id: string,
+  expectedDomain: string,
+  options: { resumeStory?: boolean }
+): Promise<void> {
   const attemptId = opaqueId();
   let shouldHarvest = false;
   await updateSession(id, (session) => {
@@ -1350,10 +1433,13 @@ async function runTargetBrandStageUnlocked(id: string, expectedDomain: string): 
       return session;
     });
   }
-  await resumeStoryAfterBrandStage(id);
+  if (options.resumeStory !== false) await resumeStoryAfterBrandStage(id);
 }
 
-export async function runSourceIntelligenceStage(id: string): Promise<void> {
+export async function runSourceIntelligenceStage(
+  id: string,
+  options: { resumeStory?: boolean } = {}
+): Promise<void> {
   const preflight = await getSession(id);
   const sourceKind = preflight?.useCase === "content"
     ? "content"
@@ -1409,7 +1495,7 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
       );
       return session;
     });
-    const sourceArtifact = await fetchPublicUrlSourceArtifact(sourceUrl, {
+    const sourceArtifact = await fetchSourceArtifactSingleFlight(sourceUrl, {
       signal: controller.signal,
       timeoutMs: 12_000,
       maxBytes: 2_000_000
@@ -1516,7 +1602,7 @@ export async function runSourceIntelligenceStage(id: string): Promise<void> {
     }
     await releaseLeaseSafely(lease, id, "source_intelligence");
   }
-  if (shouldResumeStory) await runStoryStage(id);
+  if (shouldResumeStory && options.resumeStory !== false) await runStoryStage(id);
 }
 
 function sourceKindFor(session: TryMeSession): NonNullable<TryMeSession["sourceConfirmation"]>["sourceKind"] {
@@ -2158,7 +2244,7 @@ export async function runStoryStage(id: string): Promise<void> {
   assertProductionSessionStore();
   let preflight = await getSession(id);
   if (preflight && needsBrandRefresh(preflight)) {
-    await runBrandStage(id);
+    await runBrandStage(id, { resumeStory: false });
     preflight = await getSession(id);
     if (!preflight?.brand || hasTerminalStoryFailure(preflight)) return;
   }
@@ -2189,28 +2275,7 @@ export async function runStoryStage(id: string): Promise<void> {
           : readiness?.logoReady === false
             ? "brand_logo_unavailable"
             : "brand_design_evidence_unavailable";
-      session.status = "collecting";
-      session.stages.story = {
-        status: "failed",
-        completedAt: new Date().toISOString(),
-        errorCode: reason,
-        detail: readiness?.reasons.find((message) =>
-          reason === "brand_palette_unavailable"
-            ? /color|palette|Brandfetch/i.test(message)
-            : reason === "brand_identity_confirmation_required"
-              ? /identity|alias|domain|confirmation/i.test(message)
-              : reason === "brand_logo_unavailable"
-                ? /logo|wordmark/i.test(message)
-                : /design|component|typography|layout/i.test(message)
-        ) ?? (reason === "brand_palette_unavailable"
-          ? "Verified brand colors could not be resolved. No generic palette was applied."
-          : reason === "brand_identity_confirmation_required"
-            ? "The resolved brand identity needs confirmation before generation can continue."
-            : reason === "brand_logo_unavailable"
-              ? "An official logo could not be resolved. No text-only logo substitute was applied."
-              : "Browser-backed design evidence is incomplete. No generic presentation was applied.")
-      };
-      appendEvent(session, "generation_blocked", {
+      appendEvent(session, "generation_brand_evidence_degraded", {
         reason,
         brandfetchBrandApiProvider:
           session.brand?.diagnostics?.providers?.brandfetchBrandApi ?? "unknown",
@@ -2221,14 +2286,13 @@ export async function runStoryStage(id: string): Promise<void> {
       });
       return session;
     });
-    return;
   }
   if (
     preflight?.useCase === "abm" &&
     preflight.answers.targetDomain &&
     needsTargetBrandRefresh(preflight, preflight.answers.targetDomain)
   ) {
-    await runTargetBrandStage(id);
+    await runTargetBrandStage(id, { resumeStory: false });
     const refreshed = await getSession(id);
     if (
       !refreshed ||
@@ -2241,7 +2305,7 @@ export async function runStoryStage(id: string): Promise<void> {
     && preflight.answers.sourceUrl
     && !preflight.sourceArtifact
   ) {
-    await runSourceIntelligenceStage(id);
+    await runSourceIntelligenceStage(id, { resumeStory: false });
     preflight = await getSession(id);
     // Another request may still own the extraction lease. That worker resumes
     // generation after committing the matching artifact, so never race ahead.
@@ -2252,7 +2316,7 @@ export async function runStoryStage(id: string): Promise<void> {
     preflight.answers.offerSourceUrl &&
     !preflight.sourceArtifact
   ) {
-    await runSourceIntelligenceStage(id);
+    await runSourceIntelligenceStage(id, { resumeStory: false });
     preflight = await getSession(id);
     // Another request may still own the extraction lease. That worker resumes
     // generation after committing the matching artifact, so never race ahead.
@@ -2268,6 +2332,167 @@ export async function runStoryStage(id: string): Promise<void> {
     await releaseLeaseSafely(lease, id, "generation");
   }
   if (shouldRetry) await runStoryStage(id);
+}
+
+/**
+ * Coordinates the public preview path as bounded worker waves. Independent
+ * enrichment starts together; one reconciled renderer pass follows. A newer
+ * input fingerprint marks older results stale without allowing them to replace
+ * the current experience.
+ */
+export async function runPreviewEnrichmentWave(
+  id: string,
+  options: { includeStory?: boolean } = {}
+): Promise<void> {
+  const initial = await getSession(id);
+  if (!initial || initial.status === "claimed") return;
+  const fingerprint = previewInputFingerprint(initial);
+  activePreviewFingerprints.set(id, fingerprint);
+  const currentFingerprint = () => activePreviewFingerprints.get(id) ?? fingerprint;
+  try {
+    const identityTasks: PreviewWorkerTask<unknown>[] = [
+      {
+        worker: "brand-identity",
+        timeoutMs: 1_000,
+        run: async () => ({
+          value: { domain: initial.companyDomain },
+          evidenceRefs: [{ id: initial.companyDomain, kind: "submitted-domain" }],
+          confidence: 1,
+          artifactRef: `identity:${initial.companyDomain}`
+        })
+      }
+    ];
+    const identityExecutions = await runPreviewWorkerWave(identityTasks, {
+      fingerprint,
+      currentFingerprint
+    });
+    await persistWorkerExecutions(id, fingerprint, identityExecutions);
+
+    const enrichmentTasks: PreviewWorkerTask<unknown>[] = [
+      {
+        worker: "brand-enrichment",
+        timeoutMs: Math.min(25_000, config.brandHarvesterTimeoutMs + 5_000),
+        dependencies: ["brand-identity"],
+        run: async () => {
+          await runBrandStage(id, { resumeStory: false });
+          const session = await getSession(id);
+          return {
+            value: session?.brand,
+            evidenceRefs: session?.brand
+              ? [{ id: session.brand.domain, source: session.brand.sourceUrl, kind: session.brand.source }]
+              : [],
+            confidence: confidenceScore(session?.brand?.identity?.confidence),
+            artifactRef: session?.brand
+              ? `brand:${session.brand.canonicalDomain ?? session.brand.domain}`
+              : undefined,
+            ...(!session?.brand || session.brand.readiness?.status !== "ready"
+              ? { fallback: "Full design evidence is still being enriched." }
+              : {})
+          };
+        }
+      }
+    ];
+    if (initial.useCase === "abm" && initial.answers.targetDomain) {
+      enrichmentTasks.push({
+        worker: "account-research",
+        timeoutMs: 25_000,
+        dependencies: ["brand-identity"],
+        run: async () => {
+          await runTargetBrandStage(id, { resumeStory: false });
+          const session = await getSession(id);
+          return {
+            value: session?.targetBrand,
+            evidenceRefs: session?.targetBrand
+              ? [{ id: session.targetBrand.domain, source: session.targetBrand.sourceUrl, kind: session.targetBrand.source }]
+              : [],
+            confidence: confidenceScore(session?.targetBrand?.identity?.confidence),
+            artifactRef: session?.targetBrand ? `account:${session.targetBrand.domain}` : undefined,
+            ...(!session?.targetBrand ? { fallback: "Target context remains provisional." } : {})
+          };
+        }
+      });
+    }
+    const sourceUrl =
+      initial.useCase === "campaign"
+        ? initial.answers.offerSourceUrl
+        : initial.answers.sourceUrl;
+    if (sourceUrl) {
+      enrichmentTasks.push({
+        worker: "source-intelligence",
+        timeoutMs: 15_000,
+        dependencies: ["brand-identity"],
+        run: async () => {
+          await runSourceIntelligenceStage(id, { resumeStory: false });
+          const session = await getSession(id);
+          return {
+            value: session?.sourceArtifact,
+            evidenceRefs: session?.sourceArtifact
+              ? session.sourceArtifact.content.citations.slice(0, 12).map((citation) => ({
+                  id: citation.id,
+                  source: session.sourceArtifact?.source.finalUrl ?? session.sourceArtifact?.source.sourceUrl,
+                  kind: citation.locator.kind
+                }))
+              : [],
+            confidence: confidenceScore(session?.sourceArtifact?.confidence),
+            artifactRef: session?.sourceArtifact?.artifactId,
+            ...(!session?.sourceArtifact || session.sourceArtifact.status !== "ready"
+              ? { fallback: "Source extraction did not block the first preview." }
+              : {})
+          };
+        }
+      });
+    }
+    const enrichmentExecutions = await runPreviewWorkerWave(enrichmentTasks, {
+      fingerprint,
+      currentFingerprint
+    });
+    await persistWorkerExecutions(id, fingerprint, enrichmentExecutions);
+
+    if (options.includeStory === false || currentFingerprint() !== fingerprint) return;
+    const latest = await getSession(id);
+    if (
+      !latest ||
+      (!isGenerationReady(latest.useCase, latest.answers) && !isProvisionalGenerationReady(latest))
+    ) return;
+    const renderExecutions = await runPreviewWorkerWave(
+      [
+        {
+          worker: "render",
+          timeoutMs: Math.min(75_000, config.generationDeadlineMs + 10_000),
+          dependencies: [
+            "brand-enrichment",
+            ...(latest.useCase === "abm" ? ["account-research" as const] : []),
+            ...(sourceUrl ? ["source-intelligence" as const] : []),
+            "audience-strategy",
+            "message-spine",
+            "composition"
+          ],
+          run: async () => {
+            await runStoryStage(id);
+            const session = await getSession(id);
+            return {
+              value: session?.experience,
+              evidenceRefs: (session?.experienceSpec?.evidenceItemIds ?? []).map((evidenceId) => ({
+                id: evidenceId,
+                kind: "experience-evidence"
+              })),
+              confidence: session?.qualityReceipt?.status === "passed" ? 1 : 0.7,
+              artifactRef: session?.experience?.artifactDigest,
+              ...(!session?.experience
+                ? { fallback: "The renderer kept the best available provisional experience." }
+                : {})
+            };
+          }
+        }
+      ],
+      { fingerprint, currentFingerprint }
+    );
+    await persistWorkerExecutions(id, fingerprint, renderExecutions);
+  } finally {
+    if (activePreviewFingerprints.get(id) === fingerprint) {
+      activePreviewFingerprints.delete(id);
+    }
+  }
 }
 
 async function runStoryStageUnlocked(id: string): Promise<boolean> {
@@ -2346,7 +2571,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       !latest.sourceArtifact
     ) {
       const submittedSourceUrl = latest.answers.sourceUrl;
-      const sourceArtifact = await fetchPublicUrlSourceArtifact(submittedSourceUrl, {
+      const sourceArtifact = await fetchSourceArtifactSingleFlight(submittedSourceUrl, {
         timeoutMs: 12_000,
         maxBytes: 2_000_000
       });

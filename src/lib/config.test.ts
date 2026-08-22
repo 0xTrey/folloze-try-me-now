@@ -133,3 +133,22 @@ describe("Marketo configuration", () => {
     expect(reloaded.hasMarketo).toBe(false);
   });
 });
+
+describe("public Folloze write boundary", () => {
+  it("keeps the public runtime app-hosted HTML-only", async () => {
+    const { publicRuntimeCapabilities, hasRemoteFolloze, canPublishFolloze } =
+      await configFor({
+        FOLLOZE_MODE: "publish",
+        FOLLOZE_MCP_SERVER_URL: "https://example.invalid/mcp",
+        FOLLOZE_MCP_AUTH_TOKEN: "configured-token"
+      }).then(async () => import("@/lib/config"));
+
+    expect(publicRuntimeCapabilities).toEqual({
+      appHostedHtmlOnly: true,
+      follozeWritesEnabled: false,
+      follozePublishEnabled: false
+    });
+    expect(hasRemoteFolloze).toBe(false);
+    expect(canPublishFolloze).toBe(false);
+  });
+});

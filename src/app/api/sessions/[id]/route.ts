@@ -13,9 +13,7 @@ import {
   patchSessionWorkspace,
   recordPreviewInteraction,
   recoverSessionWork,
-  runSourceIntelligenceStage,
-  runStoryStage,
-  runTargetBrandStage
+  runPreviewEnrichmentWave
 } from "@/lib/orchestrator";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { getSession, toPublicSession } from "@/lib/session-store";
@@ -70,24 +68,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const body: unknown = await request.json();
     const workspaceParse = sessionWorkspacePatchSchema.safeParse(body);
     let updated;
-    let targetDomain: string | undefined;
-    let sourceUrl: string | undefined;
-    let offerSourceUrl: string | undefined;
     if (workspaceParse.success) {
       updated = await patchSessionWorkspace(id, workspaceParse.data);
-      targetDomain = workspaceParse.data.answers?.targetDomain;
-      sourceUrl = workspaceParse.data.answers?.sourceUrl;
-      offerSourceUrl = workspaceParse.data.answers?.offerSourceUrl;
     } else {
       const patch = answersSchema.parse(body);
       updated = await patchSessionAnswers(id, patch);
-      targetDomain = patch.targetDomain;
-      sourceUrl = patch.sourceUrl;
-      offerSourceUrl = patch.offerSourceUrl;
     }
-    if (targetDomain) after(() => runTargetBrandStage(id));
-    if (sourceUrl || offerSourceUrl) after(() => runSourceIntelligenceStage(id));
-    if (updated.shouldGenerate) after(() => runStoryStage(id));
+    after(() => runPreviewEnrichmentWave(id, { includeStory: updated.shouldGenerate }));
     trace.setTraceId(updated.traceId);
     return NextResponse.json(
       { session: updated.session },

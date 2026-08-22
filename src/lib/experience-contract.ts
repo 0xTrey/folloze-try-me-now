@@ -12,11 +12,16 @@ import {
   type CampaignBrief,
   type CampaignBriefField,
   type CampaignOfferSource,
+  type ExperienceActionContract,
+  type ExperienceContentContract,
   type ExperienceContentItem,
   type ExperienceDependency,
-  type ExperienceSpecV1,
+  type ExperienceRouteKind,
+  type ExperienceSpec,
+  type ExperienceSpecV2,
   type TryMeSession
 } from "@/lib/types";
+import { config } from "@/lib/config";
 
 function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -39,6 +44,105 @@ function publicHost(value: string | undefined): string | undefined {
   const citation = publicCitation(value);
   if (!citation) return undefined;
   return new URL(citation).hostname.replace(/^www\./, "");
+}
+
+function safeDomToken(value: string): string {
+  const token = value.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+  return token || digest(value).slice(0, 12);
+}
+
+function campaignSubtypeFor(session: TryMeSession): ExperienceSpecV2["route"]["campaignSubtype"] {
+  if (session.useCase !== "campaign") return undefined;
+  if (session.answers.campaignType === "event") {
+    return /webinar|virtual/i.test(session.answers.eventSource ?? "") ? "webinar" : "event";
+  }
+  if (session.answers.campaignType === "product") {
+    return /launch|announce/i.test(session.answers.objective ?? "") ? "launch" : "product";
+  }
+  return /replay|follow[- ]?up|nurture/i.test(session.answers.objective ?? "")
+    ? "replay"
+    : "demand";
+}
+
+function primaryActionFor(
+  session: TryMeSession,
+  label: string,
+  sourceUrl: string | undefined
+): ExperienceActionContract {
+  const intent = session.answers.ctaType ?? "explore";
+  const configuredDestination = publicCitation(config.demoCtaUrl);
+  const sourceDestination = publicCitation(sourceUrl);
+  const prefersSource = ["register", "download", "explore"].includes(intent);
+  const destination = (prefersSource ? sourceDestination : undefined) ?? configuredDestination;
+  if (destination) {
+    return {
+      id: "primary-conversion",
+      purpose: "primary-conversion",
+      label,
+      actionType: "external-link",
+      destination,
+      access: "public",
+      analyticsEvent: "cta_click",
+      analyticsOwner: "try-me-now",
+      verification: prefersSource && !sourceDestination ? "fallback" : "verified",
+      ...(prefersSource && !sourceDestination
+        ? { fallbackReason: "No verified public source destination was available." }
+        : {})
+    };
+  }
+  return {
+    id: "primary-conversion",
+    purpose: "guided-exploration",
+    label,
+    actionType: "scroll",
+    destination: "#supporting-resources",
+    access: "public",
+    analyticsEvent: "cta_click",
+    analyticsOwner: "try-me-now",
+    verification: "fallback",
+    fallbackReason: "No verified external destination was available."
+  };
+}
+
+function functionalContentFor(
+  items: ExperienceContentItem[],
+  sourceUrl: string | undefined
+): {
+  items: ExperienceContentItem[];
+  actions: ExperienceActionContract[];
+  contracts: ExperienceContentContract[];
+} {
+  const safeSource = publicCitation(sourceUrl);
+  const actions = items.map((item, index): ExperienceActionContract => {
+    const actionId = `content-${safeDomToken(item.id)}-${index + 1}`;
+    return {
+      id: actionId,
+      purpose: safeSource ? "source-continuity" : "guided-exploration",
+      label: item.actionLabel,
+      actionType: safeSource ? "external-link" : "content-dialog",
+      destination: safeSource ?? `#content-detail-${safeDomToken(item.id)}`,
+      access: "public",
+      analyticsEvent: "topic_select",
+      analyticsOwner: "try-me-now",
+      verification: safeSource ? "verified" : "fallback",
+      contentItemId: item.id,
+      ...(!safeSource
+        ? { fallbackReason: "The source remains available as an in-experience detail." }
+        : {})
+    };
+  });
+  return {
+    items: items.map((item, index) => ({ ...item, actionId: actions[index].id })),
+    actions,
+    contracts: items.map((item, index) => ({
+      contentItemId: item.id,
+      actionId: actions[index].id,
+      sourceContinuity: safeSource ? "public-source" : "in-experience-detail",
+      responsive: true,
+      accessibleLabel: `${item.actionLabel}: ${item.title}`,
+      verification: safeSource ? "verified" : "fallback"
+    }))
+  };
 }
 
 function boundedText(value: string, max: number): string {
@@ -319,7 +423,7 @@ export function buildExperienceSpec(
   draft: ExperienceDraft,
   brand: NonNullable<TryMeSession["brand"]>,
   targetBrand?: TryMeSession["targetBrand"]
-): ExperienceSpecV1 {
+): ExperienceSpecV2 {
   const createdAt = new Date().toISOString();
   const canonicalDraft = canonicalizeExperienceDraft(draft);
   const sourceBrief = session.campaignBrief ?? campaignBriefFor(session, createdAt);
@@ -350,7 +454,11 @@ export function buildExperienceSpec(
     session.answers.offerSourceTitle ??
     session.answers.promotedOffer ??
     session.answers.sourceName;
-  const contentItems = contentItemsFor(session, canonicalDraft);
+  const functionalContent = functionalContentFor(
+    contentItemsFor(session, canonicalDraft),
+    sourceUrl
+  );
+  const contentItems = functionalContent.items;
   const sourceSignalText = [
     sourceTitle,
     session.sourceArtifact?.understanding.premise,
@@ -393,7 +501,7 @@ export function buildExperienceSpec(
     { selectedBy: "system", locked: true }
   );
   const payload = {
-    schemaVersion: "1.0" as const,
+    schemaVersion: "2.0" as const,
     revision:
       Math.max(session.experienceSpecRevision ?? 0, session.experienceSpec?.revision ?? 0) + 1,
     sourceBriefRevision: sourceBrief.revision,
@@ -468,6 +576,19 @@ export function buildExperienceSpec(
         : {})
     },
     wireframeSelection,
+    route: {
+      kind: (session.useCase === "content" ? "content-magic" : session.useCase) as ExperienceRouteKind,
+      ...(campaignSubtypeFor(session)
+        ? { campaignSubtype: campaignSubtypeFor(session) }
+        : {})
+    },
+    compositionRecipe: {
+      family: wireframeSelection.family,
+      archetypeId: wireframeSelection.archetypeId,
+      compositionId: wireframeSelection.compositionId,
+      selectedBy: "system" as const,
+      locked: true as const
+    },
     draft: canonicalDraft as Record<string, unknown>,
     contentItems,
     ...(session.sourceArtifact
@@ -489,10 +610,16 @@ export function buildExperienceSpec(
           }
         }
       : {}),
+    actions: [
+      primaryActionFor(session, canonicalDraft.primaryCta, sourceUrl),
+      ...functionalContent.actions
+    ],
+    contentContracts: functionalContent.contracts,
     cta: {
       intent: session.answers.ctaType ?? "explore",
       style: session.answers.ctaStyle ?? "solid",
-      label: canonicalDraft.primaryCta
+      label: canonicalDraft.primaryCta,
+      actionId: "primary-conversion"
     },
     selectedAssetIds: [...(session.answers.selectedAssetIds ?? [])],
     evidenceItemIds: (session.evidenceItems ?? [])
@@ -501,14 +628,17 @@ export function buildExperienceSpec(
     curatedSections: structuredClone(session.curatedSections ?? []),
     analytics: { events: [...PREVIEW_INTERACTION_TYPES] },
     renderers: {
-      web: { status: "ready" as const },
-      folloze: { status: "not-requested" as const }
+      web: { status: "ready" as const, hosting: "app" as const },
+      folloze: {
+        status: "disabled" as const,
+        reason: "public-runtime-html-only" as const
+      }
     }
   };
   return { ...payload, artifactDigest: digest(payload) };
 }
 
-export function draftFromExperienceSpec(spec: ExperienceSpecV1): ExperienceDraft {
+export function draftFromExperienceSpec(spec: ExperienceSpec): ExperienceDraft {
   return canonicalizeExperienceDraft(experienceDraftSchema.parse(spec.draft));
 }
 
