@@ -30,12 +30,12 @@ Status: in progress
 
 ## Wave 3: production
 
-- Agents:
-- Decisions:
-- Files:
-- Tests:
-- Concerns:
-- Commits:
+- Agents: 13 Message-spine architect; 14 Opening writer; 15 Problem/urgency writer; 16 Exploration writer; 17 Mechanism/proof writer; 18 Team/CTA writer; 19 Copy/factuality editor. All completed bounded assignments in the required sequence.
+- Decisions: production spines carry directives/evidence bounds rather than final copy; writers own disjoint section roles; unsupported urgency is omitted; exploration emits exactly three distinct choices; sparse proof becomes a validation plan rather than a claim; typed CTA intent is preserved; the final editor repairs only safe style defects and rejects unsupported factual defects.
+- Files: `src/lib/generation/production-message-spine.ts`; `src/lib/generation/section-copy-types.ts`; five `*-section-writer.ts` modules; `src/lib/generation/copy-factuality-editor.ts`; directly corresponding unit tests.
+- Tests: `npm run typecheck` — passed; `npm test` — 104 files / 924 tests passed in 11.24s; `npm run lint` — exit 0 with three pre-existing warnings; `npm run benchmark:preview` — 5 files / 30 tests passed.
+- Concerns: Wave 4 must wire the typed production artifacts into current-revision `ExperienceSpecV2`, trusted rendering, receipts, fail-soft repair, and final E2E/visual evidence.
+- Commits: `563e67a feat: define bounded section copy contracts`; `20fd9ee feat: compile evidence-bounded message spines`; `b9e3b83 feat: add bounded section copy writers`; `c0fc3a6 feat: validate and edit production section copy`.
 
 ## Wave 4: integration and QA
 
