@@ -4,6 +4,7 @@ import {
   hasBrandfetchLogoApi,
   hasRemoteBrandHarvester
 } from "@/lib/config";
+import { isIP } from "node:net";
 import sharp from "sharp";
 import {
   brandfetchLogoApiUrl,
@@ -116,7 +117,18 @@ function absoluteHttpsUrl(value: string | undefined, base: URL): string | undefi
   if (!value || value.startsWith("data:")) return undefined;
   try {
     const resolved = new URL(decodeHtml(value), base);
-    return resolved.protocol === "https:" && !resolved.username && !resolved.password
+    const hostname = resolved.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const nonPublicHostname =
+      isIP(hostname) !== 0 ||
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".internal");
+    return resolved.protocol === "https:" &&
+      !resolved.port &&
+      !resolved.username &&
+      !resolved.password &&
+      !nonPublicHostname
       ? resolved.toString()
       : undefined;
   } catch {
@@ -557,16 +569,24 @@ function extractLogo(
   };
 }
 
-function extractImageUrls(html: string, base: URL, logoUrl?: string): string[] {
+function extractImageUrls(
+  html: string,
+  css: string,
+  base: URL,
+  logoUrl?: string
+): string[] {
   const candidates = new Map<string, number>();
-  const add = (url: string | undefined, score: number) => {
+  const add = (url: string | undefined, score: number, descriptor = "") => {
     const pathname = url ? new URL(url).pathname : "";
     if (
       !url ||
       url === logoUrl ||
+      /\.(?:css|js|mjs|json|map|woff2?|ttf|otf|eot|pdf|zip|mp4|webm)(?:$|[?#])/i.test(url) ||
       /(?:^|[/_.-])(logos?|wordmark|brandmark|badge|app[-_ ]?store|google[-_ ]?play|favicon|icons?)(?:[/_.?-]|$)/i.test(
         pathname
-      )
+      ) ||
+      (/\.svg(?:$|[?#])/i.test(url) &&
+        !/diagram|architecture|platform|workflow|illustration|visual/i.test(descriptor))
     ) return;
     const reusableScore =
       score -
@@ -578,10 +598,10 @@ function extractImageUrls(html: string, base: URL, logoUrl?: string): string[] {
     candidates.set(url, Math.max(reusableScore, candidates.get(url) ?? Number.NEGATIVE_INFINITY));
   };
 
-  add(absoluteHttpsUrl(extractMeta(html, "og:image"), base), 55);
-  add(absoluteHttpsUrl(extractMeta(html, "twitter:image"), base), 50);
+  add(absoluteHttpsUrl(extractMeta(html, "og:image"), base), 55, "social preview");
+  add(absoluteHttpsUrl(extractMeta(html, "twitter:image"), base), 50, "social preview");
 
-  for (const tag of html.match(/<img\b[^>]*>/gi) ?? []) {
+  for (const tag of responsiveLogoTags(html)) {
     const source = imageSource(tag, base);
     if (!source) continue;
     const descriptor = [attr(tag, "alt"), attr(tag, "class"), attr(tag, "id"), source]
@@ -598,7 +618,31 @@ function extractImageUrls(html: string, base: URL, logoUrl?: string): string[] {
     if (width >= 600 || height >= 400) score += 25;
     if (width && height && width * height < 80_000) score -= 45;
     if (/\.svg(?:\?|$)/.test(source) && !/diagram|architecture|platform|workflow/.test(descriptor)) score -= 20;
-    add(source, score);
+    add(source, score, descriptor);
+  }
+
+  for (const rule of css.matchAll(/([^{}]{1,260})\{([^{}]{0,2400})\}/g)) {
+    const selector = rule[1].trim();
+    const body = rule[2];
+    if (
+      !selector ||
+      selector.startsWith("@") ||
+      /logo|wordmark|brandmark|badge|icon|avatar|cookie|captcha|spinner|rating|stars?|review|widget/i.test(
+        selector
+      )
+    ) continue;
+    const visualRole = /hero|masthead|banner|platform|product|solution|architecture|workflow|illustration|visual/i.test(
+      selector
+    );
+    const declarations = body.match(
+      /(?:background(?:-image)?|content)\s*:\s*[^;}{]*url\([^;}{]+\)/gi
+    ) ?? [];
+    for (const declaration of declarations) {
+      for (const match of declaration.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/gi)) {
+        const source = absoluteHttpsUrl(match[1], base);
+        add(source, visualRole ? 70 : 20, selector);
+      }
+    }
   }
 
   return [...candidates.entries()]
@@ -661,11 +705,24 @@ function saturation(hex: string): number {
   return Math.max(...channels) - Math.min(...channels);
 }
 
+interface StaticSemanticColorRoles {
+  darkSurface?: string;
+  softSurface?: string;
+  supportingAccent?: string;
+  lightSurfaceAccent?: string;
+  lightText?: string;
+  mutedText?: string;
+  divider?: string;
+  focus?: string;
+  surface?: string;
+}
+
 function extractPalette(html: string, css: string): {
   colors: string[];
   primaryColor: string;
   accentColor: string;
   surfaceColor: string;
+  semanticRoles: StaticSemanticColorRoles;
   diagnostics: NonNullable<NonNullable<BrandProfile["diagnostics"]>["palette"]>;
 } {
   const source = css.trim() || html;
@@ -888,6 +945,40 @@ function extractPalette(html: string, css: string): {
   const semanticAccentStrength = semanticAccentEntry
     ? accentScore(semanticAccentEntry.name, semanticAccentEntry.usage)
     : 0;
+  const semanticRoleColor = (
+    pattern: RegExp,
+    accepts: (color: string) => boolean = () => true
+  ) => sourceOwnedVariables
+    .filter(({ name, color }) => pattern.test(name) && accepts(color))
+    .sort((left, right) => right.usage - left.usage)[0]?.color;
+  const semanticSurface = semanticRoleColor(
+    /(?:^|[-_])(?:(?:body|page|base|canvas)[-_])?(?:surface|background)(?:[-_](?:default|primary|base|light|white|0?1))?(?:$|[-_])/,
+    (color) => luminance(color) > 0.82
+  );
+  const semanticRoles: StaticSemanticColorRoles = {
+    darkSurface: semanticRoleColor(
+      /(?:hero|masthead|nav|navbar|header).*(?:background|surface)|(?:background|surface).*(?:dark|inverse|midnight)/,
+      (color) => luminance(color) < 0.3
+    ),
+    softSurface: semanticRoleColor(
+      /(?:surface|background).*(?:soft|subtle|secondary|tertiary|muted|light[-_]?(?:gray|grey|pink))|(?:soft|subtle|muted).*(?:surface|background)/,
+      (color) => luminance(color) > 0.65
+    ),
+    supportingAccent: semanticRoleColor(
+      /(?:support|secondary)[-_]?(?:accent|brand|color)|(?:accent|brand)[-_]?(?:support|secondary)/
+    ),
+    lightSurfaceAccent: semanticAccent,
+    lightText: semanticRoleColor(
+      /(?:text|foreground|content).*(?:inverse|on[-_]?dark|light|white)|(?:inverse|on[-_]?dark).*(?:text|foreground|content)/,
+      (color) => luminance(color) > 0.72
+    ),
+    mutedText: semanticRoleColor(
+      /(?:text|foreground|content).*(?:muted|subdued|secondary|tertiary)|(?:muted|subdued).*(?:text|foreground|content)/
+    ),
+    divider: semanticRoleColor(/(?:^|[-_])(?:divider|separator|border)(?:$|[-_])/),
+    focus: semanticRoleColor(/(?:^|[-_])focus(?:$|[-_])/),
+    surface: semanticSurface
+  };
   const evidencedAccent = (semanticAccentStrength >= 170 ? semanticAccent : undefined) ??
     metadataAccent ??
     semanticAccent ??
@@ -907,8 +998,15 @@ function extractPalette(html: string, css: string): {
     (css.trim() && variables.length === 0 ? darkCandidates[0] : undefined);
   const usedFabricatedPrimary = !evidencedPrimary;
   const primaryColor = evidencedPrimary ?? "#202124";
-  const surfaceColor = ranked.find((color) => luminance(color) > 0.88) ?? "#FFFFFF";
-  const colors = [primaryColor, accentColor, surfaceColor, ...meaningful]
+  const evidencedSurface = semanticSurface ?? ranked.find((color) => luminance(color) > 0.88);
+  const surfaceColor = evidencedSurface ?? "#FFFFFF";
+  const colors = [
+    primaryColor,
+    accentColor,
+    surfaceColor,
+    ...Object.values(semanticRoles).filter((color): color is string => Boolean(color)),
+    ...meaningful
+  ]
     .filter((color, index, values) => values.indexOf(color) === index)
     .slice(0, 8);
   const semanticColors = new Set([
@@ -950,6 +1048,7 @@ function extractPalette(html: string, css: string): {
     primaryColor,
     accentColor,
     surfaceColor,
+    semanticRoles,
     diagnostics: {
       strategy,
       confidence,
@@ -964,11 +1063,11 @@ function extractPalette(html: string, css: string): {
 function cssLengthToPx(value: string): number | undefined {
   const trimmed = value.trim().toLowerCase();
   const pxMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)px$/);
-  if (pxMatch) return boundedNumber(pxMatch[1], 0, 999);
+  if (pxMatch) return boundedNumber(pxMatch[1], 0, 2000);
   const remMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)rem$/);
   if (remMatch) {
     const rem = Number.parseFloat(remMatch[1]);
-    return Number.isFinite(rem) ? boundedNumber(rem * 16, 0, 999) : undefined;
+    return Number.isFinite(rem) ? boundedNumber(rem * 16, 0, 2000) : undefined;
   }
   return undefined;
 }
@@ -980,26 +1079,38 @@ function cssLengthToPx(value: string): number | undefined {
 function extractStaticDesignDna(
   html: string,
   css: string,
-  palette: { primaryColor: string; accentColor: string; surfaceColor: string },
-  paletteConfidence: IntelligenceConfidence
+  semanticRoles: StaticSemanticColorRoles,
+  paletteConfidence: IntelligenceConfidence,
+  fonts: Pick<BrandProfile, "displayFontFamily" | "bodyFontFamily">
 ): BrandDesignDNA | undefined {
   const source = css.trim() || html;
   if (!source.trim()) return undefined;
+  const variables = new Map(
+    [...source.matchAll(/--([a-z0-9_-]+)\s*:\s*([^;}{]+)/gi)].map((match) => [
+      match[1].toLowerCase(),
+      match[2].trim()
+    ])
+  );
+  const resolveValue = (value: string | undefined, seen = new Set<string>()): string | undefined => {
+    if (!value) return undefined;
+    const reference = value.match(/var\(\s*--([a-z0-9_-]+)/i)?.[1]?.toLowerCase();
+    if (!reference) return value.trim();
+    if (seen.has(reference)) return undefined;
+    return resolveValue(variables.get(reference), new Set([...seen, reference]));
+  };
+  const declaration = (body: string, property: string): string | undefined =>
+    resolveValue(body.match(new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;}{]+)`, "i"))?.[1]);
+  const declarationColor = (body: string, property: string): string | undefined =>
+    cssColorLiterals(declaration(body, property) ?? "")
+      .map(normalizeCssColor)
+      .find((color): color is string => Boolean(color));
 
   const buttonRule = [...source.matchAll(
     /([^{}]{0,220}(?:\.button|\[class\*="button"\]|\[data-appearance=["']primary["']\]|btn[-_]?primary|primary[-_]?button|cta[-_]?button)[^{}]{0,180})\{([^{}]{0,1200})\}/gi
   )][0];
   const buttonBody = buttonRule?.[2] ?? "";
   const radiusLiteral = buttonBody.match(/border-radius\s*:\s*([^;}{]+)/i)?.[1];
-  let radiusPx = radiusLiteral ? cssLengthToPx(radiusLiteral.trim()) : undefined;
-  if (radiusPx === undefined && radiusLiteral) {
-    const referenced = radiusLiteral.match(/var\(\s*--([a-z0-9_-]+)/i)?.[1]?.toLowerCase();
-    if (referenced) {
-      const tokenValue = [...source.matchAll(/--([a-z0-9_-]+)\s*:\s*([^;}{]+)/gi)]
-        .find((match) => match[1].toLowerCase() === referenced)?.[2];
-      radiusPx = tokenValue ? cssLengthToPx(tokenValue.trim()) : undefined;
-    }
-  }
+  let radiusPx = cssLengthToPx(resolveValue(radiusLiteral) ?? "");
   if (radiusPx === undefined) {
     const radiusToken = [...source.matchAll(/--([a-z0-9_-]*radius[a-z0-9_-]*)\s*:\s*([^;}{]+)/gi)]
       .map((match) => ({
@@ -1016,18 +1127,37 @@ function extractStaticDesignDna(
   }
 
   const heightMatch = buttonBody.match(/(?:^|;)\s*(?:min-)?height\s*:\s*([^;}{]+)/i)?.[1];
-  const heightPx = heightMatch ? cssLengthToPx(heightMatch) : undefined;
+  const heightPx = cssLengthToPx(resolveValue(heightMatch) ?? "");
   const borderWidthMatch = buttonBody.match(/border(?:-width)?\s*:\s*([^;}{]+)/i)?.[1];
   const borderWidthPx = borderWidthMatch
-    ? cssLengthToPx(borderWidthMatch.split(/\s+/)[0] ?? "")
+    ? cssLengthToPx(resolveValue(borderWidthMatch)?.split(/\s+/)[0] ?? "")
     : undefined;
+  const buttonBackground = declarationColor(buttonBody, "background(?:-color)?");
+  const buttonText = declarationColor(buttonBody, "color");
+  const buttonBorder = declarationColor(buttonBody, "border(?:-color)?");
 
   const cardRule = [...source.matchAll(
     /([^{}]{0,160}(?:\.card|\[class\*="card"\])[^{}]{0,120})\{([^{}]{0,800})\}/gi
   )][0];
-  const cardRadius = cardRule?.[2]
-    ? cssLengthToPx(cardRule[2].match(/border-radius\s*:\s*([^;}{]+)/i)?.[1] ?? "")
-    : undefined;
+  const cardBody = cardRule?.[2] ?? "";
+  const cardRadius = cssLengthToPx(resolveValue(
+    cardBody.match(/border-radius\s*:\s*([^;}{]+)/i)?.[1]
+  ) ?? "");
+  const cardBorderWidth = cssLengthToPx(resolveValue(
+    cardBody.match(/border(?:-width)?\s*:\s*([^;}{]+)/i)?.[1]
+  )?.split(/\s+/)[0] ?? "");
+  const cardShadowValue = declaration(cardBody, "box-shadow");
+  const cardShadowExtent = Math.max(
+    0,
+    ...(cardShadowValue?.match(/-?\d+(?:\.\d+)?px/gi) ?? [])
+      .map((value) => Math.abs(Number.parseFloat(value)))
+  );
+  const cardShadow: NonNullable<BrandDesignDNA["cards"]>["shadow"] | undefined =
+    cardShadowValue === "none"
+      ? "none"
+      : cardShadowValue
+        ? cardShadowExtent >= 48 ? "strong" : "soft"
+        : undefined;
 
   const headingWeight = boundedNumber(
     source.match(/(?:^|[,\s{])h1\s*\{[^}]*font-weight\s*:\s*(\d{3})/i)?.[1],
@@ -1039,32 +1169,76 @@ function extractStaticDesignDna(
     300,
     800
   );
-  const serifEvidence = /(?:font-family|font-serif)[^;}{]*(?:georgia|times|serif)/i.test(source) &&
-    !/sans-serif/i.test(source.match(/font-family[^;}{]+/i)?.[0] ?? "sans-serif");
+  const displayFamily = fonts.displayFontFamily ?? fonts.bodyFontFamily;
+  const fontFallback = displayFamily
+    ? /serif/i.test(displayFamily) && !/sans/i.test(displayFamily)
+      ? "serif" as const
+      : "sans" as const
+    : undefined;
+  const headingRule = source.match(/(?:^|[,\s{])h1\s*\{([^}]*)\}/i)?.[1] ?? "";
+  const headingLetterSpacingValue = declaration(headingRule, "letter-spacing");
+  const headingLetterSpacingEm = headingLetterSpacingValue?.endsWith("em")
+    ? boundedNumber(headingLetterSpacingValue.slice(0, -2), -0.1, 0.12)
+    : undefined;
+  const headingLineHeightValue = declaration(headingRule, "line-height");
+  const headingLineHeight = headingLineHeightValue && /^\d+(?:\.\d+)?$/.test(headingLineHeightValue)
+    ? boundedNumber(headingLineHeightValue, 0.85, 1.45)
+    : undefined;
 
   const heroBlock = [...source.matchAll(
-    /([^{}]{0,160}(?:\.hero|\[class\*="hero"\]|\.masthead)[^{}]{0,120})\{([^{}]{0,1000})\}/gi
+    /([^{}]{0,160}(?:\.[a-z0-9_-]*hero[a-z0-9_-]*|\[class\*="hero"\]|\.masthead)[^{}]{0,120})\{([^{}]{0,1000})\}/gi
   )][0]?.[2] ?? "";
-  const heroBackground = cssColorLiterals(heroBlock)
+  const heroBackgroundValue = declaration(heroBlock, "background(?:-color)?");
+  const heroBackground = cssColorLiterals(heroBackgroundValue ?? "")
     .map(normalizeCssColor)
     .find((color): color is string => Boolean(color));
   const hero = heroBackground
     ? luminance(heroBackground) < 0.22 ? "dark" as const : "light" as const
-    : luminance(palette.primaryColor) < 0.22 ? "dark" as const : "light" as const;
-
+    : undefined;
   const motif: NonNullable<BrandDesignDNA["theme"]>["motif"] | undefined =
-    /radial-gradient/i.test(source) ? "radial-glow"
-      : /repeating-linear-gradient|background-size\s*:\s*\d/i.test(source) ? "technical-grid"
-        : /linear-gradient/i.test(source) ? "soft-gradient"
+    /radial-gradient/i.test(heroBlock) ? "radial-glow"
+      : /repeating-linear-gradient|background-size\s*:\s*\d/i.test(heroBlock) ? "technical-grid"
+        : /linear-gradient/i.test(heroBlock) ? "soft-gradient"
           : undefined;
+  const layoutRule = [...source.matchAll(
+    /([^{}]{0,180}(?:nav|navbar|header|hero|masthead|container|layout)[^{}]{0,160})\{([^{}]{0,1000})\}/gi
+  )].map((match) => match[2]);
+  const contentMaxWidthPx = layoutRule
+    .map((body) => cssLengthToPx(resolveValue(
+      body.match(/max-width\s*:\s*([^;}{]+)/i)?.[1]
+    ) ?? ""))
+    .filter((value): value is number => value !== undefined && value >= 960 && value <= 1800)
+    .sort((left, right) => right - left)[0];
+  const heroPadding = declaration(heroBlock, "padding");
+  const sectionBlockPx = cssLengthToPx(heroPadding?.split(/\s+/)[0] ?? "");
+  const gridGapPx = layoutRule
+    .map((body) => cssLengthToPx(resolveValue(body.match(/(?:^|;)\s*gap\s*:\s*([^;}{]+)/i)?.[1]) ?? ""))
+    .find((value): value is number => value !== undefined && value >= 4 && value <= 64);
 
-  const hasGeometry = radiusPx !== undefined || heightPx !== undefined || cardRadius !== undefined;
-  const hasType = headingWeight !== undefined || bodyWeight !== undefined || serifEvidence;
-  if (!hasGeometry && !hasType && !motif && !heroBackground) return undefined;
+  const hasButtons = Boolean(
+    buttonRule &&
+    (buttonBackground || buttonText || buttonBorder || radiusPx !== undefined ||
+      heightPx !== undefined || borderWidthPx !== undefined)
+  );
+  const hasCards = Boolean(
+    cardRule &&
+    (cardRadius !== undefined || cardBorderWidth !== undefined || cardShadow)
+  );
+  const hasGeometry = hasButtons || hasCards ||
+    contentMaxWidthPx !== undefined || sectionBlockPx !== undefined || gridGapPx !== undefined;
+  const hasType = headingWeight !== undefined || bodyWeight !== undefined || fontFallback ||
+    headingLetterSpacingEm !== undefined || headingLineHeight !== undefined;
+  const colorRoles = Object.fromEntries(
+    Object.entries(semanticRoles).filter(([key, value]) => key !== "surface" && Boolean(value))
+  ) as NonNullable<BrandDesignDNA["colors"]>;
+  const hasColorRoles = Object.keys(colorRoles).length > 0;
+  const hasTheme = Boolean(hero && (heroBackground || motif));
+  if (!hasGeometry && !hasType && !hasTheme && !hasColorRoles) return undefined;
 
-  const confidence: IntelligenceConfidence = paletteConfidence === "high" && hasGeometry
+  const evidenceGroups = [hasColorRoles, hasGeometry, hasType, hasTheme].filter(Boolean).length;
+  const confidence: IntelligenceConfidence = paletteConfidence === "high" && evidenceGroups >= 3
     ? "high"
-    : hasGeometry || hasType
+    : evidenceGroups >= 2
       ? "medium"
       : "low";
 
@@ -1072,23 +1246,51 @@ function extractStaticDesignDna(
     version: 1,
     source: "legacy-presentation",
     confidence,
-    theme: { hero, ...(motif ? { motif } : {}) },
-    colors: {
-      lightSurfaceAccent: palette.accentColor,
-      focus: palette.accentColor
-    },
-    typography: {
-      fallback: serifEvidence ? "serif" : "sans",
-      ...(headingWeight !== undefined ? { headingWeight } : {}),
-      ...(bodyWeight !== undefined ? { bodyWeight } : {})
-    },
-    buttons: {
-      primaryBackground: palette.accentColor,
-      ...(radiusPx !== undefined ? { radiusPx } : {}),
-      ...(heightPx !== undefined && heightPx >= 36 && heightPx <= 80 ? { heightPx } : {}),
-      ...(borderWidthPx !== undefined ? { borderWidthPx } : {})
-    },
-    ...(cardRadius !== undefined ? { cards: { radiusPx: cardRadius } } : {})
+    ...(hasTheme ? { theme: { hero: hero!, ...(motif ? { motif } : {}) } } : {}),
+    ...(hasColorRoles ? { colors: colorRoles } : {}),
+    ...(hasType
+      ? {
+          typography: {
+            ...(fontFallback ? { fallback: fontFallback } : {}),
+            ...(headingWeight !== undefined ? { headingWeight } : {}),
+            ...(bodyWeight !== undefined ? { bodyWeight } : {}),
+            ...(headingLetterSpacingEm !== undefined ? { headingLetterSpacingEm } : {}),
+            ...(headingLineHeight !== undefined ? { headingLineHeight } : {})
+          }
+        }
+      : {}),
+    ...(hasButtons
+      ? {
+          buttons: {
+            ...(buttonBackground ? { primaryBackground: buttonBackground } : {}),
+            ...(buttonText ? { primaryText: buttonText } : {}),
+            ...(buttonBorder ? { secondaryBorder: buttonBorder } : {}),
+            ...(radiusPx !== undefined ? { radiusPx } : {}),
+            ...(heightPx !== undefined && heightPx >= 36 && heightPx <= 80 ? { heightPx } : {}),
+            ...(borderWidthPx !== undefined ? { borderWidthPx } : {})
+          }
+        }
+      : {}),
+    ...(hasCards
+      ? {
+          cards: {
+            ...(cardRadius !== undefined ? { radiusPx: cardRadius } : {}),
+            ...(cardBorderWidth !== undefined ? { borderWidthPx: cardBorderWidth } : {}),
+            ...(cardShadow ? { shadow: cardShadow } : {})
+          }
+        }
+      : {}),
+    ...(contentMaxWidthPx !== undefined || sectionBlockPx !== undefined || gridGapPx !== undefined
+      ? {
+          spacing: {
+            ...(contentMaxWidthPx !== undefined ? { contentMaxWidthPx } : {}),
+            ...(sectionBlockPx !== undefined && sectionBlockPx >= 52 && sectionBlockPx <= 160
+              ? { sectionBlockPx }
+              : {}),
+            ...(gridGapPx !== undefined ? { gridGapPx } : {})
+          }
+        }
+      : {})
   };
 }
 
@@ -1346,11 +1548,15 @@ export function extractFastBrandProfile(input: {
   );
   const logoDecision = extractLogo(input.html, finalUrl, companyName);
   const logoUrl = logoDecision.logoUrl;
-  const imageUrls = extractImageUrls(input.html, finalUrl, logoUrl);
+  const imageUrls = extractImageUrls(input.html, input.css ?? "", finalUrl, logoUrl);
   const topics = extractPublicTopics(input.html);
   const cleanDescription = description ? stripTags(description).slice(0, 500) : undefined;
   const publicContext = [cleanDescription, ...topics].filter(Boolean).join(" ").slice(0, 2400) || undefined;
-  const { diagnostics: paletteDiagnostics, ...palette } = extractPalette(
+  const {
+    diagnostics: paletteDiagnostics,
+    semanticRoles,
+    ...palette
+  } = extractPalette(
     input.html,
     input.css ?? ""
   );
@@ -1359,8 +1565,9 @@ export function extractFastBrandProfile(input: {
   const designDna = extractStaticDesignDna(
     input.html,
     input.css ?? "",
-    palette,
-    paletteDiagnostics.confidence
+    semanticRoles,
+    paletteDiagnostics.confidence,
+    fonts
   );
   const profile: BrandProfile = {
     domain: submittedDomain,

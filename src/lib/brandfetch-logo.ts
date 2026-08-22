@@ -1,9 +1,99 @@
+import type { ProductionArtifact } from "@/lib/orchestration/worker-types";
+import type { PortableBrandLogo } from "@/lib/types";
+
 const BRANDFETCH_LOGO_HOST = "cdn.brandfetch.io";
 const BRANDFETCH_CLIENT_ID = /^[A-Za-z0-9_-]{8,80}$/;
 const PUBLIC_DOMAIN = /^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+const HEX_COLOR = /^#[A-F0-9]{6}$/;
+const DEFAULT_RETRIEVER_DEADLINE_MS = 8_000;
 
 export type BrandfetchLogoTheme = "light" | "dark";
 export type BrandfetchLogoType = "logo" | "symbol" | "icon";
+
+export type BrandfetchProviderStatus =
+  | "hit"
+  | "missing"
+  | "unauthorized"
+  | "rate_limited"
+  | "invalid_response"
+  | "failed";
+
+export interface BrandfetchProviderResult {
+  status: BrandfetchProviderStatus;
+  payload?: unknown;
+}
+
+/**
+ * Server-side provider boundary. Implementations own authenticated Brandfetch
+ * requests and optional safe-fetch asset copying; the retriever never accepts
+ * credentials or makes an unbounded network request itself.
+ */
+export interface BrandfetchRetrieverProvider {
+  lookup(domain: string, signal: AbortSignal): Promise<BrandfetchProviderResult>;
+  loadPortableLogo?(
+    url: string,
+    signal: AbortSignal
+  ): Promise<PortableBrandLogo | undefined>;
+}
+
+export interface BrandfetchRetrieverRequest {
+  sessionId: string;
+  revision: number;
+  canonicalDomain: string;
+  aliases?: string[];
+  signal?: AbortSignal;
+  deadlineMs?: number;
+  now?: () => Date;
+}
+
+export interface BrandfetchColorEvidence {
+  hex: string;
+  type?: string;
+}
+
+export interface BrandfetchFontEvidence {
+  name: string;
+  type?: string;
+}
+
+export interface BrandfetchOfficialLogoEvidence {
+  status: "verified" | "missing" | "rejected";
+  source: "brandfetch";
+  delivery?: "brandfetch-hotlink" | "portable";
+  url?: string;
+  urlOnDark?: string;
+  portable?: PortableBrandLogo;
+  candidateCount: number;
+  rejectedCandidateCount: number;
+}
+
+export interface BrandfetchEvidence {
+  canonicalDomain: string;
+  matchedDomain: string;
+  aliases: string[];
+  companyName?: string;
+  description?: string;
+  colors: BrandfetchColorEvidence[];
+  fonts: BrandfetchFontEvidence[];
+  claimed?: boolean;
+  qualityTier: "high" | "medium" | "low" | "unknown";
+  logo: BrandfetchOfficialLogoEvidence;
+}
+
+export type BrandfetchEvidenceArtifact = ProductionArtifact<BrandfetchEvidence>;
+
+interface NormalizedLogoCandidate {
+  src: string;
+  theme: string;
+  score: number;
+}
+
+class BrandfetchRetrieverTimeout extends Error {
+  constructor() {
+    super("Brandfetch retrieval exceeded its deadline.");
+    this.name = "BrandfetchRetrieverTimeout";
+  }
+}
 
 function normalizeLogoDomain(value: string): string | undefined {
   try {
@@ -14,6 +104,309 @@ function normalizeLogoDomain(value: string): string | undefined {
     return PUBLIC_DOMAIN.test(hostname) ? hostname : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function boundedProviderText(value: unknown, maximum: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[\u0000-\u001f\u007f<>\[\]{}]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized ? normalized.slice(0, maximum) : undefined;
+}
+
+function normalizeProviderColor(value: unknown): BrandfetchColorEvidence | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const color = value as Record<string, unknown>;
+  const hex = typeof color.hex === "string" ? color.hex.trim().toUpperCase() : "";
+  if (!HEX_COLOR.test(hex)) return undefined;
+  return {
+    hex,
+    type: boundedProviderText(color.type, 24)?.toLowerCase()
+  };
+}
+
+function normalizeProviderFont(value: unknown): BrandfetchFontEvidence | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const font = value as Record<string, unknown>;
+  const name = boundedProviderText(font.name, 80);
+  if (!name) return undefined;
+  return {
+    name,
+    type: boundedProviderText(font.type, 24)?.toLowerCase()
+  };
+}
+
+function providerQualityTier(value: unknown): BrandfetchEvidence["qualityTier"] {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "unknown";
+  if (value >= 2 / 3) return "high";
+  if (value >= 1 / 3) return "medium";
+  return "low";
+}
+
+function normalizeProviderLogoCandidates(payload: Record<string, unknown>): {
+  candidates: NormalizedLogoCandidate[];
+  rejectedCandidateCount: number;
+} {
+  let rejectedCandidateCount = 0;
+  const logos = Array.isArray(payload.logos) ? payload.logos : [];
+  const candidates = logos
+    .filter((logo): logo is Record<string, unknown> => Boolean(
+      logo && typeof logo === "object" && !Array.isArray(logo)
+    ))
+    .flatMap((logo) => {
+      const type = boundedProviderText(logo.type, 24)?.toLowerCase() ?? "";
+      const theme = boundedProviderText(logo.theme, 24)?.toLowerCase() ?? "";
+      const typeScore = type === "logo" ? 200 : type === "symbol" ? 80 : type === "icon" ? 20 : 0;
+      const formats = Array.isArray(logo.formats) ? logo.formats : [];
+      return formats
+        .filter((format): format is Record<string, unknown> => Boolean(
+          format && typeof format === "object" && !Array.isArray(format)
+        ))
+        .map((format): NormalizedLogoCandidate | undefined => {
+          const src = typeof format.src === "string" ? format.src.trim() : "";
+          if (!isBrandfetchHostedLogoUrl(src)) {
+            rejectedCandidateCount += 1;
+            return undefined;
+          }
+          const formatName = boundedProviderText(format.format, 24)?.toLowerCase();
+          return {
+            src,
+            theme,
+            score:
+              typeScore +
+              (formatName === "svg" ? 40 : formatName === "webp" ? 30 : formatName === "png" ? 25 : 10)
+          };
+        });
+    })
+    .filter((candidate): candidate is NormalizedLogoCandidate => Boolean(candidate))
+    .sort((left, right) => right.score - left.score)
+    .filter((candidate, index, values) =>
+      values.findIndex(({ src }) => src === candidate.src) === index
+    )
+    .slice(0, 6);
+  return { candidates, rejectedCandidateCount };
+}
+
+async function selectProviderLogo(
+  payload: Record<string, unknown>,
+  provider: BrandfetchRetrieverProvider,
+  signal: AbortSignal
+): Promise<BrandfetchOfficialLogoEvidence> {
+  const normalized = normalizeProviderLogoCandidates(payload);
+  if (!normalized.candidates.length) {
+    return {
+      status: normalized.rejectedCandidateCount ? "rejected" : "missing",
+      source: "brandfetch",
+      candidateCount: 0,
+      rejectedCandidateCount: normalized.rejectedCandidateCount
+    };
+  }
+  if (provider.loadPortableLogo) {
+    let rejectedCandidateCount = normalized.rejectedCandidateCount;
+    for (const candidate of normalized.candidates) {
+      const portable = await provider.loadPortableLogo(candidate.src, signal);
+      if (portable?.source === "brandfetch") {
+        return {
+          status: "verified",
+          source: "brandfetch",
+          delivery: "portable",
+          url: candidate.src,
+          portable,
+          candidateCount: normalized.candidates.length,
+          rejectedCandidateCount
+        };
+      }
+      rejectedCandidateCount += 1;
+    }
+    return {
+      status: "rejected",
+      source: "brandfetch",
+      candidateCount: normalized.candidates.length,
+      rejectedCandidateCount
+    };
+  }
+  const lightSurface = normalized.candidates.find(({ theme }) => theme === "dark")
+    ?? normalized.candidates[0];
+  const darkSurface = normalized.candidates.find(({ theme }) => theme === "light")
+    ?? lightSurface;
+  return {
+    status: "verified",
+    source: "brandfetch",
+    delivery: "brandfetch-hotlink",
+    url: lightSurface?.src,
+    urlOnDark: darkSurface?.src,
+    candidateCount: normalized.candidates.length,
+    rejectedCandidateCount: normalized.rejectedCandidateCount
+  };
+}
+
+function artifactBase(
+  request: BrandfetchRetrieverRequest,
+  startedAt: string,
+  completedAt: string
+): Pick<
+  BrandfetchEvidenceArtifact,
+  "worker" | "sessionId" | "revision" | "startedAt" | "completedAt"
+> {
+  return {
+    worker: "brandfetch-retriever",
+    sessionId: request.sessionId,
+    revision: request.revision,
+    startedAt,
+    completedAt
+  };
+}
+
+/**
+ * Retrieve bounded official Brandfetch evidence for identity-authorized
+ * canonical or alias domains. Provider payloads and asset URLs never enter
+ * evidence refs, fallback codes, or errors.
+ */
+export async function retrieveBrandfetchEvidence(
+  request: BrandfetchRetrieverRequest,
+  provider: BrandfetchRetrieverProvider
+): Promise<BrandfetchEvidenceArtifact> {
+  const now = request.now ?? (() => new Date());
+  const startedAt = now().toISOString();
+  const canonicalDomain = normalizeLogoDomain(request.canonicalDomain);
+  const domains = [...new Set([
+    canonicalDomain,
+    ...(request.aliases ?? []).map(normalizeLogoDomain)
+  ].filter((domain): domain is string => Boolean(domain)))];
+  if (!canonicalDomain) {
+    const completedAt = now().toISOString();
+    return {
+      ...artifactBase(request, startedAt, completedAt),
+      status: "failed",
+      evidenceRefs: [],
+      confidence: 0,
+      errorCode: "brandfetch_invalid_domain"
+    };
+  }
+
+  const controller = new AbortController();
+  const timeoutMs = Math.min(
+    Math.max(request.deadlineMs ?? DEFAULT_RETRIEVER_DEADLINE_MS, 1),
+    DEFAULT_RETRIEVER_DEADLINE_MS
+  );
+  let timedOut = false;
+  const onAbort = () => controller.abort(request.signal?.reason);
+  request.signal?.addEventListener("abort", onAbort, { once: true });
+  if (request.signal?.aborted) onAbort();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      reject(new BrandfetchRetrieverTimeout());
+    }, timeoutMs);
+  });
+
+  let terminalStatus: Exclude<BrandfetchProviderStatus, "hit"> = "missing";
+  try {
+    for (const domain of domains) {
+      const lookup = await Promise.race([
+        provider.lookup(domain, controller.signal),
+        deadline
+      ]);
+      if (lookup.status !== "hit") {
+        terminalStatus = lookup.status;
+        continue;
+      }
+      if (!lookup.payload || typeof lookup.payload !== "object" || Array.isArray(lookup.payload)) {
+        terminalStatus = "invalid_response";
+        continue;
+      }
+      const payload = lookup.payload as Record<string, unknown>;
+      const returnedDomain = typeof payload.domain === "string"
+        ? normalizeLogoDomain(payload.domain)
+        : undefined;
+      if (!returnedDomain || !domains.includes(returnedDomain)) {
+        terminalStatus = "invalid_response";
+        continue;
+      }
+      const logo = await Promise.race([
+        selectProviderLogo(payload, provider, controller.signal),
+        deadline
+      ]);
+      const colors = (Array.isArray(payload.colors) ? payload.colors : [])
+        .map(normalizeProviderColor)
+        .filter((color): color is BrandfetchColorEvidence => Boolean(color))
+        .filter((color, index, values) =>
+          values.findIndex(({ hex }) => hex === color.hex) === index
+        )
+        .slice(0, 8);
+      const fonts = (Array.isArray(payload.fonts) ? payload.fonts : [])
+        .map(normalizeProviderFont)
+        .filter((font): font is BrandfetchFontEvidence => Boolean(font))
+        .filter((font, index, values) =>
+          values.findIndex(({ name }) => name.toLowerCase() === font.name.toLowerCase()) === index
+        )
+        .slice(0, 8);
+      const value: BrandfetchEvidence = {
+        canonicalDomain,
+        matchedDomain: returnedDomain,
+        aliases: domains.filter((candidate) => candidate !== canonicalDomain),
+        companyName: boundedProviderText(payload.name, 120),
+        description: boundedProviderText(
+          payload.description ?? payload.longDescription,
+          500
+        ),
+        colors,
+        fonts,
+        claimed: typeof payload.claimed === "boolean" ? payload.claimed : undefined,
+        qualityTier: providerQualityTier(payload.qualityScore),
+        logo
+      };
+      const completedAt = now().toISOString();
+      return {
+        ...artifactBase(request, startedAt, completedAt),
+        status: logo.status === "verified" ? "complete" : "fallback",
+        value,
+        evidenceRefs: [
+          "brandfetch:brand-record",
+          ...(logo.status === "verified" ? ["brandfetch:official-logo"] : [])
+        ],
+        confidence: logo.status === "verified"
+          ? payload.claimed === true ? 0.98 : 0.9
+          : colors.length || fonts.length ? 0.72 : 0.55,
+        ...(logo.status === "verified"
+          ? {}
+          : { fallbackCode: `brandfetch_logo_${logo.status}` })
+      };
+    }
+    const completedAt = now().toISOString();
+    const missing = terminalStatus === "missing";
+    return {
+      ...artifactBase(request, startedAt, completedAt),
+      status: missing ? "fallback" : "failed",
+      evidenceRefs: [],
+      confidence: 0,
+      ...(missing
+        ? { fallbackCode: "brandfetch_not_found" }
+        : { errorCode: `brandfetch_${terminalStatus}` })
+    };
+  } catch (error) {
+    const completedAt = now().toISOString();
+    const stale = request.signal?.aborted && !timedOut;
+    const timeout = timedOut || error instanceof BrandfetchRetrieverTimeout;
+    return {
+      ...artifactBase(request, startedAt, completedAt),
+      status: stale ? "stale" : timeout ? "timed_out" : "failed",
+      evidenceRefs: [],
+      confidence: 0,
+      ...(stale
+        ? { fallbackCode: "brandfetch_stale" }
+        : timeout
+          ? { fallbackCode: "brandfetch_timeout" }
+          : { errorCode: "brandfetch_provider_failed" })
+    };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    request.signal?.removeEventListener("abort", onAbort);
   }
 }
 

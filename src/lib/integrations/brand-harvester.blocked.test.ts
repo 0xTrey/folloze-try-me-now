@@ -87,6 +87,32 @@ describe("blocked public brand sites", () => {
     });
   });
 
+  it("preserves reviewed Apple roles and geometry when the public page is blocked", async () => {
+    const profile = await harvestBrand("apple.com");
+
+    expect(profile).toMatchObject({
+      domain: "apple.com",
+      companyName: "Apple",
+      primaryColor: "#1D1D1F",
+      accentColor: "#0071E3",
+      surfaceColor: "#FFFFFF",
+      displayFontFamily: "SF Pro Display",
+      bodyFontFamily: "SF Pro Text",
+      source: "brand-harvester",
+      designDna: {
+        source: "verified-profile",
+        confidence: "high",
+        theme: { hero: "light" },
+        buttons: { radiusPx: 500, heightPx: 50 },
+        cards: { radiusPx: 28 }
+      }
+    });
+  });
+
+  it("does not invent an ADP profile when every configured public source is blocked", async () => {
+    await expect(harvestBrand("adp.com")).rejects.toThrow("Akamai returned 403");
+  });
+
   it("does not mislabel an unknown blocked site as verified", async () => {
     await expect(harvestBrand("unknown-example.test")).rejects.toThrow("Akamai returned 403");
     const logged = vi.mocked(console.error).mock.calls

@@ -103,16 +103,41 @@ describe("fast brand extraction", () => {
       html: `<!doctype html><html><head>
         <title>Apple</title>
         <meta property="og:site_name" content="Apple">
-      </head><body><main><h1>iPad</h1><a class="learn-more" href="/ipad/">Learn more</a></main></body></html>`,
+        <link rel="preload" as="font" href="/wss/fonts/SF-Pro-Display/v3/sf-pro-display_semibold.woff2">
+        <link rel="preload" as="font" href="/wss/fonts/SF-Pro-Text/v3/sf-pro-text_regular.woff2">
+      </head><body>
+        <nav class="ac-globalnav-content"></nav>
+        <main>
+          <section class="hero">
+            <h1>iPad</h1>
+            <a class="button" href="/ipad/">Learn more</a>
+            <img class="hero-product-visual" src="/ipad/images/overview/hero/hero_static.jpg" alt="iPad product family" width="1600" height="1000">
+            <img class="app-store-badge" src="/badges/app-store.svg" alt="Download on the App Store">
+          </section>
+          <article class="card"></article>
+        </main>
+      </body></html>`,
       css: `:root {
         --sk-body-text-color: rgb(29,29,31);
         --sk-headline-text-color: rgb(29, 29, 31);
         --sk-body-background-color: rgb(255,255,255);
+        --sk-soft-surface: rgb(245,245,247);
+        --sk-body-text-color-secondary: #6e6e73;
+        --sk-divider-color: #d2d2d7;
         --sk-focus-color: #0071e3;
-        --image-card-fill: rgb(245,245,247);
+        --sk-button-radius: 980px;
+        --sk-card-radius: 28px;
+        --font-display: "SF Pro Display", sans-serif;
+        --font-body: "SF Pro Text", sans-serif;
       }
-      body, h1 { color: rgb(29,29,31); background: rgb(255,255,255); }
-      .learn-more { color: #0066cc; }`,
+      @font-face { font-family: "SF Pro Display"; src: url("/wss/fonts/SF-Pro-Display/v3/sf-pro-display_semibold.woff2"); }
+      @font-face { font-family: "SF Pro Text"; src: url("/wss/fonts/SF-Pro-Text/v3/sf-pro-text_regular.woff2"); }
+      body { color: var(--sk-body-text-color); background: var(--sk-body-background-color); font-family: var(--font-body); font-weight: 400; }
+      h1 { color: var(--sk-headline-text-color); font-family: var(--font-display); font-weight: 600; letter-spacing: -0.02em; line-height: 1.05; }
+      .hero { background: var(--sk-body-background-color); padding: 80px 24px; }
+      .ac-globalnav-content { max-width: 1024px; gap: 24px; }
+      .button { background: var(--sk-focus-color); color: #fff; border-radius: var(--sk-button-radius); height: 50px; border-width: 1px; }
+      .card { border-radius: var(--sk-card-radius); }`,
       finalUrl: new URL("https://www.apple.com/ipad/")
     });
 
@@ -120,9 +145,213 @@ describe("fast brand extraction", () => {
     expect(apple.accentColor).toBe("#0071E3");
     expect(apple.surfaceColor).toBe("#FFFFFF");
     expect(apple.colors.slice(0, 3)).toEqual(["#1D1D1F", "#0071E3", "#FFFFFF"]);
+    expect(apple.displayFontFamily).toBe("SF Pro Display");
+    expect(apple.bodyFontFamily).toBe("SF Pro Text");
+    expect(apple.imageUrls).toEqual([
+      "https://www.apple.com/ipad/images/overview/hero/hero_static.jpg"
+    ]);
+    expect(apple.designDna).toMatchObject({
+      source: "legacy-presentation",
+      confidence: "high",
+      theme: { hero: "light" },
+      colors: {
+        softSurface: "#F5F5F7",
+        mutedText: "#6E6E73",
+        divider: "#D2D2D7",
+        focus: "#0071E3"
+      },
+      typography: {
+        fallback: "sans",
+        headingWeight: 600,
+        bodyWeight: 400,
+        headingLetterSpacingEm: -0.02,
+        headingLineHeight: 1.05
+      },
+      buttons: {
+        primaryBackground: "#0071E3",
+        primaryText: "#FFFFFF",
+        radiusPx: 980,
+        heightPx: 50,
+        borderWidthPx: 1
+      },
+      cards: { radiusPx: 28 },
+      spacing: { contentMaxWidthPx: 1024, sectionBlockPx: 80, gridGapPx: 24 }
+    });
     expect(apple.diagnostics?.palette).toMatchObject({
       strategy: "semantic-tokens",
       confidence: "high"
+    });
+  });
+
+  it("extracts ADP semantic roles, source fonts, navigation geometry, and safe hero assets", () => {
+    const adp = extractFastBrandProfile({
+      domain: "adp.com",
+      html: `<!doctype html><html><head>
+        <title>Payroll, HR and Tax Services | ADP Official Site</title>
+        <meta property="og:site_name" content="ADP">
+      </head><body>
+        <header><img class="navbar-logo" src="/-/media/adp/red-logo.svg" alt="ADP logo" width="96" height="38"></header>
+        <main><section class="home-hero"><h1>Experience better HR and payroll</h1><a class="button-primary">Get pricing</a></section></main>
+      </body></html>`,
+      css: `
+        @font-face { font-family: "Source Sans Pro"; src: url("/assets/fonts/source-sans-pro-regular.woff2"); }
+        @font-face { font-family: "Source Sans Pro"; src: url("/assets/fonts/source-sans-pro-semibold.woff2"); font-weight: 600; }
+        :root {
+          --adp-text-primary: #202428;
+          --adp-brand-color: rgb(237, 28, 46);
+          --adp-surface-default: #ffffff;
+          --adp-surface-soft: #f5f5f5;
+          --adp-text-muted: #5b6065;
+          --adp-divider-color: #d6d9dc;
+          --adp-focus-color: #ed1c2e;
+          --adp-button-radius: 4px;
+        }
+        body { color: var(--adp-text-primary); background: var(--adp-surface-default); font-family: "Source Sans Pro", sans-serif; font-weight: 400; }
+        h1 { font-family: "Source Sans Pro", sans-serif; font-weight: 600; line-height: 1.1; }
+        .site-header-container { max-width: 1200px; gap: 32px; }
+        .home-hero { background: var(--adp-surface-soft); padding: 72px 32px; }
+        .button-primary { background: var(--adp-brand-color); color: #ffffff; border-radius: var(--adp-button-radius); height: 48px; border-width: 0px; }
+        .home-hero-visual { background-image: url("/-/media/adp/home/payroll-hero.webp"); }
+        .tracking-pixel { background-image: url("data:image/gif;base64,bad"); }
+        .private-preview { background-image: url("https://127.0.0.1/internal-preview.png"); }
+      `,
+      finalUrl: new URL("https://www.adp.com/")
+    });
+
+    expect(adp).toMatchObject({
+      companyName: "ADP",
+      logoUrl: "https://www.adp.com/-/media/adp/red-logo.svg",
+      primaryColor: "#202428",
+      accentColor: "#ED1C2E",
+      surfaceColor: "#FFFFFF",
+      displayFontFamily: "Source Sans Pro",
+      bodyFontFamily: "Source Sans Pro",
+      displayFontUrl: "https://www.adp.com/assets/fonts/source-sans-pro-regular.woff2",
+      bodyFontUrl: "https://www.adp.com/assets/fonts/source-sans-pro-regular.woff2"
+    });
+    expect(adp.imageUrls).toEqual([
+      "https://www.adp.com/-/media/adp/home/payroll-hero.webp"
+    ]);
+    expect(adp.designDna).toMatchObject({
+      source: "legacy-presentation",
+      confidence: "high",
+      theme: { hero: "light" },
+      colors: {
+        softSurface: "#F5F5F5",
+        mutedText: "#5B6065",
+        divider: "#D6D9DC",
+        focus: "#ED1C2E"
+      },
+      typography: { fallback: "sans", headingWeight: 600, bodyWeight: 400 },
+      buttons: {
+        primaryBackground: "#ED1C2E",
+        primaryText: "#FFFFFF",
+        radiusPx: 4,
+        heightPx: 48,
+        borderWidthPx: 0
+      },
+      spacing: { contentMaxWidthPx: 1200, sectionBlockPx: 72, gridGapPx: 32 }
+    });
+    expect(adp.diagnostics?.palette).toMatchObject({
+      strategy: "semantic-tokens",
+      confidence: "high"
+    });
+  });
+
+  it("keeps 6sense hero and asset evidence first-party and role-bound", () => {
+    const sixsense = extractFastBrandProfile({
+      domain: "6sense.com",
+      html: `<!doctype html><html><head>
+        <title>RevvyAI Revenue Intelligence Platform | 6sense</title>
+        <meta property="og:site_name" content="6sense">
+      </head><body>
+        <header><img class="logo-img-base" src="/wp-content/themes/6Sense-2025/assets/img/logos/logo.svg" alt="6Sense logo" width="114" height="33"></header>
+        <main><section class="revvy-hero"><h1>Know everything. Do anything.</h1><a class="cta-button">Explore RevvyAI</a></section></main>
+      </body></html>`,
+      css: `
+        @font-face { font-family: "Aeonik"; src: url("/wp-content/themes/6Sense-2025/assets/fonts/Aeonik-Regular.woff2"); }
+        :root {
+          --brand-ink: #192232;
+          --brand-accent: #13bbb2;
+          --surface-default: #ffffff;
+          --surface-soft: #f6f6f5;
+          --text-inverse: #ffffff;
+          --text-muted: #6b7280;
+          --divider-color: #dcdde3;
+          --focus-color: #13bbb2;
+        }
+        body { color: var(--brand-ink); background: var(--surface-default); font-family: "Aeonik", sans-serif; font-weight: 400; }
+        h1 { font-family: "Aeonik", sans-serif; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+        .revvy-hero { background: radial-gradient(circle, #192232 0%, #101620 100%); padding: 96px 40px; }
+        .cta-button { background: var(--brand-accent); color: var(--text-inverse); border-radius: 12px; height: 48px; border-width: 0px; }
+        .revvy-hero-art { background-image: url("/wp-content/uploads/2026/05/hero-ai-d.png"); }
+        .partner-logo-strip { background-image: url("https://partners.example/other-company-logo.svg"); }
+      `,
+      finalUrl: new URL("https://6sense.com/platform/revvyai/")
+    });
+
+    expect(sixsense).toMatchObject({
+      companyName: "6sense",
+      logoUrl: "https://6sense.com/wp-content/themes/6Sense-2025/assets/img/logos/logo.svg",
+      primaryColor: "#192232",
+      accentColor: "#13BBB2",
+      surfaceColor: "#FFFFFF",
+      displayFontFamily: "Aeonik",
+      bodyFontFamily: "Aeonik"
+    });
+    expect(sixsense.imageUrls).toEqual([
+      "https://6sense.com/wp-content/uploads/2026/05/hero-ai-d.png"
+    ]);
+    expect(sixsense.designDna).toMatchObject({
+      source: "legacy-presentation",
+      confidence: "high",
+      theme: { hero: "dark", motif: "radial-glow" },
+      colors: {
+        softSurface: "#F6F6F5",
+        lightText: "#FFFFFF",
+        mutedText: "#6B7280",
+        divider: "#DCDDE3",
+        focus: "#13BBB2"
+      },
+      typography: {
+        fallback: "sans",
+        headingWeight: 700,
+        bodyWeight: 400,
+        headingLetterSpacingEm: -0.03,
+        headingLineHeight: 1
+      },
+      buttons: {
+        primaryBackground: "#13BBB2",
+        primaryText: "#FFFFFF",
+        radiusPx: 12,
+        heightPx: 48,
+        borderWidthPx: 0
+      },
+      spacing: { sectionBlockPx: 96 }
+    });
+    expect(sixsense.diagnostics?.palette).toMatchObject({
+      strategy: "semantic-tokens",
+      confidence: "high"
+    });
+  });
+
+  it("keeps placeholders explicitly low-confidence and out of harvested design DNA", () => {
+    const sparse = extractFastBrandProfile({
+      domain: "sparse.example",
+      html: "<!doctype html><html><head><title>Sparse</title></head><body><h1>Hello</h1></body></html>",
+      finalUrl: new URL("https://sparse.example/")
+    });
+
+    expect(sparse).toMatchObject({
+      primaryColor: "#202124",
+      accentColor: "#5F6368",
+      surfaceColor: "#FFFFFF"
+    });
+    expect(sparse.designDna).toBeUndefined();
+    expect(sparse.diagnostics?.palette).toMatchObject({
+      strategy: "fallback",
+      confidence: "low",
+      semanticCandidateCount: 0
     });
   });
 
