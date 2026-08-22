@@ -97,7 +97,7 @@ describe("target-aware ABM audience orchestration", () => {
         )
       ).toBe(true);
       expect(harvested?.audienceRecommendations?.[0]?.rationale).toMatch(
-        /^Recommended for Cisco because its .+ context makes .+ relevant to evaluating .+\.$/
+        /^Recommended for Cisco because its public .+ context makes .+ relevant: they .+ while evaluating .+\. Jitterbit remains the offer and page authority\.$/
       );
       expect(harvested?.audienceRecommendations?.[0]?.rationale).not.toContain(
         "public public"
@@ -217,7 +217,7 @@ describe("seller-evidence audience orchestration", () => {
             ({ sourceUrl }) => new URL(sourceUrl).hostname === seller.domain
           )
         ).toBe(true);
-        expect(harvested?.audienceRecommendations).toHaveLength(4);
+        expect(harvested?.audienceRecommendations).toHaveLength(3);
         expect(
           harvested?.audienceRecommendations?.every(
             ({ source }) => source === "seller-public-evidence"
@@ -231,9 +231,22 @@ describe("seller-evidence audience orchestration", () => {
           )
         ).toBe(true);
         expect(harvested?.audienceRecommendations?.[0]?.rationale).toMatch(
-          /^Recommended because Jitterbit's public .+ context makes .+ relevant to evaluating .+\.$/
+          /^Recommended because .+ supported by Jitterbit's public .+ evidence\.$/
         );
         expect(harvested?.audienceRecommendations?.[0]?.targetName).toBeUndefined();
+        expect(harvested?.offerRecommendations).toHaveLength(3);
+        expect(harvested?.objectiveRecommendations).toHaveLength(3);
+        expect(
+          harvested?.offerRecommendations?.filter(({ recommended }) => recommended)
+        ).toHaveLength(1);
+        expect(
+          harvested?.objectiveRecommendations?.filter(({ recommended }) => recommended)
+        ).toHaveLength(1);
+        expect(
+          harvested?.offerRecommendations?.every(
+            ({ revision }) => revision === harvested.revision
+          )
+        ).toBe(true);
       } finally {
         await deleteSession(id);
       }

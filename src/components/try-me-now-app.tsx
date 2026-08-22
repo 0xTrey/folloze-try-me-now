@@ -565,7 +565,13 @@ export const STREAMING_BRIEF_SKIP_THRESHOLD = 3;
 export function streamingCampaignQuestions(
   mode: CampaignEntryMode,
   audienceSuggestions: readonly string[],
-  objectiveChoices: readonly string[] = []
+  objectiveChoices: readonly string[] = [],
+  offerChoices: readonly string[] = [],
+  recommended: {
+    offer?: string;
+    audience?: string;
+    objective?: string;
+  } = {}
 ): StreamingBriefQuestion[] {
   return [
     {
@@ -575,6 +581,8 @@ export function streamingCampaignQuestions(
       hint: mode === "event"
         ? "Paste the event page or describe the webinar or field event in one sentence."
         : "Paste a product page or describe the offer and outcome in one sentence.",
+      choices: offerChoices.slice(0, 3),
+      recommendedChoice: recommended.offer,
       placeholder: mode === "event"
         ? "A September customer webinar for revenue leaders about…"
         : "Launch our AI platform for operations leaders who need…",
@@ -586,6 +594,7 @@ export function streamingCampaignQuestions(
       prompt: "Who should this reach?",
       hint: "Choose a company-fit recommendation or describe the buyer group in your own words.",
       choices: audienceSuggestions.slice(0, 3),
+      recommendedChoice: recommended.audience,
       placeholder: mode === "event" ? "Revenue and demand generation leaders" : "Enterprise marketing leaders",
       required: true
     },
@@ -594,7 +603,8 @@ export function streamingCampaignQuestions(
       label: "Goal",
       prompt: "What should this experience achieve?",
       hint: "Pick a goal or type the outcome you want buyers to take.",
-      choices: objectiveChoices.slice(0, 4),
+      choices: objectiveChoices.slice(0, 3),
+      recommendedChoice: recommended.objective,
       placeholder: mode === "event" ? "Drive registrations" : "Launch or announce",
       required: true
     }
@@ -3894,11 +3904,24 @@ export function TryMeNowApp() {
     ? "event"
     : "campaign";
   const recommendedObjective = session ? recommendedObjectiveFor(session) : "Generate demand";
+  const offerChoices = session?.offerRecommendations?.map(({ label }) => label) ?? [];
+  const audienceChoices = session?.audienceRecommendations?.map(({ label }) => label)
+    ?? session?.audienceSuggestions
+    ?? [];
+  const objectiveChoices = session?.objectiveRecommendations?.map(({ label }) => label)
+    ?? [recommendedObjective, ...objectives.campaign.filter((objective) => objective !== recommendedObjective)];
   const streamingQuestions = session?.useCase === "campaign"
     ? streamingCampaignQuestions(
       streamingMode,
-      session.audienceSuggestions,
-      [recommendedObjective, ...objectives.campaign.filter((objective) => objective !== recommendedObjective)]
+      audienceChoices,
+      objectiveChoices,
+      offerChoices,
+      {
+        offer: session.offerRecommendations?.find(({ recommended }) => recommended)?.label,
+        audience: session.audienceRecommendations?.[0]?.label,
+        objective: session.objectiveRecommendations?.find(({ recommended }) => recommended)?.label
+          ?? recommendedObjective
+      }
     )
     : [];
   const canonicalStreamingAnswers: StreamingBriefAnswer[] = [...streamingAnswers];

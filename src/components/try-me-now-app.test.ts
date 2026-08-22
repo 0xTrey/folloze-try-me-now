@@ -177,8 +177,25 @@ describe("Try Me Now experience copy", () => {
   });
 
   it("asks a goal after offer and audience instead of committing an inferred objective", () => {
-    const questions = streamingCampaignQuestions("campaign", ["Enterprise architects"], ["Launch or announce", "Generate demand"]);
+    const questions = streamingCampaignQuestions(
+      "campaign",
+      ["Enterprise architects", "Operations leaders", "Executive sponsors"],
+      ["Launch or announce", "Generate demand", "Book meetings"],
+      ["AI Control Tower", "Operations platform", "Product overview"],
+      {
+        offer: "AI Control Tower",
+        audience: "Enterprise architects",
+        objective: "Launch or announce"
+      }
+    );
     expect(questions.map((question) => question.id)).toEqual(["intent", "audience", "goal"]);
+    expect(questions.every((question) => question.choices)).toBe(true);
+    expect(questions.every((question) => question.choices?.length === 3)).toBe(true);
+    expect(questions.map((question) => question.recommendedChoice)).toEqual([
+      "AI Control Tower",
+      "Enterprise architects",
+      "Launch or announce"
+    ]);
     expect(questions[2]?.choices).toContain("Launch or announce");
   });
 

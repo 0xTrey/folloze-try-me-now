@@ -23,6 +23,7 @@ const questions = [
     label: "Audience",
     prompt: "Who should this reach?",
     choices: ["Enterprise architects", "Revenue leaders"],
+    recommendedChoice: "Enterprise architects",
     required: true
   },
   {
@@ -66,7 +67,8 @@ describe("StreamingBriefComposer", () => {
     expect(screen.getByText("What are you taking to market?")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Edit Campaign: Harmony for operations leaders/i }));
     expect(onStepChange).toHaveBeenCalledWith("intent");
-    fireEvent.click(screen.getByRole("button", { name: "Enterprise architects" }));
+    expect(screen.getByText("Recommended")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Enterprise architects, recommended" }));
     expect(onAnswer).toHaveBeenCalledWith({
       questionId: "audience",
       label: "Audience",

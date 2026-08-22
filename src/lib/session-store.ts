@@ -422,6 +422,12 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
     audienceRecommendations: session.audienceRecommendations
       ? structuredClone(session.audienceRecommendations)
       : undefined,
+    offerRecommendations: session.offerRecommendations
+      ? structuredClone(session.offerRecommendations)
+      : undefined,
+    objectiveRecommendations: session.objectiveRecommendations
+      ? structuredClone(session.objectiveRecommendations)
+      : undefined,
     selectedAudienceRecommendationId: session.selectedAudienceRecommendationId,
     evidenceItems: session.evidenceItems ? structuredClone(session.evidenceItems) : undefined,
     sourceConfirmation: session.sourceConfirmation

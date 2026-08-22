@@ -466,6 +466,20 @@ export interface AudienceRecommendation {
   evidenceSummary?: string;
 }
 
+export interface BriefRecommendationOption {
+  id: string;
+  label: string;
+  rationale: string;
+  recommended: boolean;
+  evidenceItemIds: string[];
+  confidence: IntelligenceConfidence | "hypothesis";
+  revision: number;
+  cta?: {
+    type: CtaType;
+    label: string;
+  };
+}
+
 export interface SessionEvidenceItem {
   id: string;
   type: "public-positioning" | "public-operating-context" | "public-focus-area";
@@ -936,6 +950,8 @@ export interface TryMeSession {
   experienceMode?: ExperienceMode;
   exampleKey?: string;
   audienceRecommendations?: AudienceRecommendation[];
+  offerRecommendations?: BriefRecommendationOption[];
+  objectiveRecommendations?: BriefRecommendationOption[];
   selectedAudienceRecommendationId?: string;
   evidenceItems?: SessionEvidenceItem[];
   sourceConfirmation?: SourceConfirmation;

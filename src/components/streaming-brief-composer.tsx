@@ -12,6 +12,7 @@ export type StreamingBriefQuestion = {
   prompt: string;
   hint?: string;
   choices?: readonly string[];
+  recommendedChoice?: string;
   placeholder?: string;
   required?: boolean;
 };
@@ -100,6 +101,7 @@ export function StreamingBriefComposer({
   const copy = modeCopy[mode];
   const currentQuestion = questions.find((question) => question.id === currentQuestionId)
     ?? questions.find((question) => !answers.some((answer) => answer.questionId === question.id));
+  const activeQuestionId = currentQuestion?.id;
   const answerForCurrent = currentQuestion
     ? answers.find((answer) => answer.questionId === currentQuestion.id)?.value
     : undefined;
@@ -120,9 +122,9 @@ export function StreamingBriefComposer({
       }));
 
   useEffect(() => {
-    if (!currentQuestion || disabled) return;
+    if (!activeQuestionId || disabled) return;
     questionInputRef.current?.focus();
-  }, [currentQuestion?.id, disabled]);
+  }, [activeQuestionId, disabled]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -214,6 +216,11 @@ export function StreamingBriefComposer({
                     key={choice}
                     className={value === choice ? styles.selected : undefined}
                     aria-pressed={value === choice}
+                    aria-label={
+                      currentQuestion.recommendedChoice === choice
+                        ? `${choice}, recommended`
+                        : choice
+                    }
                     disabled={disabled}
                     onClick={() => {
                       onAnswer({ questionId: currentQuestion.id, label: currentQuestion.label, value: choice });
@@ -221,6 +228,7 @@ export function StreamingBriefComposer({
                     }}
                   >
                     {choice}
+                    {currentQuestion.recommendedChoice === choice && <small>Recommended</small>}
                   </button>
                 ))}
               </div>

@@ -2,9 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import {
   assessBrandIdentity,
-  audienceRecommendationRationale,
   audienceSuggestionsFor,
-  narrativeProfileFor,
   withBrandIdentity
 } from "@/lib/brand-intelligence";
 import { assessBrandReadiness } from "@/lib/brand-readiness";
@@ -26,7 +24,13 @@ import {
   sourceGroundingFor,
   targetAccountEvidenceFor
 } from "@/lib/generation/campaign-context";
+import { buildAudienceRecommendations } from "@/lib/generation/audience-recommendations";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
+import {
+  recommendObjectiveCtas,
+  type ObjectiveCtaEvidence,
+  type ObjectiveCtaMotion
+} from "@/lib/generation/objective-cta-recommendations";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import { HttpError, logServerError } from "@/lib/http";
 import {
@@ -66,7 +70,13 @@ import type {
   WorkerExecution,
   WorkerReceipt
 } from "@/lib/orchestration/worker-types";
+import {
+  rankOfferRecommendations,
+  type ExtractedOfferEvidence,
+  type OfferCampaignMotion
+} from "@/lib/research/offer-recommendations";
 import type {
+  BriefRecommendationOption,
   BrandProfile,
   ClaimResult,
   CreateSessionInput,
@@ -235,81 +245,59 @@ function evidenceItemsFor(
 }
 
 function audienceRecommendationsFor(
+  sessionId: string,
+  revision: number,
   suggestions: string[],
   seller: BrandProfile | undefined,
   target: BrandProfile | undefined,
   evidenceItems: SessionEvidenceItem[],
   answers?: SessionAnswers
 ) {
-  const evidenceBrand = target ?? seller;
-  const evidenceDomain = evidenceBrand?.domain.toLocaleLowerCase().replace(/^www\./, "");
-  const expectedEntityRole: NonNullable<SessionEvidenceItem["entityRole"]> = target
-    ? "target"
-    : "seller";
-  const usableEvidence = evidenceItems.filter((item) => {
-    if (
-      item.disposition === "excluded" ||
-      item.entityRole !== expectedEntityRole ||
-      !evidenceDomain
-    ) return false;
-    try {
-      const host = new URL(item.sourceUrl).hostname.toLocaleLowerCase().replace(/^www\./, "");
-      return host === evidenceDomain || host.endsWith(`.${evidenceDomain}`);
-    } catch {
-      return false;
-    }
+  if (!seller) return suggestions.slice(0, 3).map((label) => ({
+    id: stableId("audience", label),
+    label,
+    rationale: "Working hypothesis to confirm while seller evidence is still loading.",
+    evidenceItemIds: [],
+    confidence: "hypothesis" as const,
+    source: "seller-category-fallback" as const,
+    confirmationStatus: "needs-confirmation" as const
+  }));
+
+  const artifact = buildAudienceRecommendations({
+    sessionId,
+    revision,
+    activeRevision: revision,
+    route: target ? "named-account" : "generic-campaign",
+    seller,
+    target,
+    offerLabel: answers?.promotedOffer,
+    evidenceItems
   });
-  const sellerProfile = seller ? narrativeProfileFor(seller) : null;
-  const targetIdentity = target
-    ? target.identity ?? assessBrandIdentity(target, target.domain)
-    : undefined;
-  const sellerIdentity = seller
-    ? seller.identity ?? assessBrandIdentity(seller, seller.domain)
-    : undefined;
-  return suggestions.map((label, index) => {
-    const evidence = usableEvidence[index % Math.max(usableEvidence.length, 1)];
-    const evidenceFocus = evidence?.text
-      .replace(/\s+/g, " ")
-      .replace(/[.!?]+$/g, "")
-      .slice(0, 120);
-    const evidenceSignal = evidence?.signals[0] ?? evidenceFocus;
-    const companySpecific = Boolean(
-      seller &&
-        target &&
-        target.source !== "fallback" &&
-        targetIdentity?.confirmationStatus === "confirmed" &&
-        usableEvidence.length
-    );
-    const sellerSpecific = Boolean(
-      seller &&
-        !target &&
-        seller.source !== "fallback" &&
-        sellerIdentity?.confirmationStatus === "confirmed" &&
-        usableEvidence.length
-    );
+  const evidenceIds = new Set(evidenceItems.map(({ id }) => id));
+  return (artifact.value?.candidates ?? []).map((candidate) => {
+    const matchedEvidence = candidate.provenance
+      .map(({ evidenceRef }) => evidenceRef)
+      .filter((id) => evidenceIds.has(id));
+    const evidenceSummary = candidate.provenance.find(
+      ({ evidenceRef }) => evidenceIds.has(evidenceRef)
+    )?.summary;
     return {
-      id: stableId("audience", seller?.domain, target?.domain, label),
-      label,
-      rationale: audienceRecommendationRationale({
-        label,
-        sellerName: seller?.companyName,
-        targetName: target?.companyName,
-        offerLabel: answers?.promotedOffer ?? sellerProfile?.offerLabel,
-        evidenceSignal: evidenceSignal || undefined
-      }),
-      evidenceItemIds: evidence ? [evidence.id] : [],
-      confidence: companySpecific || sellerSpecific
-        ? (usableEvidence.length >= 2 ? "high" : "medium")
-        : "hypothesis",
-      source: companySpecific
-        ? "seller-target-synthesis"
-        : sellerSpecific
-          ? "seller-public-evidence"
-          : "seller-category-fallback",
-      confirmationStatus: companySpecific || sellerSpecific ? "confirmed" : "needs-confirmation",
+      id: candidate.id,
+      label: candidate.label,
+      rationale: candidate.rationale,
+      evidenceItemIds: matchedEvidence,
+      confidence: candidate.confidenceBand,
+      source: target && matchedEvidence.length
+        ? "seller-target-synthesis" as const
+        : matchedEvidence.length
+          ? "seller-public-evidence" as const
+          : "seller-category-fallback" as const,
+      confirmationStatus: candidate.confidenceBand === "hypothesis"
+        ? "needs-confirmation" as const
+        : "confirmed" as const,
       ...(target ? { targetName: target.companyName } : {}),
-      ...(evidenceFocus ? { evidenceSummary: evidenceFocus } : {})
-    } as const;
+      ...(evidenceSummary ? { evidenceSummary } : {})
+    };
   });
 }
 
@@ -338,7 +326,149 @@ function assetsFor(brand: BrandProfile | undefined, target: BrandProfile | undef
   return assets;
 }
 
+function recommendationConfidence(value: number): BriefRecommendationOption["confidence"] {
+  if (value >= 0.8) return "high";
+  if (value >= 0.55) return "medium";
+  return "hypothesis";
+}
+
+function offerMotionFor(answers: SessionAnswers): OfferCampaignMotion {
+  if (answers.campaignType === "event") return "event";
+  if (answers.campaignType === "product") return "product";
+  return /\bindustr(?:y|ies)\b/i.test(answers.promotedOffer ?? "") ? "industry" : "solution";
+}
+
+function offerRecommendationsFor(
+  session: TryMeSession,
+  revision: number
+): BriefRecommendationOption[] {
+  const motion = offerMotionFor(session.answers);
+  const source = session.brand?.sourceUrl;
+  const evidence: ExtractedOfferEvidence[] = session.brand
+    ? [
+        ...(session.brand.title
+          ? [{
+              ref: stableId("offer-evidence", session.brand.domain, "title"),
+              label: session.brand.title,
+              kind: motion === "event" ? "event" as const : motion,
+              source: "homepage" as const,
+              sourceUrl: source,
+              confidence: session.brand.source === "fallback" ? 0.3 : 0.72
+            }]
+          : []),
+        ...session.brand.publicTopics.slice(0, 4).map((label, index) => ({
+          ref: stableId("offer-evidence", session.brand?.domain, String(index), label),
+          label,
+          kind: motion === "event" ? "topic" as const : motion,
+          source: "homepage" as const,
+          sourceUrl: source,
+          confidence: session.brand?.source === "fallback" ? 0.25 : Math.max(0.42, 0.68 - index * 0.06)
+        }))
+      ]
+    : [];
+  const ranked = rankOfferRecommendations({
+    revision,
+    motion,
+    eventSubtype: motion === "event" && /webinar/i.test(session.answers.eventSource ?? "")
+      ? "webinar"
+      : motion === "event"
+        ? "event"
+        : undefined,
+    suppliedUrl: session.answers.offerSourceUrl,
+    visitorOverride: session.answers.promotedOffer
+      ? {
+          label: session.answers.promotedOffer,
+          evidenceRef: stableId("visitor-offer", session.answers.promotedOffer),
+          sourceUrl: session.answers.offerSourceUrl,
+          confidence: 1
+        }
+      : undefined,
+    evidence
+  });
+  return ranked.candidates.map((candidate) => ({
+    id: candidate.id,
+    label: candidate.label,
+    rationale: candidate.reasonCodes
+      .map((code) => code.replaceAll("_", " "))
+      .join(" · "),
+    recommended: candidate.recommended,
+    evidenceItemIds: [...candidate.evidenceRefs],
+    confidence: recommendationConfidence(candidate.confidence),
+    revision
+  }));
+}
+
+function objectiveMotionFor(session: TryMeSession): ObjectiveCtaMotion {
+  if (session.useCase === "abm") return "abm";
+  if (session.answers.campaignType === "event") {
+    return /webinar/i.test(session.answers.eventSource ?? "") ? "webinar" : "event";
+  }
+  if (session.answers.campaignType === "product") return "product";
+  if (/\bindustr(?:y|ies)\b/i.test(session.answers.promotedOffer ?? "")) return "industry";
+  return "campaign";
+}
+
+function objectiveRecommendationsFor(
+  session: TryMeSession,
+  revision: number
+): BriefRecommendationOption[] {
+  const motion = objectiveMotionFor(session);
+  const evidence: ObjectiveCtaEvidence[] = [];
+  if (motion === "event" || motion === "webinar") {
+    if (session.answers.eventSource) {
+      evidence.push({
+        id: stableId("objective-evidence", session.answers.eventSource),
+        revision,
+        signal: motion === "webinar"
+          ? "webinar-registration-open"
+          : "event-registration-open",
+        provenance: "visitor-input",
+        confidence: 0.9
+      });
+    }
+  } else if (motion === "product" && session.answers.promotedOffer) {
+    evidence.push({
+      id: stableId("objective-evidence", session.answers.promotedOffer),
+      revision,
+      signal: "product-evaluation",
+      provenance: "visitor-input",
+      confidence: 0.9
+    });
+  } else if (motion === "industry" && session.answers.promotedOffer) {
+    evidence.push({
+      id: stableId("objective-evidence", session.answers.promotedOffer),
+      revision,
+      signal: "industry-priority",
+      provenance: "visitor-input",
+      confidence: 0.9
+    });
+  }
+  const now = new Date().toISOString();
+  const artifact = recommendObjectiveCtas({
+    sessionId: session.id,
+    revision,
+    activeRevision: revision,
+    motion,
+    evidence,
+    startedAt: now,
+    completedAt: now
+  });
+  return (artifact.value?.candidates ?? []).map((candidate) => ({
+    id: candidate.id,
+    label: candidate.objective,
+    rationale: candidate.reasonCodes
+      .map((code) => code.replaceAll("-", " "))
+      .join(" · "),
+    recommended: candidate.recommended,
+    evidenceItemIds: [...candidate.provenance.evidenceRefs],
+    confidence: recommendationConfidence(candidate.confidence),
+    revision,
+    cta: candidate.cta
+  }));
+}
+
 function syncExperienceFoundation(session: TryMeSession): void {
+  const nextRevision = session.revision + 1;
   const selectedAssetIds = new Set(session.answers.selectedAssetIds ?? []);
   const preservedSelectedAssets = (session.availableAssets ?? []).filter((asset) =>
     selectedAssetIds.has(asset.id)
@@ -350,12 +480,16 @@ function syncExperienceFoundation(session: TryMeSession): void {
     session.evidenceItems
   );
   session.audienceRecommendations = audienceRecommendationsFor(
+    session.id,
+    nextRevision,
     session.audienceSuggestions,
-      session.brand,
-      session.targetBrand,
-      session.evidenceItems,
-      session.answers
+    session.brand,
+    session.targetBrand,
+    session.evidenceItems,
+    session.answers
   );
+  session.offerRecommendations = offerRecommendationsFor(session, nextRevision);
+  session.objectiveRecommendations = objectiveRecommendationsFor(session, nextRevision);
   const harvestedAssets = assetsFor(session.brand, session.targetBrand);
   // A brand refresh may replace the harvested asset inventory while a curator
   // is working. Explicitly selected, server-approved assets remain part of the
@@ -1947,6 +2081,8 @@ export async function patchSessionWorkspace(
         disposition: decisions.get(item.id) ?? item.disposition
       }));
       session.audienceRecommendations = audienceRecommendationsFor(
+        session.id,
+        session.revision + 1,
         session.audienceSuggestions,
         session.brand,
         session.targetBrand,
