@@ -931,8 +931,7 @@ export function AnalyticsSignalPanel({
     ? buildSimulatedEngagement({ sessionId, audienceLabel })
     : []);
   if (!open) return null;
-  const showCounters = liveSignals.length >= 2 && engagedSeconds >= 15;
-  const sparseSeconds = Math.max(engagedSeconds, 1);
+  const showCounters = engagedSeconds >= 15;
   return (
     <div className={classes(styles.modalBackdrop, styles.signalBackdrop)} onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
       <aside ref={ref} className={styles.signalPanel} role="dialog" aria-modal="true" aria-labelledby="signal-panel-title" onKeyDown={(event) => trapModalFocus(event, ref.current)}>
@@ -940,7 +939,7 @@ export function AnalyticsSignalPanel({
         {showCounters ? (
           <div className={styles.signalStats}><div><strong>1</strong><span>{visitorLabel}</span></div><div><strong>{liveSignals.length}</strong><span>meaningful interactions</span></div><div><strong>{engagedSeconds}s</strong><span>engaged</span></div></div>
         ) : (
-          <p className={styles.sparseSignalSummary}>You&apos;ve spent {sparseSeconds} {sparseSeconds === 1 ? "second" : "seconds"} here — that&apos;s already a signal.</p>
+          <p className={styles.sparseSignalSummary}>Explore the preview to see engagement appear here.</p>
         )}
         <div className={styles.signalColumns}>
           <section className={styles.realSignalSection} aria-labelledby="real-signal-title">

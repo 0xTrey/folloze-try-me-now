@@ -44,7 +44,6 @@ import {
 
 import {
   AnalyticsSignalPanel,
-  AnalyticsSignalToast,
   AudienceEvidenceTray,
   CtaStyleControl,
   ExpirySaveValuePanel,
@@ -55,6 +54,7 @@ import {
   type EntryPathOption
 } from "@/components/try-me-now-enhancements";
 import { PreviewEvidenceActivitySurface } from "@/components/preview-lifecycle-surface";
+import { usePreviewForegroundSeconds } from "@/components/use-preview-foreground-seconds";
 import {
   StreamingBriefComposer,
   type StreamingAudienceFinding,
@@ -3127,33 +3127,6 @@ function MobileProcessDialog({ session, onClose }: { session: PublicTryMeSession
   );
 }
 
-function SignalDrawer({ events, revealedAt, onClose }: { events: ClientEvent[]; revealedAt: number; onClose: () => void }) {
-  const [now, setNow] = useState(() => Date.now());
-  const { dialogRef, onKeyDown } = useDialogBehavior(onClose);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const seconds = Math.max(1, Math.round((now - revealedAt) / 1000));
-  return createPortal(
-    <div className="drawerBackdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
-      <aside ref={dialogRef} className="signalDrawer" role="dialog" aria-modal="true" aria-labelledby="signal-title" onKeyDown={onKeyDown}>
-        <button className="drawerClose" type="button" onClick={onClose} aria-label="Close signal view"><X size={20} /></button>
-        <span className="sectionKicker">Your session, live</span>
-        <h2 id="signal-title">This is what Folloze sees.</h2>
-        <p>Every meaningful interaction can become context for campaign and sales follow-up.</p>
-        <div className="signalStats"><div><strong>1</strong><span>visitor</span></div><div><strong>{Math.max(events.length, 1)}</strong><span>interactions</span></div><div><strong>{seconds}s</strong><span>engaged</span></div></div>
-        <div className="activityList">
-          {events.slice(-5).reverse().map((event, index) => <div key={`${event.at}-${index}`}><span className={`activityDot ${event.action === "preview_viewed" ? "" : "isAccent"}`} /><div><strong>{event.label}</strong><span>{event.action.replaceAll("_", " ")}</span></div></div>)}
-        </div>
-        <div className="signalExplanation"><Gauge size={19} /><p>In a live campaign, these signals can route back to sellers and campaign systems so the next move starts with context.</p></div>
-        <a className="buttonPrimary drawerCta" href={process.env.NEXT_PUBLIC_DEMO_CTA_URL || "https://www.folloze.com/book-a-meeting"} target="_blank" rel="noopener">Book a campaign workshop<ArrowRight size={17} /></a>
-      </aside>
-    </div>,
-    document.body
-  );
-}
-
 export function TryMeNowApp() {
   const interactionReady = true;
   const [useCase, setUseCase] = useState<UseCase>();
@@ -3169,11 +3142,9 @@ export function TryMeNowApp() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [connectionError, setConnectionError] = useState("");
-  const [showSignals, setShowSignals] = useState(false);
   const [showProcess, setShowProcess] = useState(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showAnalyticsPanel, setShowAnalyticsPanel] = useState(false);
-  const [showAnalyticsToast, setShowAnalyticsToast] = useState(false);
   const [pdfUpload, setPdfUpload] = useState<PdfUploadFeedback>(idlePdfUpload);
   const [ctaValue, setCtaValue] = useState<CtaValue>({ type: "meeting", label: "Book a meeting", style: "solid" });
   const [claimEmail, setClaimEmail] = useState("");
@@ -3191,9 +3162,6 @@ export function TryMeNowApp() {
   const stabilizedSellerDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
   const initialPreviewScrolled = useRef(false);
-  const analyticsPromptedSession = useRef<string | undefined>(undefined);
-  const endJourneyRevealSession = useRef<string | undefined>(undefined);
-  const engagementFinaleShownSession = useRef<string | undefined>(undefined);
   const ctaSessionSignature = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const tunedSession = useRef<string | undefined>(undefined);
@@ -3267,7 +3235,6 @@ export function TryMeNowApp() {
     setTuneOpen(false);
     setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
-    setShowAnalyticsToast(false);
     setPdfUpload(idlePdfUpload);
     setCtaValue({ type: "meeting", label: "Book a meeting", style: "solid" });
     setClaimEmail("");
@@ -3278,9 +3245,6 @@ export function TryMeNowApp() {
     activePreflightKey.current = undefined;
     revealTracked.current = false;
     initialPreviewScrolled.current = false;
-    analyticsPromptedSession.current = undefined;
-    endJourneyRevealSession.current = undefined;
-    engagementFinaleShownSession.current = undefined;
     ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
     buildTrackedSession.current = undefined;
@@ -3306,11 +3270,9 @@ export function TryMeNowApp() {
     setError("");
     setPreflightStatus("idle");
     setConnectionError("");
-    setShowSignals(false);
     setShowProcess(false);
     setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
-    setShowAnalyticsToast(false);
     setPdfUpload(idlePdfUpload);
     setCtaValue({ type: "meeting", label: "Book a meeting", style: "solid" });
     setClaimEmail("");
@@ -3324,9 +3286,6 @@ export function TryMeNowApp() {
     activePreflightKey.current = undefined;
     revealTracked.current = false;
     initialPreviewScrolled.current = false;
-    analyticsPromptedSession.current = undefined;
-    endJourneyRevealSession.current = undefined;
-    engagementFinaleShownSession.current = undefined;
     ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
     buildTrackedSession.current = undefined;
@@ -3585,31 +3544,12 @@ export function TryMeNowApp() {
   );
 
   useEffect(() => {
-    if (!session?.experience || clientEvents.length < 5) return;
-    if (engagementFinaleShownSession.current === session.id) return;
-    engagementFinaleShownSession.current = session.id;
-    setShowAnalyticsToast(false);
-    setShowAnalyticsPanel(true);
-  }, [clientEvents.length, session?.experience, session?.id]);
-
-  useEffect(() => {
     if (session?.status !== "preview_ready_unclaimed" || !session.expiresAt) return;
     const expiresAt = Date.parse(session.expiresAt);
     if (!Number.isFinite(expiresAt)) return;
     const timer = window.setInterval(() => setPreviewClockNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, [session?.expiresAt, session?.status]);
-
-  useEffect(() => {
-    if (!session?.experience || analyticsPromptedSession.current === session.id) return;
-    const timer = window.setTimeout(() => {
-      if (analyticsPromptedSession.current === session.id) return;
-      analyticsPromptedSession.current = session.id;
-      setShowAnalyticsToast(true);
-      track("analytics_prompt_shown", { useCase: session.useCase, timing: "mid-preview" });
-    }, 18_000);
-    return () => window.clearTimeout(timer);
-  }, [session?.experience, session?.id, session?.useCase]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -3659,17 +3599,6 @@ export function TryMeNowApp() {
       const semanticKey = [next.action, context.ctaId, context.lensId, context.sectionId, context.targetId, context.area]
         .filter(Boolean)
         .join(":");
-      if (
-        event.data.action === "section_view"
-        && context.sectionId === "next-step"
-        && endJourneyRevealSession.current !== session.id
-      ) {
-        endJourneyRevealSession.current = session.id;
-        analyticsPromptedSession.current = session.id;
-        setShowAnalyticsToast(false);
-        setShowAnalyticsPanel(true);
-        track("analytics_panel_opened", { useCase: session.useCase, source: "end-of-journey" });
-      }
       setClientEvents((current) => {
         const duplicate = current.some((candidate) => {
           const candidateContext = candidate.context ?? {};
@@ -3679,10 +3608,6 @@ export function TryMeNowApp() {
           return candidateKey === semanticKey && next.at - candidate.at < 1_200;
         });
         if (duplicate) return current;
-        if (event.data.action !== "section_view") {
-          analyticsPromptedSession.current = session.id;
-          setShowAnalyticsToast(true);
-        }
         return [...current.slice(-11), next];
       });
       const elementId = [payload.blockId, payload.ctaId, payload.sectionId, payload.targetId, payload.lensId]
@@ -4079,8 +4004,6 @@ export function TryMeNowApp() {
       setSession(result.session);
       setClaimStatus("saved");
       setShowSavePrompt(false);
-      engagementFinaleShownSession.current = result.session.id;
-      setShowAnalyticsPanel(true);
       identifyProductVisitor(email);
       track("claim_completed", { useCase: result.session.useCase });
       track("save_completed", { useCase: result.session.useCase });
@@ -4162,6 +4085,9 @@ export function TryMeNowApp() {
     && canRevealPreview(session)
     && !keepStreamingBriefOpen
   );
+  const engagementSeconds = usePreviewForegroundSeconds(
+    isReveal && revealedAt && session ? session.id : undefined
+  );
   const isProvisionalPreview = isProvisionalExperience(session);
   const lifecyclePhase = previewLifecyclePhase(session);
   const lifecycleCopy = previewLifecycleCopy(lifecyclePhase);
@@ -4188,15 +4114,10 @@ export function TryMeNowApp() {
     occurredAt: event.at,
     context: event.context
   }));
-  const latestAnalyticsSignal = [...analyticsSignals].reverse().find((signal) => signal.type !== "view")
-    ?? analyticsSignals.at(-1);
   const previewSecondsRemaining = session?.expiresAt
     ? Math.max(0, Math.ceil((Date.parse(session.expiresAt) - previewClockNow) / 1_000))
     : 30 * 60;
   const previewCountdown = `${String(Math.floor(previewSecondsRemaining / 60)).padStart(2, "0")}:${String(previewSecondsRemaining % 60).padStart(2, "0")}`;
-  const engagementSeconds = revealedAt
-    ? Math.max(1, Math.round((((clientEvents.at(-1)?.at ?? revealedAt) - revealedAt) / 1000)))
-    : 0;
   const selectedToneLabel = ({
     executive: "Concise",
     consultative: "Business value",
@@ -4231,8 +4152,8 @@ export function TryMeNowApp() {
     <>
     <main
       className={`appShell ${isReveal ? "revealMode" : ""}`}
-      aria-hidden={showSignals || showProcess || saveDialogOpen || showAnalyticsPanel ? true : undefined}
-      inert={showSignals || showProcess || saveDialogOpen || showAnalyticsPanel ? true : undefined}
+      aria-hidden={showProcess || saveDialogOpen || showAnalyticsPanel ? true : undefined}
+      inert={showProcess || saveDialogOpen || showAnalyticsPanel ? true : undefined}
     >
       <header className="siteHeader">
         <Link href="/" aria-label="Folloze Try Me Now home"><Image src="/brand/folloze-logo.svg" width={101} height={25} alt="Folloze" priority /><span>Try Me Now</span></Link>
@@ -4515,8 +4436,6 @@ export function TryMeNowApp() {
                     type="button"
                     aria-label={`See live engagement, ${Math.max(analyticsSignals.length, 1)} ${Math.max(analyticsSignals.length, 1) === 1 ? "signal" : "signals"}`}
                     onClick={() => {
-                      analyticsPromptedSession.current = session.id;
-                      setShowAnalyticsToast(false);
                       setShowAnalyticsPanel(true);
                       track("analytics_panel_opened", { useCase: session.useCase, source: "preview-toolbar" });
                     }}
@@ -4533,15 +4452,6 @@ export function TryMeNowApp() {
               <div className="desktopPreviewShell">
                 <AssemblyPreview session={session} iframeRef={previewFrameRef} />
               </div>
-              <AnalyticsSignalToast
-                signal={latestAnalyticsSignal}
-                open={showAnalyticsToast && Boolean(latestAnalyticsSignal)}
-                onDismiss={() => setShowAnalyticsToast(false)}
-                onOpenPanel={() => {
-                  setShowAnalyticsToast(false);
-                  setShowAnalyticsPanel(true);
-                }}
-              />
               {session.status !== "claimed" && !isProvisionalPreview && (
                 <details className="experienceControlDeck" open={tuneOpen} onToggle={(event) => setTuneOpen(event.currentTarget.open)}>
                   <summary>
@@ -4660,7 +4570,6 @@ export function TryMeNowApp() {
       )}
 
       {showProcess && session && <MobileProcessDialog session={session} onClose={() => setShowProcess(false)} />}
-      {showSignals && revealedAt && <SignalDrawer events={clientEvents} revealedAt={revealedAt} onClose={() => setShowSignals(false)} />}
     </main>
     {saveDialogOpen && session && (
       <SaveExperienceDialog

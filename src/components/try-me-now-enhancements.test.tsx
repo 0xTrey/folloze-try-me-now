@@ -499,7 +499,8 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByText("Signal captured")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "See what buyers engage with." })).toBeInTheDocument();
     expect(screen.getByText("Your activity in this preview")).toBeInTheDocument();
-    expect(screen.getByText("You've spent 18 seconds here — that's already a signal.")).toBeInTheDocument();
+    expect(screen.getByText("18s")).toBeInTheDocument();
+    expect(screen.getByText("engaged")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Show a live-campaign example"));
     expect(screen.getByText("Not captured leads")).toBeInTheDocument();
     expect(screen.getByText("Simulated activity only. These placeholder names and actions demonstrate what Folloze can report in a live campaign.")).toBeInTheDocument();
@@ -514,6 +515,22 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(openPanel).toHaveBeenCalledOnce();
     expect(dismiss).toHaveBeenCalledOnce();
     expect(closePanel).toHaveBeenCalledOnce();
+  });
+
+  it("uses non-numeric engagement copy below fifteen foreground seconds", () => {
+    render(
+      <AnalyticsSignalPanel
+        open
+        signals={[]}
+        engagedSeconds={14}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByText("Explore the preview to see engagement appear here.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/14s|14 seconds|spent 14/i)).not.toBeInTheDocument();
   });
 
   it("deduplicates rapid semantic repeats while preserving distinct journey signals", () => {
