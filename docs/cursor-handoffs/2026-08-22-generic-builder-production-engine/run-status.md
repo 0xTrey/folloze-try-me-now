@@ -1,13 +1,14 @@
 # Cursor Run Status
 
-Status: not started
+Status: in progress
 
 ## Baseline
 
-- Branch:
-- Starting SHA:
-- Baseline tests:
-- Local preview:
+- Branch: `codex/unified-microsite-builder`
+- Starting SHA: `27827a9` (package commit; implementation base `5913367`)
+- Baseline tests: `npm test` — 87 files / 777 tests passed in 8.91s.
+- Local preview: existing Next.js dev server at `http://127.0.0.1:3001/`; entry inspected in a desktop browser at 1482×1155. It showed one “Build a buyer experience” primary path, Content Magic secondary, and two optional Northpeak links.
+- Worktree: clean at start (`git status --short --branch`).
 
 ## Wave 1: evidence
 

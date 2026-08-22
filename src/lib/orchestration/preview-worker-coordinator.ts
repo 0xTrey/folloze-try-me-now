@@ -1,7 +1,8 @@
 import type {
-  PreviewWorkerKind,
   PreviewWorkerTask,
+  ProductionArtifact,
   WorkerExecution,
+  WorkerKind,
   WorkerReceipt,
   WorkerResult
 } from "./worker-types";
@@ -53,10 +54,10 @@ export function canStartExternalWork(
 }
 
 export function blockedExternalWorkReceipt(
-  worker: PreviewWorkerKind,
+  worker: WorkerKind,
   queuedAt: Date,
   completedAt: Date,
-  dependencies: PreviewWorkerKind[] = []
+  dependencies: WorkerKind[] = []
 ): WorkerReceipt {
   return {
     worker,
@@ -174,4 +175,51 @@ export async function runPreviewWorkerWave(
 ): Promise<WorkerExecution<unknown>[]> {
   const queuedAt = (options.now ?? (() => new Date()))();
   return Promise.all(tasks.map((task) => executeTask(task, options, queuedAt)));
+}
+
+export interface ProductionWorkerWaveOptions extends PreviewWorkerWaveOptions {
+  sessionId: string;
+  revision: number;
+  currentRevision: () => number;
+}
+
+/**
+ * Runs the same deadline- and fingerprint-fenced worker boundary used by the
+ * existing preview path, then projects each execution into the revisioned
+ * production artifact contract. Stale revisions never carry a value.
+ */
+export async function runProductionWorkerWave(
+  tasks: PreviewWorkerTask<unknown>[],
+  options: ProductionWorkerWaveOptions
+): Promise<ProductionArtifact<unknown>[]> {
+  const executions = await runPreviewWorkerWave(
+    tasks.map((task) => ({
+      ...task,
+      run: (context) =>
+        task.run({
+          ...context,
+          sessionId: options.sessionId,
+          revision: options.revision
+        })
+    })),
+    options
+  );
+
+  return executions.map(({ receipt, value }) => {
+    const revisionStale = options.currentRevision() !== options.revision;
+    const status = revisionStale ? "stale" : receipt.status === "completed" ? "complete" : receipt.status;
+    return {
+      worker: receipt.worker,
+      sessionId: options.sessionId,
+      revision: options.revision,
+      status,
+      ...(status === "complete" && value !== undefined ? { value } : {}),
+      evidenceRefs: receipt.evidenceRefs.map(({ id }) => id),
+      confidence: receipt.confidence ?? 0,
+      startedAt: receipt.startedAt ?? receipt.queuedAt,
+      completedAt: receipt.completedAt,
+      ...(receipt.fallback ? { fallbackCode: "worker_fallback" } : {}),
+      ...(receipt.error ? { errorCode: receipt.error.name } : {})
+    };
+  });
 }

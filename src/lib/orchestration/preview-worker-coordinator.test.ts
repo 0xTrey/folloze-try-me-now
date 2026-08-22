@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   canStartExternalWork,
+  runProductionWorkerWave,
   runPreviewWorkerWave
 } from "./preview-worker-coordinator";
 
@@ -127,5 +128,56 @@ describe("runPreviewWorkerWave", () => {
     }], { fingerprint: "v1", currentFingerprint: () => "v1" });
     expect(results[0].receipt.status).toBe("fallback");
     expect(results[0].receipt.fallback).toMatch(/best honest artifact/i);
+  });
+
+  it("returns revisioned production artifacts and passes typed context", async () => {
+    const run = vi.fn(async ({ sessionId, revision }: { sessionId?: string; revision?: number }) => ({
+      value: { sessionId, revision },
+      evidenceRefs: [{ id: "evidence-1" }],
+      confidence: 0.92
+    }));
+    const results = await runProductionWorkerWave([{
+      worker: "company-researcher",
+      timeoutMs: 100,
+      run
+    }], {
+      sessionId: "session-1",
+      revision: 4,
+      currentRevision: () => 4,
+      fingerprint: "v4",
+      currentFingerprint: () => "v4"
+    });
+
+    expect(run).toHaveBeenCalledOnce();
+    expect(results[0]).toMatchObject({
+      worker: "company-researcher",
+      sessionId: "session-1",
+      revision: 4,
+      status: "complete",
+      value: { sessionId: "session-1", revision: 4 },
+      evidenceRefs: ["evidence-1"],
+      confidence: 0.92
+    });
+  });
+
+  it("drops production values when the session revision changes", async () => {
+    let revision = 2;
+    const results = await runProductionWorkerWave([{
+      worker: "offer-researcher",
+      timeoutMs: 100,
+      run: async () => {
+        revision = 3;
+        return { value: ["stale offer"] };
+      }
+    }], {
+      sessionId: "session-2",
+      revision: 2,
+      currentRevision: () => revision,
+      fingerprint: "v2",
+      currentFingerprint: () => "v2"
+    });
+
+    expect(results[0].status).toBe("stale");
+    expect(results[0].value).toBeUndefined();
   });
 });

@@ -8,6 +8,30 @@ export type PreviewWorkerKind =
   | "composition"
   | "render";
 
+export type ProductionWorkerKind =
+  | "identity-normalizer"
+  | "brandfetch-retriever"
+  | "dom-css-harvester"
+  | "screenshot-analyst"
+  | "company-researcher"
+  | "offer-researcher"
+  | "audience-strategist"
+  | "objective-cta-strategist"
+  | "evidence-reconciler"
+  | "framework-ranker"
+  | "wireframe-ranker"
+  | "brand-compiler"
+  | "message-spine-architect"
+  | "opening-writer"
+  | "problem-urgency-writer"
+  | "exploration-writer"
+  | "mechanism-proof-writer"
+  | "team-cta-writer"
+  | "copy-factuality-editor"
+  | "spec-compiler-qa";
+
+export type WorkerKind = PreviewWorkerKind | ProductionWorkerKind;
+
 export type PreviewWorkerStatus =
   | "queued"
   | "running"
@@ -23,8 +47,30 @@ export interface WorkerEvidenceRef {
   kind?: string;
 }
 
+export interface EvidenceValue<T> {
+  value: T;
+  source: string;
+  confidence: number;
+  observedAt: string;
+  revision: number;
+}
+
+export interface ProductionArtifact<T> {
+  worker: WorkerKind;
+  sessionId: string;
+  revision: number;
+  status: "complete" | "fallback" | "timed_out" | "failed" | "stale";
+  value?: T;
+  evidenceRefs: string[];
+  confidence: number;
+  startedAt: string;
+  completedAt: string;
+  fallbackCode?: string;
+  errorCode?: string;
+}
+
 export interface WorkerReceipt {
-  worker: PreviewWorkerKind;
+  worker: WorkerKind;
   status: Exclude<PreviewWorkerStatus, "queued" | "running">;
   queuedAt: string;
   startedAt?: string;
@@ -33,7 +79,7 @@ export interface WorkerReceipt {
   evidenceRefs: WorkerEvidenceRef[];
   confidence?: number;
   artifactRef?: string;
-  dependencies: PreviewWorkerKind[];
+  dependencies: WorkerKind[];
   fallback?: string;
   error?: { name: string; message: string };
 }
@@ -49,12 +95,14 @@ export interface WorkerResult<T> {
 export interface WorkerContext {
   signal: AbortSignal;
   fingerprint: string;
+  sessionId?: string;
+  revision?: number;
 }
 
 export interface PreviewWorkerTask<T> {
-  worker: PreviewWorkerKind;
+  worker: WorkerKind;
   timeoutMs: number;
-  dependencies?: PreviewWorkerKind[];
+  dependencies?: WorkerKind[];
   run: (context: WorkerContext) => Promise<WorkerResult<T> | T>;
 }
 
