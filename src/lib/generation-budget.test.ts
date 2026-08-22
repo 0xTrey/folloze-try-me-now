@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canStartExternalWork,
   canStartOptionalRefinement,
   generationBudgetFor,
   timingMetaForGenerationBudget
@@ -27,6 +28,14 @@ describe("generation budget", () => {
 
     expect(budget.remainingBeforeFinalizationMs).toBe(24_999);
     expect(canStartOptionalRefinement(budget, 25_000)).toBe(false);
+  });
+
+  it("refuses any new external work after the shared 60-second deadline", () => {
+    const before = generationBudgetFor(1_000, options, 60_999);
+    const after = generationBudgetFor(1_000, options, 61_000);
+
+    expect(canStartExternalWork(before)).toBe(true);
+    expect(canStartExternalWork(after)).toBe(false);
   });
 
   it("keeps deterministic timing evidence bounded and reproducible", () => {

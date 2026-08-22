@@ -51,6 +51,14 @@ export function canStartOptionalRefinement(
   return budget.remainingBeforeFinalizationMs >= Math.max(1, Math.round(requiredMs));
 }
 
+/**
+ * Hard customer deadline gate: after T+60s, no new external provider work may
+ * begin. Deterministic assembly and persistence remain allowed.
+ */
+export function canStartExternalWork(budget: GenerationBudget): boolean {
+  return budget.remainingMs > 0;
+}
+
 export function timingMetaForGenerationBudget(budget: GenerationBudget) {
   return {
     budgetMs: budget.totalMs,

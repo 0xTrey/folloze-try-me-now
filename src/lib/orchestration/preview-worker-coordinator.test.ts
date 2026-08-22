@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { runPreviewWorkerWave } from "./preview-worker-coordinator";
+import {
+  canStartExternalWork,
+  runPreviewWorkerWave
+} from "./preview-worker-coordinator";
 
 describe("runPreviewWorkerWave", () => {
   it("starts independent workers concurrently and returns evidence receipts", async () => {
@@ -74,5 +77,55 @@ describe("runPreviewWorkerWave", () => {
     }], { fingerprint: "v1", currentFingerprint: () => "v1" });
     expect(results[0].receipt.status).toBe("failed");
     expect(results[0].receipt.error?.message).toBe("renderer unavailable");
+  });
+
+  it("falls back when the shared wave deadline elapses", async () => {
+    const results = await runPreviewWorkerWave([{
+      worker: "brand-enrichment",
+      timeoutMs: 500,
+      run: async ({ signal }) => {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        expect(signal.aborted).toBe(true);
+        return { value: "late-brand" };
+      }
+    }], {
+      fingerprint: "v1",
+      currentFingerprint: () => "v1",
+      waveDeadlineMs: 5
+    });
+    expect(results[0].receipt.status).toBe("fallback");
+    expect(results[0].receipt.fallback).toMatch(/wave deadline/i);
+    expect(results[0].value).toBeUndefined();
+  });
+
+  it("does not start external work after the shared generation deadline", async () => {
+    const factory = vi.fn(async () => ({ value: "should-not-run" }));
+    const results = await runPreviewWorkerWave([{
+      worker: "account-research",
+      timeoutMs: 100,
+      run: factory
+    }], {
+      fingerprint: "v1",
+      currentFingerprint: () => "v1",
+      externalWorkDeadlineAt: Date.now() - 1
+    });
+    expect(factory).not.toHaveBeenCalled();
+    expect(results[0].receipt.status).toBe("fallback");
+    expect(results[0].receipt.fallback).toMatch(/shared generation deadline/i);
+    expect(canStartExternalWork(Date.now() - 1)).toBe(false);
+    expect(canStartExternalWork(Date.now() + 1_000)).toBe(true);
+  });
+
+  it("records optional enrichment failure as a fallback receipt", async () => {
+    const results = await runPreviewWorkerWave([{
+      worker: "brand-enrichment",
+      timeoutMs: 100,
+      run: async () => ({
+        value: undefined,
+        fallback: "Kept the best honest artifact after optional enrichment failed."
+      })
+    }], { fingerprint: "v1", currentFingerprint: () => "v1" });
+    expect(results[0].receipt.status).toBe("fallback");
+    expect(results[0].receipt.fallback).toMatch(/best honest artifact/i);
   });
 });

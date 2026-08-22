@@ -1,4 +1,5 @@
 import type {
+  PreviewWorkerKind,
   PreviewWorkerTask,
   WorkerExecution,
   WorkerReceipt,
@@ -9,6 +10,13 @@ export interface PreviewWorkerWaveOptions {
   fingerprint: string;
   currentFingerprint: () => string;
   now?: () => Date;
+  /**
+   * Shared wall-clock ceiling for the whole parallel wave. Unfinished workers
+   * receive fallback receipts instead of extending past the customer promise.
+   */
+  waveDeadlineMs?: number;
+  /** Wall-clock moment after which no new external work may begin. */
+  externalWorkDeadlineAt?: number;
 }
 
 function errorDetails(error: unknown): { name: string; message: string } {
@@ -31,15 +39,60 @@ function timeoutError(ms: number): Error {
   return new Error(`Worker timed out after ${ms}ms`);
 }
 
+function waveDeadlineError(ms: number): Error {
+  return new Error(`Worker wave deadline elapsed after ${ms}ms`);
+}
+
+/** True when optional or late external work may still begin. */
+export function canStartExternalWork(
+  deadlineAt: number | undefined,
+  now = Date.now()
+): boolean {
+  if (deadlineAt === undefined) return true;
+  return now < deadlineAt;
+}
+
+export function blockedExternalWorkReceipt(
+  worker: PreviewWorkerKind,
+  queuedAt: Date,
+  completedAt: Date,
+  dependencies: PreviewWorkerKind[] = []
+): WorkerReceipt {
+  return {
+    worker,
+    status: "fallback",
+    queuedAt: queuedAt.toISOString(),
+    startedAt: queuedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    durationMs: Math.max(0, completedAt.getTime() - queuedAt.getTime()),
+    evidenceRefs: [],
+    dependencies,
+    fallback: "No new external work started after the shared generation deadline."
+  };
+}
+
 async function executeTask<T>(
   task: PreviewWorkerTask<T>,
   options: PreviewWorkerWaveOptions,
   queuedAt: Date
 ): Promise<WorkerExecution<T>> {
   const now = options.now ?? (() => new Date());
+  const startedClock = now();
+
+  if (!canStartExternalWork(options.externalWorkDeadlineAt, startedClock.getTime())) {
+    return {
+      receipt: blockedExternalWorkReceipt(
+        task.worker,
+        queuedAt,
+        startedClock,
+        task.dependencies ?? []
+      )
+    };
+  }
+
   const controller = new AbortController();
-  const started = now();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let waveTimer: ReturnType<typeof setTimeout> | undefined;
   // Defer invocation into a promise so a synchronously thrown worker is
   // represented by a failed receipt just like an asynchronously rejected one.
   const work = Promise.resolve().then(() =>
@@ -51,8 +104,23 @@ async function executeTask<T>(
       reject(timeoutError(task.timeoutMs));
     }, task.timeoutMs);
   });
+  const waveLimited =
+    options.waveDeadlineMs === undefined
+      ? null
+      : new Promise<never>((_, reject) => {
+          const remaining = Math.max(
+            0,
+            options.waveDeadlineMs! - Math.max(0, startedClock.getTime() - queuedAt.getTime())
+          );
+          waveTimer = setTimeout(() => {
+            controller.abort(waveDeadlineError(options.waveDeadlineMs!));
+            reject(waveDeadlineError(options.waveDeadlineMs!));
+          }, remaining);
+        });
   try {
-    const raw = await Promise.race([work, timed]);
+    const raw = await Promise.race(
+      waveLimited ? [work, timed, waveLimited] : [work, timed]
+    );
     const result = resultFor(raw);
     const completedAt = now();
     const stale = options.currentFingerprint() !== options.fingerprint;
@@ -60,9 +128,9 @@ async function executeTask<T>(
       worker: task.worker,
       status: stale ? "stale" : result.fallback ? "fallback" : "completed",
       queuedAt: queuedAt.toISOString(),
-      startedAt: started.toISOString(),
+      startedAt: startedClock.toISOString(),
       completedAt: completedAt.toISOString(),
-      durationMs: Math.max(0, completedAt.getTime() - started.getTime()),
+      durationMs: Math.max(0, completedAt.getTime() - startedClock.getTime()),
       evidenceRefs: result.evidenceRefs ?? [],
       confidence: result.confidence,
       artifactRef: result.artifactRef,
@@ -72,22 +140,30 @@ async function executeTask<T>(
     return { receipt, value: stale ? undefined : result.value };
   } catch (error) {
     const completedAt = now();
-    const timedOut = error instanceof Error && /timed out/i.test(error.message);
+    const message = error instanceof Error ? error.message : String(error);
+    const timedOut = /timed out/i.test(message);
+    const waveExpired = /wave deadline/i.test(message);
     return {
       receipt: {
         worker: task.worker,
-        status: timedOut ? "timed_out" : "failed",
+        status: waveExpired ? "fallback" : timedOut ? "timed_out" : "failed",
         queuedAt: queuedAt.toISOString(),
-        startedAt: started.toISOString(),
+        startedAt: startedClock.toISOString(),
         completedAt: completedAt.toISOString(),
-        durationMs: Math.max(0, completedAt.getTime() - started.getTime()),
+        durationMs: Math.max(0, completedAt.getTime() - startedClock.getTime()),
         evidenceRefs: [],
         dependencies: task.dependencies ?? [],
-        error: errorDetails(error)
+        ...(waveExpired
+          ? {
+              fallback:
+                "Parallel research hit its wave deadline; the best honest artifact is preserved."
+            }
+          : { error: errorDetails(error) })
       }
     };
   } finally {
     if (timer) clearTimeout(timer);
+    if (waveTimer) clearTimeout(waveTimer);
   }
 }
 

@@ -302,8 +302,8 @@ describe("anonymous preview and claim publication boundary", () => {
     );
   });
 
-  it("starts a default-backed, unclaimable preview after the confirmed domain is ready", async () => {
-    const pending = session({ id: "domain-confirmed-default-preview" });
+  it("does not start generation before the material brief is eligible", async () => {
+    const pending = session({ id: "domain-ready-brief-incomplete" });
     delete pending.answers.audience;
     delete pending.answers.objective;
     pending.brand = {
@@ -324,23 +324,9 @@ describe("anonymous preview and claim publication boundary", () => {
     await runStoryStage(pending.id);
 
     const stored = await getSession(pending.id);
-    expect(stored).toMatchObject({
-      status: "preview_provisional",
-      experience: { readiness: "provisional" }
-    });
-    expect(stored?.answers).not.toHaveProperty("audience");
-    expect(stored?.answers).not.toHaveProperty("objective");
-    expect(generateExperienceDraft).toHaveBeenCalledWith(expect.objectContaining({
-      answers: expect.objectContaining({
-        audience: expect.any(String),
-        objective: "Book a meeting"
-      })
-    }));
-    const preview = stored?.events.find((event) => event.name === "preview_provisional_ready");
-    expect(Number(preview?.meta?.generationEligibleToPreviewMs)).toBeLessThan(10_000);
-    await expect(claimSession(pending.id, "buyer@example.com")).rejects.toMatchObject({
-      code: "claim_not_ready"
-    });
+    expect(stored?.experience).toBeUndefined();
+    expect(stored?.status).toBe("collecting");
+    expect(generateExperienceDraft).not.toHaveBeenCalled();
   });
 
   it("discards a late refinement after the buyer brief changes", async () => {

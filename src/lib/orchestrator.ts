@@ -12,6 +12,7 @@ import { config } from "@/lib/config";
 import type { SourceArtifact } from "@/lib/content-intelligence";
 import {
   canStartOptionalRefinement,
+  canStartExternalWork as budgetAllowsExternalWork,
   generationBudgetFor,
   timingMetaForGenerationBudget
 } from "@/lib/generation-budget";
@@ -54,6 +55,11 @@ import {
 import { appendEvent } from "@/lib/telemetry";
 import { traceIdForSession } from "@/lib/trace-store";
 import { runPreviewWorkerWave } from "@/lib/orchestration/preview-worker-coordinator";
+import {
+  dedupeResearchJobs,
+  isMaterialBriefEligible,
+  planEarlyResearch
+} from "@/lib/orchestration/research-plan";
 import { createSingleFlight } from "@/lib/orchestration/single-flight";
 import type {
   PreviewWorkerTask,
@@ -908,39 +914,7 @@ async function releaseLeaseSafely(
 }
 
 export function isGenerationReady(useCase: UseCase, answers: SessionAnswers): boolean {
-  const common = Boolean(answers.audience && answers.objective);
-  if (!common) return false;
-  if (useCase === "abm") {
-    const productContextReady = answers.objective !== "Introduce a product"
-      || Boolean(answers.sourceUrl || answers.sourceName || answers.messageBelief?.trim());
-    return Boolean(answers.targetDomain && productContextReady);
-  }
-  if (useCase === "campaign") {
-    return Boolean(
-      answers.campaignType &&
-      (answers.promotedOffer?.trim() || answers.offerSourceUrl) &&
-      (answers.campaignType !== "event" || answers.eventSource)
-    );
-  }
-  return Boolean(answers.sourceUrl || answers.sourceName);
-}
-
-/**
- * The first preview may begin as soon as the submitted company domain(s) have
- * resolved to safe brand identities.  These defaults are deliberately
- * ephemeral: they are used to render an unclaimable preview, never written to
- * the buyer's answers, and any explicit answer replaces them on the next pass.
- */
-function isProvisionalGenerationReady(session: TryMeSession): boolean {
-  const identityReady = (brand: BrandProfile | undefined) => Boolean(
-    brand && brand.identity?.confirmationStatus !== "needs-confirmation" &&
-    brand.identity?.confirmationStatus !== "rejected"
-  );
-  if (!identityReady(session.brand)) return false;
-  // Content Magic is source-authoritative. A seller domain alone must never
-  // produce a source-free content experience.
-  if (session.useCase === "content") return isGenerationReady(session.useCase, session.answers);
-  return session.useCase !== "abm" || identityReady(session.targetBrand);
+  return isMaterialBriefEligible(useCase, answers);
 }
 
 function provisionalAnswersFor(session: TryMeSession): SessionAnswers {
@@ -1902,7 +1876,7 @@ export async function patchSessionAnswers(
   return {
     session: toPublicSession(updated),
     shouldGenerate:
-      isGenerationReady(updated.useCase, updated.answers) || isProvisionalGenerationReady(updated),
+      isGenerationReady(updated.useCase, updated.answers),
     traceId: traceIdForSession(updated)
   };
 }
@@ -2061,8 +2035,7 @@ export async function patchSessionWorkspace(
   if (!updated) throw new Error("This temporary experience has expired.");
   return {
     session: toPublicSession(updated),
-    shouldGenerate:
-      isGenerationReady(updated.useCase, updated.answers) || isProvisionalGenerationReady(updated),
+    shouldGenerate: isGenerationReady(updated.useCase, updated.answers),
     traceId: traceIdForSession(updated)
   };
 }
@@ -2243,8 +2216,34 @@ export async function finalizePdfSource(
 export async function runStoryStage(id: string): Promise<void> {
   assertProductionSessionStore();
   let preflight = await getSession(id);
+  if (!preflight) return;
+  if (!isGenerationReady(preflight.useCase, preflight.answers)) return;
+
+  const eligibleAt = generationEligibleAt(preflight) ?? Date.now();
+  const budget = generationBudgetFor(eligibleAt, {
+    totalMs: config.generationDeadlineMs,
+    finalizationReserveMs: config.generationFinalizationReserveMs
+  });
+  const mayStartExternal = budgetAllowsExternalWork(budget);
+
   if (preflight && needsBrandRefresh(preflight)) {
-    await runBrandStage(id, { resumeStory: false });
+    if (!mayStartExternal) {
+      await updateSession(id, (session) => {
+        if (!session.brand) {
+          session.brand = withBrandIdentity(
+            fallbackBrand(session.companyDomain),
+            session.companyDomain
+          );
+        }
+        appendEvent(session, "brand_harvest_deadline_skipped", {
+          reason: "shared_generation_deadline",
+          ...timingMetaForGenerationBudget(budget)
+        });
+        return session;
+      });
+    } else {
+      await runBrandStage(id, { resumeStory: false });
+    }
     preflight = await getSession(id);
     if (!preflight?.brand || hasTerminalStoryFailure(preflight)) return;
   }
@@ -2292,35 +2291,80 @@ export async function runStoryStage(id: string): Promise<void> {
     preflight.answers.targetDomain &&
     needsTargetBrandRefresh(preflight, preflight.answers.targetDomain)
   ) {
-    await runTargetBrandStage(id, { resumeStory: false });
-    const refreshed = await getSession(id);
-    if (
-      !refreshed ||
-      hasTerminalStoryFailure(refreshed) ||
-      needsTargetBrandRefresh(refreshed, preflight.answers.targetDomain)
-    ) return;
+    if (!mayStartExternal) {
+      const targetDomain = preflight.answers.targetDomain;
+      await updateSession(id, (session) => {
+        if (!session.targetBrand || session.targetBrand.domain !== targetDomain) {
+          session.targetBrand = withBrandIdentity(fallbackBrand(targetDomain), targetDomain);
+        }
+        appendEvent(session, "target_harvest_deadline_skipped", {
+          reason: "shared_generation_deadline",
+          domain: targetDomain,
+          ...timingMetaForGenerationBudget(budget)
+        });
+        return session;
+      });
+      preflight = await getSession(id);
+    } else {
+      await runTargetBrandStage(id, { resumeStory: false });
+      const refreshed = await getSession(id);
+      if (
+        !refreshed ||
+        hasTerminalStoryFailure(refreshed) ||
+        needsTargetBrandRefresh(refreshed, preflight.answers.targetDomain)
+      ) return;
+      preflight = refreshed;
+    }
   }
   if (
     (preflight?.useCase === "content" || preflight?.useCase === "abm")
     && preflight.answers.sourceUrl
     && !preflight.sourceArtifact
   ) {
-    await runSourceIntelligenceStage(id, { resumeStory: false });
-    preflight = await getSession(id);
-    // Another request may still own the extraction lease. That worker resumes
-    // generation after committing the matching artifact, so never race ahead.
-    if (!preflight?.sourceArtifact || hasTerminalStoryFailure(preflight)) return;
+    if (!mayStartExternal) {
+      await updateSession(id, (session) => {
+        appendEvent(session, "source_intelligence_deadline_skipped", {
+          reason: "shared_generation_deadline",
+          ...timingMetaForGenerationBudget(budget)
+        });
+        return session;
+      });
+      // Content and product-intro paths fail closed without a source artifact.
+      // Campaign-adjacent ABM without Introduce-a-product can still provisional.
+      if (
+        preflight.useCase === "content" ||
+        preflight.answers.objective === "Introduce a product"
+      ) {
+        return;
+      }
+    } else {
+      await runSourceIntelligenceStage(id, { resumeStory: false });
+      preflight = await getSession(id);
+      // Another request may still own the extraction lease. That worker resumes
+      // generation after committing the matching artifact, so never race ahead.
+      if (!preflight?.sourceArtifact || hasTerminalStoryFailure(preflight)) return;
+    }
   }
   if (
     preflight?.useCase === "campaign" &&
     preflight.answers.offerSourceUrl &&
     !preflight.sourceArtifact
   ) {
-    await runSourceIntelligenceStage(id, { resumeStory: false });
-    preflight = await getSession(id);
-    // Another request may still own the extraction lease. That worker resumes
-    // generation after committing the matching artifact, so never race ahead.
-    if (!preflight?.sourceArtifact || hasTerminalStoryFailure(preflight)) return;
+    if (!mayStartExternal) {
+      await updateSession(id, (session) => {
+        appendEvent(session, "offer_source_intelligence_deadline_skipped", {
+          reason: "shared_generation_deadline",
+          ...timingMetaForGenerationBudget(budget)
+        });
+        return session;
+      });
+    } else {
+      await runSourceIntelligenceStage(id, { resumeStory: false });
+      preflight = await getSession(id);
+      // Another request may still own the extraction lease. That worker resumes
+      // generation after committing the matching artifact, so never race ahead.
+      if (!preflight?.sourceArtifact || hasTerminalStoryFailure(preflight)) return;
+    }
   }
 
   const lease = await acquireSessionLease(id, "generation", STORY_GENERATION_LEASE_SECONDS);
@@ -2338,7 +2382,7 @@ export async function runStoryStage(id: string): Promise<void> {
  * Coordinates the public preview path as bounded worker waves. Independent
  * enrichment starts together; one reconciled renderer pass follows. A newer
  * input fingerprint marks older results stale without allowing them to replace
- * the current experience.
+ * the current experience. Generation waits for material brief eligibility.
  */
 export async function runPreviewEnrichmentWave(
   id: string,
@@ -2349,13 +2393,64 @@ export async function runPreviewEnrichmentWave(
   const fingerprint = previewInputFingerprint(initial);
   activePreviewFingerprints.set(id, fingerprint);
   const currentFingerprint = () => activePreviewFingerprints.get(id) ?? fingerprint;
+
+  const completedKeys: string[] = [];
+  if (initial.brand && !needsBrandRefresh(initial)) {
+    completedKeys.push(`seller:${initial.companyDomain}`);
+  }
+  if (
+    initial.answers.targetDomain &&
+    initial.targetBrand &&
+    !needsTargetBrandRefresh(initial, initial.answers.targetDomain)
+  ) {
+    completedKeys.push(`target:${initial.answers.targetDomain}`);
+  }
+  const existingSourceUrl =
+    initial.useCase === "campaign"
+      ? initial.answers.offerSourceUrl
+      : initial.answers.sourceUrl;
+  if (
+    existingSourceUrl &&
+    initial.sourceArtifact &&
+    (initial.sourceArtifact.source.sourceUrl === existingSourceUrl ||
+      initial.sourceArtifact.source.finalUrl === existingSourceUrl)
+  ) {
+    completedKeys.push(`source:${existingSourceUrl}`);
+  }
+
+  const researchPlan = planEarlyResearch({
+    useCase: initial.useCase,
+    companyDomain: initial.companyDomain,
+    answers: initial.answers,
+    completedKeys
+  });
+  const plannedJobs = dedupeResearchJobs(researchPlan.jobs);
+  const eligibleAt = generationEligibleAt(initial);
+  const generationBudget =
+    eligibleAt !== undefined
+      ? generationBudgetFor(eligibleAt, {
+          totalMs: config.generationDeadlineMs,
+          finalizationReserveMs: config.generationFinalizationReserveMs
+        })
+      : undefined;
+  const externalWorkDeadlineAt = generationBudget?.deadlineAt;
+  // Parallel enrichment shares one wave ceiling so optional research cannot
+  // drift past the customer-facing generation contract once eligibility starts.
+  const enrichmentWaveDeadlineMs = generationBudget
+    ? Math.min(30_000, Math.max(1_000, generationBudget.remainingMs))
+    : 30_000;
+
   try {
     const identityTasks: PreviewWorkerTask<unknown>[] = [
       {
         worker: "brand-identity",
         timeoutMs: 1_000,
         run: async () => ({
-          value: { domain: initial.companyDomain },
+          value: {
+            domain: researchPlan.sellerAuthorityKey || initial.companyDomain,
+            sellerAuthorityPreserved: researchPlan.sellerAuthorityPreserved,
+            plannedWorkers: plannedJobs.map((job) => job.worker)
+          },
           evidenceRefs: [{ id: initial.companyDomain, kind: "submitted-domain" }],
           confidence: 1,
           artifactRef: `identity:${initial.companyDomain}`
@@ -2367,60 +2462,63 @@ export async function runPreviewEnrichmentWave(
       currentFingerprint
     });
     await persistWorkerExecutions(id, fingerprint, identityExecutions);
+    if (currentFingerprint() !== fingerprint) return;
 
-    const enrichmentTasks: PreviewWorkerTask<unknown>[] = [
-      {
-        worker: "brand-enrichment",
-        timeoutMs: Math.min(25_000, config.brandHarvesterTimeoutMs + 5_000),
-        dependencies: ["brand-identity"],
-        run: async () => {
-          await runBrandStage(id, { resumeStory: false });
-          const session = await getSession(id);
-          return {
-            value: session?.brand,
-            evidenceRefs: session?.brand
-              ? [{ id: session.brand.domain, source: session.brand.sourceUrl, kind: session.brand.source }]
-              : [],
-            confidence: confidenceScore(session?.brand?.identity?.confidence),
-            artifactRef: session?.brand
-              ? `brand:${session.brand.canonicalDomain ?? session.brand.domain}`
-              : undefined,
-            ...(!session?.brand || session.brand.readiness?.status !== "ready"
-              ? { fallback: "Full design evidence is still being enriched." }
-              : {})
-          };
-        }
+    const enrichmentTasks: PreviewWorkerTask<unknown>[] = plannedJobs.map((job) => {
+      if (job.worker === "brand-enrichment") {
+        return {
+          worker: "brand-enrichment" as const,
+          timeoutMs: Math.min(job.timeoutMs, config.brandHarvesterTimeoutMs + 5_000),
+          dependencies: ["brand-identity" as const],
+          run: async () => {
+            await runBrandStage(id, { resumeStory: false });
+            const session = await getSession(id);
+            return {
+              value: session?.brand,
+              evidenceRefs: session?.brand
+                ? [{ id: session.brand.domain, source: session.brand.sourceUrl, kind: session.brand.source }]
+                : [],
+              confidence: confidenceScore(session?.brand?.identity?.confidence),
+              artifactRef: session?.brand
+                ? `brand:${session.brand.canonicalDomain ?? session.brand.domain}`
+                : undefined,
+              ...(!session?.brand || session.brand.readiness?.status !== "ready"
+                ? { fallback: "Full design evidence is still being enriched." }
+                : {})
+            };
+          }
+        };
       }
-    ];
-    if (initial.useCase === "abm" && initial.answers.targetDomain) {
-      enrichmentTasks.push({
-        worker: "account-research",
-        timeoutMs: 25_000,
-        dependencies: ["brand-identity"],
-        run: async () => {
-          await runTargetBrandStage(id, { resumeStory: false });
-          const session = await getSession(id);
-          return {
-            value: session?.targetBrand,
-            evidenceRefs: session?.targetBrand
-              ? [{ id: session.targetBrand.domain, source: session.targetBrand.sourceUrl, kind: session.targetBrand.source }]
-              : [],
-            confidence: confidenceScore(session?.targetBrand?.identity?.confidence),
-            artifactRef: session?.targetBrand ? `account:${session.targetBrand.domain}` : undefined,
-            ...(!session?.targetBrand ? { fallback: "Target context remains provisional." } : {})
-          };
-        }
-      });
-    }
-    const sourceUrl =
-      initial.useCase === "campaign"
-        ? initial.answers.offerSourceUrl
-        : initial.answers.sourceUrl;
-    if (sourceUrl) {
-      enrichmentTasks.push({
-        worker: "source-intelligence",
-        timeoutMs: 15_000,
-        dependencies: ["brand-identity"],
+      if (job.worker === "account-research") {
+        return {
+          worker: "account-research" as const,
+          timeoutMs: job.timeoutMs,
+          dependencies: ["brand-identity" as const],
+          run: async () => {
+            await runTargetBrandStage(id, { resumeStory: false });
+            const session = await getSession(id);
+            return {
+              value: session?.targetBrand,
+              evidenceRefs: session?.targetBrand
+                ? [{
+                    id: session.targetBrand.domain,
+                    source: session.targetBrand.sourceUrl,
+                    kind: session.targetBrand.source
+                  }]
+                : [],
+              confidence: confidenceScore(session?.targetBrand?.identity?.confidence),
+              artifactRef: session?.targetBrand
+                ? `account:${session.targetBrand.domain}`
+                : undefined,
+              ...(!session?.targetBrand ? { fallback: "Target context remains provisional." } : {})
+            };
+          }
+        };
+      }
+      return {
+        worker: "source-intelligence" as const,
+        timeoutMs: job.timeoutMs,
+        dependencies: ["brand-identity" as const],
         run: async () => {
           await runSourceIntelligenceStage(id, { resumeStory: false });
           const session = await getSession(id);
@@ -2429,7 +2527,9 @@ export async function runPreviewEnrichmentWave(
             evidenceRefs: session?.sourceArtifact
               ? session.sourceArtifact.content.citations.slice(0, 12).map((citation) => ({
                   id: citation.id,
-                  source: session.sourceArtifact?.source.finalUrl ?? session.sourceArtifact?.source.sourceUrl,
+                  source:
+                    session.sourceArtifact?.source.finalUrl ??
+                    session.sourceArtifact?.source.sourceUrl,
                   kind: citation.locator.kind
                 }))
               : [],
@@ -2440,20 +2540,29 @@ export async function runPreviewEnrichmentWave(
               : {})
           };
         }
-      });
-    }
-    const enrichmentExecutions = await runPreviewWorkerWave(enrichmentTasks, {
-      fingerprint,
-      currentFingerprint
+      };
     });
-    await persistWorkerExecutions(id, fingerprint, enrichmentExecutions);
+
+    if (enrichmentTasks.length) {
+      const enrichmentExecutions = await runPreviewWorkerWave(enrichmentTasks, {
+        fingerprint,
+        currentFingerprint,
+        waveDeadlineMs: enrichmentWaveDeadlineMs,
+        externalWorkDeadlineAt
+      });
+      await persistWorkerExecutions(id, fingerprint, enrichmentExecutions);
+    }
 
     if (options.includeStory === false || currentFingerprint() !== fingerprint) return;
     const latest = await getSession(id);
-    if (
-      !latest ||
-      (!isGenerationReady(latest.useCase, latest.answers) && !isProvisionalGenerationReady(latest))
-    ) return;
+    if (!latest || !isGenerationReady(latest.useCase, latest.answers)) return;
+
+    const sourceUrl =
+      latest.useCase === "campaign"
+        ? latest.answers.offerSourceUrl
+        : latest.answers.sourceUrl;
+    // Deterministic render assembly is not external work; it may still run to
+    // preserve the best honest artifact even near the shared deadline.
     const renderExecutions = await runPreviewWorkerWave(
       [
         {
@@ -2505,10 +2614,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     if (session.blockControls?.length) {
       session.blockControls = normalizeCoreBlockControls(session.blockControls);
     }
-    if (
-      !isGenerationReady(session.useCase, session.answers) &&
-      !isProvisionalGenerationReady(session)
-    ) return session;
+    if (!isGenerationReady(session.useCase, session.answers)) return session;
     if (
       session.status === "claimed" ||
       (session.status === "preview_ready_unclaimed" &&
@@ -2570,6 +2676,14 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       latest.answers.sourceUrl &&
       !latest.sourceArtifact
     ) {
+      const unlockedEligibleAt = generationEligibleAt(latest) ?? Date.now();
+      const unlockedBudget = generationBudgetFor(unlockedEligibleAt, {
+        totalMs: config.generationDeadlineMs,
+        finalizationReserveMs: config.generationFinalizationReserveMs
+      });
+      if (!budgetAllowsExternalWork(unlockedBudget)) {
+        throw new SourceFetchError(new Error("source_deadline_exhausted"));
+      }
       const submittedSourceUrl = latest.answers.sourceUrl;
       const sourceArtifact = await fetchSourceArtifactSingleFlight(submittedSourceUrl, {
         timeoutMs: 12_000,
@@ -3014,8 +3128,7 @@ export async function recoverSessionWork(id: string): Promise<void> {
     }
 
     const storyCanResume =
-      (isGenerationReady(session.useCase, session.answers) ||
-        isProvisionalGenerationReady(session)) &&
+      isGenerationReady(session.useCase, session.answers) &&
       (session.stages.story.status === "pending" ||
         (session.stages.story.status === "running" &&
           isStale(session.stages.story.startedAt, 60_000)));
