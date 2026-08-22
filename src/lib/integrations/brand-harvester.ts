@@ -593,8 +593,8 @@ function extractImageUrls(html: string, base: URL, logoUrl?: string): string[] {
     let score = 10;
     if (/hero|platform|product|solution|overview|architecture|workflow/.test(descriptor)) score += 45;
     if (/campaign|experience/.test(descriptor)) score += 15;
-    if (/event|roadshow|webinar|conference|summit|register|registration|speaker|dates?|regions?|promotion/.test(descriptor)) score -= 90;
-    if (/logo|icon|avatar|headshot|testimonial|badge|flag|cookie|language|spinner|rating|stars?|review|widget|g2\.com|trustpilot/.test(descriptor)) score -= 100;
+    if (/(?:^|[^a-z])(?:event|roadshow|webinar|conference|summit|register|registration|speaker|dates?|regions?|promotion)(?:[^a-z]|$)/.test(descriptor)) score -= 90;
+    if (/(?:^|[^a-z])(?:logos?|icons?|avatar|headshot|testimonial|badge|flag|cookie|language|spinner|rating|stars?|review|widget)(?:[^a-z]|$)|g2\.com|trustpilot/.test(descriptor)) score -= 100;
     if (width >= 600 || height >= 400) score += 25;
     if (width && height && width * height < 80_000) score -= 45;
     if (/\.svg(?:\?|$)/.test(source) && !/diagram|architecture|platform|workflow/.test(descriptor)) score -= 20;
@@ -815,7 +815,11 @@ function extractPalette(html: string, css: string): {
       return 200 + shade;
     }
     if (/primary[-_]?core/.test(name)) return 190;
+    // Design-system semantic primaries (ServiceTitan Anvil, etc.) outrank raw scales.
+    if (/background[-_]?(?:color[-_]?)?primary(?:[-_]|$)/.test(name)) return 185;
     if (/(^|[-_])ui[-_]?0?1([-_]|$)/.test(name)) return 180;
+    // Named interactive blues used as primary action colors in public design systems.
+    if (/(?:^|[-_])(?:color[-_]?)?blue[-_]?(?:500|600|700)(?:[-_]|$)/.test(name)) return 175;
     if (/(^|[-_])accent([-_]|$)/.test(name)) return 155;
     if (/cta|button.*background/.test(name)) return 145;
     if (/(^|[-_])(action|focus|interactive|link)([-_]|$)/.test(name)) return 140;
@@ -884,21 +888,25 @@ function extractPalette(html: string, css: string): {
   const semanticAccentStrength = semanticAccentEntry
     ? accentScore(semanticAccentEntry.name, semanticAccentEntry.usage)
     : 0;
-  const accentColor = (semanticAccentStrength >= 170 ? semanticAccent : undefined) ??
+  const evidencedAccent = (semanticAccentStrength >= 170 ? semanticAccent : undefined) ??
     metadataAccent ??
     semanticAccent ??
     gradientAccent ??
     ruleAccent ??
     (css.trim() ? vividCandidates[0] : metadataAccent ?? vividCandidates[0]) ??
-    meaningful.find((color) => color !== provisionalPrimary) ??
-    "#5B5BFF";
+    meaningful.find((color) => color !== provisionalPrimary);
+  // Never label a fabricated accent as harvested truth. Incomplete palettes keep
+  // a neutral placeholder only under an explicit low-confidence fallback strategy.
+  const usedFabricatedAccent = !evidencedAccent;
+  const accentColor = evidencedAccent ?? "#5F6368";
   const darkCandidates = meaningful.filter(
     (color) => color !== accentColor && luminance(color) < 0.28 && saturation(color) > 0.08
   );
-  const primaryColor = semanticPrimary ??
+  const evidencedPrimary = semanticPrimary ??
     rulePrimary ??
-    (css.trim() && variables.length === 0 ? darkCandidates[0] : undefined) ??
-    "#1C293F";
+    (css.trim() && variables.length === 0 ? darkCandidates[0] : undefined);
+  const usedFabricatedPrimary = !evidencedPrimary;
+  const primaryColor = evidencedPrimary ?? "#202124";
   const surfaceColor = ranked.find((color) => luminance(color) > 0.88) ?? "#FFFFFF";
   const colors = [primaryColor, accentColor, surfaceColor, ...meaningful]
     .filter((color, index, values) => values.indexOf(color) === index)
@@ -919,20 +927,24 @@ function extractPalette(html: string, css: string): {
     semanticPrimary || semanticAccent || gradientAccent || rulePrimary || ruleAccent
   );
   const hasUsefulMetadata = Boolean(metadataAccent);
-  const confidence = hasSemanticRoles && semanticCandidateCount >= 2
-    ? "high"
-    : hasSemanticRoles
-      ? "medium"
-      : "low";
-  const strategy = semanticPrimary || semanticAccent || gradientAccent
-    ? "semantic-tokens"
-    : rulePrimary || ruleAccent
-      ? "source-rules"
-      : hasUsefulMetadata
-        ? "metadata"
-        : meaningful.length
-          ? "frequency"
-          : "fallback";
+  const confidence = usedFabricatedAccent || usedFabricatedPrimary
+    ? "low"
+    : hasSemanticRoles && semanticCandidateCount >= 2
+      ? "high"
+      : hasSemanticRoles
+        ? "medium"
+        : "low";
+  const strategy = usedFabricatedAccent || usedFabricatedPrimary
+    ? "fallback"
+    : semanticPrimary || semanticAccent || gradientAccent
+      ? "semantic-tokens"
+      : rulePrimary || ruleAccent
+        ? "source-rules"
+        : hasUsefulMetadata
+          ? "metadata"
+          : meaningful.length
+            ? "frequency"
+            : "fallback";
   return {
     colors,
     primaryColor,
@@ -946,6 +958,137 @@ function extractPalette(html: string, css: string): {
       rejectedCandidateCount,
       gradientCandidateCount
     }
+  };
+}
+
+function cssLengthToPx(value: string): number | undefined {
+  const trimmed = value.trim().toLowerCase();
+  const pxMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)px$/);
+  if (pxMatch) return boundedNumber(pxMatch[1], 0, 999);
+  const remMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)rem$/);
+  if (remMatch) {
+    const rem = Number.parseFloat(remMatch[1]);
+    return Number.isFinite(rem) ? boundedNumber(rem * 16, 0, 999) : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Derive bounded design DNA from public CSS when a browser harvest is unavailable.
+ * Only records roles with direct evidence; never invents radii or motifs.
+ */
+function extractStaticDesignDna(
+  html: string,
+  css: string,
+  palette: { primaryColor: string; accentColor: string; surfaceColor: string },
+  paletteConfidence: IntelligenceConfidence
+): BrandDesignDNA | undefined {
+  const source = css.trim() || html;
+  if (!source.trim()) return undefined;
+
+  const buttonRule = [...source.matchAll(
+    /([^{}]{0,220}(?:\.button|\[class\*="button"\]|\[data-appearance=["']primary["']\]|btn[-_]?primary|primary[-_]?button|cta[-_]?button)[^{}]{0,180})\{([^{}]{0,1200})\}/gi
+  )][0];
+  const buttonBody = buttonRule?.[2] ?? "";
+  const radiusLiteral = buttonBody.match(/border-radius\s*:\s*([^;}{]+)/i)?.[1];
+  let radiusPx = radiusLiteral ? cssLengthToPx(radiusLiteral.trim()) : undefined;
+  if (radiusPx === undefined && radiusLiteral) {
+    const referenced = radiusLiteral.match(/var\(\s*--([a-z0-9_-]+)/i)?.[1]?.toLowerCase();
+    if (referenced) {
+      const tokenValue = [...source.matchAll(/--([a-z0-9_-]+)\s*:\s*([^;}{]+)/gi)]
+        .find((match) => match[1].toLowerCase() === referenced)?.[2];
+      radiusPx = tokenValue ? cssLengthToPx(tokenValue.trim()) : undefined;
+    }
+  }
+  if (radiusPx === undefined) {
+    const radiusToken = [...source.matchAll(/--([a-z0-9_-]*radius[a-z0-9_-]*)\s*:\s*([^;}{]+)/gi)]
+      .map((match) => ({
+        name: match[1].toLowerCase(),
+        px: cssLengthToPx(match[2].trim())
+      }))
+      .find((entry) =>
+        entry.px !== undefined &&
+        entry.px >= 4 &&
+        entry.px <= 24 &&
+        /(button|btn|control|2$|sm|md|moderate)/.test(entry.name)
+      );
+    radiusPx = radiusToken?.px;
+  }
+
+  const heightMatch = buttonBody.match(/(?:^|;)\s*(?:min-)?height\s*:\s*([^;}{]+)/i)?.[1];
+  const heightPx = heightMatch ? cssLengthToPx(heightMatch) : undefined;
+  const borderWidthMatch = buttonBody.match(/border(?:-width)?\s*:\s*([^;}{]+)/i)?.[1];
+  const borderWidthPx = borderWidthMatch
+    ? cssLengthToPx(borderWidthMatch.split(/\s+/)[0] ?? "")
+    : undefined;
+
+  const cardRule = [...source.matchAll(
+    /([^{}]{0,160}(?:\.card|\[class\*="card"\])[^{}]{0,120})\{([^{}]{0,800})\}/gi
+  )][0];
+  const cardRadius = cardRule?.[2]
+    ? cssLengthToPx(cardRule[2].match(/border-radius\s*:\s*([^;}{]+)/i)?.[1] ?? "")
+    : undefined;
+
+  const headingWeight = boundedNumber(
+    source.match(/(?:^|[,\s{])h1\s*\{[^}]*font-weight\s*:\s*(\d{3})/i)?.[1],
+    300,
+    900
+  );
+  const bodyWeight = boundedNumber(
+    source.match(/(?:^|[,\s{])(?:body|p)\s*\{[^}]*font-weight\s*:\s*(\d{3})/i)?.[1],
+    300,
+    800
+  );
+  const serifEvidence = /(?:font-family|font-serif)[^;}{]*(?:georgia|times|serif)/i.test(source) &&
+    !/sans-serif/i.test(source.match(/font-family[^;}{]+/i)?.[0] ?? "sans-serif");
+
+  const heroBlock = [...source.matchAll(
+    /([^{}]{0,160}(?:\.hero|\[class\*="hero"\]|\.masthead)[^{}]{0,120})\{([^{}]{0,1000})\}/gi
+  )][0]?.[2] ?? "";
+  const heroBackground = cssColorLiterals(heroBlock)
+    .map(normalizeCssColor)
+    .find((color): color is string => Boolean(color));
+  const hero = heroBackground
+    ? luminance(heroBackground) < 0.22 ? "dark" as const : "light" as const
+    : luminance(palette.primaryColor) < 0.22 ? "dark" as const : "light" as const;
+
+  const motif: NonNullable<BrandDesignDNA["theme"]>["motif"] | undefined =
+    /radial-gradient/i.test(source) ? "radial-glow"
+      : /repeating-linear-gradient|background-size\s*:\s*\d/i.test(source) ? "technical-grid"
+        : /linear-gradient/i.test(source) ? "soft-gradient"
+          : undefined;
+
+  const hasGeometry = radiusPx !== undefined || heightPx !== undefined || cardRadius !== undefined;
+  const hasType = headingWeight !== undefined || bodyWeight !== undefined || serifEvidence;
+  if (!hasGeometry && !hasType && !motif && !heroBackground) return undefined;
+
+  const confidence: IntelligenceConfidence = paletteConfidence === "high" && hasGeometry
+    ? "high"
+    : hasGeometry || hasType
+      ? "medium"
+      : "low";
+
+  return {
+    version: 1,
+    source: "legacy-presentation",
+    confidence,
+    theme: { hero, ...(motif ? { motif } : {}) },
+    colors: {
+      lightSurfaceAccent: palette.accentColor,
+      focus: palette.accentColor
+    },
+    typography: {
+      fallback: serifEvidence ? "serif" : "sans",
+      ...(headingWeight !== undefined ? { headingWeight } : {}),
+      ...(bodyWeight !== undefined ? { bodyWeight } : {})
+    },
+    buttons: {
+      primaryBackground: palette.accentColor,
+      ...(radiusPx !== undefined ? { radiusPx } : {}),
+      ...(heightPx !== undefined && heightPx >= 36 && heightPx <= 80 ? { heightPx } : {}),
+      ...(borderWidthPx !== undefined ? { borderWidthPx } : {})
+    },
+    ...(cardRadius !== undefined ? { cards: { radiusPx: cardRadius } } : {})
   };
 }
 
@@ -1213,6 +1356,12 @@ export function extractFastBrandProfile(input: {
   );
   const fonts = extractFontProfile(input.html, input.css ?? "");
   const fontBase = finalUrl;
+  const designDna = extractStaticDesignDna(
+    input.html,
+    input.css ?? "",
+    palette,
+    paletteDiagnostics.confidence
+  );
   const profile: BrandProfile = {
     domain: submittedDomain,
     canonicalDomain,
@@ -1232,6 +1381,7 @@ export function extractFastBrandProfile(input: {
     bodyFontUrl: absoluteHttpsUrl(fonts.bodyFontUrl, fontBase),
     sourceUrl: finalUrl.toString(),
     source: "fast-extractor",
+    ...(designDna ? { designDna } : {}),
     diagnostics: {
       logo: logoDecision.receipt,
       palette: paletteDiagnostics

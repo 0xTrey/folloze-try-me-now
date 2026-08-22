@@ -1,4 +1,5 @@
 import type {
+  BrandDesignDNA,
   BrandProfile,
   EntityIdentity,
   IntelligenceConfidence,
@@ -9,6 +10,73 @@ import {
   companyDomainStem,
   sharesRegistrableCompanyDomain
 } from "@/lib/domain-identity";
+
+/**
+ * Provenance-backed visual compilation for a harvested brand. This is the
+ * Workstream 3 seam between extraction and renderers: it never invents colors,
+ * never promotes target recognition into seller system ownership, and lists
+ * unresolved evidence instead of fabricating fallbacks.
+ */
+export type BrandImageryTreatment = "image-led" | "image-supported" | "type-led" | "diagram-led";
+export type BrandSurfaceDensity = "airy" | "balanced" | "dense";
+export type BrandNavigationMotif = "wordmark-led" | "minimal" | "utility";
+export type BrandCtaMotif = "solid-pill" | "solid-rounded" | "solid-moderate" | "solid-square" | "outline";
+
+export interface BrandFidelityCompilation {
+  domain: string;
+  canonicalDomain: string;
+  companyName: string;
+  confidence: IntelligenceConfidence;
+  palette: {
+    primary?: string;
+    accent?: string;
+    surface?: string;
+    strategy?: NonNullable<NonNullable<BrandProfile["diagnostics"]>["palette"]>["strategy"];
+    verified: boolean;
+  };
+  designDna?: BrandDesignDNA;
+  typographyCharacter?: {
+    display?: string;
+    body?: string;
+    fallback?: NonNullable<BrandDesignDNA["typography"]>["fallback"];
+    headingWeight?: number;
+  };
+  geometry?: {
+    buttonRadiusPx?: number;
+    buttonHeightPx?: number;
+    buttonBorderWidthPx?: number;
+    cardRadiusPx?: number;
+    surfaceDensity?: BrandSurfaceDensity;
+  };
+  imagery: {
+    treatment: BrandImageryTreatment;
+    sourceOwnedImageCount: number;
+    logoVariants: { light?: boolean; dark?: boolean; portable?: boolean };
+  };
+  motifs: {
+    hero?: NonNullable<BrandDesignDNA["theme"]>["hero"];
+    motif?: NonNullable<BrandDesignDNA["theme"]>["motif"];
+    navigation?: BrandNavigationMotif;
+    cta?: BrandCtaMotif;
+  };
+  unresolvedEvidence: string[];
+}
+
+export interface BrandVisualAuthority {
+  owner: "seller";
+  seller: BrandFidelityCompilation;
+  targetRecognition: {
+    domain: string;
+    canonicalDomain: string;
+    companyName: string;
+    markReady: boolean;
+    /** Target color stays local; it never owns page surfaces, CTA, or navigation. */
+    localAccentOnly: true;
+    accentColor?: string;
+    unresolvedEvidence: string[];
+  } | null;
+  unresolvedEvidence: string[];
+}
 
 export type BrandCategory =
   | "buyer-experience"
@@ -1154,5 +1222,195 @@ export function narrativeProfileFor(brand: BrandProfile): Omit<CategoryProfile, 
     sectionBodies,
     decisionQuestions,
     signalLabels
+  };
+}
+
+function paletteVerified(profile: BrandProfile): boolean {
+  const palette = profile.diagnostics?.palette;
+  return Boolean(
+    palette &&
+      palette.strategy !== "fallback" &&
+      palette.confidence !== "low" &&
+      profile.colors.length >= 3
+  );
+}
+
+function surfaceDensityFor(designDna?: BrandDesignDNA): BrandSurfaceDensity | undefined {
+  if (!designDna) return undefined;
+  const section = designDna.spacing?.sectionBlockPx;
+  const gap = designDna.spacing?.gridGapPx;
+  const shadow = designDna.cards?.shadow;
+  if (section !== undefined && section <= 72 && gap !== undefined && gap <= 12) return "dense";
+  if (section !== undefined && section >= 112 && (shadow === "none" || gap !== undefined && gap >= 28)) {
+    return "airy";
+  }
+  if (section !== undefined || gap !== undefined || shadow) return "balanced";
+  return undefined;
+}
+
+function ctaMotifFor(designDna?: BrandDesignDNA): BrandCtaMotif | undefined {
+  const radius = designDna?.buttons?.radiusPx;
+  if (radius === undefined) return undefined;
+  if (radius >= 999 || radius >= 40) return "solid-pill";
+  if (radius >= 12) return "solid-rounded";
+  if (radius >= 4) return "solid-moderate";
+  return "solid-square";
+}
+
+function navigationMotifFor(profile: BrandProfile): BrandNavigationMotif | undefined {
+  const strategy = profile.diagnostics?.logo.strategy ?? "none";
+  if (["none", "favicon", "inline-svg-unportable"].includes(strategy)) return "utility";
+  if (profile.logoUrl || profile.portableLogo) return "wordmark-led";
+  return "minimal";
+}
+
+function imageryTreatmentFor(profile: BrandProfile): BrandImageryTreatment {
+  const count = profile.imageUrls.length;
+  if (count >= 2) return "image-led";
+  if (count === 1) return "image-supported";
+  if (profile.designDna?.theme?.motif === "technical-grid") return "diagram-led";
+  return "type-led";
+}
+
+function fidelityConfidence(profile: BrandProfile): IntelligenceConfidence {
+  const identity = profile.identity?.confidence;
+  const palette = profile.diagnostics?.palette?.confidence;
+  const design = profile.designDna?.confidence;
+  const scores = { high: 3, medium: 2, low: 1 } as const;
+  const values = [identity, palette, design]
+    .filter((value): value is IntelligenceConfidence => Boolean(value))
+    .map((value) => scores[value]);
+  if (!values.length) return "low";
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  if (average >= 2.6 && paletteVerified(profile)) return "high";
+  if (average >= 1.8) return "medium";
+  return "low";
+}
+
+/**
+ * Compile verified brand evidence into a renderer-safe fidelity receipt.
+ * Missing roles become unresolvedEvidence; they are never invented here.
+ */
+export function compileBrandFidelity(profile: BrandProfile): BrandFidelityCompilation {
+  const designDna = profile.designDna;
+  const verified = paletteVerified(profile);
+  const unresolvedEvidence: string[] = [];
+  if (!verified) unresolvedEvidence.push("semantic-palette");
+  if (!profile.portableLogo && !profile.logoUrl && !profile.logoSourceUrl) {
+    unresolvedEvidence.push("deliverable-logo");
+  }
+  if (!designDna || designDna.confidence === "low") unresolvedEvidence.push("design-geometry");
+  if (designDna?.buttons?.radiusPx === undefined) unresolvedEvidence.push("button-radius");
+  if (!profile.displayFontFamily && !designDna?.typography?.fallback) {
+    unresolvedEvidence.push("typography-delivery");
+  }
+  if (profile.imageUrls.length === 0) unresolvedEvidence.push("source-owned-imagery");
+  if (profile.identity && profile.identity.confirmationStatus !== "confirmed") {
+    unresolvedEvidence.push("company-identity");
+  }
+  const treatment = imageryTreatmentFor(profile);
+  if (treatment === "type-led" || treatment === "diagram-led") {
+    unresolvedEvidence.push(`imagery-fallback:${treatment}`);
+  }
+
+  return {
+    domain: profile.domain,
+    canonicalDomain: profile.canonicalDomain ?? profile.domain,
+    companyName: profile.companyName,
+    confidence: fidelityConfidence(profile),
+    palette: {
+      ...(verified
+        ? {
+            primary: profile.primaryColor,
+            accent: profile.accentColor,
+            surface: profile.surfaceColor
+          }
+        : {}),
+      strategy: profile.diagnostics?.palette?.strategy,
+      verified
+    },
+    ...(designDna ? { designDna } : {}),
+    typographyCharacter: {
+      display: profile.displayFontFamily,
+      body: profile.bodyFontFamily,
+      fallback: designDna?.typography?.fallback,
+      headingWeight: designDna?.typography?.headingWeight
+    },
+    geometry: {
+      buttonRadiusPx: designDna?.buttons?.radiusPx,
+      buttonHeightPx: designDna?.buttons?.heightPx,
+      buttonBorderWidthPx: designDna?.buttons?.borderWidthPx,
+      cardRadiusPx: designDna?.cards?.radiusPx,
+      surfaceDensity: surfaceDensityFor(designDna)
+    },
+    imagery: {
+      treatment,
+      sourceOwnedImageCount: profile.imageUrls.length,
+      logoVariants: {
+        light: Boolean(profile.logoUrl || profile.portableLogo),
+        dark: Boolean(profile.logoUrlOnDark),
+        portable: Boolean(profile.portableLogo)
+      }
+    },
+    motifs: {
+      hero: designDna?.theme?.hero,
+      motif: designDna?.theme?.motif,
+      navigation: navigationMotifFor(profile),
+      cta: ctaMotifFor(designDna)
+    },
+    unresolvedEvidence: [...new Set(unresolvedEvidence)]
+  };
+}
+
+/**
+ * Separate seller visual authority from target recognition. Target accents stay
+ * contained; they never replace seller palette, CTA, navigation, or surfaces.
+ */
+export function compileBrandVisualAuthority(
+  seller: BrandProfile,
+  target?: BrandProfile | null
+): BrandVisualAuthority {
+  const sellerFidelity = compileBrandFidelity(seller);
+  const unresolvedEvidence = [...sellerFidelity.unresolvedEvidence];
+  if (!target) {
+    return {
+      owner: "seller",
+      seller: sellerFidelity,
+      targetRecognition: null,
+      unresolvedEvidence
+    };
+  }
+
+  const targetReady = Boolean(
+    target.portableLogo ||
+      target.logoUrl ||
+      target.logoSourceUrl ||
+      (target.diagnostics?.logo.strategy &&
+        !["none", "favicon", "inline-svg-unportable"].includes(target.diagnostics.logo.strategy))
+  );
+  const targetUnresolved: string[] = [];
+  if (!targetReady) targetUnresolved.push("target-mark");
+  if (target.identity && target.identity.confirmationStatus !== "confirmed") {
+    targetUnresolved.push("target-identity");
+  }
+  // Never treat target system colors as seller authority even when present.
+  if (target.accentColor && target.accentColor === seller.accentColor) {
+    // Shared coincidence is fine; still keep ownership explicit via localAccentOnly.
+  }
+  unresolvedEvidence.push(...targetUnresolved.map((item) => `target:${item}`));
+
+  return {
+    owner: "seller",
+    seller: sellerFidelity,
+    targetRecognition: {
+      domain: target.domain,
+      canonicalDomain: target.canonicalDomain ?? target.domain,
+      companyName: target.companyName,
+      markReady: targetReady,
+      localAccentOnly: true,
+      ...(paletteVerified(target) ? { accentColor: target.accentColor } : {}),
+      unresolvedEvidence: targetUnresolved
+    },
+    unresolvedEvidence: [...new Set(unresolvedEvidence)]
   };
 }

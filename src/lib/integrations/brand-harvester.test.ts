@@ -368,6 +368,23 @@ describe("fast brand extraction", () => {
     expect(profile.imageUrls.join(" ")).not.toContain("data:image");
   });
 
+  it("does not treat brand names containing star as star-rating chrome", () => {
+    const seller = extractFastBrandProfile({
+      domain: "northstar.com",
+      html: `<!doctype html><html><head>
+        <title>NorthStar</title>
+        <meta property="og:site_name" content="NorthStar">
+      </head><body>
+        <header><img class="logo" src="/northstar-wordmark.svg" alt="NorthStar logo" width="160" height="36"></header>
+        <img class="inner-hero-unit-img" src="/HarmonyTitle-HeroImage-Ring.jpg" alt="NorthStar platform" width="1200" height="720">
+      </body></html>`,
+      finalUrl: new URL("https://www.northstar.com/")
+    });
+
+    expect(seller.logoUrl).toContain("northstar-wordmark.svg");
+    expect(seller.imageUrls).toContain("https://www.northstar.com/HarmonyTitle-HeroImage-Ring.jpg");
+  });
+
   it("keeps evergreen platform imagery ahead of date-bound event promotion art", () => {
     const seller = extractFastBrandProfile({
       domain: "jitterbit.com",
