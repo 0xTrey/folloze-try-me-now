@@ -12,10 +12,12 @@ const TICK_INTERVAL_MS = 250;
 export function usePreviewForegroundSeconds(
   revealedSessionId: string | undefined
 ): number {
-  const [seconds, setSeconds] = useState(0);
+  const [clock, setClock] = useState<{
+    sessionId: string | undefined;
+    seconds: number;
+  }>({ sessionId: undefined, seconds: 0 });
 
   useEffect(() => {
-    setSeconds(0);
     if (!revealedSessionId) return;
 
     let accumulatedMs = 0;
@@ -25,7 +27,10 @@ export function usePreviewForegroundSeconds(
     const elapsedMs = () =>
       accumulatedMs +
       (visibleStartedAt === undefined ? 0 : Math.max(0, Date.now() - visibleStartedAt));
-    const update = () => setSeconds(Math.floor(elapsedMs() / 1_000));
+    const update = () => setClock({
+      sessionId: revealedSessionId,
+      seconds: Math.floor(elapsedMs() / 1_000)
+    });
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         if (visibleStartedAt !== undefined) {
@@ -46,5 +51,5 @@ export function usePreviewForegroundSeconds(
     };
   }, [revealedSessionId]);
 
-  return seconds;
+  return clock.sessionId === revealedSessionId ? clock.seconds : 0;
 }
