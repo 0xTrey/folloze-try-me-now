@@ -39,22 +39,24 @@ Status: in progress
 
 ## Wave 4: integration and QA
 
-- Agents:
-- Decisions:
-- Files:
-- Tests:
-- Evidence:
-- Concerns:
-- Commits:
+- Agents: 20 Spec/compiler/QA coordinator completed the bounded integration; Cursor manager wired shared seams, runtime receipts, visual evidence, and acceptance records.
+- Decisions: `ExperienceSpecV2` remains canonical; production output is projected into the existing trusted draft/renderer; writer output cannot supply executable code or CSS; compile and reveal are current-revision-only; new provider work is refused at 60 seconds; failures return the best coherent page or a typed safe-fallback instruction; one bounded visual repair may be offered but is never reveal-blocking.
+- Files: `src/lib/generation/generic-production-engine.ts`; `src/lib/generation/session-production-engine.ts`; `src/lib/generation/production-draft-adapter.ts`; `src/lib/orchestrator.ts`; `src/lib/experience-contract.ts`; `src/lib/generation/experience-template.ts`; `src/lib/types.ts`; `src/lib/brand-system.ts`; focused unit tests; `tests/e2e/generic-production-visual-evidence.spec.ts`.
+- Tests: final `npm run benchmark:preview` — 5 files / 30 tests passed; final `npm run qa` — lint exit 0 with three pre-existing warnings, typecheck passed, 106 files / 938 tests passed, Turbopack build passed, webpack build passed; final `npm run test:e2e -- --project=desktop` — 28 passed; focused trace/privacy run — 3 files / 21 tests passed.
+- Receipts: production compiler emits worker, status, duration, evidence count, confidence band, fallback/error code, revisioned compile stages, and current-revision final reveal. Current receipt/privacy assertion is in `src/lib/generation/generic-production-engine.test.ts`; existing redaction assertions remain in `src/lib/observability.test.ts` and `src/lib/trace-store.test.ts`.
+- Evidence: `docs/cursor-handoffs/2026-08-22-generic-builder-production-engine/evidence/` contains first-viewport and full-page 1440×1000 captures for Apple, ADP, ServiceTitan, and no-logo recovery plus `visual-evidence-manifest.json`. Captures use deterministic local fixtures and intercepted local SVG stand-ins; they make no live provider request. The manifest records action color, radius, image/fallback mode, broken-image count, overflow, and document height.
+- Privacy and mutation: current trace tests reject raw domain, URL, email, copy, HTML, and secret content; production receipt assertion rejects raw company/domain/copy/URL values. No push, deploy, Folloze write, infrastructure change, credential access, secret read, or live provider call occurred.
+- Concerns: six matrix items remain Partial: no browser domain-edit stale-race (G05), no explicit desktop workbench 2:1 screenshot assertion (G27), legacy determinate progress values remain alongside receipt progress (G28), no browser provisional-to-final replacement scenario (G39), no browser session-API provider-failure scenario (G40), and no explicit automated contrast audit (G44). Brand screenshots validate local deterministic rendering; they are not live-site/provider captures.
+- Commits: `58af35c feat: compile revision-fenced production pages`; `020a98a feat: integrate production artifacts into previews`; final bounded evidence/docs/test commit pending at this status update.
 
 ## Final checks
 
-- [ ] Acceptance matrix updated.
-- [ ] Benchmark passes.
-- [ ] Full QA passes.
-- [ ] Desktop E2E passes.
-- [ ] Three-brand screenshots captured.
-- [ ] Trace privacy verified.
-- [ ] Worktree clean.
-- [ ] No push/deploy/Folloze/infrastructure action.
-- [ ] `cursor-handback.md` complete.
+- [x] Acceptance matrix updated: 40 Met, 6 Partial, 0 Blocked/Failed.
+- [x] Benchmark passes: 5 files / 30 tests.
+- [x] Full QA passes: 106 files / 938 tests plus both production builds.
+- [x] Desktop E2E passes: 28 tests.
+- [x] Three-brand screenshots captured: Apple, ADP, ServiceTitan, plus no-logo recovery.
+- [x] Trace privacy verified by current focused and full-suite tests.
+- [ ] Worktree clean after final bounded commit.
+- [x] No push/deploy/Folloze/infrastructure action.
+- [ ] `cursor-handback.md` complete after final commit SHA is known.

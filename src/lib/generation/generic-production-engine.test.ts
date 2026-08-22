@@ -380,6 +380,46 @@ describe("compileGenericProductionPage", () => {
     ]);
   });
 
+  it("emits reconstructable privacy-safe worker and reveal receipts", async () => {
+    const result = await compileGenericProductionPage(engineInput());
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    expect(result.workerReceipts.length).toBeGreaterThanOrEqual(10);
+    expect(result.workerReceipts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          worker: "spec-compiler-qa",
+          status: "completed",
+          durationMs: 1000,
+          dependencies: expect.arrayContaining([
+            "brand-compiler",
+            "message-spine-architect",
+            "wireframe-ranker",
+            "copy-factuality-editor"
+          ])
+        })
+      ])
+    );
+    expect(result.compileReceipts.at(-1)).toMatchObject({
+      stage: "final-reveal",
+      status: "completed",
+      sessionId,
+      revision,
+      detailCode: "current_revision_final_reveal",
+      artifactCount: 1
+    });
+
+    const operationalTrace = JSON.stringify({
+      workers: result.workerReceipts,
+      compile: result.compileReceipts,
+      reveal: result.artifact.value?.reveal
+    });
+    expect(operationalTrace).not.toMatch(
+      /acme\.example|Acme Workflow Cloud|Operations leaders|https?:\/\/|buyer@example/i
+    );
+  });
+
   it("discards writer results when the active revision changes in flight", async () => {
     let currentRevision = revision;
     const result = await compileGenericProductionPage(engineInput(), {

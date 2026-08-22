@@ -1,0 +1,70 @@
+[
+  {
+    "brand": "Apple",
+    "fixture": "apple",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "source": "deterministic local fixture; no live provider requests",
+    "buttonColor": "rgb(0, 113, 227)",
+    "buttonRadius": "20px",
+    "logoImageVisible": true,
+    "fallbackVisible": true,
+    "noAssetTreatments": 1,
+    "brokenImages": 0,
+    "horizontalOverflow": false,
+    "documentHeight": 5420
+  },
+  {
+    "brand": "ADP",
+    "fixture": "adp",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "source": "deterministic local fixture; no live provider requests",
+    "buttonColor": "rgb(237, 28, 46)",
+    "buttonRadius": "4px",
+    "logoImageVisible": true,
+    "fallbackVisible": true,
+    "noAssetTreatments": 0,
+    "brokenImages": 0,
+    "horizontalOverflow": false,
+    "documentHeight": 4542
+  },
+  {
+    "brand": "ServiceTitan",
+    "fixture": "servicetitan",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "source": "deterministic local fixture; no live provider requests",
+    "buttonColor": "rgb(2, 101, 220)",
+    "buttonRadius": "6px",
+    "logoImageVisible": true,
+    "fallbackVisible": true,
+    "noAssetTreatments": 0,
+    "brokenImages": 0,
+    "horizontalOverflow": false,
+    "documentHeight": 4662
+  },
+  {
+    "brand": "No Logo Co.",
+    "fixture": "no-logo-recovery",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "source": "deterministic local fixture; no live provider requests",
+    "buttonColor": "rgb(44, 107, 237)",
+    "buttonRadius": "10px",
+    "logoImageVisible": false,
+    "fallbackVisible": true,
+    "noAssetTreatments": 1,
+    "brokenImages": 0,
+    "horizontalOverflow": false,
+    "documentHeight": 4754
+  }
+]
