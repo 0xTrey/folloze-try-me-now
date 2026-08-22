@@ -9,6 +9,7 @@ function publicSession(input: {
   answers?: SessionAnswers;
   status?: PublicTryMeSession["status"];
   brandName?: string;
+  evidenceBackedRecommendations?: boolean;
 }): PublicTryMeSession {
   const id = input.id ?? `e2e-${input.useCase}-${input.companyDomain.replace(/\W+/g, "")}`;
   const companyName = input.brandName ?? "Northpeak";
@@ -35,33 +36,67 @@ function publicSession(input: {
       primaryColor: "#0B1F33",
       accentColor: "#2F6FED",
       surfaceColor: "#FFFFFF",
-      source: "brand-harvester"
+      source: "brand-harvester",
+      readiness: {
+        status: "ready",
+        identityReady: true,
+        logoReady: true,
+        paletteReady: true,
+        designReady: true,
+        sourceEvidenceReady: true,
+        reasons: []
+      }
     },
     audienceSuggestions: ["Revenue leaders", "Platform architects", "Security owners"],
-    audienceRecommendations: [
+    audienceRecommendations: input.evidenceBackedRecommendations ? [
       {
         id: "rev",
         label: "Revenue leaders",
         confidence: "high",
-        rationale: "Fit for the seller category",
-        evidenceItemIds: [],
-        source: "seller-category-fallback"
+        rationale: "Northpeak's revenue platform evidence names pipeline operations as a buying owner.",
+        evidenceItemIds: ["seller-pipeline-operations"],
+        recommendationKind: "evidence-backed",
+        source: "seller-public-evidence"
       },
       {
         id: "plat",
         label: "Platform architects",
         confidence: "medium",
-        rationale: "Fit for platform owners",
-        evidenceItemIds: [],
+        rationale: "Northpeak's platform evidence names integration architecture as an evaluation function.",
+        evidenceItemIds: ["seller-platform-architecture"],
+        recommendationKind: "evidence-backed",
         source: "seller-public-evidence"
       }
-    ]
+    ] : [],
+    offerRecommendations: input.evidenceBackedRecommendations ? [
+      {
+        id: "pipeline-command",
+        label: "Pipeline Command Center",
+        rationale: "Named in seller-owned product evidence.",
+        recommended: true,
+        evidenceItemIds: ["seller-pipeline-command"],
+        confidence: "high",
+        recommendationKind: "evidence-backed",
+        revision: 1
+      },
+      {
+        id: "governed-automation",
+        label: "Governed Revenue Automation",
+        rationale: "Named in seller-owned solution evidence.",
+        recommended: false,
+        evidenceItemIds: ["seller-governed-automation"],
+        confidence: "medium",
+        recommendationKind: "evidence-backed",
+        revision: 1
+      }
+    ] : []
   };
 }
 
 async function mockSessionApis(
   page: Page,
-  sessions: Map<string, PublicTryMeSession>
+  sessions: Map<string, PublicTryMeSession>,
+  createFixture?: (input: { useCase: UseCase; companyDomain: string }) => PublicTryMeSession
 ): Promise<void> {
   await page.route("**/api/sessions**", async (route: Route) => {
     const request = route.request();
@@ -71,7 +106,7 @@ async function mockSessionApis(
 
     if (method === "POST" && path.endsWith("/api/sessions")) {
       const body = request.postDataJSON() as { useCase: UseCase; companyDomain: string };
-      const session = publicSession({
+      const session = createFixture?.(body) ?? publicSession({
         useCase: body.useCase,
         companyDomain: body.companyDomain
       });
@@ -219,6 +254,106 @@ test.describe("unified guided first-run experience", () => {
       await expect(page.getByLabel(/What are you taking to market/i)).toBeVisible();
     }
     await expect(page.locator('input[type="email"]')).toHaveCount(0);
+  });
+
+  test("product-owner remediation keeps recommendations grounded and engagement manual on a full-width preview", async ({
+    page
+  }) => {
+    test.setTimeout(60_000);
+    const sessions = new Map<string, PublicTryMeSession>();
+    let fixtureMode: "evidence" | "none" | "ready" = "evidence";
+    await page.route("**/e/e2e-ready-remediation**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><html><body><main><section>Fixture preview</section></main></body></html>"
+      });
+    });
+    await mockSessionApis(page, sessions, ({ useCase, companyDomain }) => {
+      const base = publicSession({
+        id: fixtureMode === "ready" ? "e2e-ready-remediation" : `e2e-remediation-${fixtureMode}`,
+        useCase,
+        companyDomain,
+        evidenceBackedRecommendations: fixtureMode === "evidence"
+      });
+      if (fixtureMode !== "ready") return base;
+      return {
+        ...base,
+        status: "preview_ready_unclaimed",
+        answers: {
+          campaignType: "product",
+          promotedOffer: "Pipeline Command Center",
+          audience: "Revenue leaders",
+          objective: "Generate demand"
+        },
+        stages: {
+          brand: { status: "complete" },
+          audience: { status: "complete" },
+          story: { status: "complete" }
+        },
+        experience: {
+          ready: true,
+          title: "Northpeak Pipeline Command Center",
+          headline: "Give revenue teams a governed command center.",
+          readiness: "final",
+          generationSource: "deterministic-fallback",
+          artifactRevision: 2
+        }
+      };
+    });
+
+    await startBuyerExperience(page, "northpeak.com");
+    await expect(page.getByRole("button", { name: /Pipeline Command Center/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Governed Revenue Automation/i })).toBeVisible();
+    await expect(page.getByText(/Solution overview|Solution use cases|Solution evaluation questions/i)).toHaveCount(0);
+    await page.screenshot({
+      path: "output/product-owner-remediation/evidence-backed-recommendations.png",
+      fullPage: false
+    });
+
+    fixtureMode = "none";
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await startBuyerExperience(page, "northpeak.com");
+    await expect(page.getByLabel(/What are you taking to market/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Pipeline Command Center|Governed Revenue Automation/i })).toHaveCount(0);
+    await page.screenshot({
+      path: "output/product-owner-remediation/no-evidence-free-form.png",
+      fullPage: false
+    });
+
+    fixtureMode = "ready";
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const primary = page.locator(".unifiedPrimaryCta");
+    await expect(async () => {
+      if (await page.locator(".domainStage").count()) return;
+      await primary.click();
+      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 15_000 });
+    await page.getByLabel("Company domain").fill("northpeak.com");
+    await page.getByRole("button", { name: /Use this company/i }).click();
+
+    const engagementButton = page.getByRole("button", { name: /See live engagement/i });
+    await expect(engagementButton).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("dialog", { name: /See what buyers engage with/i })).toHaveCount(0);
+    const frame = page.frame({ url: /\/e\/e2e-ready-remediation/ });
+    expect(frame).not.toBeNull();
+    for (let index = 0; index < 5; index += 1) {
+      await frame!.evaluate((sectionIndex) => {
+        window.parent.postMessage({
+          source: "folloze-experience",
+          action: "section_view",
+          sectionId: `fixture-section-${sectionIndex}`
+        }, "*");
+      }, index);
+    }
+    await expect(page.getByRole("dialog", { name: /See what buyers engage with/i })).toHaveCount(0);
+    await expect(page.getByText(/Evidence and activity|Build receipts|Account depth|Your exploration/i)).toHaveCount(0);
+    await expect(page.locator(".revealGrid")).toHaveCSS("display", "block");
+    await expect(page.locator(".revealRail, .revealEvidenceRail")).toHaveCount(0);
+    await engagementButton.click();
+    await expect(page.getByRole("dialog", { name: /See what buyers engage with/i })).toBeVisible();
+    await expect(page.getByText("Explore the preview to see engagement appear here.")).toBeVisible();
+    await expect(page.getByText(/\b\d+s engaged\b/i)).toHaveCount(0);
   });
 
   test("event signal is captured inside the unified campaign conversation (U05 event)", async ({ page }) => {
