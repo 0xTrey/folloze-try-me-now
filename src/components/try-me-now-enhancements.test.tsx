@@ -125,17 +125,25 @@ describe("Try Me Now prospect enhancement components", () => {
       primaryColor: "#032D42",
       accentColor: "#63DF4E",
       surfaceColor: "#FFFFFF",
-      source: "brand-harvester" as const
+      source: "brand-harvester" as const,
+      readiness: {
+        status: "ready" as const,
+        identityReady: true,
+        logoReady: true,
+        paletteReady: true,
+        sourceEvidenceReady: true,
+        reasons: []
+      }
     };
     const { rerender } = render(
       <InstantBrandLockStrip status="locked" brand={brand} onInspect={inspect} />
     );
 
-    expect(screen.getByText("Brand matched")).toBeInTheDocument();
-    expect(screen.getByText("Domain matched to the public company site")).toBeInTheDocument();
-    expect(screen.getByText("Logo + 6 colors from servicenow.com.")).toBeInTheDocument();
+    expect(screen.getByText("ServiceNow brand verified")).toBeInTheDocument();
+    expect(screen.getByText("Verified against the public company site")).toBeInTheDocument();
+    expect(screen.getByText("Verified identity, logo, and palette evidence are shaping the page.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "ServiceNow logo" }).getAttribute("src")).toContain(brand.logoUrl);
-    expect(screen.getByLabelText("Harvested ServiceNow brand palette")).toBeInTheDocument();
+    expect(screen.getByLabelText("Verified ServiceNow brand palette")).toBeInTheDocument();
     expect(screen.getByText("3 applied colors")).toBeInTheDocument();
     fireEvent.click(screen.getByText("View brand details"));
     expect(screen.getByText("#032D42")).toBeInTheDocument();
@@ -170,9 +178,9 @@ describe("Try Me Now prospect enhancement components", () => {
       />
     );
 
-    const scanning = screen.getByText("Matching your brand").closest("section");
+    const scanning = screen.getByText("Researching ServiceNow's visual identity").closest("section");
     expect(scanning).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByText("Checking logo, palette, typography, and source.")).toBeInTheDocument();
+    expect(screen.getByText(/logo, palette, and imagery evidence are still being researched/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Brand palette is being detected")).toBeInTheDocument();
     expect(screen.queryByText("View brand details")).not.toBeInTheDocument();
 
@@ -189,6 +197,7 @@ describe("Try Me Now prospect enhancement components", () => {
           source: "fallback",
           readiness: {
             status: "incomplete",
+            identityReady: true,
             logoReady: false,
             paletteReady: false,
             sourceEvidenceReady: true,
@@ -198,13 +207,13 @@ describe("Try Me Now prospect enhancement components", () => {
       />
     );
 
-    expect(screen.getByText("Brand evidence needs review")).toBeInTheDocument();
+    expect(screen.getByText("ServiceNow visual research unavailable")).toBeInTheDocument();
     expect(screen.getAllByText("No verified logo was captured. The palette is still provisional.")).toHaveLength(2);
     expect(screen.getByText("Needs review")).toBeInTheDocument();
     expect(screen.getByText("No generic palette applied")).toBeInTheDocument();
     expect(screen.queryByText("#5B5BFF")).not.toBeInTheDocument();
     expect(screen.getByLabelText("ServiceNow brand palette evidence needs review")).toBeInTheDocument();
-    expect(screen.queryByText("Brand matched")).not.toBeInTheDocument();
+    expect(screen.queryByText(/matched/i)).not.toBeInTheDocument();
   });
 
   it("does not call a completed fast-extractor brand preliminary or still scanning", () => {
@@ -222,6 +231,7 @@ describe("Try Me Now prospect enhancement components", () => {
           source: "fast-extractor",
           readiness: {
             status: "ready",
+            identityReady: true,
             logoReady: true,
             paletteReady: true,
             sourceEvidenceReady: true,
@@ -231,9 +241,9 @@ describe("Try Me Now prospect enhancement components", () => {
       />
     );
 
-    expect(screen.getByText("Brand matched")).toBeInTheDocument();
+    expect(screen.getByText("Jitterbit brand verified")).toBeInTheDocument();
     expect(screen.getByText("Captured")).toBeInTheDocument();
-    expect(screen.getByText("Brand matched").closest("section")).toHaveAttribute(
+    expect(screen.getByText("Jitterbit brand verified").closest("section")).toHaveAttribute(
       "data-brand-evidence",
       "reviewed"
     );

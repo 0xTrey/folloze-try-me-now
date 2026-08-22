@@ -50,7 +50,16 @@ const readySession: PublicTryMeSession = {
     primaryColor: "#1B3E51",
     accentColor: "#F44414",
     surfaceColor: "#FFFFFF",
-    source: "brand-harvester"
+    source: "brand-harvester",
+    readiness: {
+      status: "ready",
+      identityReady: true,
+      logoReady: true,
+      paletteReady: true,
+      designReady: true,
+      sourceEvidenceReady: true,
+      reasons: []
+    }
   },
   audienceSuggestions: [],
   experience: {
@@ -135,7 +144,7 @@ describe("AssemblyPreview", () => {
       />
     );
 
-    expect(screen.getByText("Brand evidence loading")).toBeInTheDocument();
+    expect(screen.getByText("Researching Jitterbit's visual identity")).toBeInTheDocument();
     expect(screen.queryByLabelText("Detected brand palette")).not.toBeInTheDocument();
   });
 });

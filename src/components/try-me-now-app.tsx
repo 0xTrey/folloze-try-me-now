@@ -88,6 +88,7 @@ import {
   brandfetchLogoRecoveryUrls,
   isBrandfetchHostedLogoUrl
 } from "@/lib/brandfetch-logo";
+import { prospectBrandPresentation } from "@/lib/brand-readiness";
 import { fallbackCompanyName } from "@/lib/company-name";
 import {
   SELLER_BRAND_PREFLIGHT_DELAY_MS,
@@ -770,15 +771,11 @@ export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
   const objective = session?.answers.objective;
   const buyerContext = session?.useCase === "abm" ? targetName : brandName;
   const brandState = session?.stages.brand.status ?? pending;
-  const brandReadiness = session?.brand?.readiness;
-  const brandNeedsReview = brandState === "fallback" || brandReadiness?.status === "incomplete";
-  const missingBrandEvidence = brandReadiness
-    ? [
-        !brandReadiness.logoReady ? "logo" : undefined,
-        !brandReadiness.paletteReady ? "palette" : undefined,
-        !brandReadiness.sourceEvidenceReady ? "source evidence" : undefined
-      ].filter((value): value is string => Boolean(value))
-    : [];
+  const brandPresentation = prospectBrandPresentation(
+    session?.brand,
+    brandName,
+    brandState
+  );
   const audienceState = session?.stages.audience.status ?? pending;
   const guidedInputsReady = session ? generationInputsReady(session) : false;
   const experienceState = session?.experience
@@ -791,18 +788,22 @@ export function buildMoments(session?: PublicTryMeSession): BuildMoment[] {
     {
       key: "brand",
       phase: "Your brand",
-      title: ["complete", "fallback"].includes(brandState)
-        ? brandNeedsReview ? "Brand evidence needs review" : "Logo and colors ready"
-        : brandState === "running" ? `Finding ${brandName}'s look and feel` : "Brand check waiting",
-      detail: brandNeedsReview
-        ? brandReadiness?.reasons.filter(Boolean).slice(0, 2).join(" ") || `The ${brandName} logo, palette, or public source evidence still needs verification.`
-        : `Finding the logo, colors, and visual cues buyers already recognize from ${brandName}.`,
+      title:
+        brandPresentation.state === "verified"
+          ? "Logo and colors verified"
+          : brandPresentation.state === "researching"
+            ? `Finding ${brandName}'s look and feel`
+            : brandPresentation.state === "partial"
+              ? "Brand evidence is partial"
+              : "Brand visual research unavailable",
+      detail: brandPresentation.detail,
       artifact: ["complete", "fallback"].includes(brandState)
-        ? brandNeedsReview
-          ? `${brandName} · ${missingBrandEvidence.length ? `${missingBrandEvidence.join(", ")} needs review` : "verification needed"}`
-          : `${brandName} · ${session?.brand?.colors.length || 1} brand colors`
+        ? brandPresentation.label
         : undefined,
-      status: brandNeedsReview ? "fallback" : brandState,
+      status:
+        brandPresentation.state === "partial" || brandPresentation.state === "unavailable"
+          ? "fallback"
+          : brandState,
       icon: Globe2
     },
     {
@@ -853,34 +854,35 @@ export function getBuildPanelCopy(session: PublicTryMeSession): BuildPanelCopy {
     moments.findIndex((moment) => moment.status === "running" || moment.status === "pending")
   );
   const currentMoment = moments[currentIndex] ?? moments[moments.length - 1];
+  const brandPresentation = prospectBrandPresentation(
+    session.brand,
+    brandName,
+    session.stages.brand.status
+  );
   const common = {
     urlLabel: session.status === "claimed" ? "Saved URL ready" : "Private URL active",
     mobileLabel: currentMoment.title,
     mobileStep: `${Math.min(currentIndex + 1, moments.length)} of ${moments.length}`
   };
 
-  if (
-    !["complete", "fallback"].includes(session.stages.brand.status)
-    || session.brand?.readiness?.status === "incomplete"
-  ) {
-    const needsReview = session.stages.brand.status !== "running"
-      && session.brand?.readiness?.status === "incomplete";
+  if (brandPresentation.state !== "verified") {
+    const needsReview =
+      brandPresentation.state === "partial" ||
+      brandPresentation.state === "unavailable";
     return {
       ...common,
-      kicker: needsReview ? "Brand evidence · needs review" : "Brand harvest · live",
+      kicker: needsReview ? "Brand evidence · incomplete" : "Brand research · live",
       headline: needsReview
         ? `We found ${brandName}, but the brand system is not ready yet.`
         : `Reading ${brandName} while you keep moving.`,
-      supporting: needsReview
-        ? "The logo, palette, or company identity needs another enrichment pass before the page can be composed safely."
-        : "Identity, palette, and public positioning are being assembled in the background."
+      supporting: brandPresentation.detail
     };
   }
 
   if (session.useCase === "abm" && !session.answers.targetDomain) {
     return {
       ...common,
-      kicker: `${brandName} · brand mapped`,
+      kicker: `${brandName} · brand verified`,
       headline: "The seller story is ready. Now name the account.",
       supporting: "The next domain will change the buyer context, message tension, and page payoff."
     };
@@ -898,7 +900,7 @@ export function getBuildPanelCopy(session: PublicTryMeSession): BuildPanelCopy {
   if (session.useCase === "campaign" && !session.answers.campaignType) {
     return {
       ...common,
-      kicker: `${brandName} · brand mapped`,
+      kicker: `${brandName} · brand verified`,
       headline: "The brand is ready. Choose the campaign shape.",
       supporting: "Product, demand, and event paths earn attention differently, so the page will too."
     };
@@ -916,7 +918,7 @@ export function getBuildPanelCopy(session: PublicTryMeSession): BuildPanelCopy {
   if (session.useCase === "content" && !session.answers.sourceUrl && !session.answers.sourceName) {
     return {
       ...common,
-      kicker: `${brandName} · brand mapped`,
+      kicker: `${brandName} · brand verified`,
       headline: "The brand is ready. Add the source worth transforming.",
       supporting: "A public URL or PDF will become the factual backbone of the buyer path."
     };
@@ -1014,6 +1016,11 @@ export function getGuidedQuestionCopy(session: PublicTryMeSession): GuidedQuesti
 
 export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
   const brandName = brandNameFor(session);
+  const brandPresentation = prospectBrandPresentation(
+    session.brand,
+    brandName,
+    session.stages.brand.status
+  );
   const targetName = targetNameFor(session);
   const audience = audienceFor(session);
   const objective = session.answers.objective || "one clear next move";
@@ -1033,7 +1040,7 @@ export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
       summary: `${targetName} now has a ${brandName} story for ${lowercaseInitial(audience)}, with one job: ${lowercaseInitial(objective)}.`,
       counterpart: targetName,
       receipts: [
-        { number: "01", label: `${trimLabel(brandName, 24)} identity matched` },
+        { number: "01", label: trimLabel(brandPresentation.label, 40) },
         { number: "02", label: `${trimLabel(targetName, 24)} context mapped` },
         { number: "03", label: `${trimLabel(audience, 30)} in focus` },
         { number: "04", label: `${trimLabel(objective, 30)} path composed` }
@@ -1048,7 +1055,7 @@ export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
       summary: `${sourceName} is now a guided ${brandName} path for ${lowercaseInitial(audience)}, built to ${lowercaseInitial(objective)}.`,
       counterpart: sourceName,
       receipts: [
-        { number: "01", label: `${trimLabel(brandName, 24)} identity matched` },
+        { number: "01", label: trimLabel(brandPresentation.label, 40) },
         { number: "02", label: `${trimLabel(sourceName, 30)} transformed` },
         { number: "03", label: `${trimLabel(audience, 30)} lens applied` },
         { number: "04", label: `${trimLabel(objective, 30)} path composed` }
@@ -1062,7 +1069,7 @@ export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
     summary: `A private ${campaignType.toLowerCase()} preview for ${lowercaseInitial(audience)}, built to ${lowercaseInitial(objective)}.`,
     counterpart: campaignType,
     receipts: [
-      { number: "01", label: `${trimLabel(brandName, 24)} identity matched` },
+      { number: "01", label: trimLabel(brandPresentation.label, 40) },
       { number: "02", label: `${campaignType} framed` },
       { number: "03", label: `${trimLabel(audience, 30)} in focus` },
       { number: "04", label: `${trimLabel(objective, 30)} path composed` }
@@ -1865,10 +1872,18 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
   const currentIndex = Math.min(decisions.findIndex((decision) => !decision.complete), 2);
   const activeIndex = currentIndex < 0 ? 2 : currentIndex;
   const brandResolved = ["complete", "fallback"].includes(session.stages.brand.status);
-  const brandVerified = brandResolved && session.stages.brand.status !== "fallback" && session.brand?.readiness?.status !== "incomplete";
-  const targetVerified = Boolean(
-    session.targetBrand && session.targetBrand.readiness?.status !== "incomplete"
+  const sellerBrandPresentation = prospectBrandPresentation(
+    session.brand,
+    brandName,
+    session.stages.brand.status
   );
+  const targetBrandPresentation = prospectBrandPresentation(
+    session.targetBrand,
+    targetName,
+    session.targetBrand ? "complete" : "running"
+  );
+  const brandVerified = sellerBrandPresentation.state === "verified";
+  const targetVerified = targetBrandPresentation.state === "verified";
   const latestSelection = objectiveComplete
     ? { label: "Outcome", value: session.answers.objective || "" }
     : audienceComplete
@@ -1890,7 +1905,7 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
             <span className="identityLogo">
               <SafeBrandLogo session={session} owner="seller" companyName={brandName} fallback={<Building2 size={18} />} />
             </span>
-            <div><strong>{brandResolved ? brandName : `Checking ${brandName}`}</strong><small>{session.companyDomain} · {brandVerified ? "Brand evidence matched to the public company site" : brandResolved ? "Identity found; logo, palette, or source evidence needs review" : "Enrichment in progress"}</small></div>
+            <div><strong>{brandResolved ? brandName : `Checking ${brandName}`}</strong><small>{session.companyDomain} · {sellerBrandPresentation.detail}</small></div>
             {brandVerified && <CircleCheck size={18} className="identityCheck" aria-label="Seller brand evidence verified" />}
           </div>
         </article>
@@ -1907,8 +1922,8 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
               <span className="identityLogo">
                 <SafeBrandLogo session={session} owner="target" companyName={targetName} fallback={<Target size={18} />} />
               </span>
-              <div><strong>{session.targetBrand ? targetName : `Researching ${targetName}`}</strong><small>{session.answers.targetDomain} · {targetVerified ? "Target identity and brand matched" : session.targetBrand ? "Identity found; brand evidence needs review" : "Public account signals are loading"}</small></div>
-              {targetVerified && <CircleCheck size={18} className="identityCheck" aria-label="Target identity and brand matched" />}
+              <div><strong>{session.targetBrand ? targetName : `Researching ${targetName}`}</strong><small>{session.answers.targetDomain} · {targetBrandPresentation.detail}</small></div>
+              {targetVerified && <CircleCheck size={18} className="identityCheck" aria-label="Target brand evidence verified" />}
             </div>
           </article>
         )}
@@ -2906,7 +2921,17 @@ export function previewBoundaryScrollDelta(message: unknown): number | undefined
 }
 
 export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; iframeRef?: RefObject<HTMLIFrameElement | null> }) {
-  const brandReady = ["complete", "fallback"].includes(session.stages.brand.status);
+  const brandName = session.brand?.companyName || displayNameFromDomain(session.companyDomain);
+  const brandPresentation = prospectBrandPresentation(
+    session.brand,
+    brandName,
+    session.stages.brand.status
+  );
+  const brandReady = brandPresentation.state === "verified";
+  const showBrandProviderDiagnostic =
+    process.env.NODE_ENV !== "production" &&
+    session.brand?.providerAvailability?.remoteHarvester === "not_configured" &&
+    session.brand.providerAvailability.brandfetch === "not_configured";
   const audienceReady = session.stages.audience.status === "complete" || Boolean(session.answers.audience);
   const storyReady = Boolean(session.experience);
   const moments = buildMoments(session);
@@ -2914,7 +2939,6 @@ export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSe
   const currentMoment = moments.find((moment) => moment.status === "running")
     ?? moments.find((moment) => moment.status === "pending")
     ?? moments[moments.length - 1];
-  const brandName = session.brand?.companyName || displayNameFromDomain(session.companyDomain);
   const targetName = session.useCase === "abm"
     ? session.targetBrand?.companyName || displayNameFromDomain(session.answers.targetDomain)
     : undefined;
@@ -2991,7 +3015,12 @@ export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSe
             {verifiedPalette ? (
               <div className="swatches" aria-label="Detected brand palette">{palette.slice(0, 4).map((color) => <i style={{ background: color }} key={color} />)}</div>
             ) : (
-              <span className="brandEvidencePending">Brand evidence loading</span>
+              <span className="brandEvidencePending">{brandPresentation.label}</span>
+            )}
+            {showBrandProviderDiagnostic && (
+              <small className="brandProviderDiagnostic">
+                QA diagnostic: Brandfetch and remote brand harvesting are not configured.
+              </small>
             )}
           </div>
           <div className="assemblyInputs">
@@ -3888,14 +3917,24 @@ export function TryMeNowApp() {
   const streamingCurrentQuestionId = streamingFocusId && streamingQuestions.some((question) => question.id === streamingFocusId)
     ? streamingFocusId
     : nextStreamingQuestionId;
+  const currentBrandPresentation = session
+    ? prospectBrandPresentation(
+        session.brand,
+        brandNameFor(session),
+        session.stages.brand.status
+      )
+    : undefined;
   const streamingReceipts: StreamingBriefReceipt[] = session ? [
     {
       id: "brand",
-      label: session.brand ? `${brandNameFor(session)} matched` : "Matching the host brand",
-      detail: session.brand
-        ? "Official identity, logo, and visual cues are shaping the page."
-        : `Reading public brand signals from ${session.companyDomain}.`,
-      state: session.brand ? "complete" as const : "working" as const
+      label: currentBrandPresentation!.label,
+      detail: currentBrandPresentation!.detail,
+      state:
+        currentBrandPresentation!.state === "verified"
+          ? "complete" as const
+          : currentBrandPresentation!.state === "researching"
+            ? "working" as const
+            : "attention" as const
     },
     ...(canonicalStreamingAnswers.some((answer) => answer.questionId === "intent") ? [{
       id: "story",
@@ -4142,9 +4181,7 @@ export function TryMeNowApp() {
             ? lifecycleCopy.statusLabel
             : generationEligible
               ? "Material brief ready · composing preview"
-              : session.brand
-                ? `${brandNameFor(session)} brand matched`
-                : "Matching the public brand";
+              : currentBrandPresentation?.label ?? "Researching the public brand";
 
   return (
     <>

@@ -567,6 +567,7 @@ export function buildExperienceSpec(
       surfaceColor: brand.surfaceColor,
       ...(brand.logoUrl ? { logoUrl: brand.logoUrl } : {}),
       ...(brand.logoUrlOnDark ? { logoUrlOnDark: brand.logoUrlOnDark } : {}),
+      ...(brand.imageUrls.length ? { imageUrls: [...brand.imageUrls] } : {}),
       ...(brand.designDna
         ? {
             designDna: structuredClone(brand.designDna),

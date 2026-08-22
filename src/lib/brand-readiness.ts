@@ -1,5 +1,17 @@
 import type { BrandProfile, BrandReadiness } from "@/lib/types";
 
+export type ProspectBrandState =
+  | "researching"
+  | "verified"
+  | "partial"
+  | "unavailable";
+
+export interface ProspectBrandPresentation {
+  state: ProspectBrandState;
+  label: string;
+  detail: string;
+}
+
 const canonicalDomain = (value: string) =>
   value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#]/)[0] ?? "";
 
@@ -16,6 +28,64 @@ function sourceMatchesDomain(profile: BrandProfile): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * The single prospect-facing interpretation of brand research. It never treats
+ * profile existence or a terminal worker state as proof of usable visual
+ * evidence.
+ */
+export function prospectBrandPresentation(
+  profile: {
+    source?: BrandProfile["source"];
+    readiness?: Pick<
+      BrandReadiness,
+      "identityReady" | "logoReady" | "paletteReady" | "sourceEvidenceReady"
+    >;
+  } | undefined,
+  companyName: string,
+  stageStatus: "pending" | "running" | "complete" | "fallback" | "failed"
+): ProspectBrandPresentation {
+  const readiness = profile?.readiness;
+  if (stageStatus === "running" || stageStatus === "pending") {
+    return {
+      state: "researching",
+      label: `Researching ${companyName}'s visual identity`,
+      detail: "Public identity, logo, palette, and imagery evidence are still being researched."
+    };
+  }
+  const verified = Boolean(
+    profile &&
+      profile.source !== "fallback" &&
+      readiness?.identityReady &&
+      readiness.logoReady &&
+      readiness.paletteReady &&
+      readiness.sourceEvidenceReady
+  );
+  if (verified) {
+    return {
+      state: "verified",
+      label: `${companyName} brand verified`,
+      detail: "Verified identity, logo, and palette evidence are shaping the page."
+    };
+  }
+  if (
+    !profile ||
+    profile.source === "fallback" ||
+    stageStatus === "failed" ||
+    (stageStatus === "fallback" && !readiness?.identityReady)
+  ) {
+    return {
+      state: "unavailable",
+      label: `${companyName} visual research unavailable`,
+      detail: "Visual evidence was unavailable, so the preview uses an intentional neutral treatment."
+    };
+  }
+  return {
+    state: "partial",
+    label: `${companyName} identity found`,
+    detail: "Logo, palette, or imagery evidence is incomplete, so the preview stays neutral where needed."
+  };
 }
 
 /**

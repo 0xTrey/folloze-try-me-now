@@ -21,7 +21,10 @@ const seller: BrandProfile = {
   description: "Integration, automation, application development, and governed AI.",
   publicTopics: ["Integration", "Automation"],
   logoUrl: "https://jitterbit.com/logo.svg",
-  imageUrls: [],
+  imageUrls: [
+    "https://jitterbit.com/hero.jpg",
+    "https://jitterbit.com/platform.jpg"
+  ],
   colors: ["#123B4A", "#F4512C"],
   primaryColor: "#123B4A",
   accentColor: "#F4512C",
@@ -338,6 +341,9 @@ describe("campaign contract", () => {
     );
     expect(spec.brandTokens.designDna).toEqual(seller.designDna);
     expect(spec.brandTokens.designDna).not.toBe(seller.designDna);
+    expect(spec.brandTokens.logoUrl).toBe(seller.logoUrl);
+    expect(spec.brandTokens.imageUrls).toEqual(seller.imageUrls);
+    expect(spec.brandTokens.imageUrls).not.toBe(seller.imageUrls);
     expect(spec.brandTokens.designReceipt).toMatchObject({
       source: "remote-harvester",
       confidence: "high",

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { assessBrandReadiness } from "@/lib/brand-readiness";
+import {
+  assessBrandReadiness,
+  prospectBrandPresentation
+} from "@/lib/brand-readiness";
 import { portableBrandLogoFromSvg } from "@/lib/portable-brand-logo";
 import type { BrandProfile } from "@/lib/types";
 
@@ -62,6 +65,49 @@ function profile(overrides: Partial<BrandProfile> = {}): BrandProfile {
 }
 
 describe("brand readiness", () => {
+  it("uses one honest prospect state across researching, verified, partial, and unavailable brands", () => {
+    const verified = profile();
+    verified.readiness = assessBrandReadiness(verified);
+    const partial = profile({
+      portableLogo: undefined,
+      logoUrl: undefined,
+      logoSourceUrl: undefined
+    });
+    partial.readiness = assessBrandReadiness(partial);
+    const unavailable = profile({
+      source: "fallback",
+      readiness: {
+        status: "incomplete",
+        identityReady: false,
+        logoReady: false,
+        paletteReady: false,
+        designReady: false,
+        sourceEvidenceReady: false,
+        reasons: ["Providers are not configured."]
+      }
+    });
+
+    expect(prospectBrandPresentation(undefined, "Acme", "running").state).toBe(
+      "researching"
+    );
+    expect(prospectBrandPresentation(verified, "Jitterbit", "complete")).toMatchObject({
+      state: "verified",
+      label: "Jitterbit brand verified"
+    });
+    expect(prospectBrandPresentation(partial, "Jitterbit", "complete")).toMatchObject({
+      state: "partial",
+      label: "Jitterbit identity found"
+    });
+    expect(
+      prospectBrandPresentation(unavailable, "Unknown Seller", "fallback")
+    ).toMatchObject({
+      state: "unavailable",
+      label: "Unknown Seller visual research unavailable"
+    });
+    expect(prospectBrandPresentation(unavailable, "Unknown Seller", "fallback").detail)
+      .not.toMatch(/matched|official|verified|brand colors/i);
+  });
+
   it("requires confirmed identity, a deliverable official logo, semantic colors, and first-party evidence", () => {
     expect(assessBrandReadiness(profile())).toEqual({
       status: "ready",

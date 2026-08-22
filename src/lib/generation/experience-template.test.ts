@@ -147,6 +147,10 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain('--display:"Roboto Slab"');
     expect(html).toContain("Jitterbit-logo-2.svg");
     expect(html).toContain("HarmonyTitle-HeroImage-Ring.jpg");
+    expect(html).toContain("Harmony-Marketecture.png");
+    expect(html.indexOf("Harmony-Marketecture.png")).toBeGreaterThan(
+      html.indexOf("HarmonyTitle-HeroImage-Ring.jpg")
+    );
   });
 
   it("uses a neutral, explained preview treatment when palette evidence is explicitly low", () => {

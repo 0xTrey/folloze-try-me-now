@@ -38,7 +38,16 @@ function brand(domain: string, companyName: string): PublicBrandProfile {
     primaryColor: "#10243e",
     accentColor: "#ff5c35",
     surfaceColor: "#ffffff",
-    source: "brand-harvester"
+    source: "brand-harvester",
+    readiness: {
+      status: "ready",
+      identityReady: true,
+      logoReady: true,
+      paletteReady: true,
+      designReady: true,
+      sourceEvidenceReady: true,
+      reasons: []
+    }
   };
 }
 
@@ -465,9 +474,9 @@ describe("Try Me Now experience copy", () => {
     }, { brand: "fallback" });
 
     const brandMoment = buildMoments(incomplete)[0];
-    expect(brandMoment.title).toBe("Brand evidence needs review");
-    expect(brandMoment.detail).toContain("No verified logo was captured.");
-    expect(brandMoment.artifact).toBe("Jitterbit · logo, palette needs review");
+    expect(brandMoment.title).toBe("Brand evidence is partial");
+    expect(brandMoment.detail).toContain("evidence is incomplete");
+    expect(brandMoment.artifact).toBe("Jitterbit identity found");
     expect(brandMoment.title).not.toMatch(/ready/i);
   });
 

@@ -331,6 +331,22 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
           accentColor: brand.accentColor,
           surfaceColor: brand.surfaceColor,
           source: brand.source,
+          ...(brand.diagnostics?.providers
+            ? {
+                providerAvailability: {
+                  remoteHarvester:
+                    brand.diagnostics.providers.remoteBrowser === "not_configured"
+                      ? "not_configured" as const
+                      : "configured" as const,
+                  brandfetch:
+                    brand.diagnostics.providers.brandfetch === "not_configured" &&
+                    brand.diagnostics.providers.brandfetchLogoApi === "not_configured" &&
+                    brand.diagnostics.providers.brandfetchBrandApi === "not_configured"
+                      ? "not_configured" as const
+                      : "configured" as const
+                }
+              }
+            : {}),
           ...(brand.readiness
             ? {
                 readiness: {

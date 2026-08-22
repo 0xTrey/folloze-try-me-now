@@ -36,6 +36,7 @@ import {
 import Image from "next/image";
 
 import { brandfetchLogoRecoveryUrls } from "@/lib/brandfetch-logo";
+import { prospectBrandPresentation } from "@/lib/brand-readiness";
 import { captureProductEvent } from "@/lib/product-analytics-client";
 import { buildSimulatedEngagement } from "@/lib/simulated-engagement";
 
@@ -151,6 +152,7 @@ export interface BrandLockProfile {
   confidenceLabel?: string;
   readiness?: {
     status: "ready" | "incomplete";
+    identityReady: boolean;
     logoReady: boolean;
     paletteReady: boolean;
     sourceEvidenceReady: boolean;
@@ -207,9 +209,12 @@ function brandPaletteTokens(brand: BrandLockProfile | undefined) {
 export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrandLockStripProps) {
   const companyName = brand?.companyName || brand?.domain || "Your brand";
   const [failedLogoUrls, setFailedLogoUrls] = useState<string[]>([]);
-  const paletteReady = status !== "scanning" && Boolean(
-    brand && brand.source !== "fallback" && (brand.readiness?.paletteReady ?? true)
+  const brandPresentation = prospectBrandPresentation(
+    brand,
+    companyName,
+    status === "scanning" ? "running" : status === "locked" ? "complete" : "fallback"
   );
+  const paletteReady = brandPresentation.state === "verified";
   const palette = brandPaletteTokens(paletteReady ? brand : undefined);
   const logoUrls = brandfetchLogoRecoveryUrls(
     brand?.logoUrlOnDark ?? brand?.logoUrl,
@@ -217,27 +222,21 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
   );
   const logoUrl = logoUrls.find((candidate) => !failedLogoUrls.includes(candidate));
   const hasLogo = Boolean(logoUrl);
-  const isCaptured = status === "locked";
-  const needsReview = status === "fallback" || brand?.readiness?.status === "incomplete";
+  const isCaptured = brandPresentation.state === "verified";
+  const needsReview = ["partial", "unavailable"].includes(brandPresentation.state);
   const paletteKind = status === "scanning"
     ? "Matching brand details"
     : !paletteReady
       ? "Brand details need review"
       : "View brand details";
-  const stateTitle = status === "scanning"
-    ? "Matching your brand"
-    : needsReview
-      ? "Brand evidence needs review"
-      : "Brand matched";
+  const stateTitle = brandPresentation.label;
   const readinessReason = brand?.readiness?.reasons.filter(Boolean).slice(0, 2).join(" ");
-  const stateDetail = status === "scanning"
-    ? "Checking logo, palette, typography, and source."
-    : needsReview
-      ? readinessReason || `The ${companyName} logo, palette, or source evidence still needs verification.`
-      : brand?.positioning || `Logo + ${palette.colors.length} colors from ${brand?.domain ?? "the public site"}.`;
+  const stateDetail = brandPresentation.state === "verified"
+    ? brand?.positioning || brandPresentation.detail
+    : readinessReason || brandPresentation.detail;
   const statusLabel = needsReview
     ? "Needs review"
-    : brand?.confidenceLabel || (status === "scanning"
+    : brand?.confidenceLabel || (brandPresentation.state === "researching"
       ? "Scanning"
       : "Captured");
   const stripStyle = {
@@ -297,7 +296,7 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
         <span>{stateTitle}</span>
         <strong>{companyName}</strong>
         <small>{stateDetail}</small>
-        {isCaptured && <em className={styles.identityProof}><Check size={11} />Domain matched to the public company site</em>}
+        {isCaptured && <em className={styles.identityProof}><Check size={11} />Verified against the public company site</em>}
       </div>
       <span className={styles.lockStatus}>
         {status === "scanning" ? <span className={styles.orbit} /> : <Check size={14} />}
@@ -305,7 +304,7 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
       </span>
       <details
         className={styles.brandPalette}
-        aria-label={status === "scanning" ? "Brand palette is being detected" : needsReview ? `${companyName} brand palette evidence needs review` : `Harvested ${companyName} brand palette`}
+        aria-label={status === "scanning" ? "Brand palette is being detected" : needsReview ? `${companyName} brand palette evidence needs review` : `Verified ${companyName} brand palette`}
       >
         <summary className={styles.brandPaletteHeader}>
           <span>{paletteKind}</span>

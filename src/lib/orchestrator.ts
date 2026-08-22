@@ -971,14 +971,6 @@ async function assembleExperienceArtifact(input: {
   const productionDraft = productionPage
     ? applyProductionPageToDraft(controlledDraft, productionPage)
     : controlledDraft;
-  const experienceSpec = buildExperienceSpec(
-    input.session,
-    productionDraft,
-    input.brand,
-    input.targetBrand,
-    productionPage
-  );
-  const webDraft = draftFromExperienceSpec(experienceSpec);
   const qualityReceipt = qualityReceiptFor(
     input.session,
     input.session.revision + 1,
@@ -1003,6 +995,14 @@ async function assembleExperienceArtifact(input: {
         qualityReceipt.artifactRevision
       )
     : undefined;
+  const experienceSpec = buildExperienceSpec(
+    input.session,
+    productionDraft,
+    renderBrand,
+    renderTargetBrand,
+    productionPage
+  );
+  const webDraft = draftFromExperienceSpec(experienceSpec);
   const renderStartedAt = Date.now();
   const html = renderExperienceHtml({
     draft: webDraft,

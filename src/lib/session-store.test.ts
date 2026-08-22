@@ -77,6 +77,52 @@ describe("session operation leases", () => {
 });
 
 describe("anonymous session lifecycle", () => {
+  it("projects only bounded provider availability for development diagnostics", () => {
+    const projected = toPublicSession(anonymousPreview({
+      brand: {
+        domain: "example.com",
+        companyName: "Example",
+        publicTopics: [],
+        imageUrls: [],
+        colors: ["#202124", "#5F6368", "#FFFFFF"],
+        primaryColor: "#202124",
+        accentColor: "#5F6368",
+        surfaceColor: "#FFFFFF",
+        sourceUrl: "https://example.com",
+        source: "fallback",
+        diagnostics: {
+          logo: {
+            strategy: "none",
+            imageCandidateCount: 0,
+            rejectedImageCount: 0,
+            inlineSvgCandidateCount: 0
+          },
+          providers: {
+            publicPage: "failed",
+            publicPageAttempts: 1,
+            remoteBrowser: "not_configured",
+            brandfetch: "not_configured",
+            brandfetchLogoApi: "not_configured",
+            brandfetchBrandApi: "not_configured",
+            verifiedFallback: false
+          },
+          designFidelity: {
+            designReady: false,
+            score: 0,
+            missing: ["Private server detail must remain private."]
+          }
+        }
+      }
+    }));
+
+    expect(projected.brand?.providerAvailability).toEqual({
+      remoteHarvester: "not_configured",
+      brandfetch: "not_configured"
+    });
+    expect(projected.brand).not.toHaveProperty("diagnostics");
+    expect(JSON.stringify(projected.brand)).not.toContain("Private server detail");
+  });
+
   it("projects only credible recommendation sets into the public composer contract", () => {
     const projected = toPublicSession(anonymousPreview({
       audienceRecommendations: [{

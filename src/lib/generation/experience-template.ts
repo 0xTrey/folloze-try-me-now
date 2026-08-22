@@ -216,10 +216,11 @@ function imageFigure(
 ): string {
   const safeUrl = safeAssetUrl(url);
   if (!safeUrl && !allowFallback) return "";
+  const showFallback = allowFallback || Boolean(safeUrl);
   const roleClass = safeUrl && /diagram|architecture|marketecture|workflow|chart/i.test(safeUrl) ? " is-diagram" : "";
   const safeAssetRole = assetRole && /^[a-z-]{1,48}$/.test(assetRole) ? ` data-asset-role="${assetRole}"` : "";
-  return `<figure class="media ${className}${roleClass}"${allowFallback ? "" : ' data-no-fallback="true"'}${safeAssetRole}>
-    ${allowFallback ? `<div class="media-fallback" data-fallback-kind="experience-blueprint" aria-hidden="true">
+  return `<figure class="media ${className}${roleClass}"${showFallback ? "" : ' data-no-fallback="true"'}${safeAssetRole}>
+    ${showFallback ? `<div class="media-fallback"${allowFallback ? ' data-fallback-kind="experience-blueprint"' : ""} aria-hidden="true">
       <span class="media-fallback-kicker">Experience blueprint</span>
       <strong>Context.<br>Proof.<br>Next step.</strong>
       <span class="media-fallback-steps"><i>01</i><i>02</i><i>03</i></span>
@@ -283,7 +284,7 @@ function frameworkImage(
   // name, so semantic filename scoring cannot recognize that choice.
   const selected = ranked[0]?.score
     ? ranked[0].url
-    : images.length === 1
+    : images.length === 1 || (images.length > 1 && images.every(isImageDeliveryPath))
       ? images[0]
       : undefined;
   return imageFigure(selected, brief.caption, className, eager, false, brief.assetType);
@@ -501,7 +502,7 @@ export function renderExperienceHtml(input: {
   const visualGrammar = template.visualGrammar;
   const framework = template.family === "content-source" ? undefined : draft.persuasionFramework;
   const frameworkHeroMedia = framework
-    ? frameworkImage(images, framework.opening.imageBrief, "hero-media", true)
+    ? frameworkImage(heroImage ? [heroImage] : [], framework.opening.imageBrief, "hero-media", true)
     : undefined;
   const templateFingerprint = framework
     ? template.fingerprint
@@ -608,7 +609,7 @@ export function renderExperienceHtml(input: {
         const body = frameworkChoices ? frameworkChoices[index].outcome : draft.sections[index].body;
         const question = frameworkChoices ? frameworkChoices[index].validationQuestion : undefined;
         const media = frameworkChoices
-          ? frameworkImage(images, frameworkChoices[index].imageBrief, "lens-media")
+          ? frameworkImage(supportingImages, frameworkChoices[index].imageBrief, "lens-media")
           : imageFigure(
               supportingImages[index] ?? supportingImages[0],
               `${brand.companyName}: ${label}`,

@@ -412,7 +412,13 @@ export type PublicBrandProfile = Pick<
   | "surfaceColor"
   | "source"
   | "readiness"
->;
+> & {
+  /** Non-secret availability receipt for local development and QA diagnostics. */
+  providerAvailability?: {
+    remoteHarvester: "configured" | "not_configured";
+    brandfetch: "configured" | "not_configured";
+  };
+};
 
 export interface ExperienceSection {
   eyebrow: string;
@@ -830,6 +836,8 @@ export interface ExperienceSpecV1 {
     surfaceColor: string;
     logoUrl?: string;
     logoUrlOnDark?: string;
+    /** Session-scoped seller imagery available to the trusted renderer. */
+    imageUrls?: string[];
     /** Added compatibly to V1 specs; legacy persisted specs may omit it. */
     designDna?: BrandDesignDNA;
     /** Renderer-facing receipt for deterministic QA of harvested token use. */
