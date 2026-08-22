@@ -360,9 +360,12 @@ function artifactFailure(
   if (
     input.revision !== input.activeRevision ||
     artifacts.some((artifact) => artifact.revision !== input.revision) ||
-    input.evidenceArtifact.value?.revision !== input.revision ||
-    input.brandArtifact.value?.revision !== input.revision ||
-    input.messageSpineArtifact.value?.revision !== input.revision ||
+    (input.evidenceArtifact.value !== undefined &&
+      input.evidenceArtifact.value.revision !== input.revision) ||
+    (input.brandArtifact.value !== undefined &&
+      input.brandArtifact.value.revision !== input.revision) ||
+    (input.messageSpineArtifact.value !== undefined &&
+      input.messageSpineArtifact.value.revision !== input.revision) ||
     Object.values(input.evidenceArtifact.value?.fields ?? {}).some(
       (field) => field !== undefined && field.revision !== input.revision
     )

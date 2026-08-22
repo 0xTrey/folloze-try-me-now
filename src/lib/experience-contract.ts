@@ -5,6 +5,7 @@ import {
   type ExperienceDraft
 } from "@/lib/generation/experience-schema";
 import { compilePersonalizationPlan } from "@/lib/generation/experience-renderers";
+import type { GenericProductionPage } from "@/lib/generation/generic-production-engine";
 import { selectWireframe } from "@/lib/generation/wireframe-library";
 import {
   PREVIEW_INTERACTION_TYPES,
@@ -423,7 +424,8 @@ export function buildExperienceSpec(
   session: TryMeSession,
   draft: ExperienceDraft,
   brand: NonNullable<TryMeSession["brand"]>,
-  targetBrand?: TryMeSession["targetBrand"]
+  targetBrand?: TryMeSession["targetBrand"],
+  productionPage?: GenericProductionPage
 ): ExperienceSpecV2 {
   const createdAt = new Date().toISOString();
   const canonicalDraft = canonicalizeExperienceDraft(draft);
@@ -474,7 +476,7 @@ export function buildExperienceSpec(
   );
   const approvedCustomerStory =
     /customer (?:story|case)|case study|customer result/i.test(sourceSignalText);
-  const wireframeSelection = selectWireframe(
+  const wireframeSelection = productionPage?.composition ?? selectWireframe(
     {
       family: session.useCase === "abm" ? "account" : session.useCase,
       audience: session.answers.customAudience ?? session.answers.audience,
@@ -616,6 +618,25 @@ export function buildExperienceSpec(
       ...functionalContent.actions
     ],
     contentContracts: functionalContent.contracts,
+    ...(productionPage
+      ? {
+          production: {
+            revision: productionPage.revision,
+            status: "complete" as const,
+            frameworkId: productionPage.framework.id,
+            compositionId: productionPage.composition.compositionId,
+            mediaIntent: productionPage.mediaIntent,
+            sections: productionPage.sections.map((section) => ({
+              id: section.sectionId,
+              role: section.role,
+              status: section.status,
+              wordCount: section.wordCount,
+              evidenceRefs: [...section.evidenceRefs]
+            })),
+            claimEvidenceCount: productionPage.claimToEvidence.length
+          }
+        }
+      : {}),
     cta: {
       intent: session.answers.ctaType ?? "explore",
       style: session.answers.ctaStyle ?? "solid",

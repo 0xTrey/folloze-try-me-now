@@ -1,5 +1,8 @@
 import type { SourceArtifact } from "@/lib/content-intelligence";
-import type { WireframeSelectionV1 } from "@/lib/generation/wireframe-library";
+import type {
+  WireframeSectionRole,
+  WireframeSelectionV1
+} from "@/lib/generation/wireframe-library";
 import type { WorkerReceipt } from "@/lib/orchestration/worker-types";
 
 export const USE_CASES = ["abm", "campaign", "content"] as const;
@@ -855,6 +858,22 @@ export interface ExperienceSpecV1 {
   };
 }
 
+export interface ExperienceProductionReceipt {
+  revision: number;
+  status: "complete" | "fallback";
+  frameworkId: string;
+  compositionId: string;
+  mediaIntent: "image-led" | "diagram-led" | "type-led";
+  sections: Array<{
+    id: string;
+    role: WireframeSectionRole;
+    status: "complete" | "omitted";
+    wordCount: number;
+    evidenceRefs: string[];
+  }>;
+  claimEvidenceCount: number;
+}
+
 /**
  * Canonical app-hosted HTML contract. V2 makes route ownership and every
  * visible action explicit while preserving the existing draft and renderer
@@ -876,6 +895,7 @@ export interface ExperienceSpecV2
   };
   actions: ExperienceActionContract[];
   contentContracts: ExperienceContentContract[];
+  production?: ExperienceProductionReceipt;
   cta: {
     intent: CtaType;
     style: CtaStyle;

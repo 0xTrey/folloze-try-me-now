@@ -32,6 +32,9 @@ import {
   type ObjectiveCtaMotion
 } from "@/lib/generation/objective-cta-recommendations";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
+import type { GenericProductionEngineResult } from "@/lib/generation/generic-production-engine";
+import { applyProductionPageToDraft } from "@/lib/generation/production-draft-adapter";
+import { compileSessionProductionPage } from "@/lib/generation/session-production-engine";
 import { HttpError, logServerError } from "@/lib/http";
 import {
   brandWithFirstPartyImages,
@@ -937,7 +940,7 @@ function qualityReceiptFor(
   };
 }
 
-function assembleExperienceArtifact(input: {
+async function assembleExperienceArtifact(input: {
   id: string;
   session: TryMeSession;
   draft: ExperienceDraft;
@@ -949,11 +952,28 @@ function assembleExperienceArtifact(input: {
 }) {
   const controlledDraft = draftWithBlockControls(input.draft, input.session.blockControls);
   syncCampaignContracts(input.session);
+  const storyStartedAt = Date.parse(input.session.stages.story.startedAt ?? "");
+  const productionResult = await compileSessionProductionPage({
+    session: input.session,
+    brand: input.brand,
+    targetBrand: input.targetBrand,
+    providerStartedAtMs: Number.isFinite(storyStartedAt) ? storyStartedAt : Date.now(),
+    currentTimeMs: Date.now()
+  });
+  const productionPage =
+    productionResult.outcome === "production-page" &&
+    productionResult.artifact.revision === input.session.revision
+      ? productionResult.artifact.value
+      : undefined;
+  const productionDraft = productionPage
+    ? applyProductionPageToDraft(controlledDraft, productionPage)
+    : controlledDraft;
   const experienceSpec = buildExperienceSpec(
     input.session,
-    controlledDraft,
+    productionDraft,
     input.brand,
-    input.targetBrand
+    input.targetBrand,
+    productionPage
   );
   const webDraft = draftFromExperienceSpec(experienceSpec);
   const qualityReceipt = qualityReceiptFor(
@@ -993,18 +1013,94 @@ function assembleExperienceArtifact(input: {
     contentItems: experienceSpec.contentItems,
     actions: experienceSpec.actions,
     wireframeSelection: experienceSpec.wireframeSelection,
+    productionSections: experienceSpec.production?.sections,
     ...(experienceSpec.personalization
       ? { personalization: experienceSpec.personalization }
       : {})
   });
   return {
-    controlledDraft,
+    controlledDraft: productionDraft,
+    productionResult,
     experienceSpec,
     webDraft,
     qualityReceipt,
     html,
     renderDurationMs: Date.now() - renderStartedAt
   };
+}
+
+function recordProductionEngineResult(
+  session: TryMeSession,
+  result: GenericProductionEngineResult,
+  reveal: "provisional" | "final"
+): void {
+  session.workerReceipts = structuredClone([...result.workerReceipts]);
+  const revision =
+    result.outcome === "production-page"
+      ? result.artifact.revision
+      : result.instruction.revision;
+  for (const receipt of result.workerReceipts) {
+    appendEvent(session, `worker_${receipt.status}`, {
+      worker: receipt.worker,
+      revision,
+      durationMs: receipt.durationMs ?? 0,
+      evidenceCount: receipt.evidenceRefs.length,
+      confidenceBand:
+        (receipt.confidence ?? 0) >= 0.8
+          ? "high"
+          : (receipt.confidence ?? 0) >= 0.5
+            ? "medium"
+            : "low",
+      fallbackCode: receipt.fallback ?? null,
+      errorCode: receipt.error?.name ?? null
+    });
+  }
+  if (result.outcome === "safe-deterministic-fallback") {
+    appendEvent(session, "spec_compiled", {
+      revision,
+      status: "fallback",
+      fallbackCode: result.instruction.code,
+      supportCode: result.instruction.supportCode
+    });
+    appendEvent(session, "render_ready", {
+      revision,
+      status: "fallback",
+      reveal
+    });
+    return;
+  }
+  const page = result.artifact.value;
+  if (!page) return;
+  appendEvent(session, "brief_material", {
+    revision,
+    evidenceCount: result.artifact.evidenceRefs.length
+  });
+  appendEvent(session, "framework_selected", {
+    revision,
+    frameworkId: page.framework.id
+  });
+  appendEvent(session, "wireframe_selected", {
+    revision,
+    archetypeId: page.composition.archetypeId,
+    compositionId: page.composition.compositionId,
+    sectionCount: page.sections.length
+  });
+  appendEvent(session, "spec_compiled", {
+    revision,
+    status: result.artifact.status,
+    sectionCount: page.sections.length
+  });
+  appendEvent(session, "render_ready", {
+    revision,
+    status: result.artifact.status,
+    reveal
+  });
+  if (reveal === "final") {
+    appendEvent(session, "final_revealed", {
+      revision,
+      sectionCount: page.sections.length
+    });
+  }
 }
 
 function generationEligibleAt(session: TryMeSession): number | undefined {
@@ -2893,6 +2989,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     // slow model refinement can never hold the first useful preview hostage.
     // Existing final previews remain visible during later regenerations.
     if (!latest.experience) {
+      const provisionalSourceRevision = latest.revision;
       const provisionalStartedAt = Date.now();
       const answers = provisionalAnswersFor(latest);
       const provisionalDraft = deterministicDraft({
@@ -2902,7 +2999,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         answers,
         sourceArtifact: latest.sourceArtifact
       });
-      const provisionalArtifact = assembleExperienceArtifact({
+      const provisionalArtifact = await assembleExperienceArtifact({
         id,
         session: { ...latest, answers },
         draft: provisionalDraft,
@@ -2923,6 +3020,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         (session) => {
           if (
             session.stages.story.attemptId !== attemptId ||
+            session.revision !== provisionalSourceRevision ||
             storyInputFingerprint(session) !== expectedFingerprint ||
             session.experience
           ) {
@@ -2945,6 +3043,11 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           session.experienceSpecRevision = provisionalArtifact.experienceSpec.revision;
           session.experienceSpec = provisionalArtifact.experienceSpec;
           session.qualityReceipt = provisionalArtifact.qualityReceipt;
+          recordProductionEngineResult(
+            session,
+            provisionalArtifact.productionResult,
+            "provisional"
+          );
           session.status = "preview_provisional";
           session.expiresAt = new Date(
             provisionalReadyAt + config.sessionTtlSeconds * 1000
@@ -3030,7 +3133,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         fallbackReason: `trust_gate_${trustFallbackReason}`
       };
     }
-    const finalArtifact = assembleExperienceArtifact({
+    const finalSourceRevision = latest.revision;
+    const finalArtifact = await assembleExperienceArtifact({
       id,
       session: { ...latest, answers: provisionalAnswersFor(latest) },
       draft: generated.draft,
@@ -3078,6 +3182,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       (session) => {
         if (
           session.stages.story.attemptId !== attemptId ||
+          session.revision !== finalSourceRevision ||
           storyInputFingerprint(session) !== expectedFingerprint
         ) {
           staleGeneration = true;
@@ -3105,6 +3210,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         session.experienceSpecRevision = finalArtifact.experienceSpec.revision;
         session.experienceSpec = finalArtifact.experienceSpec;
         session.qualityReceipt = finalArtifact.qualityReceipt;
+        recordProductionEngineResult(session, finalArtifact.productionResult, "final");
         session.status = finalIsProvisional ? "preview_provisional" : "preview_ready_unclaimed";
         session.expiresAt = new Date(readyAt + config.sessionTtlSeconds * 1000).toISOString();
         session.stages.story = {

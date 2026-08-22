@@ -396,7 +396,7 @@ function profilePaletteIsEvidence(profile: BrandProfile): boolean {
 }
 
 function profileLogoIsVerified(profile: BrandProfile): boolean {
-  const strategy = profile.diagnostics?.logo.strategy;
+  const strategy = profile.diagnostics?.logo?.strategy;
   if (profile.identity?.confirmationStatus === "rejected") return false;
   if (profile.portableLogo) return true;
   return Boolean(
