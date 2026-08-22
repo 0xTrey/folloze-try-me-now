@@ -21,12 +21,12 @@ Status: in progress
 
 ## Wave 2: reconcile and select
 
-- Agents:
-- Decisions:
-- Files:
-- Tests:
-- Concerns:
-- Commits:
+- Agents: 9 Evidence reconciler; 10 Framework ranker; 11 Wireframe ranker; 12 Brand compiler. All completed bounded assignments.
+- Decisions: visitor edits outrank research; material completeness applies to required brief fields while optional gaps remain explicit; model framework input may validate but cannot replace deterministic ranking; composition selection remains internal; missing imagery resolves to type/diagram slots; weak brand evidence leaves semantic roles absent instead of inventing a palette.
+- Files: `src/lib/research/evidence-reconciler.ts`; `src/lib/generation/message-spine.ts`; `src/lib/generation/wireframe-library.ts`; `src/lib/brand-system.ts`; directly corresponding unit tests.
+- Tests: `npm run typecheck` — passed; `npm test` — 96 files / 869 tests passed in 11.07s; `npm run lint` — exit 0 with three pre-existing warnings.
+- Concerns: Wave 3 must compile the selected framework and composition into bounded section-copy artifacts before manager integration into `ExperienceSpecV2`.
+- Commits: `27503b3 feat: guide the brief with typed recommendations`; `3172564 feat: reconcile evidence into semantic brand briefs`; `22b7635 feat: rank messaging and dynamic compositions`.
 
 ## Wave 3: production
 
