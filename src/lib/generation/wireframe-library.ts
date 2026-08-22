@@ -520,6 +520,10 @@ export function listWireframeArchetypes(family?: WireframeFamily): readonly Wire
   return family ? wireframeLibrary.filter((wireframe) => wireframe.family === family) : wireframeLibrary;
 }
 
+export type WireframeBrandEvidenceStrength = "strong" | "moderate" | "weak" | "none";
+export type WireframeAssetQuality = "high" | "medium" | "low" | "none";
+export type WireframeContentDensity = "rich" | "moderate" | "sparse";
+
 export interface WireframeSelectionSignals {
   family: WireframeFamily;
   audience?: string;
@@ -539,6 +543,31 @@ export interface WireframeSelectionSignals {
   decisionRoleCount?: number;
   isSpecificUseCase?: boolean;
   isNurture?: boolean;
+  /** Verified seller brand evidence strength; never invents missing brand facts. */
+  brandEvidenceStrength?: WireframeBrandEvidenceStrength;
+  /** Source-owned imagery / logo readiness used only as a soft ranking boost. */
+  assetQuality?: WireframeAssetQuality;
+  /** Approved source / offer text density; sparse content prefers simpler archetypes. */
+  contentDensity?: WireframeContentDensity;
+}
+
+export type WireframeRankingFactor =
+  | "route"
+  | "audience"
+  | "offer"
+  | "brandEvidence"
+  | "assetQuality"
+  | "proof"
+  | "contentDensity"
+  | "objective";
+
+export interface WireframeRankingScore {
+  archetypeId: WireframeArchetypeId;
+  compositionId: CompositionId;
+  score: number;
+  factors: Partial<Record<WireframeRankingFactor, number>>;
+  reasonCode: WireframeSelectionReasonCode;
+  reason: string;
 }
 
 export interface WireframeSelectionOptions {
@@ -557,6 +586,11 @@ export interface WireframeSelectionV1 {
   alternativeIds: WireframeArchetypeId[];
   selectedBy: "system" | "visitor";
   locked: boolean;
+  /** Internal explainability only; never shown as a prospect template picker. */
+  ranking?: {
+    selectedScore: number;
+    candidates: WireframeRankingScore[];
+  };
 }
 
 interface SelectedArchetype {
@@ -720,6 +754,109 @@ function selectContentArchetype(signals: WireframeSelectionSignals, text: string
   };
 }
 
+function softSignalBoosts(signals: WireframeSelectionSignals, archetypeId: WireframeArchetypeId): Partial<Record<WireframeRankingFactor, number>> {
+  const metadata = getWireframeArchetype(archetypeId);
+  const brand = signals.brandEvidenceStrength ?? "none";
+  const assets = signals.assetQuality ?? "none";
+  const density = signals.contentDensity ?? "moderate";
+  const factors: Partial<Record<WireframeRankingFactor, number>> = {};
+
+  const brandBoost =
+    brand === "strong" ? 8 : brand === "moderate" ? 4 : brand === "weak" ? 1 : 0;
+  if (brandBoost && (metadata.primaryCompositionId === "editorial-split" || metadata.primaryCompositionId === "evidence-lead")) {
+    factors.brandEvidence = brandBoost;
+  } else if (brandBoost) {
+    factors.brandEvidence = Math.max(1, Math.floor(brandBoost / 2));
+  }
+
+  const assetBoost = assets === "high" ? 7 : assets === "medium" ? 3 : assets === "low" ? 1 : 0;
+  if (assetBoost && (metadata.primaryCompositionId === "evidence-lead" || metadata.primaryCompositionId === "editorial-split")) {
+    factors.assetQuality = assetBoost;
+  } else if (assetBoost && metadata.primaryCompositionId === "data-story") {
+    factors.assetQuality = Math.max(1, Math.floor(assetBoost / 2));
+  }
+
+  if (density === "rich") {
+    factors.contentDensity =
+      metadata.primaryCompositionId === "chapter-journey" ||
+      metadata.primaryCompositionId === "data-story" ||
+      metadata.primaryCompositionId === "workflow-spine"
+        ? 6
+        : 2;
+  } else if (density === "sparse") {
+    factors.contentDensity =
+      metadata.primaryCompositionId === "editorial-split" || metadata.primaryCompositionId === "interactive-paths"
+        ? 5
+        : -4;
+  } else {
+    factors.contentDensity = 1;
+  }
+
+  return factors;
+}
+
+function scoreArchetypeAgainstRule(
+  archetypeId: WireframeArchetypeId,
+  rule: SelectedArchetype,
+  signals: WireframeSelectionSignals
+): WireframeRankingScore {
+  const metadata = getWireframeArchetype(archetypeId);
+  const factors: Partial<Record<WireframeRankingFactor, number>> = {
+    route: 100
+  };
+
+  if (archetypeId === rule.id) {
+    factors.audience = 40;
+    factors.offer = 30;
+    factors.objective = 30;
+    factors.proof = signals.approvedQuantifiedProof || signals.approvedCustomerStory ? 20 : 10;
+  } else {
+    // Compatible alternatives stay eligible but cannot outrank the documented rule winner
+    // unless soft signals are extreme — keep deterministic priority intact.
+    const ruleAlternatives = getWireframeArchetype(rule.id).compatibleAlternativeIds;
+    const alternativeIndex = ruleAlternatives.indexOf(archetypeId);
+    factors.audience = alternativeIndex >= 0 ? 12 - alternativeIndex * 2 : 4;
+    factors.offer = 4;
+    factors.objective = 4;
+    factors.proof = signals.approvedQuantifiedProof || signals.approvedCustomerStory ? 6 : 2;
+  }
+
+  const soft = softSignalBoosts(signals, archetypeId);
+  for (const [key, value] of Object.entries(soft) as Array<[WireframeRankingFactor, number]>) {
+    factors[key] = (factors[key] ?? 0) + value;
+  }
+
+  const score = Object.values(factors).reduce((sum, value) => sum + (value ?? 0), 0);
+  return {
+    archetypeId,
+    compositionId: metadata.primaryCompositionId,
+    score,
+    factors,
+    reasonCode: archetypeId === rule.id ? rule.reasonCode : rule.reasonCode,
+    reason: archetypeId === rule.id
+      ? rule.reason
+      : `Compatible alternative to ${rule.id} with score ${score}.`
+  };
+}
+
+/**
+ * Rank reviewed compositions inside one route family. Prospects never see this
+ * catalog; the highest explainable score becomes the locked system selection.
+ */
+export function rankWireframeCandidates(signals: WireframeSelectionSignals): WireframeRankingScore[] {
+  const text = normalizedSignalText(signals);
+  const rule =
+    signals.family === "account"
+      ? selectAccountArchetype(signals, text)
+      : signals.family === "campaign"
+        ? selectCampaignArchetype(signals, text)
+        : selectContentArchetype(signals, text);
+
+  return listWireframeArchetypes(signals.family)
+    .map((wireframe) => scoreArchetypeAgainstRule(wireframe.id, rule, signals))
+    .sort((left, right) => right.score - left.score || left.archetypeId.localeCompare(right.archetypeId));
+}
+
 function alternativesFor(id: WireframeArchetypeId): WireframeArchetypeId[] {
   const wireframe = getWireframeArchetype(id);
   return wireframe.compatibleAlternativeIds
@@ -740,18 +877,20 @@ export function selectWireframe(
     );
   }
 
-  const text = normalizedSignalText(signals);
-  const selected: SelectedArchetype = requested
+  const ranked = rankWireframeCandidates(signals);
+  const selected = requested
     ? {
         id: requested.id,
-        reasonCode: "visitor-selected",
-        reason: `Using ${requested.label.toLocaleLowerCase()} because the visitor selected this compatible layout.`
+        reasonCode: "visitor-selected" as const,
+        reason: `Using ${requested.label.toLocaleLowerCase()} because the visitor selected this compatible layout.`,
+        score: ranked.find((item) => item.archetypeId === requested.id)?.score ?? 0
       }
-    : signals.family === "account"
-      ? selectAccountArchetype(signals, text)
-      : signals.family === "campaign"
-        ? selectCampaignArchetype(signals, text)
-        : selectContentArchetype(signals, text);
+    : {
+        id: ranked[0]!.archetypeId,
+        reasonCode: ranked[0]!.reasonCode,
+        reason: ranked[0]!.reason,
+        score: ranked[0]!.score
+      };
   const metadata = getWireframeArchetype(selected.id);
 
   return {
@@ -763,7 +902,11 @@ export function selectWireframe(
     reason: selected.reason,
     alternativeIds: alternativesFor(selected.id),
     selectedBy: requested ? "visitor" : options.selectedBy ?? "system",
-    locked: options.locked ?? false
+    locked: options.locked ?? false,
+    ranking: {
+      selectedScore: selected.score,
+      candidates: ranked
+    }
   };
 }
 
@@ -775,10 +918,50 @@ export type WireframeSelectionHints = Pick<
   | "isSpecificUseCase"
   | "isNurture"
   | "productDescription"
+  | "brandEvidenceStrength"
+  | "assetQuality"
+  | "contentDensity"
 >;
 
 function familyForUseCase(useCase: UseCase): WireframeFamily {
   return useCase === "abm" ? "account" : useCase;
+}
+
+function inferredBrandEvidenceStrength(
+  context: CampaignGenerationContext
+): WireframeBrandEvidenceStrength {
+  const colors = [
+    context.designContext.colorSystem.primary,
+    context.designContext.colorSystem.accent,
+    context.designContext.colorSystem.surface
+  ].filter(Boolean).length;
+  const typography = Boolean(
+    context.designContext.typography.display || context.designContext.typography.body
+  );
+  if (colors >= 3 && typography && context.designContext.imagery.sourceOwnedImageCount >= 2) {
+    return "strong";
+  }
+  if (colors >= 2 || context.designContext.imagery.sourceOwnedImageCount >= 1) return "moderate";
+  if (colors >= 1) return "weak";
+  return "none";
+}
+
+function inferredAssetQuality(context: CampaignGenerationContext): WireframeAssetQuality {
+  const count = context.designContext.imagery.sourceOwnedImageCount;
+  if (count >= 3) return "high";
+  if (count === 2) return "medium";
+  if (count === 1) return "low";
+  return "none";
+}
+
+function inferredContentDensity(context: CampaignGenerationContext): WireframeContentDensity {
+  const topics = context.brief.sourceGrounding.topics.length;
+  const hasSourceBody = Boolean(
+    context.brief.sourceTitle || context.brief.messageSpine.recognizableContext
+  );
+  if (topics >= 3 || (hasSourceBody && topics >= 2)) return "rich";
+  if (!hasSourceBody && topics === 0) return "sparse";
+  return "moderate";
 }
 
 export function selectWireframeForCampaignContext(input: {
@@ -807,7 +990,10 @@ export function selectWireframeForCampaignContext(input: {
       approvedCustomerStory: hints.approvedCustomerStory,
       decisionRoleCount: hints.decisionRoleCount,
       isSpecificUseCase: hints.isSpecificUseCase,
-      isNurture: hints.isNurture
+      isNurture: hints.isNurture,
+      brandEvidenceStrength: hints.brandEvidenceStrength ?? inferredBrandEvidenceStrength(context),
+      assetQuality: hints.assetQuality ?? inferredAssetQuality(context),
+      contentDensity: hints.contentDensity ?? inferredContentDensity(context)
     },
     options
   );
@@ -839,7 +1025,10 @@ export function selectWireframeForExperienceSpec(input: {
       approvedCustomerStory: hints.approvedCustomerStory,
       decisionRoleCount: hints.decisionRoleCount,
       isSpecificUseCase: hints.isSpecificUseCase,
-      isNurture: hints.isNurture
+      isNurture: hints.isNurture,
+      brandEvidenceStrength: hints.brandEvidenceStrength,
+      assetQuality: hints.assetQuality,
+      contentDensity: hints.contentDensity
     },
     options
   );

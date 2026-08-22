@@ -2,11 +2,13 @@ import type {
   ExperienceDraft,
   PersuasionFramework
 } from "@/lib/generation/experience-schema";
+import { sanitizeExperienceSectionLabels } from "@/lib/generation/experience-schema";
 import {
   experienceTemplateFor,
   SHARED_EXPERIENCE_PRIMITIVES,
   type ExperiencePrimitive
 } from "@/lib/generation/experience-renderers";
+import { sanitizeBuyerFacingLabel } from "@/lib/generation/message-spine";
 import type { VisualGrammar } from "@/lib/generation/visual-grammar";
 import type { WireframeSelectionV1 } from "@/lib/generation/wireframe-library";
 import { isImageDeliveryPath } from "@/lib/image-delivery";
@@ -337,7 +339,13 @@ export function renderExperienceHtml(input: {
   actions?: ExperienceActionContract[];
   wireframeSelection?: WireframeSelectionV1;
 }): string {
-  const { draft, brand, targetBrand } = input;
+  const brand = input.brand;
+  const targetBrand = input.targetBrand;
+  const draft: ExperienceDraft = {
+    ...input.draft,
+    sectionLabels: sanitizeExperienceSectionLabels(input.draft.sectionLabels),
+    narrativeArc: sanitizeBuyerFacingLabel(input.draft.narrativeArc, input.draft.narrativeArc)
+  };
   const actionById = new Map((input.actions ?? []).map((action) => [action.id, action]));
   const primaryAction = actionById.get("primary-conversion") ?? {
     id: "primary-conversion",
@@ -482,9 +490,6 @@ export function renderExperienceHtml(input: {
       : template.family === "campaign-launch" && offerTitle
         ? `${brand.companyName} | ${offerTitle}`
         : draft.eyebrow;
-  const resourcesHeading = /\bquestions?\b/i.test(draft.sectionLabels.journey)
-    ? template.navigation.resources
-    : draft.sectionLabels.journey;
   const themeLink = input.themeUrl
     ? `<link rel="stylesheet" href="${escapeHtml(input.themeUrl)}">`
     : "";
@@ -508,16 +513,22 @@ export function renderExperienceHtml(input: {
   const journeyNavItems = framework
     ? frameworkSectionIds.map((id, index) => ({
         id,
-        label: template.journeyNavigation[index] ?? `Section ${index + 1}`
+        label: sanitizeBuyerFacingLabel(
+          template.journeyNavigation[index] ?? `Section ${index + 1}`,
+          "Overview"
+        )
       }))
     : [
         { id: "experience-overview", label: "Overview" },
         ...template.regionOrder.map((region) => ({
           id: sectionIds[region],
-          label: template.navigation[region]
+          label: sanitizeBuyerFacingLabel(template.navigation[region], "Overview")
         })),
         { id: "next-step", label: "Next step" }
       ];
+  const resourcesHeading = /\bquestions?\b/i.test(draft.sectionLabels.journey)
+    ? sanitizeBuyerFacingLabel(template.navigation.resources, "Evidence")
+    : draft.sectionLabels.journey;
   const journeyNavButtons = journeyNavItems
     .map(
       (item, index) => `<button type="button" data-scroll-target="${escapeHtml(item.id)}" data-journey-link="${escapeHtml(item.id)}" ${index === 0 ? 'aria-current="location"' : ""}>

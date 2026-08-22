@@ -7,6 +7,9 @@ import type { WireframeArchetypeId } from "@/lib/generation/wireframe-library";
  * placement, and interaction rhythm, but never copy, proof, citations, CTA
  * intent, or source policy. Those remain the responsibility of the
  * ExperienceSpec and persuasion framework.
+ *
+ * Model work fills constrained content slots inside a selected grammar. It
+ * never invents page geometry, module order, or a new composition id.
  */
 export const visualGrammarIds = [
   "editorial-split",
@@ -25,6 +28,20 @@ export type Cadence = "editorial" | "evidence" | "interactive" | "system" | "dat
 export type CloseTreatment = "working-session" | "proof-receipt" | "guided-next-step" | "validation-plan" | "methodology-continuation" | "watch-or-continue";
 export type NoAssetTreatment = "editorial-evidence" | "proof-receipt" | "choice-map" | "system-map" | "data-frame" | "chapter-index";
 
+/** Slots a model may fill after composition selection. Geometry stays locked. */
+export const MODEL_CONSTRAINED_CONTENT_SLOTS = [
+  "audience",
+  "tension",
+  "promise",
+  "mechanism",
+  "proofPlan",
+  "decisionHelp",
+  "nextAction",
+  "whyNow"
+] as const;
+
+export type ModelConstrainedContentSlot = (typeof MODEL_CONSTRAINED_CONTENT_SLOTS)[number];
+
 export interface VisualGrammar {
   id: VisualGrammarId;
   motionProfile: MotionProfile;
@@ -35,6 +52,9 @@ export interface VisualGrammar {
   noAssetTreatment: NoAssetTreatment;
   /** A hero image is a singular moment, never a generic repeating texture. */
   allowHeroReuse: false;
+  /** Explicit contract: writers fill slots; they do not invent layout. */
+  modelMayInventGeometry: false;
+  constrainedContentSlots: readonly ModelConstrainedContentSlot[];
 }
 
 const grammar = (
@@ -53,7 +73,9 @@ const grammar = (
   cadence,
   closeTreatment,
   noAssetTreatment,
-  allowHeroReuse: false
+  allowHeroReuse: false,
+  modelMayInventGeometry: false,
+  constrainedContentSlots: MODEL_CONSTRAINED_CONTENT_SLOTS
 });
 
 export const visualGrammars: Record<VisualGrammarId, VisualGrammar> = {
@@ -91,4 +113,23 @@ export const visualGrammarByArchetype: Record<WireframeArchetypeId, VisualGramma
 
 export function visualGrammarForArchetype(archetypeId: WireframeArchetypeId): VisualGrammar {
   return visualGrammars[visualGrammarByArchetype[archetypeId]];
+}
+
+/**
+ * Fail-soft guard for generation: if a model proposes a geometry change, keep
+ * the reviewed grammar and ignore the invention.
+ */
+export function rejectInventedGeometry(
+  selected: VisualGrammarId,
+  proposed: string | null | undefined
+): { grammarId: VisualGrammarId; inventedGeometryRejected: boolean } {
+  if (!proposed || proposed === selected) {
+    return { grammarId: selected, inventedGeometryRejected: false };
+  }
+  if ((visualGrammarIds as readonly string[]).includes(proposed)) {
+    // Alternative reviewed grammars are only allowed through wireframe selection,
+    // never by free-form model invention mid-generation.
+    return { grammarId: selected, inventedGeometryRejected: true };
+  }
+  return { grammarId: selected, inventedGeometryRejected: true };
 }

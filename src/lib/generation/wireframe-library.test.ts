@@ -9,6 +9,7 @@ import {
   contentArchetypeIds,
   getWireframeArchetype,
   listWireframeArchetypes,
+  rankWireframeCandidates,
   selectWireframe,
   selectWireframeForCampaignContext,
   selectWireframeForExperienceSpec,
@@ -210,6 +211,44 @@ describe("deterministic wireframe selection", () => {
         (id) => getWireframeArchetype(id).family === selection.family
       )
     ).toBe(true);
+    expect(selection.ranking?.candidates.length).toBe(5);
+    expect(selection.ranking?.candidates[0]?.archetypeId).toBe("account-technical");
+    expect(selection.selectedBy).toBe("system");
+  });
+
+  it("ranks reviewed compositions from route, audience, offer, brand, assets, proof, and density", () => {
+    const ranked = rankWireframeCandidates({
+      family: "campaign",
+      campaignType: "product",
+      promotedOffer: "Campaign Builder",
+      audience: "Revenue marketing leaders",
+      brandEvidenceStrength: "strong",
+      assetQuality: "high",
+      contentDensity: "moderate",
+      approvedCustomerStory: false
+    });
+
+    expect(ranked[0]?.archetypeId).toBe("campaign-product");
+    expect(ranked.map((item) => item.archetypeId)).toEqual(
+      expect.arrayContaining(["campaign-product", "campaign-demand", "campaign-use-case"])
+    );
+    expect(ranked.every((item) => item.factors.route === 100)).toBe(true);
+    expect(ranked[0]?.factors.brandEvidence).toBeGreaterThan(0);
+    expect(ranked[0]?.factors.assetQuality).toBeGreaterThan(0);
+    expect(ranked[0]?.score).toBeGreaterThan(ranked[1]!.score);
+  });
+
+  it("never exposes a prospect-facing template marketplace in system selection", () => {
+    const selection = selectWireframe({
+      family: "content",
+      sourceTitle: "Demand generation playbook"
+    });
+    expect(selection.selectedBy).toBe("system");
+    expect(selection.locked).toBe(false);
+    expect(selection.reasonCode).not.toBe("visitor-selected");
+    expect(selection.ranking?.candidates.every((item) => item.archetypeId.startsWith("content-"))).toBe(
+      true
+    );
   });
 
   it("allows only a compatible post-preview selection", () => {

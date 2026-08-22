@@ -7,10 +7,48 @@ import {
   experienceShapes,
   wireframeNames
 } from "@/lib/generation/campaign-context";
+import {
+  BUYER_FACING_JARGON_PATTERN,
+  sanitizeBuyerFacingLabel
+} from "@/lib/generation/message-spine";
 
 export const EXPERIENCE_DRAFT_LIMITS = {
   audienceLabel: 90
 } as const;
+
+/** Exact-copy ban list for U19 buyer-facing labels. */
+export const FORBIDDEN_BUYER_FACING_LABELS = [
+  "Account thesis",
+  "Decision path",
+  "Decision paths",
+  "Decision lens",
+  "Supporting proof",
+  "Narrative arc",
+  "Stakeholder map",
+  "Buying committee"
+] as const;
+
+export function assertNoBuyerFacingJargon(value: string, field = "copy"): string {
+  if (BUYER_FACING_JARGON_PATTERN.test(value)) {
+    throw new Error(`${field} contains forbidden buyer-facing strategy jargon`);
+  }
+  return value;
+}
+
+export function sanitizeExperienceSectionLabels<T extends {
+  thesis: string;
+  lenses: string;
+  journey: string;
+  close: string;
+}>(labels: T): T {
+  return {
+    ...labels,
+    thesis: sanitizeBuyerFacingLabel(labels.thesis, "Overview"),
+    lenses: sanitizeBuyerFacingLabel(labels.lenses, "Where to start"),
+    journey: sanitizeBuyerFacingLabel(labels.journey, "Evidence"),
+    close: sanitizeBuyerFacingLabel(labels.close, "Next step")
+  };
+}
 
 const audienceRationaleBoundary =
   /\b(?:aligning|building|connecting|designing|driving|evaluating|focused on|leading|managing|owning|responsible for|securing|validating|who|that)\b/i;

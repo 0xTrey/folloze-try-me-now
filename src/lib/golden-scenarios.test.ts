@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
 import { resolvePublicCompanyName } from "@/lib/company-name";
+import { FORBIDDEN_BUYER_FACING_LABELS } from "@/lib/generation/experience-schema";
 import { compileCampaignContext } from "@/lib/generation/campaign-context";
+import {
+  BUYER_FACING_NAVIGATION,
+  sanitizeBuyerFacingLabel
+} from "@/lib/generation/message-spine";
+import { selectWireframe, selectWireframeForCampaignContext } from "@/lib/generation/wireframe-library";
 import { choosePdfDocumentTitle } from "@/lib/pdf-title";
 import type { BrandProfile } from "@/lib/types";
 
@@ -154,5 +160,116 @@ describe("golden customer scenarios", () => {
 
     expect(title).toBe("Now Platform Reference Guide");
     expect(title).not.toContain("ebk-now-platform-reference-guide.pdf");
+  });
+
+  it("keeps distinct account, campaign/event, and Content Magic message contracts", () => {
+    const seller = brand("folloze.com", "Folloze", {
+      description: "Personalized buyer experiences for enterprise GTM teams.",
+      publicTopics: ["Buyer experience", "Account-based marketing"],
+      imageUrls: ["https://cdn.example/folloze-hero.png", "https://cdn.example/folloze-ui.png"]
+    });
+    const accountTarget = brand("servicetitan.com", "ServiceTitan", {
+      description: "Software for residential and commercial trade businesses.",
+      publicTopics: ["Field service", "Trade operations"]
+    });
+
+    const account = compileCampaignContext({
+      brand: seller,
+      targetBrand: accountTarget,
+      useCase: "abm",
+      answers: {
+        targetDomain: "servicetitan.com",
+        audience: "Platform architects and security leaders",
+        objective: "Validate the integration architecture"
+      }
+    });
+    const campaign = compileCampaignContext({
+      brand: seller,
+      useCase: "campaign",
+      answers: {
+        campaignType: "product",
+        promotedOffer: "Folloze Campaign Builder",
+        audience: "Revenue marketing leaders",
+        objective: "Launch a product"
+      }
+    });
+    const event = compileCampaignContext({
+      brand: seller,
+      useCase: "campaign",
+      answers: {
+        campaignType: "event",
+        eventSource: "Northpeak ABM Summit webinar",
+        audience: "ABM program owners",
+        objective: "Register for the session"
+      }
+    });
+    const content = compileCampaignContext({
+      brand: seller,
+      useCase: "content",
+      answers: {
+        sourceTitle: "Buyer experience playbook",
+        audience: "Demand generation leaders",
+        objective: "Increase content engagement"
+      },
+      sourceContent: {
+        sourceUrl: "https://folloze.com/resources/buyer-experience-playbook",
+        title: "Buyer experience playbook",
+        excerpt: "A guided framework for building account-ready buyer experiences."
+      }
+    });
+
+    expect(account.messageSpineV2.composition.contract).toBe("account-named-opportunity");
+    expect(campaign.messageSpineV2.composition.contract).toBe("campaign-offer-path");
+    expect(event.messageSpineV2.composition.contract).toBe("campaign-event-session");
+    expect(content.messageSpineV2.composition.contract).toBe("content-source-companion");
+
+    expect(account.wireframe.selection?.archetypeId).toBe("account-technical");
+    expect(
+      selectWireframeForCampaignContext({
+        useCase: "campaign",
+        answers: {
+          campaignType: "product",
+          promotedOffer: "Folloze Campaign Builder",
+          audience: "Revenue marketing leaders",
+          objective: "Launch a product"
+        },
+        context: campaign
+      }).archetypeId
+    ).toBe("campaign-product");
+    expect(event.wireframe.selection?.archetypeId).toBe("campaign-event");
+    expect(content.wireframe.selection?.archetypeId).toBe("content-guide");
+
+    expect(account.messageSpineV2.composition.buyerFacingLabels).toEqual([
+      ...BUYER_FACING_NAVIGATION.account
+    ]);
+    expect(content.messageSpineV2.composition.buyerFacingLabels).toEqual([
+      ...BUYER_FACING_NAVIGATION.content
+    ]);
+  });
+
+  it("asserts buyer-facing labels replace internal strategy jargon (U19)", () => {
+    expect(FORBIDDEN_BUYER_FACING_LABELS).toEqual(
+      expect.arrayContaining([
+        "Account thesis",
+        "Decision paths",
+        "Supporting proof",
+        "Narrative arc",
+        "Stakeholder map",
+        "Buying committee"
+      ])
+    );
+    for (const label of FORBIDDEN_BUYER_FACING_LABELS) {
+      expect(sanitizeBuyerFacingLabel(label)).not.toBe(label);
+    }
+    expect(BUYER_FACING_NAVIGATION.account).toEqual([
+      "Overview",
+      "Why it matters",
+      "Where to start",
+      "How it works",
+      "For your team",
+      "Evidence",
+      "Next step"
+    ]);
+    expect(selectWireframe({ family: "account" }).selectedBy).toBe("system");
   });
 });
