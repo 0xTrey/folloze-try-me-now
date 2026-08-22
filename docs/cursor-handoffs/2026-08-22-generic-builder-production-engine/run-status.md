@@ -1,6 +1,6 @@
 # Cursor Run Status
 
-Status: in progress
+Status: complete
 
 ## Baseline
 
@@ -47,7 +47,7 @@ Status: in progress
 - Evidence: `docs/cursor-handoffs/2026-08-22-generic-builder-production-engine/evidence/` contains first-viewport and full-page 1440×1000 captures for Apple, ADP, ServiceTitan, and no-logo recovery plus `visual-evidence-manifest.json`. Captures use deterministic local fixtures and intercepted local SVG stand-ins; they make no live provider request. The manifest records action color, radius, image/fallback mode, broken-image count, overflow, and document height.
 - Privacy and mutation: current trace tests reject raw domain, URL, email, copy, HTML, and secret content; production receipt assertion rejects raw company/domain/copy/URL values. No push, deploy, Folloze write, infrastructure change, credential access, secret read, or live provider call occurred.
 - Concerns: six matrix items remain Partial: no browser domain-edit stale-race (G05), no explicit desktop workbench 2:1 screenshot assertion (G27), legacy determinate progress values remain alongside receipt progress (G28), no browser provisional-to-final replacement scenario (G39), no browser session-API provider-failure scenario (G40), and no explicit automated contrast audit (G44). Brand screenshots validate local deterministic rendering; they are not live-site/provider captures.
-- Commits: `58af35c feat: compile revision-fenced production pages`; `020a98a feat: integrate production artifacts into previews`; final bounded evidence/docs/test commit pending at this status update.
+- Commits: `58af35c feat: compile revision-fenced production pages`; `020a98a feat: integrate production artifacts into previews`; `f16d7d6 test: capture production engine acceptance evidence`.
 
 ## Final checks
 
@@ -57,6 +57,6 @@ Status: in progress
 - [x] Desktop E2E passes: 28 tests.
 - [x] Three-brand screenshots captured: Apple, ADP, ServiceTitan, plus no-logo recovery.
 - [x] Trace privacy verified by current focused and full-suite tests.
-- [ ] Worktree clean after final bounded commit.
+- [x] Worktree clean after final bounded commits.
 - [x] No push/deploy/Folloze/infrastructure action.
-- [ ] `cursor-handback.md` complete after final commit SHA is known.
+- [x] `cursor-handback.md` complete.
