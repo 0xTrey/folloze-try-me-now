@@ -53,7 +53,6 @@ import {
   type CtaValue,
   type EntryPathOption
 } from "@/components/try-me-now-enhancements";
-import { PreviewEvidenceActivitySurface } from "@/components/preview-lifecycle-surface";
 import { usePreviewForegroundSeconds } from "@/components/use-preview-foreground-seconds";
 import {
   StreamingBriefComposer,
@@ -4103,7 +4102,6 @@ export function TryMeNowApp() {
   );
   const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
   const revealCopy = session ? getRevealCopy(session) : undefined;
-  const evidenceFindings = session ? audienceHubFindingsFor(session) : [];
   const analyticsSignals: AnalyticsSignal[] = clientEvents.map((event, index) => ({
     id: `${event.at}-${index}`,
     label: event.label,
@@ -4407,7 +4405,7 @@ export function TryMeNowApp() {
             session={session}
             onRetry={() => void retryFailedStage("story")}
           />
-          <div className="revealGrid revealGridLifecycle">
+          <div className="revealGrid">
             <div className="revealPreview">
               <div className="previewControlBar">
                 <div className="desktopPreviewLabel">
@@ -4514,27 +4512,6 @@ export function TryMeNowApp() {
                 {isProvisionalPreview ? "Explore the working preview" : "Explore the full experience"}<ArrowRight size={16} />
               </a>
             </div>
-            <aside className="revealRail revealEvidenceRail">
-              <PreviewEvidenceActivitySurface
-                session={session}
-                activity={analyticsSignals.map((signal) => ({
-                  id: signal.id,
-                  label: signal.label,
-                  detail: signal.detail
-                }))}
-                evidence={evidenceFindings.map((finding) => ({
-                  id: finding.id,
-                  label: finding.label,
-                  text: finding.text
-                }))}
-                onRetryStage={(stage) => void retryFailedStage(stage)}
-                personalizationSlot={
-                  <div data-personalization-seam="tabs-host" aria-label="Personalization preview variants">
-                    {/* Personalization workstream owns variant tabs here. */}
-                  </div>
-                }
-              />
-            </aside>
           </div>
           <div className="revealFooter">
             <span>{lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed" ? "Saved URL" : "Temporary URL"}</span>

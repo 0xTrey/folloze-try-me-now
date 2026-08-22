@@ -1405,15 +1405,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .pdfUploadProgressTrack > i { width: 100%; animation: none; }
 }
 
-/* Workstream 6: preview lifecycle evidence surface */
-.revealGridLifecycle {
-  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.9fr);
-}
-.revealEvidenceRail {
-  padding: 0;
-  border-left: 1px solid var(--fz-border);
-  background: #f7f8fb;
-  overflow: auto;
+.revealGrid {
+  grid-template-columns: minmax(0, 1fr);
 }
 .previewEligibilityHold {
   min-height: 320px;
@@ -1432,11 +1425,4 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   color: var(--fz-muted-strong);
   font-size: 14px;
   line-height: 1.45;
-}
-@media (max-width: 1100px) {
-  .revealGridLifecycle { grid-template-columns: 1fr; }
-  .revealEvidenceRail {
-    border-left: 0;
-    border-top: 1px solid var(--fz-border);
-  }
 }
