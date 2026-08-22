@@ -40,6 +40,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .liveDot { width: 8px; height: 8px; display: inline-block; flex: 0 0 auto; border-radius: 50%; background: var(--fz-success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--fz-success) 14%, transparent); }
 .resetButton { min-height: 44px; padding: 0 8px; margin-right: -8px; justify-self: end; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--fz-muted-strong); cursor: pointer; font-size: 13px; }
 .resetButton:hover { color: var(--fz-accent); }
+.resetButtonProminent {
+  min-height: 48px;
+  padding: 0 18px;
+  margin-right: 0;
+  gap: 10px;
+  color: var(--fz-ink);
+  border: 1px solid var(--fz-border);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 8px 20px rgba(7, 20, 40, .06);
+}
+.resetButtonProminent:hover {
+  color: var(--fz-accent);
+  border-color: var(--fz-accent);
+  background: var(--fz-accent-tint);
+}
 .sectionKicker { display: inline-block; color: var(--fz-accent); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 
 .entryStage { min-height: calc(100vh - 72px); display: flex; flex-direction: column; padding: 46px clamp(22px, 4vw, 64px) 24px; }
@@ -261,7 +279,112 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .ceremonyTimer { display: none; }
 }
 
-/* Prospect experience v2: the builder and its output now feel like one product. */
+/* Prospect experience v2: unified conversational entry. */
+.unifiedEntry {
+  width: min(100%, 820px);
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+  justify-items: stretch;
+}
+.unifiedPrimaryCta {
+  width: 100%;
+  min-height: 148px;
+  padding: 28px 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 18px;
+  color: #fff;
+  text-align: left;
+  border: 0;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #0077ff 0%, #0048de 100%);
+  box-shadow: 0 22px 48px rgba(0, 119, 255, .28);
+  cursor: pointer;
+}
+.unifiedPrimaryCta > span {
+  grid-column: 1;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  opacity: .82;
+}
+.unifiedPrimaryCta strong {
+  grid-column: 1;
+  font: 620 clamp(28px, 3.4vw, 40px) / 1.05 var(--font-display), sans-serif;
+  letter-spacing: -.04em;
+}
+.unifiedPrimaryCta small {
+  grid-column: 1;
+  max-width: 34rem;
+  color: rgba(255, 255, 255, .86);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.unifiedPrimaryCta > svg {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+}
+.unifiedPrimaryCta:hover:not(:disabled),
+.unifiedPrimaryCta:focus-visible:not(:disabled) {
+  outline: 0;
+  transform: translateY(-1px);
+  box-shadow: 0 26px 56px rgba(0, 119, 255, .34);
+}
+.unifiedPrimaryCta:disabled,
+.unifiedSecondaryCta:disabled { opacity: .55; cursor: not-allowed; }
+.unifiedSecondaryCta {
+  width: 100%;
+  min-height: 52px;
+  padding: 14px 18px;
+  color: var(--fz-action);
+  text-align: left;
+  border: 1px solid var(--fz-border);
+  border-radius: 14px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 650;
+}
+.unifiedSecondaryCta:hover:not(:disabled),
+.unifiedSecondaryCta:focus-visible:not(:disabled) {
+  border-color: var(--fz-accent);
+  background: var(--fz-accent-tint);
+  outline: 0;
+}
+.northpeakWorkedStates {
+  margin-top: 8px;
+  padding: 16px 18px;
+  border: 1px dashed #c9dff0;
+  border-radius: 14px;
+  background: #f7fbff;
+}
+.northpeakWorkedStates .sectionKicker { margin-bottom: 10px; }
+.northpeakWorkedStates ul {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+.northpeakWorkedStates a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fz-body);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 650;
+}
+.northpeakWorkedStates a:hover,
+.northpeakWorkedStates a:focus-visible {
+  color: var(--fz-accent);
+  outline: 0;
+}
+
 .entryPathRail {
   width: min(100%,1460px);
   margin: 0 auto;
@@ -316,8 +439,41 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .desktopPreviewLabel strong { font-size:11px;letter-spacing:.02em }
 .desktopPreviewLabel small { margin-top:2px;color:var(--fz-muted-strong);font-size:11px }
 .previewToolbarActions { display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap }
+.personalizationVariantBar {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:0 18px 10px;
+  padding:8px 0 2px;
+}
+.personalizationVariantLabel {
+  color:var(--fz-muted-strong);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.personalizationVariantChips { display:flex;align-items:center;gap:6px;flex-wrap:wrap }
+.personalizationVariantChip {
+  min-height:34px;
+  padding:6px 12px;
+  border:1px solid var(--fz-border);
+  border-radius:999px;
+  background:var(--fz-surface);
+  color:var(--fz-body);
+  font-size:12px;
+  font-weight:650;
+  cursor:pointer;
+}
+.personalizationVariantChip[aria-pressed="true"] {
+  border-color:color-mix(in srgb,var(--fz-action) 42%,var(--fz-border));
+  background:var(--fz-accent-tint);
+  color:var(--fz-action-dark);
+}
 .previewReadinessStatus { min-height:38px;padding:8px 11px;display:inline-flex;align-items:center;gap:6px;color:var(--fz-action-dark);border:1px solid color-mix(in srgb,var(--fz-action) 26%,var(--fz-border));border-radius:999px;background:var(--fz-accent-tint);font-size:11px;font-weight:750;white-space:nowrap }
-.previewReadinessStatus.isRefining { color:var(--fz-action-dark) }
+.previewReadinessStatus.isRefining,
+.previewReadinessStatus.isEnriching { color:var(--fz-action-dark) }
 .previewReadinessStatus.isSaved { color:#087448;border-color:#bde8d1;background:#f3fcf7 }
 .previewReadinessStatus.isWarning { color:#704400;border-color:#e9c783;background:#fff7e7 }
 .editBriefButton { min-height: 44px; padding: 8px 15px; white-space: nowrap; }
@@ -1244,4 +1400,40 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 @media (prefers-reduced-motion: reduce) {
   .pdfUploadProgressTrack > i { width: 100%; animation: none; }
+}
+
+/* Workstream 6: preview lifecycle evidence surface */
+.revealGridLifecycle {
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.9fr);
+}
+.revealEvidenceRail {
+  padding: 0;
+  border-left: 1px solid var(--fz-border);
+  background: #f7f8fb;
+  overflow: auto;
+}
+.previewEligibilityHold {
+  min-height: 320px;
+  margin: 0;
+  padding: 28px;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  border: 1px dashed color-mix(in srgb, var(--fz-border) 80%, #c9d2e0);
+  border-radius: 18px;
+  background: linear-gradient(160deg, #f7f8fb, #fff);
+}
+.previewEligibilityHold p {
+  max-width: 42ch;
+  margin: 0;
+  color: var(--fz-muted-strong);
+  font-size: 14px;
+  line-height: 1.45;
+}
+@media (max-width: 1100px) {
+  .revealGridLifecycle { grid-template-columns: 1fr; }
+  .revealEvidenceRail {
+    border-left: 0;
+    border-top: 1px solid var(--fz-border);
+  }
 }

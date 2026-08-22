@@ -17,6 +17,7 @@ import {
   FileText,
   Gauge,
   Globe2,
+  Layers3,
   LoaderCircle,
   Mail,
   Megaphone,
@@ -54,24 +55,29 @@ import {
   type CtaValue,
   type EntryPathOption
 } from "@/components/try-me-now-enhancements";
+import { PreviewEvidenceActivitySurface } from "@/components/preview-lifecycle-surface";
 import {
   StreamingBriefComposer,
   type StreamingAudienceFinding,
   type StreamingBriefAnswer,
   type StreamingBriefQuestion,
-  type StreamingBriefReceipt
+  type StreamingBriefReceipt,
+  type StreamingBriefSummaryField
 } from "@/components/streaming-brief-composer";
 
 import type {
   AudienceRecommendation,
   BriefFieldProvenance,
   ExperienceBlockControl as SessionExperienceBlockControl,
+  PersonalizationVariantId,
   PublicTryMeSession,
   SessionEvidenceItem,
   SessionAnswers,
+  StageKey,
   StageState,
   UseCase
 } from "@/lib/types";
+import { PERSONALIZATION_VARIANT_IDS } from "@/lib/types";
 import {
   ApiResponseError,
   friendlyUploadError,
@@ -94,7 +100,20 @@ import {
 import { imageDeliveryPath } from "@/lib/image-delivery";
 import { interpretConversationalBrief } from "@/lib/conversational-brief";
 import {
+  analyticsDurationBucket,
+  analyticsQualityGate,
+  answersPatchForStageRetry,
+  canOfferClaimModal,
+  canRevealPreview,
+  isProvisionalExperience,
+  isSessionGenerationEligible,
+  previewLifecycleCopy,
+  previewLifecyclePhase,
+  workerNameForStage
+} from "@/lib/preview-lifecycle";
+import {
   captureProductEvent,
+  captureUnifiedProductEvent,
   identifyProductVisitor,
   initializeProductAnalytics,
   productAnalyticsHeaders,
@@ -122,8 +141,8 @@ type ClientEvent = {
 const ANALYTICS_SECTION_LABELS: Record<string, string> = {
   "experience-overview": "Overview",
   "experience-thesis": "Why it matters",
-  "decision-path": "Decision paths",
-  "supporting-resources": "Supporting proof",
+  "decision-path": "Where to start",
+  "supporting-resources": "Evidence",
   "next-step": "Next step"
 };
 
@@ -278,7 +297,22 @@ export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCa
   );
 }
 
-const APRIO_GEORGIA_PACIFIC_EXAMPLE_URL = "https://experience.folloze.com/aprio-for-georgia-pacific";
+const NORTHPEAK_ACCOUNT_EXAMPLE_URL = "https://experience.folloze.com/northpeak--folloze";
+const NORTHPEAK_CAMPAIGN_EXAMPLE_URL = "https://engage.folloze.com/120367";
+
+/** Optional Northpeak worked states for the unified entry — never primary CTAs. */
+export const northpeakWorkedStates = [
+  {
+    id: "account",
+    label: "See a Northpeak account experience",
+    href: NORTHPEAK_ACCOUNT_EXAMPLE_URL
+  },
+  {
+    id: "campaign",
+    label: "See a Northpeak personalized campaign",
+    href: NORTHPEAK_CAMPAIGN_EXAMPLE_URL
+  }
+] as const;
 
 export const entryPathOptions: Record<UseCase, EntryPathOption> = {
   abm: {
@@ -288,11 +322,11 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     title: "Build a 1:1 account experience",
     description: "Add your company and one target account. Folloze builds a personalized buyer experience for that account.",
     actionLabel: "Build a 1:1 account experience",
-    exampleLabel: "See the Aprio + Georgia-Pacific example",
-    exampleUrl: APRIO_GEORGIA_PACIFIC_EXAMPLE_URL,
+    exampleLabel: "See a Northpeak account experience",
+    exampleUrl: NORTHPEAK_ACCOUNT_EXAMPLE_URL,
     demoSteps: ["Company + account", "Public account context", "1:1 buyer experience"],
-    previewImage: "/entry/aprio-georgia-pacific-preview.webp",
-    previewAlt: "Aprio account experience tailored for Georgia-Pacific",
+    previewImage: "/entry/abm-preview.webp",
+    previewAlt: "Northpeak account experience tailored for a named buyer account",
     accent: "#0077ff",
     tone: "paper"
   },
@@ -303,30 +337,39 @@ export const entryPathOptions: Record<UseCase, EntryPathOption> = {
     title: "Launch a campaign landing page",
     description: "Add one offer and audience. Folloze builds a branded campaign page with a measurable next step.",
     actionLabel: "Launch a campaign landing page",
-    exampleLabel: "See the ServiceNow AI platform campaign",
-    exampleUrl: "https://engage.folloze.com/servicenow-ai-platform-campaign",
+    exampleLabel: "See a Northpeak personalized campaign",
+    exampleUrl: NORTHPEAK_CAMPAIGN_EXAMPLE_URL,
     demoSteps: ["Offer + audience", "Buyer objective", "Campaign landing page"],
     previewImage: "/entry/campaign-preview.webp",
-    previewAlt: "ServiceNow-branded AI platform campaign landing page",
+    previewAlt: "Northpeak-branded personalized campaign landing page",
     accent: "#0048de",
     tone: "cobalt"
   },
   content: {
     id: "content",
     index: "03",
-    eyebrow: "Content",
+    eyebrow: "Content Magic",
     title: "Make content interactive",
     description: "Turn a public URL or PDF into a guided, source-grounded buyer experience.",
     actionLabel: "Make content interactive",
-    exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
-    exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
+    exampleLabel: "See a Northpeak Content Magic example",
+    exampleUrl: NORTHPEAK_CAMPAIGN_EXAMPLE_URL,
     demoSteps: ["Public URL or PDF", "Source understanding", "Interactive experience"],
     previewImage: "/entry/content-preview.webp",
-    previewAlt: "Cisco Hybrid Mesh Firewall report transformed into an interactive content experience",
+    previewAlt: "Northpeak source turned into an interactive content experience",
     accent: "#091019",
     tone: "ink"
   }
 };
+
+export function experienceTypeLabelFor(session: Pick<PublicTryMeSession, "useCase" | "answers">): string {
+  if (session.useCase === "abm") return "Account microsite";
+  if (session.useCase === "content") return "Content Magic";
+  if (session.answers.campaignType === "event") return "Event landing page";
+  if (session.answers.campaignType === "demand") return "Demand campaign";
+  if (session.answers.campaignType === "product") return "Product campaign";
+  return "Buyer experience";
+}
 
 function uiCtaType(value?: SessionAnswers["ctaType"]): CtaValue["type"] {
   if (value === "register") return "registration";
@@ -1200,13 +1243,18 @@ export function PreviewUpdateNotice({
   const state = previewUpdateState(session);
   if (!state || !session.experience) return null;
   const revision = session.experience.artifactRevision ?? 1;
+  const storyDetail = session.stages.story.detail
+    || session.stages.story.artifact
+    || (session.stages.story.errorCode
+      ? `Story worker receipt: ${session.stages.story.errorCode}`
+      : undefined);
 
   if (state === "provisional") {
     return (
       <section className="previewUpdateNotice isRunning" role="status" aria-live="polite" data-preview-update-state="provisional">
         <span className="previewUpdateIcon" aria-hidden="true"><LoaderCircle className="spin" size={18} /></span>
-        <span><strong>Your first preview is ready.</strong>Explore the page now while Folloze refines the copy and evidence in place.</span>
-        <small><i className="liveDot" />Quality pass running</small>
+        <span><strong>Your first preview is ready.</strong>Explore now while enrichment continues from worker receipts.</span>
+        <small><i className="liveDot" />{storyDetail || "Story enrichment receipt · running"}</small>
       </section>
     );
   }
@@ -1216,7 +1264,7 @@ export function PreviewUpdateNotice({
       <section className="previewUpdateNotice isRunning" role="status" aria-live="polite" data-preview-update-state="running">
         <span className="previewUpdateIcon" aria-hidden="true"><LoaderCircle className="spin" size={18} /></span>
         <span><strong>Updating this preview</strong>Revision {revision} stays fully interactive while Folloze writes the replacement.</span>
-        <small><i className="liveDot" />Revision {revision} live</small>
+        <small><i className="liveDot" />{storyDetail || `Revision ${revision} live`}</small>
       </section>
     );
   }
@@ -1353,7 +1401,7 @@ function LiveChecklist({ session, compact = false }: { session?: PublicTryMeSess
   );
 }
 
-type OverviewFieldKey = "seller" | "target" | "offer" | "audience" | "objective";
+type OverviewFieldKey = "seller" | "target" | "offer" | "audience" | "objective" | "experienceType";
 
 type OverviewRow = {
   key: OverviewFieldKey;
@@ -1451,9 +1499,18 @@ export function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
         || (objectiveValue ? "inferred" : undefined),
       required: true,
       icon: Gauge
+    },
+    experienceType: {
+      key: "experienceType",
+      label: "Experience type",
+      detail: "Inferred output family",
+      value: experienceTypeLabelFor(session),
+      provenance: "inferred",
+      required: true,
+      icon: Layers3
     }
   };
-  // Every motion presents the same five-field grammar. For campaign/content,
+  // Every motion presents the same field grammar. For campaign/content,
   // "target" becomes the people the experience is intended to help rather than
   // a named account. This keeps the visible brief simple without collapsing
   // seller, source/offer, audience, and objective in the underlying session.
@@ -1480,11 +1537,13 @@ export function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
     rows.audience.label = "Buyer group";
     rows.objective.label = "What they should do";
   }
-  return (["seller", "target", "offer", "audience", "objective"] as OverviewFieldKey[]).map((key) => rows[key]);
+  return (["seller", "target", "offer", "audience", "objective", "experienceType"] as OverviewFieldKey[]).map((key) => rows[key]);
 }
 
 export function liveBriefFilledCount(session: PublicTryMeSession): number {
-  return overviewRowsFor(session).filter((row) => Boolean(row.value)).length;
+  return overviewRowsFor(session)
+    .filter((row) => row.key !== "experienceType")
+    .filter((row) => Boolean(row.value)).length;
 }
 
 export function canSkipStreamingCampaign(session: PublicTryMeSession): boolean {
@@ -1522,6 +1581,7 @@ function overviewQuestionFor(field: OverviewFieldKey, useCase: UseCase): string 
     case "objective":
       return "goal";
     case "seller":
+    case "experienceType":
       return undefined;
     default: {
       const exhaustive: never = field;
@@ -1613,7 +1673,6 @@ export function CampaignOverviewRail({
 
 export function UseCasePortals({
   onSelect,
-  onWatchBuild,
   disabled = false
 }: {
   onSelect: (value: UseCase, campaignMode?: CampaignEntryMode) => void;
@@ -1621,30 +1680,56 @@ export function UseCasePortals({
   disabled?: boolean;
 }) {
   return (
-    <div className="entryPathRail" aria-label="Choose what you want to create">
-      {(Object.keys(entryPathOptions) as UseCase[]).map((key) => (
-        <EntryPathMicroDemo
-          key={key}
-          option={{
-            ...entryPathOptions[key],
-            title: useCaseContent[key].cta,
-            description: useCaseContent[key].description
-          }}
-          disabled={disabled}
-          onSelect={(selected) => onSelect(selected, selected === "campaign" ? "campaign" : undefined)}
-          onExampleOpen={(selected) => track("example_opened", {
-            useCase: selected,
-          })}
-        />
-      ))}
-      {onWatchBuild && (
-        <button className="watchBuildEntry" type="button" disabled={disabled} onClick={onWatchBuild}>
-          <span><span className="liveDot" />Worked example</span>
-          <strong>Watch one build</strong>
-          <small>Follow a real campaign build first. You can swap in your company at the end.</small>
-          <ArrowRight size={16} aria-hidden="true" />
-        </button>
-      )}
+    <div className="unifiedEntry" aria-label="Start building a buyer experience">
+      <button
+        type="button"
+        className="unifiedPrimaryCta"
+        disabled={disabled}
+        onClick={() => {
+          captureUnifiedProductEvent("unified_entry_started", {
+            properties: { entry_surface: "homepage", device_class: "desktop" }
+          });
+          onSelect("campaign", "campaign");
+        }}
+      >
+        <span>Primary path</span>
+        <strong>Build a buyer experience</strong>
+        <small>Add your company and a few signals. Folloze infers the experience type and assembles the page.</small>
+        <ArrowRight size={18} aria-hidden="true" />
+      </button>
+
+      <button
+        type="button"
+        className="unifiedSecondaryCta"
+        disabled={disabled}
+        onClick={() => {
+          captureUnifiedProductEvent("unified_entry_started", {
+            properties: { entry_surface: "content_magic", device_class: "desktop" }
+          });
+          onSelect("content");
+        }}
+      >
+        Or open Content Magic to make a URL or PDF interactive
+      </button>
+
+      <aside className="northpeakWorkedStates" aria-label="Optional Northpeak worked states">
+        <span className="sectionKicker">Optional examples</span>
+        <ul>
+          {northpeakWorkedStates.map((example) => (
+            <li key={example.id}>
+              <a
+                href={example.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => track("example_opened", { useCase: example.id === "account" ? "abm" : "campaign" })}
+              >
+                <ExternalLink size={14} aria-hidden="true" />
+                {example.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </aside>
     </div>
   );
 }
@@ -1670,7 +1755,15 @@ function DomainStart({
   preflightStatus: "idle" | "scheduled" | "starting" | "started" | "failed";
   error?: string;
 }) {
-  const portal = campaignMode === "event" ? useCaseContent.content : useCaseContent[useCase];
+  const portal = campaignMode === "event"
+    ? useCaseContent.content
+    : useCase === "campaign"
+      ? {
+          ...useCaseContent.campaign,
+          domainTitle: "Start with your company.",
+          domainBody: "Enter your company domain. Folloze begins matching the brand, then asks only for the signals still missing."
+        }
+      : useCaseContent[useCase];
   const normalizedDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
   const domainReady = likelyDomain.test(normalizedDomain);
   const preflightActive = preflightStatus === "starting" || preflightStatus === "started";
@@ -1694,7 +1787,7 @@ function DomainStart({
             : "Enter a company domain to start the brand match.");
   return (
     <section className={`domainStage ${useCase === "campaign" ? "isStreamingDomain" : ""}`}>
-      <button className="textBack buttonTertiary" type="button" onClick={onBack}><ArrowLeft size={16} />Choose another path</button>
+          <button className="textBack buttonTertiary" type="button" onClick={onBack}><ArrowLeft size={16} />Back to start</button>
       <div className="domainStageGrid">
         <div className="domainPrompt">
           <span className="sectionKicker">Start with the brand</span>
@@ -2731,6 +2824,65 @@ export function getAssemblyPreviewKey(
   return `${session.id}:${session.experience?.artifactRevision ?? 0}`;
 }
 
+const PERSONALIZATION_VARIANT_LABELS: Record<PersonalizationVariantId, string> = {
+  generic: "Generic",
+  account: "Account",
+  account_industry: "Account + industry",
+  account_industry_persona_a: "Persona A",
+  account_industry_persona_b: "Persona B"
+};
+
+/** Preview-only personalization chips. Switching never regenerates the session. */
+export function personalizationVariantOptionsFor(
+  session: Pick<PublicTryMeSession, "experienceSpec">
+): Array<{ id: PersonalizationVariantId; label: string }> {
+  const ids = session.experienceSpec?.personalizationVariantIds ?? [];
+  return PERSONALIZATION_VARIANT_IDS.filter((id) => ids.includes(id)).map((id) => ({
+    id,
+    label: PERSONALIZATION_VARIANT_LABELS[id]
+  }));
+}
+
+export function defaultPersonalizationVariantFor(
+  session: Pick<PublicTryMeSession, "experienceSpec">
+): PersonalizationVariantId {
+  const preferred = session.experienceSpec?.personalizationDefaultVariantId;
+  if (preferred && (session.experienceSpec?.personalizationVariantIds ?? []).includes(preferred)) {
+    return preferred;
+  }
+  return personalizationVariantOptionsFor(session)[0]?.id ?? "generic";
+}
+
+export function PersonalizationVariantBar({
+  options,
+  selectedId,
+  onSelect
+}: {
+  options: Array<{ id: PersonalizationVariantId; label: string }>;
+  selectedId: PersonalizationVariantId;
+  onSelect: (id: PersonalizationVariantId) => void;
+}) {
+  if (options.length < 2) return null;
+  return (
+    <div className="personalizationVariantBar" role="toolbar" aria-label="Personalization preview">
+      <span className="personalizationVariantLabel">Preview as</span>
+      <div className="personalizationVariantChips">
+        {options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className="personalizationVariantChip"
+            aria-pressed={selectedId === option.id}
+            onClick={() => onSelect(option.id)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function previewBoundaryScrollDelta(message: unknown): number | undefined {
   if (!message || typeof message !== "object") return undefined;
   const candidate = message as { source?: unknown; action?: unknown; deltaY?: unknown };
@@ -3021,7 +3173,10 @@ export function TryMeNowApp() {
   const [revealedAt, setRevealedAt] = useState<number>();
   const [previewClockNow, setPreviewClockNow] = useState(() => Date.now());
   const [tuneOpen, setTuneOpen] = useState(false);
+  const [personalizationVariantId, setPersonalizationVariantId] =
+    useState<PersonalizationVariantId>("generic");
   const startedDomain = useRef<string | undefined>(undefined);
+  const stabilizedSellerDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
   const initialPreviewScrolled = useRef(false);
   const analyticsPromptedSession = useRef<string | undefined>(undefined);
@@ -3036,6 +3191,10 @@ export function TryMeNowApp() {
   const buildTrackedSession = useRef<string | undefined>(undefined);
   const previewScrolledSession = useRef<string | undefined>(undefined);
   const activePreflightKey = useRef<string | undefined>(undefined);
+  const provisionalRenderTracked = useRef<string | undefined>(undefined);
+  const finalRenderTracked = useRef<string | undefined>(undefined);
+  const supportRefTracked = useRef<string | undefined>(undefined);
+  const previewOpenedTracked = useRef(false);
   const [preflightCoordinator] = useState(() => (
     new SellerBrandPreflightCoordinator(
       async (selectedUseCase, companyDomain) => {
@@ -3104,6 +3263,7 @@ export function TryMeNowApp() {
     setClaimStatus("idle");
     setClaimError("");
     startedDomain.current = undefined;
+    stabilizedSellerDomain.current = undefined;
     activePreflightKey.current = undefined;
     revealTracked.current = false;
     initialPreviewScrolled.current = false;
@@ -3114,6 +3274,10 @@ export function TryMeNowApp() {
     persistedSectionSignals.current.clear();
     buildTrackedSession.current = undefined;
     previewScrolledSession.current = undefined;
+    provisionalRenderTracked.current = undefined;
+    finalRenderTracked.current = undefined;
+    supportRefTracked.current = undefined;
+    previewOpenedTracked.current = false;
     track("path_selected", { useCase: selected });
     track("use_case_selected", { useCase: selected });
   }, []);
@@ -3145,6 +3309,7 @@ export function TryMeNowApp() {
     setRevealedAt(undefined);
     setTuneOpen(false);
     startedDomain.current = undefined;
+    stabilizedSellerDomain.current = undefined;
     activePreflightKey.current = undefined;
     revealTracked.current = false;
     initialPreviewScrolled.current = false;
@@ -3155,6 +3320,10 @@ export function TryMeNowApp() {
     persistedSectionSignals.current.clear();
     buildTrackedSession.current = undefined;
     previewScrolledSession.current = undefined;
+    provisionalRenderTracked.current = undefined;
+    finalRenderTracked.current = undefined;
+    supportRefTracked.current = undefined;
+    previewOpenedTracked.current = false;
   }, []);
 
   const closeAnalyticsPanel = useCallback(() => setShowAnalyticsPanel(false), []);
@@ -3163,7 +3332,21 @@ export function TryMeNowApp() {
     setDomain(value);
     activePreflightKey.current = undefined;
     const normalized = value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
-    setPreflightStatus(likelyDomain.test(normalized) ? "scheduled" : "idle");
+    const ready = likelyDomain.test(normalized);
+    setPreflightStatus(ready ? "scheduled" : "idle");
+    if (!ready) {
+      stabilizedSellerDomain.current = undefined;
+      return;
+    }
+    if (stabilizedSellerDomain.current === normalized) return;
+    stabilizedSellerDomain.current = normalized;
+    captureUnifiedProductEvent("domain_stabilized", {
+      properties: {
+        domain_role: "seller",
+        normalization: "canonical_host",
+        has_value: true
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -3267,14 +3450,68 @@ export function TryMeNowApp() {
   }, [pollSessionId, pollSessionStatus]);
 
   useEffect(() => {
-    if (!session?.experience || initialPreviewScrolled.current) return;
-    initialPreviewScrolled.current = true;
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [session?.experience]);
+    if (showSavePrompt && session && !canOfferClaimModal(session, {
+      events: clientEvents,
+      previewOpened: previewOpenedTracked.current || Boolean(revealedAt)
+    })) {
+      setShowSavePrompt(false);
+    }
+  }, [clientEvents, revealedAt, session, showSavePrompt]);
 
   useEffect(() => {
-    if (!session || session.status !== "preview_ready_unclaimed" || revealTracked.current) return;
+    if (!session?.experience || initialPreviewScrolled.current) return;
+    if (!canRevealPreview(session)) return;
+    initialPreviewScrolled.current = true;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [session]);
+
+  useEffect(() => {
+    if (!session?.experience || !canRevealPreview(session)) return;
+    const revision = session.experience.artifactRevision ?? 1;
+    const durationMs = Math.max(0, Date.now() - Date.parse(session.createdAt || session.updatedAt));
+    const properties = {
+      artifact_revision: revision,
+      duration_bucket: analyticsDurationBucket(durationMs),
+      quality_gate: analyticsQualityGate(session)
+    };
+    if (isProvisionalExperience(session)) {
+      const key = `${session.id}:provisional:${revision}`;
+      if (provisionalRenderTracked.current === key) return;
+      provisionalRenderTracked.current = key;
+      captureUnifiedProductEvent("provisional_rendered", {
+        sessionId: session.id,
+        properties
+      });
+      return;
+    }
+    const key = `${session.id}:final:${revision}`;
+    if (finalRenderTracked.current === key) return;
+    finalRenderTracked.current = key;
+    captureUnifiedProductEvent("final_rendered", {
+      sessionId: session.id,
+      properties
+    });
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    if (!["generation_failed", "claim_failed"].includes(session.status)) return;
+    if (!session.supportRef || supportRefTracked.current === session.supportRef) return;
+    supportRefTracked.current = session.supportRef;
+    captureUnifiedProductEvent("support_reference_created", {
+      sessionId: session.id,
+      outcome: "failure",
+      properties: {
+        support_ref: session.supportRef,
+        failure_stage: session.status === "claim_failed" ? "claim" : "generation"
+      }
+    });
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || !canRevealPreview(session) || revealTracked.current) return;
     revealTracked.current = true;
+    previewOpenedTracked.current = true;
     const revealTime = Date.now();
     setRevealedAt(revealTime);
     track("experience_revealed", { useCase: session.useCase });
@@ -3294,6 +3531,44 @@ export function TryMeNowApp() {
     tunedSession.current = session.id;
     setTuneOpen(false);
   }, [session?.experience, session?.id, session?.status]);
+
+  useEffect(() => {
+    if (!session?.experienceSpec?.personalizationVariantIds?.length) return;
+    setPersonalizationVariantId(defaultPersonalizationVariantFor(session));
+  }, [session?.experienceSpec?.artifactDigest, session?.id]);
+
+  const selectPersonalizationVariant = useCallback(
+    (variantId: PersonalizationVariantId) => {
+      setPersonalizationVariantId(variantId);
+      const frame = previewFrameRef.current?.contentWindow;
+      if (frame) {
+        try {
+          frame.postMessage(
+            {
+              source: "folloze-builder",
+              type: "set_personalization_variant",
+              variantId
+            },
+            "*"
+          );
+        } catch {
+          // Preview frame may be cross-origin during transient loads; ignore.
+        }
+      }
+      const hasEvidence =
+        variantId !== "generic" ||
+        Boolean(session?.experienceSpec?.personalizationVariantIds?.includes("account"));
+      captureUnifiedProductEvent("personalization_variant_viewed", {
+        sessionId: session?.id,
+        properties: {
+          variant_id: variantId,
+          has_evidence: variantId === "generic" ? false : true
+        }
+      });
+      void hasEvidence;
+    },
+    [session?.experienceSpec?.personalizationVariantIds, session?.id]
+  );
 
   useEffect(() => {
     if (!session?.experience || clientEvents.length < 5) return;
@@ -3670,7 +3945,7 @@ export function TryMeNowApp() {
       id: "preview",
       label: "Interactive preview ready",
       detail: session.experience.readiness === "provisional"
-        ? "The first page is ready while the quality pass continues."
+        ? "The first page is ready while enrichment continues from worker receipts."
         : "The buyer experience is ready to explore.",
       state: "complete" as const
     }] : [])
@@ -3679,11 +3954,23 @@ export function TryMeNowApp() {
 
   const handleStreamingAnswer = (answer: StreamingBriefAnswer) => {
     if (!session || session.useCase !== "campaign") return;
+    const isEdit = streamingAnswers.some((candidate) => candidate.questionId === answer.questionId);
     setStreamingAnswers((current) => [
       ...current.filter((candidate) => candidate.questionId !== answer.questionId),
       answer
     ]);
     setStreamingFocusId(undefined);
+    const fieldKey = answer.questionId === "intent"
+      ? "offer"
+      : answer.questionId === "audience"
+        ? "audience"
+        : answer.questionId === "goal"
+          ? "objective"
+          : "offer";
+    captureUnifiedProductEvent(isEdit ? "brief_field_edited" : "brief_field_confirmed", {
+      sessionId: session.id,
+      properties: { field_key: fieldKey, has_value: Boolean(answer.value.trim()) }
+    });
     track("field_interacted", {
       useCase: session.useCase,
       entryMode: streamingMode,
@@ -3701,6 +3988,21 @@ export function TryMeNowApp() {
       return;
     }
     const patch = streamingCampaignPatchForIntent(answer.value, streamingMode);
+    const interpretation = interpretConversationalBrief(answer.value, "campaign");
+    captureUnifiedProductEvent("input_interpreted", {
+      sessionId: session.id,
+      properties: {
+        interpretation: interpretation.campaignType?.value === "event"
+          ? "event_brief"
+          : interpretation.targetAccount
+            ? "account_brief"
+            : "campaign_brief",
+        field_count: [interpretation.offer, interpretation.audience, interpretation.objective, interpretation.campaignType]
+          .filter(Boolean).length,
+        has_offer: Boolean(interpretation.offer || patch.promotedOffer),
+        has_objective: Boolean(interpretation.objective || patch.objective)
+      }
+    });
     if (patch.campaignType === "event") setCampaignEntryMode("event");
     void patchAnswers(patch);
   };
@@ -3708,6 +4010,10 @@ export function TryMeNowApp() {
   const skipStreamingBrief = () => {
     if (!session || session.useCase !== "campaign") return;
     setStreamingPreviewRequested(true);
+    captureUnifiedProductEvent("brief_field_skipped", {
+      sessionId: session.id,
+      properties: { field_key: "objective" }
+    });
     track("field_interacted", {
       useCase: session.useCase,
       entryMode: streamingMode,
@@ -3721,6 +4027,10 @@ export function TryMeNowApp() {
     setClaimStatus("saving");
     setClaimError("");
     track("claim_started", { useCase: session.useCase });
+    captureUnifiedProductEvent("claim_attempted", {
+      sessionId: session.id,
+      properties: { claim_step: "submit", has_value: Boolean(email.trim()) }
+    });
     try {
       const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}/claim`, {
         method: "POST",
@@ -3743,7 +4053,58 @@ export function TryMeNowApp() {
         useCase: session.useCase,
         code: claimFailure instanceof ApiResponseError ? claimFailure.code ?? "claim_failed" : "claim_failed"
       });
+      if (session.supportRef) {
+        captureUnifiedProductEvent("support_reference_created", {
+          sessionId: session.id,
+          outcome: "failure",
+          properties: {
+            support_ref: session.supportRef,
+            failure_stage: "claim"
+          }
+        });
+      }
     }
+  };
+
+  const retryFailedStage = async (stage: StageKey) => {
+    if (!session) return;
+    captureUnifiedProductEvent("retry_requested", {
+      sessionId: session.id,
+      properties: {
+        retry_scope: "stage",
+        worker_name: workerNameForStage(stage)
+      }
+    });
+    if (stage === "brand") {
+      try {
+        const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}`);
+        setSession((current) => preservePreviewDuringRegeneration(current, result.session));
+        setAnswers(result.session.answers);
+      } catch {
+        // Recover path is best-effort; fall through to a soft brief re-touch.
+      }
+      const style = session.answers.styleVariant || "brand-led";
+      await patchWorkspace({ answers: { styleVariant: style } });
+      return;
+    }
+    const patch = answersPatchForStageRetry(stage, session.answers);
+    if (Object.keys(patch).length === 0) return;
+    await patchAnswers(patch);
+  };
+
+  const openSavePrompt = () => {
+    if (!session) return;
+    const allowed = canOfferClaimModal(session, {
+      events: clientEvents,
+      previewOpened: previewOpenedTracked.current || Boolean(revealedAt)
+    });
+    if (!allowed) return;
+    track("save_opened", { useCase: session.useCase });
+    captureUnifiedProductEvent("modal_displayed", {
+      sessionId: session.id,
+      properties: { modal_kind: "claim", trigger: "save_cta" }
+    });
+    setShowSavePrompt(true);
   };
 
   const allStreamingQuestionsAnswered = streamingQuestions.length > 0
@@ -3755,16 +4116,27 @@ export function TryMeNowApp() {
     && !streamingPreviewRequested
     && !allStreamingQuestionsAnswered
   );
-  const isReveal = Boolean(session?.experience && !keepStreamingBriefOpen);
-  const isProvisionalPreview = Boolean(
-    session?.experience && (
-      session.experience.readiness === "provisional" ||
-      session.status === "preview_provisional"
-    )
+  const generationEligible = isSessionGenerationEligible(session);
+  const isReveal = Boolean(
+    session
+    && canRevealPreview(session)
+    && !keepStreamingBriefOpen
   );
-  const canSaveExperience = canClaimPreview(session);
+  const isProvisionalPreview = isProvisionalExperience(session);
+  const lifecyclePhase = previewLifecyclePhase(session);
+  const lifecycleCopy = previewLifecycleCopy(lifecyclePhase);
+  const personalizationOptions = session ? personalizationVariantOptionsFor(session) : [];
+  const canSaveExperience = canOfferClaimModal(session, {
+    events: clientEvents,
+    previewOpened: previewOpenedTracked.current || Boolean(revealedAt)
+  });
+  const showCampaignPreviewPane = Boolean(
+    session?.useCase === "campaign"
+    && (canRevealPreview(session) || (generationEligible && session.experience))
+  );
   const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
   const revealCopy = session ? getRevealCopy(session) : undefined;
+  const evidenceFindings = session ? audienceHubFindingsFor(session) : [];
   const analyticsSignals: AnalyticsSignal[] = clientEvents.map((event, index) => ({
     id: `${event.at}-${index}`,
     label: event.label,
@@ -3797,18 +4169,22 @@ export function TryMeNowApp() {
     minimal: "Minimal"
   } as const)[answers.styleVariant || "brand-led"];
   const headerStatus = !useCase
-    ? "Build a buyer-ready experience in about a minute"
+    ? "Build a buyer experience in about a minute"
     : !session
-      ? `${useCaseContent[useCase].kicker} selected`
-      : session.status === "claimed"
-        ? "Experience saved and ready to share"
-        : isProvisionalPreview
-          ? "Preview ready · final review in progress"
+      ? useCase === "content"
+        ? "Content Magic selected"
+        : "Buyer experience selected"
+      : lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed"
+        ? lifecycleCopy.statusLabel
+        : lifecyclePhase === "enriching"
+          ? lifecycleCopy.statusLabel
           : isReveal
-            ? "Experience ready to explore"
-            : session.brand
-              ? `${brandNameFor(session)} brand matched`
-              : "Matching the public brand";
+            ? lifecycleCopy.statusLabel
+            : generationEligible
+              ? "Material brief ready · composing preview"
+              : session.brand
+                ? `${brandNameFor(session)} brand matched`
+                : "Matching the public brand";
 
   return (
     <>
@@ -3820,29 +4196,23 @@ export function TryMeNowApp() {
       <header className="siteHeader">
         <Link href="/" aria-label="Folloze Try Me Now home"><Image src="/brand/folloze-logo.svg" width={101} height={25} alt="Folloze" priority /><span>Try Me Now</span></Link>
         <div className="headerPromise" role="status" aria-live="polite"><span className="liveDot" />{headerStatus}</div>
-        {session && <button className="resetButton" type="button" onClick={resetExperience}><RefreshCw size={14} />Start over</button>}
+        {session && <button className="resetButton resetButtonProminent" type="button" onClick={resetExperience}><RefreshCw size={16} />Start over</button>}
       </header>
 
       {!useCase && (
         <section className="entryStage">
           <div className="entryHero">
             <span className="sectionKicker">Try Folloze</span>
-            <h1>Build a buyer-ready experience.</h1>
-            <p>Choose a starting point. Add a company and a few details. Folloze builds a branded experience your buyers can explore.</p>
+            <h1>Build a buyer experience.</h1>
+            <p>Start with your company. Answer one missing signal at a time. Folloze assembles a branded buyer experience you can explore before you save.</p>
             <div className="entryPromise" aria-label="Try Me Now experience promise">
-              <span><CircleCheck size={14} />Start with a guided brief</span>
+              <span><CircleCheck size={14} />One guided conversation</span>
               <span><Clock3 size={14} />First preview in about a minute</span>
               <span><ShieldCheck size={14} />Preview first. Save when ready.</span>
             </div>
           </div>
           <UseCasePortals
             onSelect={selectUseCase}
-            onWatchBuild={() => {
-              const exampleDomain = "folloze.com";
-              setUseCase("campaign");
-              setDomain(exampleDomain);
-              void startSession("campaign", exampleDomain);
-            }}
             disabled={!interactionReady}
           />
           <div className="entryFooter">Start with a company domain. Explore the result before sharing your email.</div>
@@ -3874,23 +4244,71 @@ export function TryMeNowApp() {
               <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
               {session.useCase === "campaign" ? (
                 <StreamingBriefComposer
-                  mode={streamingMode}
+                  mode="unified"
                   questions={streamingQuestions}
                   currentQuestionId={streamingCurrentQuestionId}
                   answers={canonicalStreamingAnswers}
                   receipts={streamingReceipts}
-                  brief={{
-                    Company: brandNameFor(session),
-                    Experience: streamingMode === "event" ? "Event promotion" : "Campaign landing page",
-                    Offer: answers.promotedOffer,
-                    Audience: answers.audience === "Other" ? answers.customAudience : answers.audience,
-                    Goal: answers.objective
-                  }}
+                  summaryFields={[
+                    {
+                      key: "seller",
+                      label: "Seller",
+                      value: brandNameFor(session),
+                      editable: false
+                    },
+                    {
+                      key: "target",
+                      label: "Audience",
+                      value: answers.audience === "Other" ? answers.customAudience : answers.audience,
+                      editable: true
+                    },
+                    {
+                      key: "offer",
+                      label: "Offer",
+                      value: answers.promotedOffer,
+                      editable: true
+                    },
+                    {
+                      key: "objective",
+                      label: "Objective",
+                      value: answers.objective,
+                      editable: true
+                    },
+                    {
+                      key: "experience_type",
+                      label: "Experience type",
+                      value: experienceTypeLabelFor(session),
+                      editable: false
+                    }
+                  ] satisfies StreamingBriefSummaryField[]}
                   canSkip={canSkipStreaming}
                   skipLabel="Skip to preview"
                   disabled={isSaving}
                   onAnswer={handleStreamingAnswer}
-                  onStepChange={setStreamingFocusId}
+                  onStepChange={(questionId) => {
+                    setStreamingFocusId(questionId);
+                    captureUnifiedProductEvent("brief_field_edited", {
+                      sessionId: session.id,
+                      properties: {
+                        field_key: questionId === "intent" ? "offer" : questionId === "goal" ? "objective" : "audience",
+                        has_value: true
+                      }
+                    });
+                  }}
+                  onSummaryEdit={(fieldKey) => {
+                    const questionId = fieldKey === "offer"
+                      ? "intent"
+                      : fieldKey === "objective"
+                        ? "goal"
+                        : fieldKey === "audience" || fieldKey === "target"
+                          ? "audience"
+                          : undefined;
+                    if (questionId) setStreamingFocusId(questionId);
+                    captureUnifiedProductEvent("brief_field_edited", {
+                      sessionId: session.id,
+                      properties: { field_key: fieldKey, has_value: true }
+                    });
+                  }}
                   onSkip={skipStreamingBrief}
                 />
               ) : (
@@ -3941,10 +4359,33 @@ export function TryMeNowApp() {
           {session.useCase === "campaign" && (
             <div className="buildPanel streamingPreviewPanel">
               <div className="buildTop">
-                <span className="sectionKicker">{session.experience ? "Live preview" : "Brand lock"}</span>
-                <strong>{session.experience ? "The page stays visible while the brief improves." : buildPanelCopy.headline}</strong>
+                <span className="sectionKicker">
+                  {showCampaignPreviewPane
+                    ? "Live preview"
+                    : generationEligible
+                      ? "Composing"
+                      : "Brand lock"}
+                </span>
+                <strong>
+                  {showCampaignPreviewPane
+                    ? "The page stays visible while enrichment continues."
+                    : generationEligible
+                      ? "The material brief is ready. Provisional preview starts next."
+                      : buildPanelCopy.headline}
+                </strong>
               </div>
-              <AssemblyPreview session={session} iframeRef={previewFrameRef} />
+              {showCampaignPreviewPane ? (
+                <AssemblyPreview session={session} iframeRef={previewFrameRef} />
+              ) : (
+                <div className="previewEligibilityHold" role="status" data-preview-gated="material-brief">
+                  <span className="sectionKicker">Preview waits on the material brief</span>
+                  <p>
+                    {generationEligible
+                      ? "Generation is eligible. Folloze is composing the first interactive preview."
+                      : "Finish seller, audience or target, offer, and objective before the preview reveals."}
+                  </p>
+                </div>
+              )}
             </div>
           )}
           <aside className="processRail">
@@ -3962,43 +4403,49 @@ export function TryMeNowApp() {
       )}
 
       {session && isReveal && revealCopy && (
-        <section className="revealStage">
+        <section className="revealStage" data-lifecycle-phase={lifecyclePhase}>
           <div className="revealIntro">
             <div className="revealIntroCopy">
               <span className="sectionKicker">
-                {session.status === "claimed"
-                  ? "Saved. Shareable. Measurable."
-                  : isProvisionalPreview
-                    ? "First preview ready"
-                    : revealCopy.kicker}
+                {lifecycleCopy.kicker}
               </span>
               <h1>{getRevealShellHeadline(session)}</h1>
               <p className="revealPayoff">
                 {isProvisionalPreview
-                  ? "The experience is interactive now. Folloze is finishing the quality pass without taking the page away."
+                  ? "The experience is interactive now. Enrichment continues from worker receipts without taking the page away."
                   : revealCopy.summary}
               </p>
-              <div className="revealMeta"><span>Built from public brand and company signals</span><i /><span>{isProvisionalPreview ? "Refining before save" : "Private until you save it"}</span></div>
+              <div className="revealMeta">
+                <span>Built from public brand and company signals</span>
+                <i />
+                <span>{lifecycleCopy.publicationNote}</span>
+              </div>
             </div>
             <div className="revealActions">
               {session.status === "claimed" ? (
                 <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
               ) : canSaveExperience ? (
-                <button className="buttonPrimary" type="button" onClick={() => {
-                  track("save_opened", { useCase: session.useCase });
-                  setShowSavePrompt(true);
-                }}><Mail size={16} />Save this preview</button>
+                <button className="buttonPrimary" type="button" onClick={openSavePrompt}>
+                  <Mail size={16} />Save this preview
+                </button>
+              ) : isProvisionalPreview ? (
+                <span className="buttonPrimary" role="status">
+                  <LoaderCircle className="spin" size={16} />
+                  Enriching from receipts
+                </span>
               ) : (
-                <span className="buttonPrimary" role="status"><LoaderCircle className="spin" size={16} />Quality pass running</span>
+                <span className="buttonSecondary" role="status">
+                  Explore the preview to unlock save
+                </span>
               )}
               <a className="buttonSecondary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">{isProvisionalPreview ? "Open working preview" : "Open full screen"}<ExternalLink size={16} /></a>
             </div>
           </div>
           <PreviewUpdateNotice
             session={session}
-            onRetry={() => void patchAnswers({ objective: session.answers.objective })}
+            onRetry={() => void retryFailedStage("story")}
           />
-          <div className="revealGrid">
+          <div className="revealGrid revealGridLifecycle">
             <div className="revealPreview">
               <div className="previewControlBar">
                 <div className="desktopPreviewLabel">
@@ -4006,12 +4453,21 @@ export function TryMeNowApp() {
                   <span><strong>Live preview</strong><small>Scroll inside to explore the full experience.</small></span>
                 </div>
                 <div className="previewToolbarActions">
-                  {session.status === "claimed" ? (
-                    <span className="previewReadinessStatus isSaved"><Check size={14} />Saved</span>
-                  ) : isProvisionalPreview ? (
-                    <span className="previewReadinessStatus isRefining"><LoaderCircle className="spin" size={14} />Interactive · refining</span>
+                  {lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed" ? (
+                    <span className="previewReadinessStatus isSaved" data-lifecycle-phase={lifecyclePhase}>
+                      <Check size={14} />{lifecycleCopy.statusLabel}
+                    </span>
+                  ) : lifecyclePhase === "enriching" ? (
+                    <span className="previewReadinessStatus isEnriching" data-lifecycle-phase="enriching">
+                      <LoaderCircle className="spin" size={14} />Interactive · enriching
+                    </span>
                   ) : (
-                    <span className={`previewReadinessStatus ${previewSecondsRemaining <= 300 ? "isWarning" : ""}`}><Clock3 size={14} />Ready to save · {previewCountdown}</span>
+                    <span
+                      className={`previewReadinessStatus ${previewSecondsRemaining <= 300 ? "isWarning" : ""}`}
+                      data-lifecycle-phase="preview_ready"
+                    >
+                      <Clock3 size={14} />Preview ready · {previewCountdown}
+                    </span>
                   )}
                   <button
                     className="previewAnalyticsButton"
@@ -4028,6 +4484,11 @@ export function TryMeNowApp() {
                   </button>
                 </div>
               </div>
+              <PersonalizationVariantBar
+                options={personalizationOptions}
+                selectedId={personalizationVariantId}
+                onSelect={selectPersonalizationVariant}
+              />
               <div className="desktopPreviewShell">
                 <AssemblyPreview session={session} iframeRef={previewFrameRef} />
               </div>
@@ -4102,19 +4563,39 @@ export function TryMeNowApp() {
                 {isProvisionalPreview ? "Explore the working preview" : "Explore the full experience"}<ArrowRight size={16} />
               </a>
             </div>
-            <aside className="revealRail">
-              <CampaignOverviewRail
+            <aside className="revealRail revealEvidenceRail">
+              <PreviewEvidenceActivitySurface
                 session={session}
-                onEdit={() => {
-                  setTuneOpen(true);
-                  window.requestAnimationFrame(() => {
-                    document.querySelector<HTMLElement>(isProvisionalPreview ? ".provisionalBriefEditor" : ".experienceControlDeck")?.scrollIntoView({ behavior: "smooth", block: "center" });
-                  });
-                }}
+                activity={analyticsSignals.map((signal) => ({
+                  id: signal.id,
+                  label: signal.label,
+                  detail: signal.detail
+                }))}
+                evidence={evidenceFindings.map((finding) => ({
+                  id: finding.id,
+                  label: finding.label,
+                  text: finding.text
+                }))}
+                onRetryStage={(stage) => void retryFailedStage(stage)}
+                personalizationSlot={
+                  <div data-personalization-seam="tabs-host" aria-label="Personalization preview variants">
+                    {/* Personalization workstream owns variant tabs here. */}
+                  </div>
+                }
               />
             </aside>
           </div>
-          <div className="revealFooter"><span>{session.status === "claimed" ? "Saved URL" : "Temporary URL"}</span><code>{session.liveUrl || session.temporaryUrl}</code><span>{session.status === "claimed" ? "Saved" : isProvisionalPreview ? "Quality pass in progress" : "Expires 30 minutes after generation"}</span></div>
+          <div className="revealFooter">
+            <span>{lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed" ? "Saved URL" : "Temporary URL"}</span>
+            <code>{session.liveUrl || session.temporaryUrl}</code>
+            <span>
+              {lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed"
+                ? lifecycleCopy.statusLabel
+                : lifecyclePhase === "enriching"
+                  ? "Enrichment continuing from worker receipts"
+                  : "Expires 30 minutes after generation"}
+            </span>
+          </div>
           {isProvisionalPreview && tuneOpen && (
             <section className="provisionalBriefEditor" aria-labelledby="provisional-brief-title">
               <div className="provisionalBriefEditorIntro">

@@ -7,8 +7,10 @@ import {
   campaignIntakeComplete,
   canSkipStreamingCampaign,
   ctaValueForSession,
+  defaultPersonalizationVariantFor,
   describePreviewAnalyticsEvent,
   entryPathOptions,
+  northpeakWorkedStates,
   getAssemblyPreviewKey,
   getBuildPanelCopy,
   getGuidedQuestionCopy,
@@ -18,6 +20,7 @@ import {
   liveBriefFilledCount,
   objectiveContextPrompt,
   overviewRowsFor,
+  personalizationVariantOptionsFor,
   preservePreviewDuringRegeneration,
   previewBoundaryScrollDelta,
   recommendedObjectiveFor,
@@ -110,26 +113,42 @@ describe("Try Me Now experience copy", () => {
     expect(entryPathOptions.abm).toMatchObject({
       title: "Build a 1:1 account experience",
       actionLabel: "Build a 1:1 account experience",
-      exampleLabel: "See the Aprio + Georgia-Pacific example",
-      exampleUrl: "https://experience.folloze.com/aprio-for-georgia-pacific",
-      previewImage: "/entry/aprio-georgia-pacific-preview.webp",
-      previewAlt: "Aprio account experience tailored for Georgia-Pacific"
+      exampleLabel: "See a Northpeak account experience",
+      exampleUrl: "https://experience.folloze.com/northpeak--folloze",
+      previewImage: "/entry/abm-preview.webp",
+      previewAlt: "Northpeak account experience tailored for a named buyer account"
     });
     expect(entryPathOptions.campaign).toMatchObject({
       title: "Launch a campaign landing page",
       actionLabel: "Launch a campaign landing page",
-      exampleLabel: "See the ServiceNow AI platform campaign",
-      exampleUrl: "https://engage.folloze.com/servicenow-ai-platform-campaign",
-      previewAlt: "ServiceNow-branded AI platform campaign landing page"
+      exampleLabel: "See a Northpeak personalized campaign",
+      exampleUrl: "https://engage.folloze.com/120367",
+      previewAlt: "Northpeak-branded personalized campaign landing page"
     });
     expect(entryPathOptions.content).toMatchObject({
-      eyebrow: "Content",
+      eyebrow: "Content Magic",
       title: "Make content interactive",
       actionLabel: "Make content interactive",
-      exampleLabel: "See the Cisco Hybrid Mesh Firewall report as an experience",
-      exampleUrl: "https://engage.folloze.com/cisco-hmf-example",
+      exampleLabel: "See a Northpeak Content Magic example",
+      exampleUrl: "https://engage.folloze.com/120367",
       previewImage: "/entry/content-preview.webp"
     });
+    expect(JSON.stringify(entryPathOptions)).not.toMatch(/Aprio|ServiceNow|Cisco|aprio-for-georgia-pacific|servicenow-ai-platform|cisco-hmf/i);
+  });
+
+  it("exposes optional Northpeak worked states without making them the primary entry", () => {
+    expect(northpeakWorkedStates).toEqual([
+      {
+        id: "account",
+        label: "See a Northpeak account experience",
+        href: "https://experience.folloze.com/northpeak--folloze"
+      },
+      {
+        id: "campaign",
+        label: "See a Northpeak personalized campaign",
+        href: "https://engage.folloze.com/120367"
+      }
+    ]);
   });
 
   it("turns one event sentence into the existing event campaign contract", () => {
@@ -173,6 +192,7 @@ describe("Try Me Now experience copy", () => {
     expect(rows.find((row) => row.key === "audience")?.provenance).toBe("inferred");
     expect(rows.find((row) => row.key === "objective")?.value).toBe("Launch or announce");
     expect(rows.find((row) => row.key === "objective")?.provenance).toBe("inferred");
+    expect(rows.find((row) => row.key === "experienceType")?.value).toBe("Product campaign");
     expect(rows.some((row) => !row.value && row.key !== "offer")).toBe(false);
   });
 
@@ -514,7 +534,7 @@ describe("Try Me Now experience copy", () => {
 
   it("turns bounded preview context into semantic engagement labels", () => {
     expect(describePreviewAnalyticsEvent("section_view", { sectionId: "supporting-resources" })).toEqual({
-      label: "Viewed Supporting proof",
+      label: "Viewed Evidence",
       detail: "The visitor reached a new part of the buyer journey."
     });
     expect(describePreviewAnalyticsEvent("topic_select", { lensId: "lens-2" }).label).toBe(
@@ -524,5 +544,38 @@ describe("Try Me Now experience copy", () => {
       label: "Tested the closing CTA",
       detail: "This preview captured next-step intent without leaving or losing the experience."
     });
+  });
+
+  it("exposes personalization preview options without regenerating the session", () => {
+    const withVariants = session("abm", {
+      experienceSpec: {
+        schemaVersion: "2.0",
+        revision: 1,
+        sourceBriefRevision: 1,
+        artifactDigest: "digest",
+        renderers: {
+          web: { status: "ready", hosting: "app" },
+          folloze: { status: "disabled", reason: "public-runtime-html-only" }
+        },
+        sectionCount: 3,
+        contentItemCount: 2,
+        personalizationVariantIds: [
+          "generic",
+          "account",
+          "account_industry",
+          "account_industry_persona_a",
+          "account_industry_persona_b"
+        ],
+        personalizationDefaultVariantId: "account"
+      }
+    });
+    expect(personalizationVariantOptionsFor(withVariants).map((item) => item.id)).toEqual([
+      "generic",
+      "account",
+      "account_industry",
+      "account_industry_persona_a",
+      "account_industry_persona_b"
+    ]);
+    expect(defaultPersonalizationVariantFor(withVariants)).toBe("account");
   });
 });

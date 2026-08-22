@@ -35,26 +35,36 @@ const questions = [
 ] as const;
 
 describe("StreamingBriefComposer", () => {
-  it("shows one question at a time and collapses finished answers", () => {
+  it("shows one question at a time and keeps finished answers in the transcript", () => {
     const onAnswer = vi.fn();
     const onStepChange = vi.fn();
     render(
       <StreamingBriefComposer
-        mode="campaign"
+        mode="unified"
         questions={questions}
         currentQuestionId="audience"
         answers={[{ questionId: "intent", label: "Campaign", value: "Harmony for operations leaders" }]}
+        summaryFields={[
+          { key: "seller", label: "Seller", value: "Folloze", editable: false },
+          { key: "offer", label: "Offer", value: "Harmony", editable: true },
+          { key: "experience_type", label: "Experience type", value: "Product campaign", editable: false }
+        ]}
         canSkip
         onAnswer={onAnswer}
         onStepChange={onStepChange}
+        onSummaryEdit={vi.fn()}
         onSkip={vi.fn()}
       />
     );
 
-    expect(screen.queryByText("What are you taking to market?")).not.toBeInTheDocument();
-    expect(screen.getByText("Who should this reach?")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Harmony for operations leaders/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Harmony for operations leaders/i }));
+    expect(screen.queryByRole("heading", { name: "What are you taking to market?" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Who should this reach/i)).toBeInTheDocument();
+    expect(screen.getByText("Next signal · Audience")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Edit Campaign: Harmony for operations leaders/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Live Brief" })).toBeInTheDocument();
+    expect(screen.getByText("Product campaign")).toBeInTheDocument();
+    expect(screen.getByText("What are you taking to market?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Edit Campaign: Harmony for operations leaders/i }));
     expect(onStepChange).toHaveBeenCalledWith("intent");
     fireEvent.click(screen.getByRole("button", { name: "Enterprise architects" }));
     expect(onAnswer).toHaveBeenCalledWith({
@@ -79,5 +89,30 @@ describe("StreamingBriefComposer", () => {
     );
 
     expect(screen.getByRole("button", { name: "Skip to preview" })).toBeDisabled();
+  });
+
+  it("lets sellers edit compact Live Brief fields from the summary", () => {
+    const onSummaryEdit = vi.fn();
+    render(
+      <StreamingBriefComposer
+        mode="unified"
+        questions={questions}
+        currentQuestionId="goal"
+        answers={[
+          { questionId: "intent", label: "Campaign", value: "Secure AI Live" },
+          { questionId: "audience", label: "Audience", value: "Security leaders" }
+        ]}
+        summaryFields={[
+          { key: "offer", label: "Offer", value: "Secure AI Live", editable: true },
+          { key: "audience", label: "Audience", value: "Security leaders", editable: true },
+          { key: "objective", label: "Objective", value: undefined, editable: true }
+        ]}
+        onAnswer={vi.fn()}
+        onSummaryEdit={onSummaryEdit}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Offer" }));
+    expect(onSummaryEdit).toHaveBeenCalledWith("offer");
   });
 });

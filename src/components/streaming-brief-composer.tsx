@@ -1,10 +1,10 @@
 "use client";
 
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 
 import styles from "./streaming-brief-composer.module.css";
 
-export type StreamingBriefMode = "campaign" | "event";
+export type StreamingBriefMode = "campaign" | "event" | "unified";
 
 export type StreamingBriefQuestion = {
   id: string;
@@ -35,16 +35,28 @@ export type StreamingAudienceFinding = {
   text: string;
 };
 
+export type StreamingBriefSummaryField = {
+  key: "seller" | "target" | "audience" | "offer" | "objective" | "experience_type";
+  label: string;
+  value?: string;
+  editable?: boolean;
+};
+
 const modeCopy: Record<StreamingBriefMode, { eyebrow: string; title: string; detail: string }> = {
+  unified: {
+    eyebrow: "Buyer experience",
+    title: "Tell Folloze what to build.",
+    detail: "One missing signal at a time. Your answers stay in this transcript, and the Live Brief stays editable."
+  },
   campaign: {
     eyebrow: "Campaign brief",
     title: "Tell Folloze what you want to launch.",
-    detail: "One question at a time. The Live Brief on the right is the source of truth. Preview as soon as three signals are in place."
+    detail: "One question at a time. The Live Brief stays visible and editable while Folloze interprets your answers."
   },
   event: {
     eyebrow: "Event brief",
     title: "Tell Folloze what you want to promote.",
-    detail: "Describe the webinar or field event. Folloze will ask only what is still missing, then keep the page visible while it builds."
+    detail: "Describe the webinar or field event. Folloze asks only what is still missing, then keeps the page visible while it builds."
   }
 };
 
@@ -55,12 +67,14 @@ export type StreamingBriefComposerProps = {
   answers: readonly StreamingBriefAnswer[];
   receipts?: readonly StreamingBriefReceipt[];
   brief?: Readonly<Record<string, string | undefined>>;
+  summaryFields?: readonly StreamingBriefSummaryField[];
   canSkip?: boolean;
   skipLabel?: string;
   disabled?: boolean;
   onAnswer: (answer: StreamingBriefAnswer) => void;
   onStepChange?: (questionId: string) => void;
   onSkip?: () => void;
+  onSummaryEdit?: (fieldKey: StreamingBriefSummaryField["key"]) => void;
 };
 
 export function StreamingBriefComposer({
@@ -70,15 +84,19 @@ export function StreamingBriefComposer({
   answers,
   receipts = [],
   brief = {},
+  summaryFields = [],
   canSkip = false,
   skipLabel = "Skip to preview",
   disabled = false,
   onAnswer,
   onStepChange,
-  onSkip
+  onSkip,
+  onSummaryEdit
 }: StreamingBriefComposerProps) {
   const [draft, setDraft] = useState("");
   const descriptionId = useId();
+  const summaryId = useId();
+  const questionInputRef = useRef<HTMLTextAreaElement>(null);
   const copy = modeCopy[mode];
   const currentQuestion = questions.find((question) => question.id === currentQuestionId)
     ?? questions.find((question) => !answers.some((answer) => answer.questionId === question.id));
@@ -90,6 +108,21 @@ export function StreamingBriefComposer({
     ? Math.max(questions.findIndex((question) => question.id === currentQuestion.id) + 1, 1)
     : questions.length;
   const completedAnswers = answers.filter((answer) => answer.questionId !== currentQuestion?.id);
+  const visibleSummary = summaryFields.length > 0
+    ? summaryFields
+    : Object.entries(brief)
+      .filter(([, fieldValue]) => Boolean(fieldValue))
+      .map(([label, fieldValue]) => ({
+        key: label.toLowerCase().replace(/\s+/g, "_") as StreamingBriefSummaryField["key"],
+        label,
+        value: fieldValue,
+        editable: false
+      }));
+
+  useEffect(() => {
+    if (!currentQuestion || disabled) return;
+    questionInputRef.current?.focus();
+  }, [currentQuestion?.id, disabled]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -106,23 +139,69 @@ export function StreamingBriefComposer({
         <p id={descriptionId}>{copy.detail}</p>
       </header>
 
-      <div className={styles.stream} aria-label="Brief conversation">
-        {completedAnswers.map((answer) => (
-          <button
-            type="button"
-            className={styles.turn}
-            key={`${answer.questionId}:${answer.value}`}
-            disabled={disabled || !onStepChange}
-            onClick={() => onStepChange?.(answer.questionId)}
-          >
-            <small>{answer.label}</small>
-            <strong>{answer.value}</strong>
-            <span>Edit</span>
-          </button>
-        ))}
+      {visibleSummary.length > 0 && (
+        <section className={styles.summary} aria-labelledby={summaryId}>
+          <div className={styles.summaryHeader}>
+            <h3 id={summaryId}>Live Brief</h3>
+            <span>Editable anytime</span>
+          </div>
+          <ul className={styles.summaryList}>
+            {visibleSummary.map((field) => {
+              const complete = Boolean(field.value?.trim());
+              const content = (
+                <>
+                  <small>{field.label}</small>
+                  <strong>{field.value?.trim() || "Waiting"}</strong>
+                </>
+              );
+              if (field.editable && onSummaryEdit) {
+                return (
+                  <li key={field.key}>
+                    <button
+                      type="button"
+                      className={complete ? styles.summaryComplete : styles.summaryPending}
+                      disabled={disabled}
+                      onClick={() => onSummaryEdit(field.key)}
+                      aria-label={`Edit ${field.label}`}
+                    >
+                      {content}
+                      <span>Edit</span>
+                    </button>
+                  </li>
+                );
+              }
+              return (
+                <li key={field.key} className={complete ? styles.summaryComplete : styles.summaryPending}>
+                  <div>{content}</div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      <div className={styles.stream} aria-label="Brief conversation" role="log" aria-live="polite">
+        {completedAnswers.map((answer) => {
+          const question = questions.find((candidate) => candidate.id === answer.questionId);
+          return (
+            <button
+              type="button"
+              className={styles.turn}
+              key={`${answer.questionId}:${answer.value}`}
+              disabled={disabled || !onStepChange}
+              onClick={() => onStepChange?.(answer.questionId)}
+              aria-label={`Edit ${answer.label}: ${answer.value}`}
+            >
+              <small>{answer.label}</small>
+              {question?.prompt && <em className={styles.turnPrompt}>{question.prompt}</em>}
+              <strong>{answer.value}</strong>
+              <span>Edit</span>
+            </button>
+          );
+        })}
         {currentQuestion ? (
           <form className={styles.question} onSubmit={submit} aria-describedby={descriptionId}>
-            <span className={styles.step}>Question {stepIndex} of {questions.length}</span>
+            <span className={styles.step}>Next signal · {currentQuestion.label}</span>
             <label htmlFor={`streaming-brief-${currentQuestion.id}`}>
               <strong>{currentQuestion.prompt}</strong>
               {currentQuestion.hint && <small>{currentQuestion.hint}</small>}
@@ -147,6 +226,7 @@ export function StreamingBriefComposer({
               </div>
             )}
             <textarea
+              ref={questionInputRef}
               id={`streaming-brief-${currentQuestion.id}`}
               value={value}
               onChange={(event) => setDraft(event.target.value)}
@@ -176,6 +256,9 @@ export function StreamingBriefComposer({
                 </button>
               )}
             </div>
+            <p className={styles.progressHint} aria-hidden="true">
+              Question {stepIndex} of {questions.length}
+            </p>
           </form>
         ) : (
           <div className={styles.complete} role="status">
@@ -197,10 +280,6 @@ export function StreamingBriefComposer({
           </p>
         ))}
       </section>
-
-      {Object.values(brief).some(Boolean) && (
-        <p className={styles.briefHint}>Live Brief is updating in the sidebar. Change any signal there or edit a previous answer.</p>
-      )}
     </section>
   );
 }

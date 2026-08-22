@@ -268,7 +268,7 @@ describe("PreviewUpdateNotice", () => {
     const notice = screen.getByRole("status");
     expect(notice).toHaveAttribute("data-preview-update-state", "provisional");
     expect(notice).toHaveTextContent("Your first preview is ready.");
-    expect(notice).toHaveTextContent("Quality pass running");
+    expect(notice).toHaveTextContent("Story enrichment receipt · running");
     expect(screen.getByTitle("Generated buyer experience preview")).toBeInTheDocument();
     expect(canClaimPreview(provisional)).toBe(false);
     expect(canClaimPreview(readySession)).toBe(true);
@@ -432,7 +432,8 @@ describe("guided campaign workspace", () => {
     expect(screen.getByText("Jitterbit")).toBeInTheDocument();
     expect(screen.getByText("Jitterbit Harmony")).toBeInTheDocument();
     expect(screen.getAllByText("Enterprise architects").length).toBeGreaterThan(0);
-    expect(document.querySelectorAll('[data-overview-field]')).toHaveLength(5);
+    expect(document.querySelectorAll('[data-overview-field]')).toHaveLength(6);
+    expect(document.querySelector('[data-overview-field="experienceType"]')).toHaveTextContent("Product campaign");
   });
 
   it("keeps the campaign offer incomplete when only a campaign type is selected", () => {
@@ -454,7 +455,8 @@ describe("guided campaign workspace", () => {
 
     expect(screen.getByLabelText("Live experience brief")).toBeInTheDocument();
     expect(document.querySelector('[data-overview-field="offer"]')).toHaveTextContent("Waiting for this signal");
-    expect(screen.queryByText("Product campaign")).not.toBeInTheDocument();
+    expect(document.querySelector('[data-overview-field="offer"]')).not.toHaveTextContent("Product campaign");
+    expect(document.querySelector('[data-overview-field="experienceType"]')).toHaveTextContent("Product campaign");
     expect(document.querySelector('[data-overview-field="objective"]')).toHaveTextContent("Launch or announce");
     expect(document.querySelector('[data-overview-field="objective"]')).toHaveTextContent("We inferred");
   });
@@ -488,7 +490,7 @@ describe("guided campaign workspace", () => {
       />
     );
 
-    expect(document.querySelector("[data-overview-count]")).toHaveTextContent("5 of 5");
+    expect(document.querySelector("[data-overview-count]")).toHaveTextContent("6 of 6");
     expect(screen.getByRole("heading", { name: "What we know about Jitterbit" })).toBeInTheDocument();
     expect(screen.getByText(/branded buyer path/i)).toBeInTheDocument();
     expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument();
@@ -498,29 +500,46 @@ describe("guided campaign workspace", () => {
     const onEdit = vi.fn();
     render(<CampaignOverviewRail session={readySession} onEdit={onEdit} />);
 
-    for (const label of ["Building as", "Who it is for", "What it is about", "Buyer group", "What they should do"]) {
+    for (const label of ["Building as", "Who it is for", "What it is about", "Buyer group", "What they should do", "Experience type"]) {
       fireEvent.click(screen.getByRole("button", { name: `Edit ${label}` }));
     }
 
-    expect(onEdit.mock.calls.map(([field]) => field)).toEqual(["seller", "target", "offer", "audience", "objective"]);
+    expect(onEdit.mock.calls.map(([field]) => field)).toEqual([
+      "seller",
+      "target",
+      "offer",
+      "audience",
+      "objective",
+      "experienceType"
+    ]);
   });
 
-  it("offers a zero-typing worked example without replacing the three starting paths", () => {
-    const onWatchBuild = vi.fn();
-    render(<UseCasePortals onSelect={vi.fn()} onWatchBuild={onWatchBuild} />);
-
-    expect(document.querySelectorAll(".entryPathRail > *")).toHaveLength(4);
-    fireEvent.click(screen.getByRole("button", { name: /Watch one build/i }));
-    expect(onWatchBuild).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/swap in your company at the end/i)).toBeInTheDocument();
-  });
-
-  it("routes the third starting path into Content Magic", () => {
+  it("offers one dominant buyer-experience entry with Content Magic secondary and Northpeak worked states", () => {
     const onSelect = vi.fn();
     render(<UseCasePortals onSelect={onSelect} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Make content interactive/i }));
-    expect(onSelect).toHaveBeenCalledWith("content", undefined);
+    expect(screen.getByRole("button", { name: /Build a buyer experience/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Watch one build/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Aprio|ServiceNow|Cisco Hybrid Mesh/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Northpeak account experience/i })).toHaveAttribute(
+      "href",
+      "https://experience.folloze.com/northpeak--folloze"
+    );
+    expect(screen.getByRole("link", { name: /Northpeak personalized campaign/i })).toHaveAttribute(
+      "href",
+      "https://engage.folloze.com/120367"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Build a buyer experience/i }));
+    expect(onSelect).toHaveBeenCalledWith("campaign", "campaign");
+  });
+
+  it("routes Content Magic through a secondary entry path", () => {
+    const onSelect = vi.fn();
+    render(<UseCasePortals onSelect={onSelect} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Content Magic/i }));
+    expect(onSelect).toHaveBeenCalledWith("content");
   });
 
   it("collects a named campaign offer and optional public source before audience selection", () => {
