@@ -47,7 +47,6 @@ import {
   AnalyticsSignalToast,
   AudienceEvidenceTray,
   CtaStyleControl,
-  EntryPathMicroDemo,
   ExpirySaveValuePanel,
   InstantBrandLockStrip,
   ToneChips,
@@ -3173,8 +3172,10 @@ export function TryMeNowApp() {
   const [revealedAt, setRevealedAt] = useState<number>();
   const [previewClockNow, setPreviewClockNow] = useState(() => Date.now());
   const [tuneOpen, setTuneOpen] = useState(false);
-  const [personalizationVariantId, setPersonalizationVariantId] =
-    useState<PersonalizationVariantId>("generic");
+  const [personalizationSelection, setPersonalizationSelection] = useState<{
+    key: string;
+    variantId: PersonalizationVariantId;
+  }>({ key: "", variantId: "generic" });
   const startedDomain = useRef<string | undefined>(undefined);
   const stabilizedSellerDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
@@ -3194,7 +3195,6 @@ export function TryMeNowApp() {
   const provisionalRenderTracked = useRef<string | undefined>(undefined);
   const finalRenderTracked = useRef<string | undefined>(undefined);
   const supportRefTracked = useRef<string | undefined>(undefined);
-  const previewOpenedTracked = useRef(false);
   const [preflightCoordinator] = useState(() => (
     new SellerBrandPreflightCoordinator(
       async (selectedUseCase, companyDomain) => {
@@ -3277,7 +3277,7 @@ export function TryMeNowApp() {
     provisionalRenderTracked.current = undefined;
     finalRenderTracked.current = undefined;
     supportRefTracked.current = undefined;
-    previewOpenedTracked.current = false;
+    setPersonalizationSelection({ key: "", variantId: "generic" });
     track("path_selected", { useCase: selected });
     track("use_case_selected", { useCase: selected });
   }, []);
@@ -3323,7 +3323,7 @@ export function TryMeNowApp() {
     provisionalRenderTracked.current = undefined;
     finalRenderTracked.current = undefined;
     supportRefTracked.current = undefined;
-    previewOpenedTracked.current = false;
+    setPersonalizationSelection({ key: "", variantId: "generic" });
   }, []);
 
   const closeAnalyticsPanel = useCallback(() => setShowAnalyticsPanel(false), []);
@@ -3450,15 +3450,6 @@ export function TryMeNowApp() {
   }, [pollSessionId, pollSessionStatus]);
 
   useEffect(() => {
-    if (showSavePrompt && session && !canOfferClaimModal(session, {
-      events: clientEvents,
-      previewOpened: previewOpenedTracked.current || Boolean(revealedAt)
-    })) {
-      setShowSavePrompt(false);
-    }
-  }, [clientEvents, revealedAt, session, showSavePrompt]);
-
-  useEffect(() => {
     if (!session?.experience || initialPreviewScrolled.current) return;
     if (!canRevealPreview(session)) return;
     initialPreviewScrolled.current = true;
@@ -3511,7 +3502,6 @@ export function TryMeNowApp() {
   useEffect(() => {
     if (!session || !canRevealPreview(session) || revealTracked.current) return;
     revealTracked.current = true;
-    previewOpenedTracked.current = true;
     const revealTime = Date.now();
     setRevealedAt(revealTime);
     track("experience_revealed", { useCase: session.useCase });
@@ -3532,14 +3522,31 @@ export function TryMeNowApp() {
     setTuneOpen(false);
   }, [session?.experience, session?.id, session?.status]);
 
-  useEffect(() => {
-    if (!session?.experienceSpec?.personalizationVariantIds?.length) return;
-    setPersonalizationVariantId(defaultPersonalizationVariantFor(session));
-  }, [session?.experienceSpec?.artifactDigest, session?.id]);
+  const personalizationSourceKey = session?.experienceSpec?.personalizationVariantIds?.length
+    ? `${session.id}:${session.experienceSpec.artifactDigest ?? session.revision}`
+    : "";
+  if (
+    personalizationSourceKey
+    && personalizationSelection.key !== personalizationSourceKey
+    && session
+  ) {
+    setPersonalizationSelection({
+      key: personalizationSourceKey,
+      variantId: defaultPersonalizationVariantFor(session)
+    });
+  }
+  const personalizationVariantId = personalizationSelection.key === personalizationSourceKey
+    ? personalizationSelection.variantId
+    : session?.experienceSpec?.personalizationVariantIds?.length
+      ? defaultPersonalizationVariantFor(session)
+      : "generic";
 
   const selectPersonalizationVariant = useCallback(
     (variantId: PersonalizationVariantId) => {
-      setPersonalizationVariantId(variantId);
+      setPersonalizationSelection((current) => ({
+        key: current.key || personalizationSourceKey,
+        variantId
+      }));
       const frame = previewFrameRef.current?.contentWindow;
       if (frame) {
         try {
@@ -3555,9 +3562,6 @@ export function TryMeNowApp() {
           // Preview frame may be cross-origin during transient loads; ignore.
         }
       }
-      const hasEvidence =
-        variantId !== "generic" ||
-        Boolean(session?.experienceSpec?.personalizationVariantIds?.includes("account"));
       captureUnifiedProductEvent("personalization_variant_viewed", {
         sessionId: session?.id,
         properties: {
@@ -3565,9 +3569,8 @@ export function TryMeNowApp() {
           has_evidence: variantId === "generic" ? false : true
         }
       });
-      void hasEvidence;
     },
-    [session?.experienceSpec?.personalizationVariantIds, session?.id]
+    [personalizationSourceKey, session?.id]
   );
 
   useEffect(() => {
@@ -4096,7 +4099,7 @@ export function TryMeNowApp() {
     if (!session) return;
     const allowed = canOfferClaimModal(session, {
       events: clientEvents,
-      previewOpened: previewOpenedTracked.current || Boolean(revealedAt)
+      previewOpened: Boolean(revealedAt)
     });
     if (!allowed) return;
     track("save_opened", { useCase: session.useCase });
@@ -4128,8 +4131,9 @@ export function TryMeNowApp() {
   const personalizationOptions = session ? personalizationVariantOptionsFor(session) : [];
   const canSaveExperience = canOfferClaimModal(session, {
     events: clientEvents,
-    previewOpened: previewOpenedTracked.current || Boolean(revealedAt)
+    previewOpened: Boolean(revealedAt)
   });
+  const saveDialogOpen = Boolean(showSavePrompt && session && canSaveExperience);
   const showCampaignPreviewPane = Boolean(
     session?.useCase === "campaign"
     && (canRevealPreview(session) || (generationEligible && session.experience))
@@ -4190,8 +4194,8 @@ export function TryMeNowApp() {
     <>
     <main
       className={`appShell ${isReveal ? "revealMode" : ""}`}
-      aria-hidden={showSignals || showProcess || showSavePrompt || showAnalyticsPanel ? true : undefined}
-      inert={showSignals || showProcess || showSavePrompt || showAnalyticsPanel ? true : undefined}
+      aria-hidden={showSignals || showProcess || saveDialogOpen || showAnalyticsPanel ? true : undefined}
+      inert={showSignals || showProcess || saveDialogOpen || showAnalyticsPanel ? true : undefined}
     >
       <header className="siteHeader">
         <Link href="/" aria-label="Folloze Try Me Now home"><Image src="/brand/folloze-logo.svg" width={101} height={25} alt="Folloze" priority /><span>Try Me Now</span></Link>
@@ -4621,7 +4625,7 @@ export function TryMeNowApp() {
       {showProcess && session && <MobileProcessDialog session={session} onClose={() => setShowProcess(false)} />}
       {showSignals && revealedAt && <SignalDrawer events={clientEvents} revealedAt={revealedAt} onClose={() => setShowSignals(false)} />}
     </main>
-    {showSavePrompt && session && canSaveExperience && (
+    {saveDialogOpen && session && (
       <SaveExperienceDialog
         open
         expiresLabel={previewCountdown}

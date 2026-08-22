@@ -2,10 +2,11 @@ export const PREVIEW_BENCHMARK_ROUTES = ["abm", "campaign", "event", "content"] 
 
 export type PreviewBenchmarkRoute = (typeof PREVIEW_BENCHMARK_ROUTES)[number];
 
+/** Customer-visible contract: shell by 5s, provisional by 15s, terminal by 60s. */
 export const PREVIEW_SLO_MS = {
   shell: 5_000,
-  provisional: 30_000,
-  terminal: 90_000
+  provisional: 15_000,
+  terminal: 60_000
 } as const;
 
 export interface PreviewBenchmarkSample {

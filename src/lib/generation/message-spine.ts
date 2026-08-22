@@ -155,7 +155,7 @@ const GENERIC_FILLER_PATTERN =
 const UNSUPPORTED_WHY_NOW_PATTERN =
   /\b(?:urgency is rising|act now before it(?:'s| is) too late|the market is shifting fast|now more than ever)\b/i;
 
-function unique(values: string[]): string[] {
+function unique<T extends string>(values: readonly T[]): T[] {
   return values.filter((value, index) => values.indexOf(value) === index);
 }
 
@@ -356,9 +356,10 @@ export function reviewMessageCompositionQuality(
     issues.push("generic_filler");
     if (next.tension && GENERIC_FILLER_PATTERN.test(next.tension)) {
       const { tension: _removed, ...rest } = next;
+      void _removed;
       next = {
         ...rest,
-        omittedSlots: unique([...next.omittedSlots, "tension"])
+        omittedSlots: unique([...next.omittedSlots, "tension" as const])
       };
     }
   }
@@ -366,9 +367,10 @@ export function reviewMessageCompositionQuality(
   if (next.whyNow && (UNSUPPORTED_WHY_NOW_PATTERN.test(next.whyNow) || GENERIC_FILLER_PATTERN.test(next.whyNow))) {
     issues.push("unsupported_why_now");
     const { whyNow: _removed, ...rest } = next;
+    void _removed;
     next = {
       ...rest,
-      omittedSlots: unique([...next.omittedSlots, "whyNow"])
+      omittedSlots: unique([...next.omittedSlots, "whyNow" as const])
     };
   }
 

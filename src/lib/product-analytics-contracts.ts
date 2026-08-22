@@ -1,4 +1,4 @@
-import { sanitizeObservabilityText } from "@/lib/observability";
+import { sanitizeObservabilityText } from "@/lib/observability-sanitize";
 
 export const PRODUCT_EVENT_NAMES = [
   "analytics_panel_opened",

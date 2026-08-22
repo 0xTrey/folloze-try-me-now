@@ -21,36 +21,48 @@ import {
 } from "@/lib/generation-budget";
 
 const routeFixtures: PreviewBenchmarkSample[] = [
-  { route: "abm", shellMs: 1_100, provisionalMs: 16_000, terminalMs: 72_000, outcome: "ready" },
-  { route: "campaign", shellMs: 900, provisionalMs: 14_000, terminalMs: 61_000, outcome: "ready" },
-  { route: "event", shellMs: 1_000, provisionalMs: 18_000, terminalMs: 74_000, outcome: "ready" },
-  { route: "content", shellMs: 1_200, provisionalMs: 24_000, terminalMs: 89_000, outcome: "provisional" }
+  { route: "abm", shellMs: 1_100, provisionalMs: 12_000, terminalMs: 48_000, outcome: "ready" },
+  { route: "campaign", shellMs: 900, provisionalMs: 11_000, terminalMs: 52_000, outcome: "ready" },
+  { route: "event", shellMs: 1_000, provisionalMs: 13_000, terminalMs: 55_000, outcome: "ready" },
+  { route: "content", shellMs: 1_200, provisionalMs: 14_500, terminalMs: 59_000, outcome: "provisional" }
 ];
 
-describe("90-second app-hosted HTML preview benchmark", () => {
-  it("covers ABM, campaign, event, and content with one fail-soft SLO", () => {
+describe("60-second app-hosted HTML preview benchmark", () => {
+  it("covers ABM, campaign, event, and content with the 15s/60s fixture contract (U11)", () => {
     const results = evaluatePreviewBenchmark(routeFixtures);
 
     expect(results.map(({ route }) => route)).toEqual(PREVIEW_BENCHMARK_ROUTES);
     expect(results.every(({ passed }) => passed)).toBe(true);
     expect(results.find(({ route }) => route === "content")).toMatchObject({
       outcome: "provisional",
-      terminalMs: 89_000,
+      terminalMs: 59_000,
       passed: true
     });
-    expect(PREVIEW_SLO_MS).toEqual({ shell: 5_000, provisional: 30_000, terminal: 90_000 });
+    expect(PREVIEW_SLO_MS).toEqual({ shell: 5_000, provisional: 15_000, terminal: 60_000 });
   });
 
   it("reports the precise checkpoint breach without hiding a slow route", () => {
     const results = evaluatePreviewBenchmark(
       routeFixtures.map((sample) =>
-        sample.route === "event" ? { ...sample, terminalMs: 90_001 } : sample
+        sample.route === "event" ? { ...sample, terminalMs: 60_001 } : sample
       )
     );
 
     expect(results.find(({ route }) => route === "event")).toMatchObject({
       passed: false,
       breaches: ["terminal"]
+    });
+  });
+
+  it("fails provisional samples that miss the 15-second fixture ceiling", () => {
+    const results = evaluatePreviewBenchmark(
+      routeFixtures.map((sample) =>
+        sample.route === "campaign" ? { ...sample, provisionalMs: 15_001 } : sample
+      )
+    );
+    expect(results.find(({ route }) => route === "campaign")).toMatchObject({
+      passed: false,
+      breaches: ["provisional"]
     });
   });
 
