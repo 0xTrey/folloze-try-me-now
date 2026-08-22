@@ -640,13 +640,14 @@ export function streamingCampaignPatchForIntent(
 }
 
 export function streamingCampaignSkipPatch(
-  session: Pick<PublicTryMeSession, "useCase" | "answers" | "audienceSuggestions" | "audienceRecommendations" | "campaignOfferSource">,
+  session: Pick<PublicTryMeSession, "useCase" | "answers" | "audienceRecommendations" | "campaignOfferSource">,
   mode: CampaignEntryMode
 ): SessionAnswers {
   const inferredAudience = session.answers.customAudience
     || (session.answers.audience && session.answers.audience !== "Other" ? session.answers.audience : undefined)
-    || session.audienceRecommendations?.[0]?.label
-    || session.audienceSuggestions[0];
+    || session.audienceRecommendations?.find(
+      (recommendation) => recommendation.recommendationKind === "evidence-backed"
+    )?.label;
   const inferredOffer = campaignOfferFor(session);
   return {
     ...(session.answers.campaignType ? {} : { campaignType: mode === "event" ? "event" : "product" }),
@@ -3904,10 +3905,21 @@ export function TryMeNowApp() {
     ? "event"
     : "campaign";
   const recommendedObjective = session ? recommendedObjectiveFor(session) : "Generate demand";
-  const offerChoices = session?.offerRecommendations?.map(({ label }) => label) ?? [];
-  const audienceChoices = session?.audienceRecommendations?.map(({ label }) => label)
-    ?? session?.audienceSuggestions
-    ?? [];
+  const evidenceBackedOffers = session?.offerRecommendations?.filter(
+    (recommendation) => recommendation.recommendationKind === "evidence-backed"
+  ) ?? [];
+  const evidenceBackedAudiences = session?.audienceRecommendations?.filter(
+    (recommendation) =>
+      recommendation.recommendationKind === "evidence-backed" &&
+      recommendation.source !== "seller-category-fallback" &&
+      recommendation.confidence !== "hypothesis"
+  ) ?? [];
+  const offerChoices = evidenceBackedOffers.length >= 2
+    ? evidenceBackedOffers.map(({ label }) => label)
+    : [];
+  const audienceChoices = evidenceBackedAudiences.length >= 2
+    ? evidenceBackedAudiences.map(({ label }) => label)
+    : [];
   const objectiveChoices = session?.objectiveRecommendations?.map(({ label }) => label)
     ?? [recommendedObjective, ...objectives.campaign.filter((objective) => objective !== recommendedObjective)];
   const streamingQuestions = session?.useCase === "campaign"
@@ -3917,8 +3929,8 @@ export function TryMeNowApp() {
       objectiveChoices,
       offerChoices,
       {
-        offer: session.offerRecommendations?.find(({ recommended }) => recommended)?.label,
-        audience: session.audienceRecommendations?.[0]?.label,
+        offer: evidenceBackedOffers.find(({ recommended }) => recommended)?.label,
+        audience: evidenceBackedAudiences[0]?.label,
         objective: session.objectiveRecommendations?.find(({ recommended }) => recommended)?.label
           ?? recommendedObjective
       }
@@ -4003,7 +4015,9 @@ export function TryMeNowApp() {
       field: `streaming_${answer.questionId}`
     });
     if (answer.questionId === "audience") {
-      const recommended = session.audienceSuggestions.includes(answer.value);
+      const recommended = evidenceBackedAudiences.some(
+        (recommendation) => recommendation.label === answer.value
+      );
       void patchAnswers(recommended
         ? { audience: answer.value }
         : { audience: "Other", customAudience: answer.value });

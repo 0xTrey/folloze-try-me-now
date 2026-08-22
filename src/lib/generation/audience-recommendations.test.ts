@@ -89,6 +89,7 @@ describe("audience recommendation strategy", () => {
         (candidate) =>
           candidate.buyerJob.length > 20 &&
           candidate.rationale.length > 40 &&
+          candidate.recommendationKind === "evidence-backed" &&
           candidate.provenance.length > 0 &&
           candidate.provenance.every(({ evidenceRef, confidence }) =>
             Boolean(evidenceRef) && confidence > 0
@@ -193,6 +194,7 @@ describe("audience recommendation strategy", () => {
       artifact.value?.candidates.every(
         (candidate) =>
           candidate.confidenceBand === "hypothesis" &&
+          candidate.recommendationKind === "fallback" &&
           candidate.confidence <= 0.4 &&
           candidate.rationale.startsWith("Hypothesis to confirm:") &&
           candidate.provenance.every(({ kind }) => kind === "deterministic-fallback")

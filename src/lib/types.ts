@@ -460,6 +460,7 @@ export interface AudienceRecommendation {
   rationale: string;
   evidenceItemIds: string[];
   confidence: "high" | "medium" | "hypothesis";
+  recommendationKind?: "evidence-backed" | "fallback";
   source:
     | "seller-category-fallback"
     | "seller-public-evidence"
@@ -476,6 +477,7 @@ export interface BriefRecommendationOption {
   recommended: boolean;
   evidenceItemIds: string[];
   confidence: IntelligenceConfidence | "hypothesis";
+  recommendationKind?: "evidence-backed" | "fallback";
   revision: number;
   cta?: {
     type: CtaType;

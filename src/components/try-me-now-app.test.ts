@@ -213,7 +213,7 @@ describe("Try Me Now experience copy", () => {
     expect(rows.some((row) => !row.value && row.key !== "offer")).toBe(false);
   });
 
-  it("lets the visitor skip to preview once three signals include a named offer", () => {
+  it("does not turn a fallback audience suggestion into an explicit visitor choice", () => {
     expect(canSkipStreamingCampaign(session("campaign"))).toBe(false);
     expect(liveBriefFilledCount(session("campaign"))).toBeGreaterThanOrEqual(2);
     const readyToSkip = session("campaign", {
@@ -221,6 +221,25 @@ describe("Try Me Now experience copy", () => {
       audienceSuggestions: ["Enterprise architects"]
     });
     expect(canSkipStreamingCampaign(readyToSkip)).toBe(true);
+    expect(streamingCampaignSkipPatch(readyToSkip, "campaign")).toMatchObject({
+      objective: "Launch or announce"
+    });
+    expect(streamingCampaignSkipPatch(readyToSkip, "campaign")).not.toHaveProperty("audience");
+  });
+
+  it("may carry forward an evidence-backed audience when the brief is skipped", () => {
+    const readyToSkip = session("campaign", {
+      answers: { campaignType: "product", promotedOffer: "Harmony" },
+      audienceRecommendations: [{
+        id: "audience-enterprise-architects",
+        label: "Enterprise architects",
+        rationale: "Supported by seller-owned platform evidence.",
+        evidenceItemIds: ["seller-platform"],
+        confidence: "high",
+        recommendationKind: "evidence-backed",
+        source: "seller-public-evidence"
+      }]
+    });
     expect(streamingCampaignSkipPatch(readyToSkip, "campaign")).toMatchObject({
       audience: "Enterprise architects",
       objective: "Launch or announce"

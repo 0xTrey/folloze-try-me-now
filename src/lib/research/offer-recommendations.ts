@@ -63,6 +63,7 @@ export interface OfferRecommendationCandidate {
   label: string;
   kind: OfferEvidenceKind;
   source: OfferEvidenceSource | "fallback";
+  recommendationKind: "evidence-backed" | "fallback";
   recommended: boolean;
   reasonCodes: OfferRecommendationReasonCode[];
   evidenceRefs: string[];
@@ -311,6 +312,8 @@ export function rankOfferRecommendations(
       Boolean(canonicalUrl(input.suppliedUrl))
         ? ("supplied-url" as const)
         : group.best.source,
+    recommendationKind:
+      group.best.source === "visitor-input" ? "fallback" as const : "evidence-backed" as const,
     reasonCodes: group.reasonCodes,
     evidenceRefs: group.evidenceRefs,
     confidence: group.best.confidence
@@ -325,6 +328,7 @@ export function rankOfferRecommendations(
       label,
       kind: "topic",
       source: "fallback",
+      recommendationKind: "fallback",
       reasonCodes: ["weak_evidence_fallback"],
       evidenceRefs: [],
       confidence: 0.1

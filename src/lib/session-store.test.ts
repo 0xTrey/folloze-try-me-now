@@ -7,6 +7,7 @@ import {
   isProductionSafeSessionStoreMode,
   putSession,
   selectSessionStoreMode,
+  toPublicSession,
   usesRedisSessionStoreMode
 } from "@/lib/session-store";
 import type { TryMeSession } from "@/lib/types";
@@ -76,6 +77,40 @@ describe("session operation leases", () => {
 });
 
 describe("anonymous session lifecycle", () => {
+  it("projects only credible recommendation sets into the public composer contract", () => {
+    const projected = toPublicSession(anonymousPreview({
+      audienceRecommendations: [{
+        id: "fallback-audience",
+        label: "Operations teams",
+        rationale: "Deterministic fallback",
+        evidenceItemIds: [],
+        confidence: "hypothesis",
+        recommendationKind: "fallback",
+        source: "seller-category-fallback"
+      }],
+      offerRecommendations: [
+        "Solution overview",
+        "Solution use cases",
+        "Solution evaluation questions"
+      ].map((label, index) => ({
+        id: `fallback-offer-${index}`,
+        label,
+        rationale: "weak evidence fallback",
+        recommended: index === 0,
+        evidenceItemIds: [],
+        confidence: "low" as const,
+        recommendationKind: "fallback" as const,
+        revision: 2
+      }))
+    }));
+
+    expect(projected.audienceRecommendations).toEqual([]);
+    expect(projected.offerRecommendations).toEqual([]);
+    expect(JSON.stringify(projected)).not.toMatch(
+      /Solution overview|Solution use cases|Solution evaluation questions/
+    );
+  });
+
   it("expires exactly 30 minutes after preview readiness even when storage lives longer", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-31T12:00:00.000Z"));

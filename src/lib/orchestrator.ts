@@ -250,21 +250,12 @@ function evidenceItemsFor(
 function audienceRecommendationsFor(
   sessionId: string,
   revision: number,
-  suggestions: string[],
   seller: BrandProfile | undefined,
   target: BrandProfile | undefined,
   evidenceItems: SessionEvidenceItem[],
   answers?: SessionAnswers
 ) {
-  if (!seller) return suggestions.slice(0, 3).map((label) => ({
-    id: stableId("audience", label),
-    label,
-    rationale: "Working hypothesis to confirm while seller evidence is still loading.",
-    evidenceItemIds: [],
-    confidence: "hypothesis" as const,
-    source: "seller-category-fallback" as const,
-    confirmationStatus: "needs-confirmation" as const
-  }));
+  if (!seller) return [];
 
   const artifact = buildAudienceRecommendations({
     sessionId,
@@ -277,7 +268,7 @@ function audienceRecommendationsFor(
     evidenceItems
   });
   const evidenceIds = new Set(evidenceItems.map(({ id }) => id));
-  return (artifact.value?.candidates ?? []).map((candidate) => {
+  const recommendations = (artifact.value?.candidates ?? []).map((candidate) => {
     const matchedEvidence = candidate.provenance
       .map(({ evidenceRef }) => evidenceRef)
       .filter((id) => evidenceIds.has(id));
@@ -290,6 +281,7 @@ function audienceRecommendationsFor(
       rationale: candidate.rationale,
       evidenceItemIds: matchedEvidence,
       confidence: candidate.confidenceBand,
+      recommendationKind: candidate.recommendationKind,
       source: target && matchedEvidence.length
         ? "seller-target-synthesis" as const
         : matchedEvidence.length
@@ -302,6 +294,13 @@ function audienceRecommendationsFor(
       ...(evidenceSummary ? { evidenceSummary } : {})
     };
   });
+  const evidenceBacked = recommendations.filter(
+    (candidate) =>
+      candidate.recommendationKind === "evidence-backed" &&
+      candidate.source !== "seller-category-fallback" &&
+      candidate.confidence !== "hypothesis"
+  );
+  return evidenceBacked.length >= 2 ? evidenceBacked : [];
 }
 
 function assetsFor(brand: BrandProfile | undefined, target: BrandProfile | undefined): ExperienceAsset[] {
@@ -388,15 +387,20 @@ function offerRecommendationsFor(
       : undefined,
     evidence
   });
-  return ranked.candidates.map((candidate) => ({
+  const evidenceBacked = ranked.candidates.filter(
+    (candidate) => candidate.recommendationKind === "evidence-backed"
+  );
+  if (evidenceBacked.length < 2) return [];
+  return evidenceBacked.map((candidate, index) => ({
     id: candidate.id,
     label: candidate.label,
     rationale: candidate.reasonCodes
       .map((code) => code.replaceAll("_", " "))
       .join(" · "),
-    recommended: candidate.recommended,
+    recommended: index === 0,
     evidenceItemIds: [...candidate.evidenceRefs],
     confidence: recommendationConfidence(candidate.confidence),
+    recommendationKind: candidate.recommendationKind,
     revision
   }));
 }
@@ -485,7 +489,6 @@ function syncExperienceFoundation(session: TryMeSession): void {
   session.audienceRecommendations = audienceRecommendationsFor(
     session.id,
     nextRevision,
-    session.audienceSuggestions,
     session.brand,
     session.targetBrand,
     session.evidenceItems,
@@ -2179,7 +2182,6 @@ export async function patchSessionWorkspace(
       session.audienceRecommendations = audienceRecommendationsFor(
         session.id,
         session.revision + 1,
-        session.audienceSuggestions,
         session.brand,
         session.targetBrand,
         session.evidenceItems,

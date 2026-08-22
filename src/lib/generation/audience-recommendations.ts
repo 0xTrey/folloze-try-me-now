@@ -31,6 +31,7 @@ export interface AudienceAccountCandidate {
   recommended: boolean;
   confidence: number;
   confidenceBand: AudienceCandidateConfidence;
+  recommendationKind: "evidence-backed" | "fallback";
   provenance: AudienceCandidateProvenance[];
   authority: {
     pageBrandOwner: "seller";
@@ -416,7 +417,7 @@ function rankedEvidence(
   evidence: UsableEvidence[],
   candidateIndex: number
 ): UsableEvidence | undefined {
-  return evidence
+  const ranked = evidence
     .map((item, index) => ({
       item,
       index,
@@ -428,7 +429,8 @@ function rankedEvidence(
         right.item.confidence - left.item.confidence ||
         ((left.index - candidateIndex + evidence.length) % Math.max(evidence.length, 1)) -
           ((right.index - candidateIndex + evidence.length) % Math.max(evidence.length, 1))
-    )[0]?.item;
+    )[0];
+  return ranked && ranked.score > 0 ? ranked.item : undefined;
 }
 
 function evidenceProvenance(evidence: UsableEvidence): AudienceCandidateProvenance {
@@ -562,6 +564,7 @@ export function buildAudienceRecommendations(
       ? (authorityProvenance.confidence + evidence.confidence) / 2
       : Math.min(authorityProvenance.confidence, 0.4);
     const confidence = Number(evidenceConfidence.toFixed(2));
+    const band = confidenceBand(confidence);
     return {
       id: stableId(
         "audience",
@@ -582,7 +585,11 @@ export function buildAudienceRecommendations(
       }),
       recommended: index === 0,
       confidence,
-      confidenceBand: confidenceBand(confidence),
+      confidenceBand: band,
+      recommendationKind:
+        evidence && band !== "hypothesis" && authorityProvenance.kind !== "deterministic-fallback"
+          ? "evidence-backed"
+          : "fallback",
       provenance,
       authority: {
         pageBrandOwner: "seller",

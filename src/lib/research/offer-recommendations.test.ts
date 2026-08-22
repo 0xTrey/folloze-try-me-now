@@ -55,6 +55,11 @@ describe("rankOfferRecommendations", () => {
       "Account Data"
     ]);
     expect(result.candidates).toHaveLength(3);
+    expect(
+      result.candidates.every(
+        ({ recommendationKind }) => recommendationKind === "evidence-backed"
+      )
+    ).toBe(true);
     expect(result.candidates.filter(({ recommended }) => recommended)).toHaveLength(1);
     expect(result.recommendedId).toBe(result.candidates[0].id);
     expect(result.candidates[0].reasonCodes).toEqual(
@@ -164,6 +169,7 @@ describe("rankOfferRecommendations", () => {
     expect(result.candidates[0]).toMatchObject({
       label: "Data Residency Readiness",
       source: "visitor-input",
+      recommendationKind: "fallback",
       recommended: true,
       evidenceRefs: ["visitor:offer"]
     });
@@ -230,6 +236,11 @@ describe("rankOfferRecommendations", () => {
       "Industry evaluation questions"
     ]);
     expect(result.candidates.every(({ source }) => source === "fallback")).toBe(true);
+    expect(
+      result.candidates.every(
+        ({ recommendationKind }) => recommendationKind === "fallback"
+      )
+    ).toBe(true);
     expect(result.candidates.some(({ label }) => label.includes("Unverified"))).toBe(false);
     expect(result.evidenceRefs).toEqual([]);
     expect(result.reasonCodes).toEqual(["weak_evidence_fallback"]);

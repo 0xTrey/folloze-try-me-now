@@ -133,6 +133,7 @@ function audienceCandidate(input: {
     recommended: true,
     confidence: input.confidence ?? 0.85,
     confidenceBand: "high",
+    recommendationKind: "evidence-backed",
     provenance: [{
       evidenceRef: `${entityRole}:${input.id}`,
       entityRole,

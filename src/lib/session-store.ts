@@ -394,6 +394,15 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
         citationCount: session.sourceArtifact.diagnostics.citationCount
       }
     : undefined;
+  const publicAudienceRecommendations = (session.audienceRecommendations ?? []).filter(
+    (recommendation) =>
+      recommendation.recommendationKind === "evidence-backed" &&
+      recommendation.source !== "seller-category-fallback" &&
+      recommendation.confidence !== "hypothesis"
+  );
+  const publicOfferRecommendations = (session.offerRecommendations ?? []).filter(
+    (recommendation) => recommendation.recommendationKind === "evidence-backed"
+  );
 
   return {
     id: session.id,
@@ -419,12 +428,14 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
     audienceSuggestions: [...session.audienceSuggestions],
     experienceMode: session.experienceMode,
     exampleKey: session.exampleKey,
-    audienceRecommendations: session.audienceRecommendations
-      ? structuredClone(session.audienceRecommendations)
-      : undefined,
-    offerRecommendations: session.offerRecommendations
-      ? structuredClone(session.offerRecommendations)
-      : undefined,
+    audienceRecommendations:
+      publicAudienceRecommendations.length >= 2
+        ? structuredClone(publicAudienceRecommendations)
+        : [],
+    offerRecommendations:
+      publicOfferRecommendations.length >= 2
+        ? structuredClone(publicOfferRecommendations)
+        : [],
     objectiveRecommendations: session.objectiveRecommendations
       ? structuredClone(session.objectiveRecommendations)
       : undefined,
