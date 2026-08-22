@@ -12,54 +12,50 @@ Base: `1e22931` (production)
 | Brand fidelity | brand-fidelity-builder | 1 | integrated |
 | Messaging and composition | message-composition-builder | 1 | integrated |
 | Telemetry and receipts | telemetry-receipts-builder | 1 | integrated |
-| Unified intake UX | intake-ux-builder | 2 | starting |
-| Personalization preview | personalization-preview-builder | 2 | starting |
-| Preview lifecycle and reveal | preview-lifecycle-builder | 2 | starting |
-| Adversarial QA | unified-builder-qa | 3 | pending |
+| Unified intake UX | intake-ux-builder | 2 | integrated |
+| Personalization preview | personalization-preview-builder | 2 | integrated |
+| Preview lifecycle and reveal | preview-lifecycle-builder | 2 | integrated |
+| Adversarial QA | unified-builder-qa | 3 | starting |
 
 ## Decisions made
 
-- Precedence follows the package README (video feedback → architecture → 60s contract → ExperienceSpec/renderers → visual direction → observability).
-- One prospect front door: Build a buyer experience; Content Magic remains secondary and not deleted.
+- Precedence follows the package README.
+- One prospect front door: Build a buyer experience; Content Magic secondary.
 - Personalization states are preview variants, not templates.
+- Provisional reveal gated on material brief eligibility (not domain-only).
+- Save/email modal only after final artifact + meaningful preview engagement.
+- Primary unified path creates campaign sessions; experience type is inferred/display; Content Magic remains a separate route. ABM `useCase` switch-on-account-inference deferred unless QA blocks.
 - No push, deploy, Vercel mutation, Folloze publish, or secret reads.
-- Provisional generation gated on material brief eligibility (not domain-only).
-- Brand fidelity compiles seller authority separately from target recognition; no fabricated high-confidence colors.
-- Composition ranking is internal-only; buyer jargon sanitized fail-soft.
-- Unified product events are privacy-safe contracts; UI emit hooks deferred to Wave 2.
 
 ## Wave 1 summary
 
+Research plan + deadlines; brand fidelity + ServiceTitan fixture; composition ranking + buyer labels; privacy-safe unified analytics contracts.
+
+## Wave 2 summary
+
 | Area | Outcome |
 | --- | --- |
-| Research | `research-plan`, wave deadlines, `canStartExternalWork`, eligibility gate, stale fencing |
-| Brand | `compileBrandFidelity`, ServiceTitan Anvil fixture (`#0265DC`, 6px radius), NorthStar imagery fix |
-| Messaging | Multi-factor wireframe ranking, route spines, buyer nav labels, golden scenarios |
-| Telemetry | Unified event contracts, stronger redaction, support-ref reconstruction tests |
+| Intake | Dominant Build CTA; Northpeak examples; transcript + Live Brief; unified entry analytics |
+| Personalization | generic/account/industry/persona A/B variants with provenance; client-side switch |
+| Lifecycle | Eligibility gate; receipt-backed evidence surface; modal timing; distinct lifecycle phases |
 
-Seams for Wave 2: `captureUnifiedProductEvent` hooks; `experience-renderers.ts` base jargon fallbacks; consume `compileBrandFidelity` / imagery treatment in preview variants.
+## Baseline / integration tests
 
-## Baseline
-
-- Sources read: package README, workstreams, acceptance matrix, architecture, 60s contract, visual direction, observability, tyler feedback, ux-v2 plan, v3 templates, wireframe strategy, V2 chat handoff.
-- Baseline: `npx vitest run` → **81 files / 717 passed**.
-- Post Wave 1 integrate: `npx vitest run` → **84 files / 759 passed**.
-
-## Files changed (Wave 1)
-
-See commits below. Key new files: `research-plan.ts`, `brand-fidelity.test.ts`, `product-analytics-contracts.ts`, `tests/fixtures/brand-fidelity/**`.
-
-## Tests run and outcomes
-
-- Wave 1 targeted + full suite: **759 passed**
-- `npm run benchmark:preview` covered via preview-benchmark / generation-budget suites in Wave 1 agent runs
+- Baseline: 717 passed
+- Post Wave 1: 759 passed
+- Post Wave 2: **87 files / 776 passed**
 
 ## Unresolved concerns
 
-- Wave 2 must wire unified analytics emits or funnels stay empty.
-- Renderer base fallbacks still may leak "Account thesis" until personalization/lifecycle pass.
-- Full U01–U07 / U20–U24 / E2E evidence waits on Waves 2–3.
+- Desktop E2E still expects old three-path / Aprio entry — Wave 3 must update.
+- Unified door does not yet flip `useCase` to `abm` when a named account is inferred.
+- Full U05/U20 desktop Playwright evidence waits on Wave 3.
 
 ## Final commit list
 
-_(updated as Wave 1 commits land)_
+- `04ccd57` feat: strengthen verified brand fidelity compilation
+- `3672df7` feat: rank compositions and sanitize buyer-facing copy
+- `88f4cd3` feat: add privacy-safe unified builder analytics contracts
+- `2cabe80` feat: gate generation on eligible research plan waves
+- `7c56104` docs: record unified builder Wave 1 run status
+- _(Wave 2 commits landing next)_
