@@ -5,6 +5,7 @@ import { experienceTemplateFor } from "@/lib/generation/experience-renderers";
 import {
   accountArchetypeIds,
   archetypeForLegacyWireframe,
+  buildWireframeCompositionPlan,
   campaignArchetypeIds,
   contentArchetypeIds,
   getWireframeArchetype,
@@ -270,6 +271,185 @@ describe("deterministic wireframe selection", () => {
         { requestedArchetypeId: "campaign-product" }
       )
     ).toThrow(/belongs to campaign, not content/);
+  });
+});
+
+describe("dynamic composition planning", () => {
+  it("builds a four-section Apple-like sparse neutral plan without empty media", () => {
+    const plan = buildWireframeCompositionPlan({
+      family: "campaign",
+      campaignType: "product",
+      contentDensity: "sparse",
+      messageStructure: "single-idea",
+      proofAvailability: "none",
+      assetQuality: "none",
+      brandEvidenceStrength: "none",
+      sellerLogoAvailable: false,
+      sellerGeometry: "sparse-neutral",
+      sellerDensity: "sparse",
+      interactionOpportunity: "none",
+      campaignMotion: "quiet",
+      decisionComplexity: "low"
+    });
+
+    expect(plan).toMatchObject({
+      version: 1,
+      archetypeId: "campaign-product",
+      compositionId: "editorial-split",
+      sectionCount: 4,
+      visibility: "internal"
+    });
+    expect(plan.sections.map(({ role }) => role)).toEqual([
+      "hero",
+      "context",
+      "mechanism",
+      "next-action"
+    ]);
+    expect(plan.sections[0]?.componentSlots).toContain("typographic-hero");
+    expect(plan.sections.flatMap(({ componentSlots }) => componentSlots)).not.toEqual(
+      expect.arrayContaining(["logo-lockup", "image-hero", "video-stage"])
+    );
+    expect(plan.sections.every(({ componentSlots }) => componentSlots.length > 0)).toBe(true);
+    expect(plan.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "section-count-4-compact",
+        "seller-sparse-neutral",
+        "imagery-fallback-type"
+      ])
+    );
+  });
+
+  it("builds a six-section ADP-like branded proof plan with scored alternatives", () => {
+    const plan = buildWireframeCompositionPlan({
+      family: "account",
+      approvedQuantifiedProof: true,
+      contentDensity: "moderate",
+      messageStructure: "proof-led",
+      proofAvailability: "strong",
+      assetQuality: "high",
+      brandEvidenceStrength: "strong",
+      sellerLogoAvailable: true,
+      sellerGeometry: "branded-proof",
+      sellerDensity: "balanced",
+      interactionOpportunity: "light",
+      campaignMotion: "guided",
+      decisionComplexity: "medium"
+    });
+
+    expect(plan).toMatchObject({
+      archetypeId: "account-proof",
+      compositionId: "evidence-lead",
+      sectionCount: 6
+    });
+    expect(plan.sections[0]?.componentSlots).toEqual(
+      expect.arrayContaining(["headline-group", "logo-lockup", "proof-artifact"])
+    );
+    expect(plan.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "section-count-6-balanced",
+        "proof-strong",
+        "seller-branded-proof"
+      ])
+    );
+    expect(plan.score).toBeGreaterThan(0);
+    expect(plan.alternatives).toHaveLength(2);
+    expect(plan.alternatives.every(({ score }) => score < plan.score)).toBe(true);
+  });
+
+  it("builds a six-section demonstrative event and webinar journey", () => {
+    const selection = selectWireframe({
+      family: "campaign",
+      campaignType: "event",
+      eventContext: "Live webinar with a chaptered recording",
+      contentDensity: "moderate",
+      assetQuality: "medium",
+      interactionOpportunity: "rich",
+      campaignMotion: "demonstrative"
+    });
+
+    expect(selection).toMatchObject({
+      archetypeId: "campaign-event",
+      compositionId: "chapter-journey",
+      selectedBy: "system",
+      compositionPlan: {
+        sectionCount: 6,
+        visibility: "internal"
+      }
+    });
+    expect(selection.compositionPlan.sections.map(({ role }) => role)).toEqual(
+      expect.arrayContaining(["agenda", "chapter-navigation"])
+    );
+    expect(selection.compositionPlan.sections[0]?.allowedInteractions).toContain("play-source");
+    expect(
+      selection.compositionPlan.sections.find(({ role }) => role === "chapter-navigation")
+        ?.allowedInteractions
+    ).toContain("seek-chapter");
+  });
+
+  it("builds an eight-section technical plan with diagram fallbacks for no-logo/no-image input", () => {
+    const plan = buildWireframeCompositionPlan({
+      family: "account",
+      audience: "Security, architecture, data, and platform engineering",
+      contentDensity: "rich",
+      messageStructure: "technical-sequence",
+      proofAvailability: "limited",
+      assetQuality: "none",
+      brandEvidenceStrength: "none",
+      sellerLogoAvailable: false,
+      sellerGeometry: "balanced-brand",
+      sellerDensity: "dense",
+      interactionOpportunity: "rich",
+      campaignMotion: "guided",
+      decisionComplexity: "high"
+    });
+    const allSlots = plan.sections.flatMap(({ componentSlots }) => componentSlots);
+
+    expect(plan).toMatchObject({
+      archetypeId: "account-technical",
+      compositionId: "workflow-spine",
+      sectionCount: 8
+    });
+    expect(plan.sections).toHaveLength(8);
+    expect(plan.sections[0]?.componentSlots).toContain("diagram-hero");
+    expect(allSlots).not.toEqual(
+      expect.arrayContaining(["logo-lockup", "image-hero", "video-stage", "proof-artifact"])
+    );
+    expect(allSlots).toEqual(
+      expect.arrayContaining(["process-diagram", "evidence-diagram", "decision-matrix"])
+    );
+    expect(plan.reasonCodes).toContain("imagery-fallback-diagram");
+    expect(plan.totalWordBudget.max).toBeGreaterThan(plan.totalWordBudget.min);
+  });
+
+  it("scores every reviewed candidate against the complete composition signal set", () => {
+    const ranked = rankWireframeCandidates({
+      family: "content",
+      sourceTitle: "Benchmark research",
+      contentDensity: "rich",
+      messageStructure: "proof-led",
+      proofAvailability: "strong",
+      assetQuality: "none",
+      interactionOpportunity: "rich",
+      sellerGeometry: "balanced-brand",
+      sellerDensity: "dense",
+      campaignMotion: "quiet",
+      decisionComplexity: "high"
+    });
+    const requiredFactors = [
+      "messageStructure",
+      "contentVolume",
+      "proofAvailability",
+      "imageryAvailability",
+      "interactionOpportunity",
+      "sellerGeometry",
+      "sellerDensity",
+      "campaignMotion",
+      "decisionComplexity"
+    ] as const;
+
+    for (const candidate of ranked) {
+      expect(requiredFactors.every((factor) => factor in candidate.factors)).toBe(true);
+    }
   });
 });
 

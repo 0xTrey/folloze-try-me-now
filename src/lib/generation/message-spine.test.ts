@@ -3,11 +3,15 @@ import { describe, expect, it } from "vitest";
 import { compileCampaignContext } from "@/lib/generation/campaign-context";
 import {
   BUYER_FACING_NAVIGATION,
+  MESSAGE_FRAMEWORK_IDS,
   containsBuyerFacingJargon,
   messageSpineCopyFailure,
+  rankMessageFrameworks,
+  resolveMessageFramework,
   reviewMessageCompositionQuality,
   sanitizeBuyerFacingLabel
 } from "@/lib/generation/message-spine";
+import type { MessageFrameworkRankingInput } from "@/lib/generation/message-spine";
 import type { BrandProfile } from "@/lib/types";
 
 const seller: BrandProfile = {
@@ -71,6 +75,22 @@ function candidateFor(context: ReturnType<typeof abm>) {
     ] as [string, string, string],
     cta: "Plan the working session",
     evidenceIdsByUse: { hero: ["seller.mechanism", "target.1"], mechanism: ["seller.mechanism"] }
+  };
+}
+
+function frameworkInput(
+  overrides: Partial<MessageFrameworkRankingInput> = {}
+): MessageFrameworkRankingInput {
+  return {
+    motion: "demand",
+    audience: "Business leaders",
+    objective: "Build awareness",
+    cta: "Explore the offer",
+    offerMaturity: "unconfirmed",
+    proofDensity: "sparse",
+    contentVolume: "light",
+    decisionComplexity: "low",
+    ...overrides
   };
 }
 
@@ -223,6 +243,159 @@ describe("MessageSpineV2", () => {
     expect(content).toMatchObject({ family: "content", contract: "content-source-companion" });
   });
 
+  it("selects a bounded framework for every generic motion", () => {
+    const scenarios: Array<
+      [MessageFrameworkRankingInput, (typeof MESSAGE_FRAMEWORK_IDS)[number]]
+    > = [
+      [
+        frameworkInput({
+          motion: "account",
+          objective: "Evaluate the fit",
+          cta: "Book a meeting",
+          offerMaturity: "emerging",
+          proofDensity: "moderate",
+          contentVolume: "standard",
+          decisionComplexity: "high"
+        }),
+        "problem-change"
+      ],
+      [frameworkInput(), "outcome-mechanism"],
+      [
+        frameworkInput({
+          motion: "product",
+          objective: "Launch the product",
+          offerMaturity: "confirmed",
+          proofDensity: "moderate",
+          contentVolume: "standard",
+          decisionComplexity: "medium"
+        }),
+        "outcome-mechanism"
+      ],
+      [
+        frameworkInput({
+          motion: "event",
+          objective: "Drive registrations",
+          cta: "Register for the event"
+        }),
+        "event-value"
+      ],
+      [
+        frameworkInput({
+          motion: "content",
+          objective: "Educate buyers",
+          cta: "Read the guide",
+          offerMaturity: "confirmed",
+          proofDensity: "rich",
+          contentVolume: "deep",
+          decisionComplexity: "medium"
+        }),
+        "source-insight"
+      ]
+    ];
+
+    for (const [input, expected] of scenarios) {
+      const ranking = rankMessageFrameworks(input);
+      expect(ranking.selected.id).toBe(expected);
+      expect(ranking.alternatives).toHaveLength(MESSAGE_FRAMEWORK_IDS.length - 1);
+      expect(ranking.selected.score).toBeGreaterThanOrEqual(ranking.alternatives[0]!.score);
+      expect(ranking.basis).toBe("deterministic");
+    }
+  });
+
+  it("adapts deterministically to sparse proof, rich proof, and technical audiences", () => {
+    const sparse = rankMessageFrameworks(frameworkInput());
+    expect(sparse.selected.id).toBe("outcome-mechanism");
+    expect(sparse.selected.reasonCodes).toContain("proof_sparse");
+
+    const proofRich = rankMessageFrameworks(
+      frameworkInput({
+        objective: "Generate demand",
+        cta: "Contact sales",
+        offerMaturity: "confirmed",
+        proofDensity: "rich",
+        contentVolume: "deep",
+        decisionComplexity: "high"
+      })
+    );
+    expect(proofRich.selected.id).toBe("proof-led-decision");
+    expect(proofRich.selected.reasonCodes).toContain("proof_rich");
+
+    const technical = rankMessageFrameworks(
+      frameworkInput({
+        motion: "product",
+        audience: "Platform architects and integration engineers",
+        objective: "Evaluate technical fit",
+        cta: "Validate the architecture",
+        offerMaturity: "confirmed",
+        proofDensity: "rich",
+        contentVolume: "deep",
+        decisionComplexity: "high"
+      })
+    );
+    expect(technical.selected.id).toBe("technical-validation");
+    expect(technical.selected.reasonCodes).toContain("audience_technical");
+  });
+
+  it("uses library order as a stable score tie-breaker", () => {
+    const input = frameworkInput({ motion: "product" });
+    const first = rankMessageFrameworks(input);
+    const second = rankMessageFrameworks(input);
+    const technicalIndex = first.alternatives.findIndex(
+      (framework) => framework.id === "technical-validation"
+    );
+    const proofIndex = first.alternatives.findIndex(
+      (framework) => framework.id === "proof-led-decision"
+    );
+
+    expect(first).toEqual(second);
+    expect(first.alternatives[technicalIndex]!.score).toBe(
+      first.alternatives[proofIndex]!.score
+    );
+    expect(technicalIndex).toBeLessThan(proofIndex);
+  });
+
+  it("resolves all required slots for every framework and omits unsupported optional slots", () => {
+    for (const frameworkId of MESSAGE_FRAMEWORK_IDS) {
+      const resolution = resolveMessageFramework(frameworkId, {
+        audience: "Operations leaders",
+        promise: "Reduce manual handoffs across governed workflows.",
+        mechanism: "Connect applications through governed integration workflows.",
+        proofPolicy: "Use supported mechanism evidence only.",
+        nextAction: "Plan a validation session",
+        offerName: "Harmony"
+      });
+
+      expect(resolution.audience).toBeTruthy();
+      expect(resolution.promise).toBeTruthy();
+      expect(resolution.mechanism).toBeTruthy();
+      expect(resolution.proofPlan).toBeTruthy();
+      expect(resolution.decisionHelp).toBeTruthy();
+      expect(resolution.nextAction).toBeTruthy();
+      expect(resolution.tension).toBeUndefined();
+      expect(resolution.whyNow).toBeUndefined();
+    }
+  });
+
+  it("allows bounded model ranking to validate but not replace deterministic order", () => {
+    const input = frameworkInput();
+    const deterministic = rankMessageFrameworks(input);
+    const modelOrder = [
+      "source-insight",
+      ...MESSAGE_FRAMEWORK_IDS.filter((id) => id !== "source-insight")
+    ];
+    const validated = rankMessageFrameworks(input, {
+      selectedFrameworkId: "source-insight",
+      orderedFrameworkIds: modelOrder
+    });
+
+    expect(validated.selected).toEqual(deterministic.selected);
+    expect(validated.alternatives).toEqual(deterministic.alternatives);
+    expect(validated.modelValidation).toEqual({
+      status: "disagreed",
+      reasonCode: "model_ranking_disagreed"
+    });
+  });
+
   it("omits unsupported why-now instead of inventing urgency filler", () => {
     const spine = abm(cisco).messageSpineV2;
     expect(spine.composition.omittedSlots).toContain("whyNow");
@@ -233,6 +406,13 @@ describe("MessageSpineV2", () => {
     const review = reviewMessageCompositionQuality({
       family: "account",
       contract: "account-named-opportunity",
+      frameworkRanking: rankMessageFrameworks(
+        frameworkInput({
+          motion: "account",
+          objective: "Evaluate the fit",
+          decisionComplexity: "high"
+        })
+      ),
       audience: "Security leaders",
       tension: "Make progress with confidence across the stack",
       promise: "Account thesis for the named opportunity",

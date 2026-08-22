@@ -13,6 +13,101 @@ export const MESSAGE_SPINE_SECTION_USES = [
 export type MessageSpineSectionUse = (typeof MESSAGE_SPINE_SECTION_USES)[number];
 export type MessageSpineEvidenceConfidence = "high" | "medium" | "low";
 export type MessageRouteFamily = "account" | "campaign" | "content";
+export type MessageMotion = "account" | "demand" | "product" | "event" | "content";
+export type MessageOfferMaturity = "unconfirmed" | "emerging" | "confirmed";
+export type MessageProofDensity = "sparse" | "moderate" | "rich";
+export type MessageContentVolume = "light" | "standard" | "deep";
+export type MessageDecisionComplexity = "low" | "medium" | "high";
+export type MessageObjectiveIntent =
+  | "awareness"
+  | "education"
+  | "evaluation"
+  | "conversion"
+  | "registration";
+
+export const MESSAGE_FRAMEWORK_IDS = [
+  "outcome-mechanism",
+  "problem-change",
+  "technical-validation",
+  "proof-led-decision",
+  "event-value",
+  "source-insight"
+] as const;
+
+export type MessageFrameworkId = (typeof MESSAGE_FRAMEWORK_IDS)[number];
+
+export type MessageFrameworkReasonCode =
+  | "framework_baseline"
+  | `motion_${MessageMotion}`
+  | "audience_technical"
+  | "audience_business"
+  | `objective_${MessageObjectiveIntent}`
+  | `offer_${MessageOfferMaturity}`
+  | `proof_${MessageProofDensity}`
+  | `content_${MessageContentVolume}`
+  | `decision_${MessageDecisionComplexity}`;
+
+export interface MessageFrameworkRankingInput {
+  motion: MessageMotion;
+  audience: string;
+  objective: string;
+  cta: string;
+  offerMaturity: MessageOfferMaturity;
+  proofDensity: MessageProofDensity;
+  contentVolume: MessageContentVolume;
+  decisionComplexity: MessageDecisionComplexity;
+}
+
+export interface RankedMessageFramework {
+  id: MessageFrameworkId;
+  name: string;
+  score: number;
+  reasonCodes: MessageFrameworkReasonCode[];
+}
+
+export interface BoundedModelFrameworkRanking {
+  selectedFrameworkId: string;
+  orderedFrameworkIds: string[];
+}
+
+export interface MessageFrameworkModelValidation {
+  status: "confirmed" | "disagreed" | "rejected";
+  reasonCode:
+    | "model_ranking_confirmed"
+    | "model_ranking_disagreed"
+    | "model_ranking_invalid";
+}
+
+export interface MessageFrameworkRanking {
+  selected: RankedMessageFramework;
+  alternatives: RankedMessageFramework[];
+  basis: "deterministic";
+  modelValidation?: MessageFrameworkModelValidation;
+}
+
+export interface MessageFrameworkResolutionSeed {
+  audience: string;
+  promise: string;
+  mechanism: string;
+  proofPolicy: string;
+  nextAction: string;
+  offerName: string;
+  targetName?: string;
+  sourceName?: string;
+  tension?: string;
+  whyNow?: string;
+}
+
+export interface MessageFrameworkResolution {
+  audience: string;
+  tension?: string;
+  promise: string;
+  mechanism: string;
+  proofPlan: string;
+  decisionHelp: string;
+  nextAction: string;
+  whyNow?: string;
+}
 
 /**
  * Internal strategy jargon that must never appear in prospect-visible chrome.
@@ -105,6 +200,7 @@ export interface MessageSpineV2 {
 export interface ResolvedMessageComposition {
   family: MessageRouteFamily;
   contract: MessageRouteContractId;
+  frameworkRanking: MessageFrameworkRanking;
   audience: string;
   tension?: string;
   promise: string;
@@ -165,6 +261,252 @@ function concise(value: string, max = 180): string {
   return normalized.slice(0, max + 1).replace(/\s+\S*$/, "").replace(/[\s,;:.]+$/g, "");
 }
 
+interface MessageFrameworkDefinition {
+  id: MessageFrameworkId;
+  name: string;
+  motions: readonly MessageMotion[];
+  audienceAffinity: "technical" | "business" | "neutral";
+  objectives: readonly MessageObjectiveIntent[];
+  offerMaturities: readonly MessageOfferMaturity[];
+  proofDensities: readonly MessageProofDensity[];
+  contentVolumes: readonly MessageContentVolume[];
+  decisionComplexities: readonly MessageDecisionComplexity[];
+  proofWeight?: number;
+}
+
+const MESSAGE_FRAMEWORK_LIBRARY: readonly MessageFrameworkDefinition[] = [
+  {
+    id: "outcome-mechanism",
+    name: "Outcome and mechanism",
+    motions: ["demand", "product"],
+    audienceAffinity: "business",
+    objectives: ["awareness", "conversion"],
+    offerMaturities: ["unconfirmed", "emerging", "confirmed"],
+    proofDensities: ["sparse", "moderate"],
+    contentVolumes: ["light", "standard"],
+    decisionComplexities: ["low", "medium"]
+  },
+  {
+    id: "problem-change",
+    name: "Problem and supported change",
+    motions: ["account", "demand"],
+    audienceAffinity: "business",
+    objectives: ["evaluation", "conversion"],
+    offerMaturities: ["emerging", "confirmed"],
+    proofDensities: ["moderate", "rich"],
+    contentVolumes: ["standard", "deep"],
+    decisionComplexities: ["medium", "high"]
+  },
+  {
+    id: "technical-validation",
+    name: "Technical validation",
+    motions: ["account", "product"],
+    audienceAffinity: "technical",
+    objectives: ["education", "evaluation"],
+    offerMaturities: ["emerging", "confirmed"],
+    proofDensities: ["moderate", "rich"],
+    contentVolumes: ["standard", "deep"],
+    decisionComplexities: ["high"]
+  },
+  {
+    id: "proof-led-decision",
+    name: "Proof-led decision",
+    motions: ["account", "demand", "product"],
+    audienceAffinity: "neutral",
+    objectives: ["evaluation", "conversion"],
+    offerMaturities: ["confirmed"],
+    proofDensities: ["rich"],
+    contentVolumes: ["standard", "deep"],
+    decisionComplexities: ["medium", "high"],
+    proofWeight: 30
+  },
+  {
+    id: "event-value",
+    name: "Event value",
+    motions: ["event"],
+    audienceAffinity: "neutral",
+    objectives: ["registration", "education", "awareness"],
+    offerMaturities: ["unconfirmed", "emerging", "confirmed"],
+    proofDensities: ["sparse", "moderate"],
+    contentVolumes: ["light", "standard"],
+    decisionComplexities: ["low", "medium"]
+  },
+  {
+    id: "source-insight",
+    name: "Source insight and application",
+    motions: ["content"],
+    audienceAffinity: "neutral",
+    objectives: ["education", "awareness", "conversion"],
+    offerMaturities: ["emerging", "confirmed"],
+    proofDensities: ["moderate", "rich"],
+    contentVolumes: ["standard", "deep"],
+    decisionComplexities: ["low", "medium", "high"]
+  }
+];
+
+const TECHNICAL_AUDIENCE_PATTERN =
+  /\b(?:architects?|developers?|engineers?|technical|technology|infrastructure|security|platform|integration|data|IT)\b/i;
+
+function objectiveIntentFor(objective: string, cta: string): MessageObjectiveIntent {
+  const signal = `${objective} ${cta}`;
+  if (/\b(?:register|registration|reserve|attend|webinar|event)\b/i.test(signal)) return "registration";
+  if (/\b(?:evaluate|evaluation|assess|assessment|validate|demo|meeting|consult)\b/i.test(signal)) {
+    return "evaluation";
+  }
+  if (/\b(?:convert|conversion|contact|download|launch|announce|demand|pipeline)\b/i.test(signal)) {
+    return "conversion";
+  }
+  if (/\b(?:educate|education|learn|read|guide|insight|content engagement)\b/i.test(signal)) {
+    return "education";
+  }
+  return "awareness";
+}
+
+function modelValidationFor(
+  deterministicId: MessageFrameworkId,
+  modelRanking: BoundedModelFrameworkRanking | undefined
+): MessageFrameworkModelValidation | undefined {
+  if (!modelRanking) return undefined;
+  const ordered = modelRanking.orderedFrameworkIds;
+  const boundedIds = new Set<string>(MESSAGE_FRAMEWORK_IDS);
+  const valid =
+    ordered.length === MESSAGE_FRAMEWORK_IDS.length &&
+    new Set(ordered).size === MESSAGE_FRAMEWORK_IDS.length &&
+    ordered.every((id) => boundedIds.has(id)) &&
+    ordered[0] === modelRanking.selectedFrameworkId;
+  if (!valid) return { status: "rejected", reasonCode: "model_ranking_invalid" };
+  return modelRanking.selectedFrameworkId === deterministicId
+    ? { status: "confirmed", reasonCode: "model_ranking_confirmed" }
+    : { status: "disagreed", reasonCode: "model_ranking_disagreed" };
+}
+
+/**
+ * Scores only the reviewed framework library. Model output can confirm or
+ * disagree with this result, but cannot reorder or replace it.
+ */
+export function rankMessageFrameworks(
+  input: MessageFrameworkRankingInput,
+  modelRanking?: BoundedModelFrameworkRanking
+): MessageFrameworkRanking {
+  const objectiveIntent = objectiveIntentFor(input.objective, input.cta);
+  const technicalAudience = TECHNICAL_AUDIENCE_PATTERN.test(input.audience);
+  const ranked = MESSAGE_FRAMEWORK_LIBRARY.map((framework, libraryOrder) => {
+    let score = 10;
+    const reasonCodes: MessageFrameworkReasonCode[] = ["framework_baseline"];
+    const add = (matches: boolean, points: number, reason: MessageFrameworkReasonCode) => {
+      if (!matches) return;
+      score += points;
+      reasonCodes.push(reason);
+    };
+
+    add(framework.motions.includes(input.motion), 40, `motion_${input.motion}`);
+    add(
+      framework.audienceAffinity === (technicalAudience ? "technical" : "business"),
+      technicalAudience ? 18 : 8,
+      technicalAudience ? "audience_technical" : "audience_business"
+    );
+    add(framework.objectives.includes(objectiveIntent), 12, `objective_${objectiveIntent}`);
+    add(
+      framework.offerMaturities.includes(input.offerMaturity),
+      6,
+      `offer_${input.offerMaturity}`
+    );
+    add(
+      framework.proofDensities.includes(input.proofDensity),
+      framework.proofWeight ?? 14,
+      `proof_${input.proofDensity}`
+    );
+    add(
+      framework.contentVolumes.includes(input.contentVolume),
+      8,
+      `content_${input.contentVolume}`
+    );
+    add(
+      framework.decisionComplexities.includes(input.decisionComplexity),
+      10,
+      `decision_${input.decisionComplexity}`
+    );
+
+    return {
+      id: framework.id,
+      name: framework.name,
+      score,
+      reasonCodes,
+      libraryOrder
+    };
+  }).sort(
+    (left, right) =>
+      right.score - left.score ||
+      left.libraryOrder - right.libraryOrder ||
+      left.id.localeCompare(right.id)
+  );
+
+  const selected = ranked[0]!;
+  const publicCandidate = ({
+    id,
+    name,
+    score,
+    reasonCodes
+  }: (typeof ranked)[number]): RankedMessageFramework => ({ id, name, score, reasonCodes });
+  const modelValidation = modelValidationFor(selected.id, modelRanking);
+  return {
+    selected: publicCandidate(selected),
+    alternatives: ranked.slice(1).map(publicCandidate),
+    basis: "deterministic",
+    ...(modelValidation ? { modelValidation } : {})
+  };
+}
+
+/**
+ * Resolves the complete required content contract for every bounded framework.
+ * Tension and why-now remain evidence-gated optional slots.
+ */
+export function resolveMessageFramework(
+  frameworkId: MessageFrameworkId,
+  seed: MessageFrameworkResolutionSeed
+): MessageFrameworkResolution {
+  let proofPlan: string;
+  let decisionHelp: string;
+
+  switch (frameworkId) {
+    case "outcome-mechanism":
+      proofPlan = seed.proofPolicy;
+      decisionHelp = `Help ${seed.audience} compare the promised outcome with how ${seed.offerName} creates it.`;
+      break;
+    case "problem-change":
+      proofPlan = `Ground the case for change in supported context. ${seed.proofPolicy}`;
+      decisionHelp = `Help ${seed.audience} choose one change to validate${seed.targetName ? ` for ${seed.targetName}` : ""}.`;
+      break;
+    case "technical-validation":
+      proofPlan = `Show the mechanism, operating boundaries, and validation questions. ${seed.proofPolicy}`;
+      decisionHelp = `Help ${seed.audience} test one technical assumption before expanding scope.`;
+      break;
+    case "proof-led-decision":
+      proofPlan = `Lead with the strongest supported evidence, then state its limits. ${seed.proofPolicy}`;
+      decisionHelp = `Help ${seed.audience} compare the evidence with one bounded decision criterion.`;
+      break;
+    case "event-value":
+      proofPlan = `Use only supplied event details and supported seller evidence. ${seed.proofPolicy}`;
+      decisionHelp = `Help ${seed.audience} choose the most relevant event topic before taking the next step.`;
+      break;
+    case "source-insight":
+      proofPlan = `Use only claims grounded in ${seed.sourceName ?? "the approved source"} and cite the source when a finding is shown.`;
+      decisionHelp = `Help ${seed.audience} apply one supported finding from ${seed.sourceName ?? "the source"} to their next decision.`;
+      break;
+  }
+
+  return {
+    audience: concise(seed.audience, 140),
+    ...(seed.tension ? { tension: concise(seed.tension, 180) } : {}),
+    promise: concise(seed.promise, 220),
+    mechanism: concise(seed.mechanism, 220),
+    proofPlan: concise(proofPlan, 220),
+    decisionHelp: concise(decisionHelp, 200),
+    nextAction: concise(seed.nextAction, 140),
+    ...(seed.whyNow ? { whyNow: concise(seed.whyNow, 180) } : {})
+  };
+}
+
 function tokens(value: string): string[] {
   return unique(
     value
@@ -207,6 +549,80 @@ function contractIdFor(
     return "campaign-event-session";
   }
   return "campaign-offer-path";
+}
+
+function motionFor(
+  context: Omit<CampaignGenerationContext, "messageSpineV2">
+): MessageMotion {
+  switch (context.brief.campaignRegister) {
+    case "one-to-one-abm":
+      return "account";
+    case "campaign-demand":
+      return "demand";
+    case "campaign-product":
+      return "product";
+    case "campaign-event":
+      return "event";
+    case "content-magic":
+      return "content";
+  }
+}
+
+function offerMaturityFor(
+  context: Omit<CampaignGenerationContext, "messageSpineV2">
+): MessageOfferMaturity {
+  if (context.brief.offerOrSource.confirmationStatus === "confirmed") return "confirmed";
+  return context.brief.offerOrSource.kind === "seller-category" ? "unconfirmed" : "emerging";
+}
+
+function proofDensityFor(
+  context: Omit<CampaignGenerationContext, "messageSpineV2">,
+  evidence: MessageSpineEvidence[]
+): MessageProofDensity {
+  const usableEvidence = evidence.filter(
+    (item) => item.sourceType !== "visitor" && item.confidence !== "low"
+  );
+  if (
+    usableEvidence.length >= 4 ||
+    (context.brief.proofMode === "source-content" &&
+      context.brief.sourceGrounding.confidence === "high")
+  ) {
+    return "rich";
+  }
+  if (usableEvidence.length >= 2 || context.brief.proofMode === "source-content") {
+    return "moderate";
+  }
+  return "sparse";
+}
+
+function contentVolumeFor(
+  context: Omit<CampaignGenerationContext, "messageSpineV2">,
+  evidence: MessageSpineEvidence[]
+): MessageContentVolume {
+  const groundedEvidenceCount = evidence.filter((item) => item.sourceType !== "visitor").length;
+  if (context.brief.sourceGrounding.topics.length >= 4 || groundedEvidenceCount >= 4) return "deep";
+  if (context.brief.sourceGrounding.topics.length >= 2 || groundedEvidenceCount >= 2) {
+    return "standard";
+  }
+  return "light";
+}
+
+function decisionComplexityFor(
+  context: Omit<CampaignGenerationContext, "messageSpineV2">
+): MessageDecisionComplexity {
+  if (
+    context.brief.campaignRegister === "one-to-one-abm" ||
+    TECHNICAL_AUDIENCE_PATTERN.test(context.brief.audience)
+  ) {
+    return "high";
+  }
+  if (
+    context.brief.buyerStage === "evaluation" ||
+    context.brief.buyerStage === "decision-support"
+  ) {
+    return "medium";
+  }
+  return "low";
 }
 
 function isSupportedWhyNow(value: string | null | undefined): value is string {
@@ -266,41 +682,38 @@ function resolveComposition(
     : undefined;
   if (!whyNow) omittedSlots.push("whyNow");
 
-  const proofPlan =
+  const proofPolicy =
     family === "content"
-      ? concise(
-          `Use only claims grounded in ${brief.sourceTitle ?? "the approved source"} and cite the source when a finding is shown.`,
-          220
-        )
-      : concise(brief.messageSpine.proofPolicy, 220);
-
-  const decisionHelp =
-    family === "account"
-      ? concise(
-          `Help ${brief.audience} choose one validation question ${brief.targetAccount ? `for ${brief.targetAccount.name}` : "for the account"} before expanding scope.`,
-          200
-        )
-      : family === "content"
-        ? concise(
-            `Help ${brief.audience} apply one supported finding from ${brief.sourceTitle ?? "the source"} to their next decision.`,
-            200
-          )
-        : concise(
-            `Help ${brief.audience} pick one useful path through ${brief.offerOrSource.name} without inventing unsupported proof.`,
-            200
-          );
+      ? `Use only claims grounded in ${brief.sourceTitle ?? "the approved source"} and cite the source when a finding is shown.`
+      : brief.messageSpine.proofPolicy;
+  const frameworkRanking = rankMessageFrameworks({
+    motion: motionFor(context),
+    audience: brief.audience,
+    objective: brief.campaignGoal,
+    cta: brief.primaryAction,
+    offerMaturity: offerMaturityFor(context),
+    proofDensity: proofDensityFor(context, evidence),
+    contentVolume: contentVolumeFor(context, evidence),
+    decisionComplexity: decisionComplexityFor(context)
+  });
+  const resolution = resolveMessageFramework(frameworkRanking.selected.id, {
+    audience: brief.audience,
+    promise: proposition.supportedChange,
+    mechanism: proposition.sellerMechanism,
+    proofPolicy,
+    nextAction: proposition.boundedNextDecision || brief.messageSpine.nextAction,
+    offerName: brief.offerOrSource.name,
+    ...(brief.targetAccount ? { targetName: brief.targetAccount.name } : {}),
+    ...(brief.sourceTitle ? { sourceName: brief.sourceTitle } : {}),
+    ...(tension ? { tension } : {}),
+    ...(whyNow ? { whyNow } : {})
+  });
 
   return {
     family,
     contract,
-    audience: brief.audience,
-    ...(tension ? { tension } : {}),
-    promise: concise(proposition.supportedChange, 220),
-    mechanism: concise(proposition.sellerMechanism, 220),
-    proofPlan,
-    decisionHelp,
-    nextAction: concise(proposition.boundedNextDecision || brief.messageSpine.nextAction, 140),
-    ...(whyNow ? { whyNow } : {}),
+    frameworkRanking,
+    ...resolution,
     omittedSlots,
     buyerFacingLabels: BUYER_FACING_NAVIGATION[family]
   };

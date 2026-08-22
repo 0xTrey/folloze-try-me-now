@@ -523,6 +523,20 @@ export function listWireframeArchetypes(family?: WireframeFamily): readonly Wire
 export type WireframeBrandEvidenceStrength = "strong" | "moderate" | "weak" | "none";
 export type WireframeAssetQuality = "high" | "medium" | "low" | "none";
 export type WireframeContentDensity = "rich" | "moderate" | "sparse";
+export type WireframeMessageStructure =
+  | "single-idea"
+  | "problem-solution"
+  | "proof-led"
+  | "multi-path"
+  | "technical-sequence"
+  | "chaptered";
+export type WireframeProofAvailability = "strong" | "limited" | "none";
+export type WireframeInteractionOpportunity = "rich" | "light" | "none";
+export type WireframeSellerGeometry = "sparse-neutral" | "balanced-brand" | "branded-proof";
+export type WireframeSellerDensity = "dense" | "balanced" | "sparse";
+export type WireframeCampaignMotion = "demonstrative" | "guided" | "quiet";
+export type WireframeDecisionComplexity = "high" | "medium" | "low";
+export type WireframeSectionCount = 4 | 5 | 6 | 7 | 8;
 
 export interface WireframeSelectionSignals {
   family: WireframeFamily;
@@ -549,6 +563,17 @@ export interface WireframeSelectionSignals {
   assetQuality?: WireframeAssetQuality;
   /** Approved source / offer text density; sparse content prefers simpler archetypes. */
   contentDensity?: WireframeContentDensity;
+  /** Message organization inferred upstream or supplied by an internal reviewer. */
+  messageStructure?: WireframeMessageStructure;
+  proofAvailability?: WireframeProofAvailability;
+  interactionOpportunity?: WireframeInteractionOpportunity;
+  sellerGeometry?: WireframeSellerGeometry;
+  sellerDensity?: WireframeSellerDensity;
+  campaignMotion?: WireframeCampaignMotion;
+  decisionComplexity?: WireframeDecisionComplexity;
+  /** Internal planning constraint. The result remains bounded to four through eight sections. */
+  sectionCount?: WireframeSectionCount;
+  sellerLogoAvailable?: boolean;
 }
 
 export type WireframeRankingFactor =
@@ -559,7 +584,16 @@ export type WireframeRankingFactor =
   | "assetQuality"
   | "proof"
   | "contentDensity"
-  | "objective";
+  | "objective"
+  | "messageStructure"
+  | "contentVolume"
+  | "proofAvailability"
+  | "imageryAvailability"
+  | "interactionOpportunity"
+  | "sellerGeometry"
+  | "sellerDensity"
+  | "campaignMotion"
+  | "decisionComplexity";
 
 export interface WireframeRankingScore {
   archetypeId: WireframeArchetypeId;
@@ -574,6 +608,118 @@ export interface WireframeSelectionOptions {
   requestedArchetypeId?: WireframeArchetypeId;
   selectedBy?: "system" | "visitor";
   locked?: boolean;
+}
+
+export type WireframeSectionRole =
+  | "hero"
+  | "context"
+  | "mechanism"
+  | "proof"
+  | "pathways"
+  | "agenda"
+  | "chapter-navigation"
+  | "decision-support"
+  | "resources"
+  | "seller-validation"
+  | "next-action";
+
+export type WireframeComponentSlot =
+  | "headline-group"
+  | "logo-lockup"
+  | "image-hero"
+  | "video-stage"
+  | "proof-artifact"
+  | "typographic-hero"
+  | "diagram-hero"
+  | "narrative-copy"
+  | "fact-pair"
+  | "metric-strip"
+  | "proof-ledger"
+  | "evidence-diagram"
+  | "choice-cards"
+  | "process-diagram"
+  | "step-sequence"
+  | "agenda-list"
+  | "chapter-index"
+  | "decision-matrix"
+  | "resource-list"
+  | "seller-facts"
+  | "cta-panel";
+
+export type WireframeAllowedInteraction =
+  | "none"
+  | "anchor-scroll"
+  | "expand-details"
+  | "select-path"
+  | "focus-step"
+  | "filter-findings"
+  | "seek-chapter"
+  | "play-source"
+  | "open-source"
+  | "primary-cta";
+
+export type WireframeCompositionReasonCode =
+  | "section-count-4-compact"
+  | "section-count-5-focused"
+  | "section-count-6-balanced"
+  | "section-count-7-detailed"
+  | "section-count-8-complex"
+  | "message-single-idea"
+  | "message-problem-solution"
+  | "message-proof-led"
+  | "message-multi-path"
+  | "message-technical-sequence"
+  | "message-chaptered"
+  | "proof-strong"
+  | "proof-limited"
+  | "proof-none"
+  | "imagery-available"
+  | "imagery-fallback-type"
+  | "imagery-fallback-diagram"
+  | "seller-sparse-neutral"
+  | "seller-balanced-brand"
+  | "seller-branded-proof"
+  | "motion-quiet"
+  | "motion-guided"
+  | "motion-demonstrative"
+  | "decision-low"
+  | "decision-medium"
+  | "decision-high";
+
+export interface WireframeSectionPlan {
+  role: WireframeSectionRole;
+  label: string;
+  wordBudget: {
+    min: number;
+    max: number;
+  };
+  componentSlots: WireframeComponentSlot[];
+  allowedInteractions: WireframeAllowedInteraction[];
+}
+
+export interface WireframeCompositionAlternative {
+  archetypeId: WireframeArchetypeId;
+  compositionId: CompositionId;
+  score: number;
+  sectionCount: WireframeSectionCount;
+  reasonCodes: WireframeCompositionReasonCode[];
+}
+
+export interface WireframeCompositionPlanV1 {
+  version: 1;
+  archetypeId: WireframeArchetypeId;
+  compositionId: CompositionId;
+  sectionCount: WireframeSectionCount;
+  sections: WireframeSectionPlan[];
+  totalWordBudget: {
+    min: number;
+    max: number;
+  };
+  score: number;
+  alternatives: WireframeCompositionAlternative[];
+  reasonCodes: WireframeCompositionReasonCode[];
+  /** Internal-only contract. This plan must not become a prospect-facing chooser. */
+  visibility: "internal";
 }
 
 export interface WireframeSelectionV1 {
@@ -591,6 +737,7 @@ export interface WireframeSelectionV1 {
     selectedScore: number;
     candidates: WireframeRankingScore[];
   };
+  compositionPlan: WireframeCompositionPlanV1;
 }
 
 interface SelectedArchetype {
@@ -754,6 +901,273 @@ function selectContentArchetype(signals: WireframeSelectionSignals, text: string
   };
 }
 
+interface ResolvedCompositionSignals {
+  messageStructure: WireframeMessageStructure;
+  proofAvailability: WireframeProofAvailability;
+  interactionOpportunity: WireframeInteractionOpportunity;
+  sellerGeometry: WireframeSellerGeometry;
+  sellerDensity: WireframeSellerDensity;
+  campaignMotion: WireframeCampaignMotion;
+  decisionComplexity: WireframeDecisionComplexity;
+  sectionCount: WireframeSectionCount;
+  hasImagery: boolean;
+  hasLogo: boolean;
+}
+
+const compositionMotion: Record<CompositionId, WireframeCampaignMotion> = {
+  "editorial-split": "quiet",
+  "evidence-lead": "guided",
+  "interactive-paths": "guided",
+  "workflow-spine": "guided",
+  "data-story": "quiet",
+  "chapter-journey": "demonstrative"
+};
+
+function resolveMessageStructure(
+  signals: WireframeSelectionSignals,
+  text: string
+): WireframeMessageStructure {
+  if (signals.messageStructure) return signals.messageStructure;
+  if (
+    signals.campaignType === "event" ||
+    /webinar|video|recording|conference|summit|agenda|chapter/.test(text)
+  ) {
+    return "chaptered";
+  }
+  if (
+    signals.approvedQuantifiedProof ||
+    signals.approvedCustomerStory ||
+    /customer proof|case stud|benchmark|research|measurable outcome/.test(text)
+  ) {
+    return "proof-led";
+  }
+  if (
+    signals.isSpecificUseCase ||
+    /technical|architecture|implementation|workflow|validation|process/.test(text)
+  ) {
+    return "technical-sequence";
+  }
+  const roleCount = signals.decisionRoleCount ?? inferredDecisionRoleCount(signals.audience);
+  if (roleCount >= 3 || /choose|role|path|buying team|cross-functional/.test(text)) {
+    return "multi-path";
+  }
+  if (signals.contentDensity === "sparse") return "single-idea";
+  return "problem-solution";
+}
+
+function resolveDecisionComplexity(
+  signals: WireframeSelectionSignals,
+  messageStructure: WireframeMessageStructure
+): WireframeDecisionComplexity {
+  if (signals.decisionComplexity) return signals.decisionComplexity;
+  const roleCount = signals.decisionRoleCount ?? inferredDecisionRoleCount(signals.audience);
+  if (
+    roleCount >= 4 ||
+    messageStructure === "technical-sequence" ||
+    signals.experiencePattern === "assessment"
+  ) {
+    return "high";
+  }
+  if (roleCount >= 2 || messageStructure === "multi-path" || messageStructure === "proof-led") {
+    return "medium";
+  }
+  return "low";
+}
+
+function resolveCompositionSignals(
+  signals: WireframeSelectionSignals
+): ResolvedCompositionSignals {
+  const text = normalizedSignalText(signals);
+  const messageStructure = resolveMessageStructure(signals, text);
+  const proofAvailability =
+    signals.proofAvailability ??
+    (signals.approvedQuantifiedProof || signals.approvedCustomerStory
+      ? "strong"
+      : /evidence|proof|research|benchmark|source|citation|customer/.test(text)
+        ? "limited"
+        : "none");
+  const decisionComplexity = resolveDecisionComplexity(signals, messageStructure);
+  const interactionOpportunity =
+    signals.interactionOpportunity ??
+    (messageStructure === "multi-path" || signals.experiencePattern === "assessment"
+      ? "rich"
+      : messageStructure === "chaptered" || decisionComplexity === "medium"
+        ? "light"
+        : "none");
+  const sellerGeometry =
+    signals.sellerGeometry ??
+    (signals.brandEvidenceStrength === "strong" && proofAvailability === "strong"
+      ? "branded-proof"
+      : signals.contentDensity === "sparse" &&
+          (!signals.brandEvidenceStrength ||
+            signals.brandEvidenceStrength === "none" ||
+            signals.brandEvidenceStrength === "weak")
+        ? "sparse-neutral"
+        : "balanced-brand");
+  const sellerDensity =
+    signals.sellerDensity ??
+    (signals.contentDensity === "rich"
+      ? "dense"
+      : signals.contentDensity === "sparse"
+        ? "sparse"
+        : "balanced");
+  const campaignMotion =
+    signals.campaignMotion ??
+    (messageStructure === "chaptered"
+      ? "demonstrative"
+      : interactionOpportunity === "rich" || messageStructure === "technical-sequence"
+        ? "guided"
+        : "quiet");
+  const sectionCount =
+    signals.sectionCount ??
+    (signals.contentDensity === "sparse" &&
+    decisionComplexity === "low" &&
+    messageStructure !== "chaptered"
+      ? 4
+      : decisionComplexity === "high" &&
+          (signals.contentDensity === "rich" || sellerDensity === "dense")
+        ? 8
+        : 6);
+
+  return {
+    messageStructure,
+    proofAvailability,
+    interactionOpportunity,
+    sellerGeometry,
+    sellerDensity,
+    campaignMotion,
+    decisionComplexity,
+    sectionCount,
+    hasImagery: signals.assetQuality !== undefined && signals.assetQuality !== "none",
+    hasLogo: signals.sellerLogoAvailable ?? signals.brandEvidenceStrength === "strong"
+  };
+}
+
+function compositionFitFactors(
+  compositionId: CompositionId,
+  signals: WireframeSelectionSignals
+): Pick<
+  Record<WireframeRankingFactor, number>,
+  | "messageStructure"
+  | "contentVolume"
+  | "proofAvailability"
+  | "imageryAvailability"
+  | "interactionOpportunity"
+  | "sellerGeometry"
+  | "sellerDensity"
+  | "campaignMotion"
+  | "decisionComplexity"
+> {
+  const resolved = resolveCompositionSignals(signals);
+  const messageMatches: Record<WireframeMessageStructure, readonly CompositionId[]> = {
+    "single-idea": ["editorial-split"],
+    "problem-solution": ["editorial-split", "workflow-spine"],
+    "proof-led": ["evidence-lead", "data-story"],
+    "multi-path": ["interactive-paths", "data-story"],
+    "technical-sequence": ["workflow-spine"],
+    chaptered: ["chapter-journey"]
+  };
+  const volumeMatches =
+    resolved.sectionCount <= 5
+      ? (["editorial-split", "evidence-lead"] as const)
+      : resolved.sectionCount >= 7
+        ? (["workflow-spine", "interactive-paths", "data-story", "chapter-journey"] as const)
+        : compositionIds;
+  const proofScore =
+    resolved.proofAvailability === "strong"
+      ? compositionId === "evidence-lead" || compositionId === "data-story"
+        ? 10
+        : 4
+      : resolved.proofAvailability === "limited"
+        ? compositionId === "evidence-lead" || compositionId === "data-story"
+          ? 5
+          : 3
+        : compositionId === "evidence-lead" || compositionId === "data-story"
+          ? -6
+          : 4;
+  const imageryScore = resolved.hasImagery
+    ? compositionId === "editorial-split" ||
+      compositionId === "evidence-lead" ||
+      compositionId === "chapter-journey"
+      ? 6
+      : 3
+    : compositionId === "workflow-spine" || compositionId === "data-story"
+      ? 6
+      : compositionId === "editorial-split"
+        ? 5
+        : compositionId === "chapter-journey"
+          ? -3
+          : 2;
+  const interactionScore =
+    resolved.interactionOpportunity === "rich"
+      ? compositionId === "interactive-paths" ||
+        compositionId === "data-story" ||
+        compositionId === "chapter-journey"
+        ? 8
+        : 2
+      : resolved.interactionOpportunity === "light"
+        ? compositionId === "interactive-paths" ||
+          compositionId === "workflow-spine" ||
+          compositionId === "chapter-journey"
+          ? 5
+          : 3
+        : compositionId === "editorial-split" || compositionId === "evidence-lead"
+          ? 5
+          : 0;
+  const geometryScore =
+    resolved.sellerGeometry === "sparse-neutral"
+      ? compositionId === "editorial-split"
+        ? 8
+        : 1
+      : resolved.sellerGeometry === "branded-proof"
+        ? compositionId === "evidence-lead"
+          ? 8
+          : compositionId === "editorial-split"
+            ? 5
+            : 2
+        : 4;
+  const densityScore =
+    resolved.sellerDensity === "sparse"
+      ? compositionId === "editorial-split"
+        ? 7
+        : 1
+      : resolved.sellerDensity === "dense"
+        ? compositionId === "workflow-spine" ||
+          compositionId === "interactive-paths" ||
+          compositionId === "data-story"
+          ? 7
+          : 2
+        : 4;
+  const decisionScore =
+    resolved.decisionComplexity === "high"
+      ? compositionId === "workflow-spine" ||
+        compositionId === "interactive-paths" ||
+        compositionId === "data-story"
+        ? 8
+        : 1
+      : resolved.decisionComplexity === "medium"
+        ? compositionId === "evidence-lead" ||
+          compositionId === "interactive-paths" ||
+          compositionId === "workflow-spine"
+          ? 5
+          : 3
+        : compositionId === "editorial-split" || compositionId === "evidence-lead"
+          ? 5
+          : 1;
+
+  return {
+    messageStructure: messageMatches[resolved.messageStructure].includes(compositionId) ? 10 : -2,
+    contentVolume: (volumeMatches as readonly CompositionId[]).includes(compositionId) ? 8 : -2,
+    proofAvailability: proofScore,
+    imageryAvailability: imageryScore,
+    interactionOpportunity: interactionScore,
+    sellerGeometry: geometryScore,
+    sellerDensity: densityScore,
+    campaignMotion: compositionMotion[compositionId] === resolved.campaignMotion ? 6 : 0,
+    decisionComplexity: decisionScore
+  };
+}
+
 function softSignalBoosts(signals: WireframeSelectionSignals, archetypeId: WireframeArchetypeId): Partial<Record<WireframeRankingFactor, number>> {
   const metadata = getWireframeArchetype(archetypeId);
   const brand = signals.brandEvidenceStrength ?? "none";
@@ -825,6 +1239,12 @@ function scoreArchetypeAgainstRule(
   for (const [key, value] of Object.entries(soft) as Array<[WireframeRankingFactor, number]>) {
     factors[key] = (factors[key] ?? 0) + value;
   }
+  const compositionFit = compositionFitFactors(metadata.primaryCompositionId, signals);
+  for (const [key, value] of Object.entries(compositionFit) as Array<
+    [WireframeRankingFactor, number]
+  >) {
+    factors[key] = (factors[key] ?? 0) + value;
+  }
 
   const score = Object.values(factors).reduce((sum, value) => sum + (value ?? 0), 0);
   return {
@@ -855,6 +1275,363 @@ export function rankWireframeCandidates(signals: WireframeSelectionSignals): Wir
   return listWireframeArchetypes(signals.family)
     .map((wireframe) => scoreArchetypeAgainstRule(wireframe.id, rule, signals))
     .sort((left, right) => right.score - left.score || left.archetypeId.localeCompare(right.archetypeId));
+}
+
+const compositionSectionRoles: Record<
+  CompositionId,
+  readonly [
+    WireframeSectionRole,
+    WireframeSectionRole,
+    WireframeSectionRole,
+    WireframeSectionRole,
+    WireframeSectionRole,
+    WireframeSectionRole,
+    WireframeSectionRole,
+    "next-action"
+  ]
+> = {
+  "editorial-split": [
+    "hero",
+    "context",
+    "mechanism",
+    "proof",
+    "pathways",
+    "decision-support",
+    "seller-validation",
+    "next-action"
+  ],
+  "evidence-lead": [
+    "hero",
+    "proof",
+    "context",
+    "mechanism",
+    "decision-support",
+    "resources",
+    "seller-validation",
+    "next-action"
+  ],
+  "interactive-paths": [
+    "hero",
+    "pathways",
+    "context",
+    "mechanism",
+    "proof",
+    "decision-support",
+    "resources",
+    "next-action"
+  ],
+  "workflow-spine": [
+    "hero",
+    "mechanism",
+    "context",
+    "proof",
+    "decision-support",
+    "pathways",
+    "resources",
+    "next-action"
+  ],
+  "data-story": [
+    "hero",
+    "proof",
+    "context",
+    "pathways",
+    "mechanism",
+    "decision-support",
+    "resources",
+    "next-action"
+  ],
+  "chapter-journey": [
+    "hero",
+    "agenda",
+    "chapter-navigation",
+    "context",
+    "proof",
+    "decision-support",
+    "resources",
+    "next-action"
+  ]
+};
+
+const sectionRoleLabels: Record<WireframeSectionRole, string> = {
+  hero: "Opening promise",
+  context: "Recognizable context",
+  mechanism: "How the outcome is created",
+  proof: "Evidence and validation",
+  pathways: "Ways to explore",
+  agenda: "Agenda and takeaways",
+  "chapter-navigation": "Chapters and moments",
+  "decision-support": "Decision support",
+  resources: "Supporting resources",
+  "seller-validation": "Seller credibility",
+  "next-action": "Next useful action"
+};
+
+const sectionWordBudgets: Record<
+  WireframeSectionRole,
+  { min: number; max: number }
+> = {
+  hero: { min: 35, max: 75 },
+  context: { min: 55, max: 115 },
+  mechanism: { min: 65, max: 140 },
+  proof: { min: 45, max: 110 },
+  pathways: { min: 45, max: 105 },
+  agenda: { min: 40, max: 95 },
+  "chapter-navigation": { min: 35, max: 85 },
+  "decision-support": { min: 55, max: 125 },
+  resources: { min: 30, max: 80 },
+  "seller-validation": { min: 30, max: 70 },
+  "next-action": { min: 25, max: 55 }
+};
+
+function sectionRolesFor(
+  compositionId: CompositionId,
+  count: WireframeSectionCount
+): WireframeSectionRole[] {
+  const sequence = compositionSectionRoles[compositionId];
+  return [...sequence.slice(0, count - 1), "next-action"];
+}
+
+function heroMediaSlot(
+  compositionId: CompositionId,
+  resolved: ResolvedCompositionSignals
+): WireframeComponentSlot {
+  if (!resolved.hasImagery) {
+    return compositionId === "workflow-spine" || compositionId === "data-story"
+      ? "diagram-hero"
+      : "typographic-hero";
+  }
+  if (compositionId === "chapter-journey") return "video-stage";
+  if (compositionId === "evidence-lead") return "proof-artifact";
+  return "image-hero";
+}
+
+function componentSlotsFor(
+  role: WireframeSectionRole,
+  compositionId: CompositionId,
+  resolved: ResolvedCompositionSignals
+): WireframeComponentSlot[] {
+  if (role === "hero") {
+    return [
+      "headline-group",
+      ...(resolved.hasLogo ? (["logo-lockup"] as const) : []),
+      heroMediaSlot(compositionId, resolved)
+    ];
+  }
+  if (role === "context") return ["narrative-copy"];
+  if (role === "mechanism") {
+    return compositionId === "workflow-spine"
+      ? ["step-sequence", "process-diagram"]
+      : ["process-diagram"];
+  }
+  if (role === "proof") {
+    if (resolved.proofAvailability === "strong") {
+      return resolved.hasImagery
+        ? ["fact-pair", "proof-artifact"]
+        : ["fact-pair", "evidence-diagram"];
+    }
+    return ["proof-ledger", "evidence-diagram"];
+  }
+  if (role === "pathways") return ["choice-cards"];
+  if (role === "agenda") return ["agenda-list"];
+  if (role === "chapter-navigation") return ["chapter-index"];
+  if (role === "decision-support") return ["decision-matrix"];
+  if (role === "resources") return ["resource-list"];
+  if (role === "seller-validation") return ["seller-facts"];
+  return ["cta-panel"];
+}
+
+function allowedInteractionsFor(
+  role: WireframeSectionRole,
+  compositionId: CompositionId,
+  resolved: ResolvedCompositionSignals
+): WireframeAllowedInteraction[] {
+  if (role === "next-action") return ["primary-cta"];
+  if (role === "hero") {
+    return compositionId === "chapter-journey" && resolved.hasImagery
+      ? ["play-source", "anchor-scroll"]
+      : ["anchor-scroll"];
+  }
+  if (role === "proof") {
+    return resolved.interactionOpportunity === "none"
+      ? ["open-source"]
+      : ["expand-details", "open-source"];
+  }
+  if (role === "pathways") {
+    return resolved.interactionOpportunity === "none" ? ["none"] : ["select-path"];
+  }
+  if (role === "mechanism") {
+    return resolved.interactionOpportunity === "rich" ? ["focus-step"] : ["none"];
+  }
+  if (role === "chapter-navigation") {
+    return resolved.hasImagery ? ["seek-chapter"] : ["anchor-scroll"];
+  }
+  if (role === "resources") return ["open-source"];
+  if (role === "decision-support" && resolved.interactionOpportunity === "rich") {
+    return ["filter-findings"];
+  }
+  return ["none"];
+}
+
+function compositionReasonCodes(
+  resolved: ResolvedCompositionSignals,
+  compositionId: CompositionId
+): WireframeCompositionReasonCode[] {
+  const countReason: Record<WireframeSectionCount, WireframeCompositionReasonCode> = {
+    4: "section-count-4-compact",
+    5: "section-count-5-focused",
+    6: "section-count-6-balanced",
+    7: "section-count-7-detailed",
+    8: "section-count-8-complex"
+  };
+  const messageReason: Record<
+    WireframeMessageStructure,
+    WireframeCompositionReasonCode
+  > = {
+    "single-idea": "message-single-idea",
+    "problem-solution": "message-problem-solution",
+    "proof-led": "message-proof-led",
+    "multi-path": "message-multi-path",
+    "technical-sequence": "message-technical-sequence",
+    chaptered: "message-chaptered"
+  };
+  const proofReason: Record<
+    WireframeProofAvailability,
+    WireframeCompositionReasonCode
+  > = {
+    strong: "proof-strong",
+    limited: "proof-limited",
+    none: "proof-none"
+  };
+  const sellerReason: Record<
+    WireframeSellerGeometry,
+    WireframeCompositionReasonCode
+  > = {
+    "sparse-neutral": "seller-sparse-neutral",
+    "balanced-brand": "seller-balanced-brand",
+    "branded-proof": "seller-branded-proof"
+  };
+  const motionReason: Record<
+    WireframeCampaignMotion,
+    WireframeCompositionReasonCode
+  > = {
+    quiet: "motion-quiet",
+    guided: "motion-guided",
+    demonstrative: "motion-demonstrative"
+  };
+  const decisionReason: Record<
+    WireframeDecisionComplexity,
+    WireframeCompositionReasonCode
+  > = {
+    low: "decision-low",
+    medium: "decision-medium",
+    high: "decision-high"
+  };
+  const imageryReason: WireframeCompositionReasonCode = resolved.hasImagery
+    ? "imagery-available"
+    : compositionId === "workflow-spine" || compositionId === "data-story"
+      ? "imagery-fallback-diagram"
+      : "imagery-fallback-type";
+
+  return [
+    countReason[resolved.sectionCount],
+    messageReason[resolved.messageStructure],
+    proofReason[resolved.proofAvailability],
+    imageryReason,
+    sellerReason[resolved.sellerGeometry],
+    motionReason[resolved.campaignMotion],
+    decisionReason[resolved.decisionComplexity]
+  ];
+}
+
+function compositionPlanFromRanking(
+  signals: WireframeSelectionSignals,
+  archetypeId: WireframeArchetypeId,
+  ranked: readonly WireframeRankingScore[]
+): WireframeCompositionPlanV1 {
+  const metadata = getWireframeArchetype(archetypeId);
+  if (metadata.family !== signals.family) {
+    throw new Error(
+      `Wireframe ${metadata.id} belongs to ${metadata.family}, not ${signals.family}`
+    );
+  }
+  const resolved = resolveCompositionSignals(signals);
+  const roles = sectionRolesFor(metadata.primaryCompositionId, resolved.sectionCount);
+  const labels = [
+    ...metadata.sectionLabels.slice(0, Math.min(roles.length - 1, 6)),
+    ...(roles.length === 8 ? [sectionRoleLabels[roles[6]!]] : []),
+    metadata.sectionLabels[6]
+  ];
+  const densityMultiplier =
+    resolved.sellerDensity === "dense"
+      ? 1.15
+      : resolved.sellerDensity === "sparse"
+        ? 0.8
+        : 1;
+  const sections = roles.map((role, index): WireframeSectionPlan => {
+    const baseBudget = sectionWordBudgets[role];
+    return {
+      role,
+      label: labels[index] ?? sectionRoleLabels[role],
+      wordBudget: {
+        min: Math.round(baseBudget.min * densityMultiplier),
+        max: Math.round(baseBudget.max * densityMultiplier)
+      },
+      componentSlots: componentSlotsFor(role, metadata.primaryCompositionId, resolved),
+      allowedInteractions: allowedInteractionsFor(
+        role,
+        metadata.primaryCompositionId,
+        resolved
+      )
+    };
+  });
+  const selectedScore =
+    ranked.find((candidate) => candidate.archetypeId === archetypeId)?.score ?? 0;
+  const alternativeIdSet = new Set(metadata.compatibleAlternativeIds);
+  const alternatives = ranked
+    .filter((candidate) => alternativeIdSet.has(candidate.archetypeId))
+    .slice(0, 2)
+    .map((candidate): WireframeCompositionAlternative => ({
+      archetypeId: candidate.archetypeId,
+      compositionId: candidate.compositionId,
+      score: candidate.score,
+      sectionCount: resolved.sectionCount,
+      reasonCodes: compositionReasonCodes(resolved, candidate.compositionId)
+    }));
+
+  return {
+    version: 1,
+    archetypeId,
+    compositionId: metadata.primaryCompositionId,
+    sectionCount: resolved.sectionCount,
+    sections,
+    totalWordBudget: sections.reduce(
+      (total, section) => ({
+        min: total.min + section.wordBudget.min,
+        max: total.max + section.wordBudget.max
+      }),
+      { min: 0, max: 0 }
+    ),
+    score: selectedScore,
+    alternatives,
+    reasonCodes: compositionReasonCodes(resolved, metadata.primaryCompositionId),
+    visibility: "internal"
+  };
+}
+
+/**
+ * Builds the internal, deterministic section plan for the highest-ranked
+ * reviewed archetype, or for an explicitly supplied compatible archetype.
+ */
+export function buildWireframeCompositionPlan(
+  signals: WireframeSelectionSignals,
+  archetypeId?: WireframeArchetypeId
+): WireframeCompositionPlanV1 {
+  const ranked = rankWireframeCandidates(signals);
+  return compositionPlanFromRanking(
+    signals,
+    archetypeId ?? ranked[0]!.archetypeId,
+    ranked
+  );
 }
 
 function alternativesFor(id: WireframeArchetypeId): WireframeArchetypeId[] {
@@ -906,7 +1683,8 @@ export function selectWireframe(
     ranking: {
       selectedScore: selected.score,
       candidates: ranked
-    }
+    },
+    compositionPlan: compositionPlanFromRanking(signals, selected.id, ranked)
   };
 }
 
@@ -921,6 +1699,15 @@ export type WireframeSelectionHints = Pick<
   | "brandEvidenceStrength"
   | "assetQuality"
   | "contentDensity"
+  | "messageStructure"
+  | "proofAvailability"
+  | "interactionOpportunity"
+  | "sellerGeometry"
+  | "sellerDensity"
+  | "campaignMotion"
+  | "decisionComplexity"
+  | "sectionCount"
+  | "sellerLogoAvailable"
 >;
 
 function familyForUseCase(useCase: UseCase): WireframeFamily {
@@ -993,7 +1780,16 @@ export function selectWireframeForCampaignContext(input: {
       isNurture: hints.isNurture,
       brandEvidenceStrength: hints.brandEvidenceStrength ?? inferredBrandEvidenceStrength(context),
       assetQuality: hints.assetQuality ?? inferredAssetQuality(context),
-      contentDensity: hints.contentDensity ?? inferredContentDensity(context)
+      contentDensity: hints.contentDensity ?? inferredContentDensity(context),
+      messageStructure: hints.messageStructure,
+      proofAvailability: hints.proofAvailability,
+      interactionOpportunity: hints.interactionOpportunity,
+      sellerGeometry: hints.sellerGeometry,
+      sellerDensity: hints.sellerDensity,
+      campaignMotion: hints.campaignMotion,
+      decisionComplexity: hints.decisionComplexity,
+      sectionCount: hints.sectionCount,
+      sellerLogoAvailable: hints.sellerLogoAvailable
     },
     options
   );
@@ -1028,7 +1824,16 @@ export function selectWireframeForExperienceSpec(input: {
       isNurture: hints.isNurture,
       brandEvidenceStrength: hints.brandEvidenceStrength,
       assetQuality: hints.assetQuality,
-      contentDensity: hints.contentDensity
+      contentDensity: hints.contentDensity,
+      messageStructure: hints.messageStructure,
+      proofAvailability: hints.proofAvailability,
+      interactionOpportunity: hints.interactionOpportunity,
+      sellerGeometry: hints.sellerGeometry,
+      sellerDensity: hints.sellerDensity,
+      campaignMotion: hints.campaignMotion,
+      decisionComplexity: hints.decisionComplexity,
+      sectionCount: hints.sectionCount,
+      sellerLogoAvailable: hints.sellerLogoAvailable
     },
     options
   );
