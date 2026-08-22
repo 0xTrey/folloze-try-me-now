@@ -36,8 +36,9 @@ The output fails this test if the logo is missing, the palette is wrong, the cop
 2. [`agent-contracts.md`](./agent-contracts.md)
 3. [`acceptance-matrix.md`](./acceptance-matrix.md)
 4. [`grading-scorecard.md`](./grading-scorecard.md)
-5. [`cursor-prompt.md`](./cursor-prompt.md)
-6. Existing sources listed in the execution contract.
+5. [`trey-review-guide.md`](./trey-review-guide.md)
+6. [`cursor-prompt.md`](./cursor-prompt.md)
+7. Existing sources listed in the execution contract.
 
 ## Non-negotiable architecture
 
