@@ -58,7 +58,7 @@ export const experienceDraft: ExperienceDraft = {
   sectionSequence: ["thesis", "decision-lenses", "guided-questions"],
   sectionLabels: {
     thesis: "The account-level case",
-    lenses: "Choose the decision lens",
+    lenses: "Where to start",
     journey: "Questions for the next conversation",
     close: "Put the first question on the table"
   },

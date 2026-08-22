@@ -250,6 +250,7 @@ const expectedOrder = [
   "starting-points",
   "outcome-mechanism",
   "team-value",
+  "supporting-resources",
   "next-step",
 ];
 
