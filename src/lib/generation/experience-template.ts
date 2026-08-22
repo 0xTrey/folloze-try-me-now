@@ -4,7 +4,10 @@ import type {
 } from "@/lib/generation/experience-schema";
 import { sanitizeExperienceSectionLabels } from "@/lib/generation/experience-schema";
 import {
+  applyPersonalizationVariant,
   experienceTemplateFor,
+  personalizationRuntimePayload,
+  personalizationVariantById,
   SHARED_EXPERIENCE_PRIMITIVES,
   type ExperiencePrimitive
 } from "@/lib/generation/experience-renderers";
@@ -16,6 +19,8 @@ import type {
   BrandProfile,
   ExperienceActionContract,
   ExperienceContentItem,
+  ExperiencePersonalizationPlan,
+  PersonalizationVariantId,
   SessionAnswers,
   UseCase
 } from "@/lib/types";
@@ -338,14 +343,43 @@ export function renderExperienceHtml(input: {
   contentItems?: ExperienceContentItem[];
   actions?: ExperienceActionContract[];
   wireframeSelection?: WireframeSelectionV1;
+  personalization?: ExperiencePersonalizationPlan;
+  personalizationVariantId?: PersonalizationVariantId | string;
 }): string {
   const brand = input.brand;
   const targetBrand = input.targetBrand;
+  const personalizationPlan = input.personalization;
+  const activePersonalization = personalizationPlan
+    ? personalizationVariantById(
+        personalizationPlan,
+        input.personalizationVariantId ?? personalizationPlan.defaultVariantId
+      )
+    : undefined;
+  const personalizedDraft = personalizationPlan
+    ? applyPersonalizationVariant(
+        input.draft,
+        personalizationPlan,
+        activePersonalization?.variantId ?? personalizationPlan.defaultVariantId
+      )
+    : input.draft;
   const draft: ExperienceDraft = {
-    ...input.draft,
-    sectionLabels: sanitizeExperienceSectionLabels(input.draft.sectionLabels),
-    narrativeArc: sanitizeBuyerFacingLabel(input.draft.narrativeArc, input.draft.narrativeArc)
+    ...personalizedDraft,
+    sectionLabels: sanitizeExperienceSectionLabels(personalizedDraft.sectionLabels),
+    narrativeArc: sanitizeBuyerFacingLabel(
+      personalizedDraft.narrativeArc,
+      personalizedDraft.narrativeArc
+    )
   };
+  const personalizationRuntime = personalizationPlan
+    ? personalizationRuntimePayload(personalizationPlan)
+    : undefined;
+  const activePersonalizationId =
+    activePersonalization?.variantId ?? personalizationPlan?.defaultVariantId ?? "generic";
+  const imageryTreatment =
+    activePersonalization?.imageryTreatment ??
+    personalizationPlan?.visibleVariants.find(
+      (variant) => variant.variantId === personalizationPlan.defaultVariantId
+    )?.imageryTreatment;
   const actionById = new Map((input.actions ?? []).map((action) => [action.id, action]));
   const primaryAction = actionById.get("primary-conversion") ?? {
     id: "primary-conversion",
@@ -764,7 +798,7 @@ export function renderExperienceHtml(input: {
     .content-detail{width:min(620px,calc(100vw - 32px));padding:0;border:1px solid var(--line);border-radius:var(--card-radius);background:var(--brand-surface);color:var(--brand-ink);box-shadow:0 32px 96px color-mix(in srgb,var(--brand-ink) 30%,transparent)}.content-detail::backdrop{background:color-mix(in srgb,var(--brand-ink) 64%,transparent);backdrop-filter:blur(5px)}.content-detail form{position:relative;padding:clamp(28px,5vw,52px)}.content-detail h3{margin:0;font:var(--heading-weight) clamp(30px,4vw,48px)/1.05 var(--display);letter-spacing:var(--heading-tracking)}.content-detail p:not(.eyebrow){margin:20px 0;color:var(--text);font-size:17px}.content-detail .dialog-close{position:absolute;right:16px;top:14px;width:42px;height:42px;border:1px solid var(--line);border-radius:999px;background:var(--brand-surface);color:var(--brand-ink);cursor:pointer;font-size:24px}.content-detail .primary{margin-top:12px}
   </style>
 </head>
-<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} visual-grammar-${visualGrammar.id} motion-${visualGrammar.motionProfile} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}" data-visual-grammar="${visualGrammar.id}" data-motion-profile="${visualGrammar.motionProfile}" data-hero-media-role="${visualGrammar.heroMediaRole}" data-proof-device="${visualGrammar.proofDevice}" data-cadence="${visualGrammar.cadence}" data-close-treatment="${visualGrammar.closeTreatment}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-brand-source="${escapeHtml(brand.source)}" data-brand-palette-treatment="${neutralPreview ? "neutral-fallback" : "verified-or-legacy"}"${neutralPreview ? ` data-brand-warning="palette-confidence-low" data-brand-warning-copy="${escapeHtml(neutralPreviewNotice)}"` : ""}${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
+<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} visual-grammar-${visualGrammar.id} motion-${visualGrammar.motionProfile} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}${imageryTreatment ? ` imagery-${imageryTreatment}` : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}" data-visual-grammar="${visualGrammar.id}" data-motion-profile="${visualGrammar.motionProfile}" data-hero-media-role="${visualGrammar.heroMediaRole}" data-proof-device="${visualGrammar.proofDevice}" data-cadence="${visualGrammar.cadence}" data-close-treatment="${visualGrammar.closeTreatment}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-personalization-variant="${escapeHtml(activePersonalizationId)}"${imageryTreatment ? ` data-imagery-treatment="${escapeHtml(imageryTreatment)}"` : ""} data-brand-source="${escapeHtml(brand.source)}" data-brand-palette-treatment="${neutralPreview ? "neutral-fallback" : "verified-or-legacy"}"${neutralPreview ? ` data-brand-warning="palette-confidence-low" data-brand-warning-copy="${escapeHtml(neutralPreviewNotice)}"` : ""}${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
 <button class="skip-link" type="button" data-scroll-target="main-content">Skip to experience</button>
 <div class="shell">
   <header class="nav">
@@ -870,6 +904,36 @@ export function renderExperienceHtml(input: {
       persistEvent(action,payload);
     };
     window.flzAnalytic('experience_view',{});
+    ${personalizationRuntime ? `var personalizationPlan=${JSON.stringify(personalizationRuntime)};
+    function applyPersonalizationVariant(variantId){
+      if(!personalizationPlan||!personalizationPlan.variants)return false;
+      var next=personalizationPlan.variants[variantId];
+      if(!next)return false;
+      Object.keys(next.fields||{}).forEach(function(blockId){
+        var nodes=document.querySelectorAll('[data-flz-block-id="'+blockId+'"]');
+        nodes.forEach(function(node){node.textContent=next.fields[blockId]});
+      });
+      body.setAttribute('data-personalization-variant',variantId);
+      if(next.imageryTreatment){
+        body.setAttribute('data-imagery-treatment',next.imageryTreatment);
+        body.className=body.className.replace(/\\bimagery-[a-z-]+/g,'').trim()+' imagery-'+next.imageryTreatment;
+      }
+      try{if(window.parent&&window.parent!==window)window.parent.postMessage({source:'folloze-experience',version:1,event:'personalization_variant_applied',action:'personalization_variant_applied',payload:{variantId:variantId,hasEvidence:!!next.hasEvidence}},parentOrigin)}catch(_variantMessageError){}
+      return true;
+    }
+    window.flzApplyPersonalizationVariant=applyPersonalizationVariant;
+    try{
+      var params=new URLSearchParams(window.location.search);
+      var requestedVariant=params.get('variant');
+      if(requestedVariant)applyPersonalizationVariant(requestedVariant);
+      else applyPersonalizationVariant(personalizationPlan.defaultVariantId);
+    }catch(_variantBootError){}
+    window.addEventListener('message',function(event){
+      if(parentOrigin!=='*'&&event.origin!==parentOrigin)return;
+      var data=event.data;
+      if(!data||data.source!=='folloze-builder'||data.type!=='set_personalization_variant')return;
+      if(typeof data.variantId==='string')applyPersonalizationVariant(data.variantId);
+    });` : ""}
 
     var previewScrollRoot=document.scrollingElement||document.documentElement;
     var boundaryWheelDelta=0;

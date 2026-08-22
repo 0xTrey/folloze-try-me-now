@@ -471,6 +471,17 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
           contentItemCount: session.experienceSpec.contentItems?.length ?? 0,
           ...(session.experienceSpec.sourceIntelligence
             ? { sourceStatus: session.experienceSpec.sourceIntelligence.status }
+            : {}),
+          ...("personalization" in session.experienceSpec &&
+          session.experienceSpec.personalization
+            ? {
+                personalizationVariantIds:
+                  session.experienceSpec.personalization.visibleVariants.map(
+                    (variant) => variant.variantId
+                  ),
+                personalizationDefaultVariantId:
+                  session.experienceSpec.personalization.defaultVariantId
+              }
             : {})
         }
       : undefined,

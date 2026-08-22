@@ -131,7 +131,19 @@ function session(): TryMeSession {
         rationale: "Connects the offer to Cisco's public infrastructure priorities.",
         evidenceItemIds: ["evidence_networking"],
         confidence: "high",
-        source: "seller-target-synthesis"
+        source: "seller-target-synthesis",
+        confirmationStatus: "confirmed",
+        evidenceSummary: "Networking and security modernization"
+      },
+      {
+        id: "audience_security",
+        label: "Security architecture owners",
+        rationale: "Security owners need governed automation proof for Cisco operating context.",
+        evidenceItemIds: ["evidence_observability"],
+        confidence: "high",
+        source: "seller-target-synthesis",
+        confirmationStatus: "confirmed",
+        evidenceSummary: "Observability programs"
       }
     ],
     evidenceItems: [
@@ -139,10 +151,23 @@ function session(): TryMeSession {
         id: "evidence_networking",
         type: "public-focus-area",
         label: "Public focus area",
-        text: "Networking and security",
+        text: "Networking and security modernization across hybrid infrastructure estates",
         sourceUrl: "https://cisco.com/solutions/?ref=test",
         signals: ["networking", "security"],
-        disposition: "pinned"
+        disposition: "pinned",
+        entityRole: "target",
+        confidence: "high"
+      },
+      {
+        id: "evidence_observability",
+        type: "public-operating-context",
+        label: "Operating context",
+        text: "Observability programs guide how platform teams evaluate connected workflows",
+        sourceUrl: "https://cisco.com/observability",
+        signals: ["observability"],
+        disposition: "available",
+        entityRole: "target",
+        confidence: "high"
       }
     ],
     curatedSections: [
@@ -211,13 +236,19 @@ describe("campaign contract", () => {
       accountDomain: "cisco.com",
       accountName: "Cisco"
     });
-    expect(lens.findings).toEqual([
-      expect.objectContaining({
-        category: "buyer-concern",
-        citationUrl: "https://cisco.com/solutions/",
-        disposition: "pinned"
-      })
-    ]);
+    expect(lens.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: "buyer-concern",
+          citationUrl: "https://cisco.com/solutions/",
+          disposition: "pinned"
+        }),
+        expect.objectContaining({
+          id: "evidence_observability",
+          disposition: "available"
+        })
+      ])
+    );
   });
 
   it("captures a sanitized campaign offer source without conflating it with target research", () => {
@@ -261,7 +292,7 @@ describe("campaign contract", () => {
         },
         audience: {
           status: "ready",
-          findingIds: ["evidence_networking"]
+          findingIds: ["evidence_networking", "evidence_observability"]
         }
       },
       identities: {
@@ -317,6 +348,17 @@ describe("campaign contract", () => {
         "spacing.contentMaxWidthPx"
       ])
     });
+    expect(spec.personalization?.mode).toBe("preview-variants");
+    expect(spec.personalization?.visibleVariants.map((variant) => variant.variantId)).toEqual(
+      expect.arrayContaining(["generic", "account", "account_industry"])
+    );
+    expect(
+      spec.personalization?.visibleVariants.every((variant) =>
+        Object.values(variant.fields).every(
+          (field) => field && field.sourceRefs.length > 0 && Boolean(field.reason)
+        )
+      )
+    ).toBe(true);
     expect(spec.curatedSections).toHaveLength(1);
     expect(spec.draft).toMatchObject({
       wireframeName: "abm-account-microsite",

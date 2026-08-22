@@ -4,6 +4,7 @@ import {
   experienceDraftSchema,
   type ExperienceDraft
 } from "@/lib/generation/experience-schema";
+import { compilePersonalizationPlan } from "@/lib/generation/experience-renderers";
 import { selectWireframe } from "@/lib/generation/wireframe-library";
 import {
   PREVIEW_INTERACTION_TYPES,
@@ -621,6 +622,15 @@ export function buildExperienceSpec(
       label: canonicalDraft.primaryCta,
       actionId: "primary-conversion"
     },
+    personalization: compilePersonalizationPlan({
+      draft: canonicalDraft,
+      seller: brand,
+      ...(targetBrand ? { target: targetBrand } : {}),
+      useCase: session.useCase,
+      answers: session.answers,
+      evidenceItems: session.evidenceItems,
+      audienceRecommendations: session.audienceRecommendations
+    }),
     selectedAssetIds: [...(session.answers.selectedAssetIds ?? [])],
     evidenceItemIds: (session.evidenceItems ?? [])
       .filter((item) => item.disposition !== "excluded")

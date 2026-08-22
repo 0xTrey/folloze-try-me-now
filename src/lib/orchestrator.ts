@@ -858,7 +858,10 @@ function assembleExperienceArtifact(input: {
     qualityReceipt,
     contentItems: experienceSpec.contentItems,
     actions: experienceSpec.actions,
-    wireframeSelection: experienceSpec.wireframeSelection
+    wireframeSelection: experienceSpec.wireframeSelection,
+    ...(experienceSpec.personalization
+      ? { personalization: experienceSpec.personalization }
+      : {})
   });
   return {
     controlledDraft,

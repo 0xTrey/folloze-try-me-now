@@ -663,6 +663,59 @@ export type ExperienceActionType = "external-link" | "scroll" | "content-dialog"
 export type ExperienceActionAccess = "public" | "email-claim";
 export type ExperienceActionVerification = "verified" | "fallback";
 
+/** Preview-only personalization views compiled from one canonical experience. */
+export const PERSONALIZATION_VARIANT_IDS = [
+  "generic",
+  "account",
+  "account_industry",
+  "account_industry_persona_a",
+  "account_industry_persona_b"
+] as const;
+export type PersonalizationVariantId = (typeof PERSONALIZATION_VARIANT_IDS)[number];
+
+export const PERSONALIZATION_FIELD_KEYS = [
+  "headline",
+  "tension",
+  "proofEmphasis",
+  "nextAction",
+  "audienceLabel",
+  "eyebrow",
+  "imageryTreatment"
+] as const;
+export type PersonalizationFieldKey = (typeof PERSONALIZATION_FIELD_KEYS)[number];
+
+export type PersonalizationSafetyClassification =
+  | "approved"
+  | "safe_public"
+  | "risky_reviewed"
+  | "omitted";
+
+export interface PersonalizationFieldValue {
+  value: string;
+  sourceRefs: string[];
+  classification: PersonalizationSafetyClassification;
+  reason: string;
+}
+
+export interface PersonalizationVisibleVariant {
+  variantId: PersonalizationVariantId;
+  label: string;
+  audienceState: string;
+  fields: Partial<Record<PersonalizationFieldKey, PersonalizationFieldValue>>;
+  omittedFields: PersonalizationFieldKey[];
+  /** Seller-compiled imagery treatment when verified; omitted when unsupported. */
+  imageryTreatment?: "image-led" | "image-supported" | "type-led" | "diagram-led";
+  hasEvidence: boolean;
+}
+
+export interface ExperiencePersonalizationPlan {
+  mode: "preview-variants";
+  defaultVariantId: PersonalizationVariantId;
+  safeFields: PersonalizationFieldKey[];
+  omittedFields: PersonalizationFieldKey[];
+  visibleVariants: PersonalizationVisibleVariant[];
+}
+
 /**
  * A buyer-visible control must have a real behavior. Presentation-only CTA
  * buttons are intentionally not representable in V2.
@@ -815,6 +868,8 @@ export interface ExperienceSpecV2
     label: string;
     actionId: string;
   };
+  /** Preview variants only; never separate wireframe choices. */
+  personalization?: ExperiencePersonalizationPlan;
   renderers: {
     web: { status: "ready"; hosting: "app" };
     folloze: { status: "disabled"; reason: "public-runtime-html-only" };
@@ -833,6 +888,9 @@ export type PublicExperienceSpecSummary = {
   sectionCount: number;
   contentItemCount: number;
   sourceStatus?: ExperienceSourceIntelligence["status"];
+  /** Available personalization preview variant ids for client switching. */
+  personalizationVariantIds?: PersonalizationVariantId[];
+  personalizationDefaultVariantId?: PersonalizationVariantId;
 };
 
 export interface ClaimState {

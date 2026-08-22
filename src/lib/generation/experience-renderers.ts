@@ -1,5 +1,16 @@
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import {
+  BUYER_FACING_NAVIGATION,
+  sanitizeBuyerFacingLabel
+} from "@/lib/generation/message-spine";
+import {
+  applyPersonalizationVariant,
+  availablePersonalizationVariantIds,
+  compilePersonalizationPlan,
+  personalizationRuntimePayload,
+  personalizationVariantById
+} from "@/lib/generation/personalization-preview";
+import {
   archetypeForLegacyWireframe,
   getWireframeArchetype,
   type CompositionId,
@@ -45,18 +56,18 @@ const accountComposition: ExperienceTemplateComposition = {
   compositionId: "editorial-split",
   fingerprint: "v4-account-seven-section-persuasion",
   heroLabel: "Account experience",
-  signatureAriaLabel: "Account decision paths",
+  signatureAriaLabel: "Where to start",
   signatureEyebrow: (audience, targetName) =>
-    `Decision paths for ${targetName ?? audience}`,
+    `Where to start for ${targetName ?? audience}`,
   navigation: {
-    thesis: "Account thesis",
-    lenses: "Decision paths",
-    resources: "Supporting proof"
+    thesis: BUYER_FACING_NAVIGATION.account[0],
+    lenses: BUYER_FACING_NAVIGATION.account[2],
+    resources: BUYER_FACING_NAVIGATION.account[5]
   },
   regionOrder: canonicalRegionOrder,
   resourcesEyebrow: "Evidence to carry forward",
   resourceAction: "Explore the evidence",
-  journeyNavigation: ["Overview", "Why it matters", "Where to start", "How it works", "For your team", "Evidence", "Next step"],
+  journeyNavigation: [...BUYER_FACING_NAVIGATION.account],
   visualGrammar: visualGrammarForArchetype("account-executive")
 };
 
@@ -76,7 +87,7 @@ const campaignComposition: ExperienceTemplateComposition = {
   regionOrder: canonicalRegionOrder,
   resourcesEyebrow: "Proof for the campaign",
   resourceAction: "Explore this proof",
-  journeyNavigation: ["Overview", "Why it matters", "Where to start", "How it works", "For your team", "Evidence", "Next step"],
+  journeyNavigation: [...BUYER_FACING_NAVIGATION.campaign],
   visualGrammar: visualGrammarForArchetype("campaign-demand")
 };
 
@@ -96,7 +107,7 @@ const contentComposition: ExperienceTemplateComposition = {
   regionOrder: canonicalRegionOrder,
   resourcesEyebrow: "From the source",
   resourceAction: "Explore this highlight",
-  journeyNavigation: ["Key finding", "Explore", "Chapters", "Apply it", "Source", "Next step"],
+  journeyNavigation: [...BUYER_FACING_NAVIGATION.content],
   visualGrammar: visualGrammarForArchetype("content-report")
 };
 
@@ -110,6 +121,14 @@ export const SHARED_EXPERIENCE_PRIMITIVES = [
   "close",
   "analytics"
 ] as const;
+
+export {
+  applyPersonalizationVariant,
+  availablePersonalizationVariantIds,
+  compilePersonalizationPlan,
+  personalizationRuntimePayload,
+  personalizationVariantById
+};
 
 export function experienceTemplateFor(
   draft: Pick<ExperienceDraft, "campaignRegister" | "wireframeName">,
@@ -153,9 +172,18 @@ export function experienceTemplateFor(
     signatureEyebrow: (_audience, targetName) =>
       targetName ? `${archetype.label} for ${targetName}` : archetype.label,
     navigation: {
-      thesis: archetype.navigationLabels[1] ?? base.navigation.thesis,
-      lenses: archetype.navigationLabels[2] ?? base.navigation.lenses,
-      resources: archetype.navigationLabels.at(-2) ?? base.navigation.resources
+      thesis: sanitizeBuyerFacingLabel(
+        archetype.navigationLabels[1] ?? base.navigation.thesis,
+        base.navigation.thesis
+      ),
+      lenses: sanitizeBuyerFacingLabel(
+        archetype.navigationLabels[2] ?? base.navigation.lenses,
+        base.navigation.lenses
+      ),
+      resources: sanitizeBuyerFacingLabel(
+        archetype.navigationLabels.at(-2) ?? base.navigation.resources,
+        base.navigation.resources
+      )
     },
     regionOrder,
     resourcesEyebrow:
@@ -166,7 +194,9 @@ export function experienceTemplateFor(
       archetype.contentPolicy === "source-preserving"
         ? "Explore this source point"
         : "Explore the evidence",
-    journeyNavigation: archetype.navigationLabels,
+    journeyNavigation: archetype.navigationLabels.map((label) =>
+      sanitizeBuyerFacingLabel(label, label)
+    ),
     visualGrammar: visualGrammarForArchetype(archetype.id)
   };
 }
