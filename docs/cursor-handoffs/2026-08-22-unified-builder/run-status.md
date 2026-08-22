@@ -57,7 +57,9 @@ Status: **ready for Codex review** (local only; not pushed/deployed)
 - `2b99efb` feat: gate preview reveal on material brief eligibility
 - `70369df` feat: unify conversational buyer-experience intake
 - `8cd7cc9` docs: record unified builder Wave 2 run status
-- _(Wave 3 commits landing next)_
+- `d291c00` fix: unblock unified builder QA build and preview SLO
+- `6b30262` test: cover unified builder desktop acceptance paths
+- `ccb9fb3` docs: hand back unified builder package to Codex
 
 ## Codex handback
 
