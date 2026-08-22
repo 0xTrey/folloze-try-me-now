@@ -22,6 +22,8 @@ The next wave will define three approved wireframes and their section-by-section
 3. [`../2026-08-22-generic-builder-production-engine/execution-contract.md`](../2026-08-22-generic-builder-production-engine/execution-contract.md)
 4. [`../2026-08-22-generic-builder-production-engine/acceptance-matrix.md`](../2026-08-22-generic-builder-production-engine/acceptance-matrix.md)
 
+Trey's next design decisions are collected separately in [`wireframe-messaging-interview.md`](./wireframe-messaging-interview.md). Cursor must not implement those decisions in this wave.
+
 ## Handoff boundary
 
 - Implement and commit locally.
@@ -29,4 +31,3 @@ The next wave will define three approved wireframes and their section-by-section
 - Do not push, deploy, publish, rotate credentials, read secret values, or change infrastructure.
 - Do not redesign copy, message frameworks, section taxonomy, or wireframe selection.
 - Finish with [`cursor-handback.md`](./cursor-handback.md) ending in `READY_FOR_TREY_REVIEW`.
-
