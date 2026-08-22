@@ -111,4 +111,18 @@ describe("POST /api/analytics/events", () => {
     expect(response.status).toBe(400);
     expect(getMemoryProductEventsForTest()).toHaveLength(0);
   });
+
+  it("stores a same-origin unified analytics event", async () => {
+    const response = await POST(request({
+      events: [{
+        ...validEvent,
+        eventId: "tme_unifiedroute0001",
+        event: "unified_entry_started",
+        category: "navigation",
+        properties: { entry_surface: "primary_cta", device_class: "desktop" }
+      }]
+    }));
+    expect(response.status).toBe(202);
+    expect(getMemoryProductEventsForTest()[0]?.event).toBe("unified_entry_started");
+  });
 });

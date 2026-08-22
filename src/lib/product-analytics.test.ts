@@ -67,7 +67,7 @@ describe("first-party product analytics", () => {
     })).not.toThrow();
   });
 
-  it("rejects unknown events, arbitrary nested data, and contact data", () => {
+  it("rejects unknown events, arbitrary nested data, contact data, and raw domains", () => {
     const base = {
       eventId: "tme_1234567890abcdef",
       ...identity,
@@ -81,6 +81,24 @@ describe("first-party product analytics", () => {
     expect(() => parseProductEventBatch({
       events: [{ ...base, event: "ui_click", properties: { label: "person@example.com" } }]
     })).toThrow();
+    expect(() => parseProductEventBatch({
+      events: [{ ...base, event: "ui_click", properties: { label: "cisco.com" } }]
+    })).toThrow();
+    expect(() => parseProductEventBatch({
+      events: [{ ...base, event: "domain_stabilized", category: "input", properties: { domain: "acme.com" } }]
+    })).toThrow();
+  });
+
+  it("accepts unified builder events under their property contracts", () => {
+    expect(() => parseProductEventBatch({
+      events: [{
+        eventId: "tme_unified123456789",
+        ...identity,
+        event: "personalization_variant_viewed",
+        category: "interaction",
+        properties: { variant_id: "account_industry_persona_a", has_evidence: true }
+      }]
+    })).not.toThrow();
   });
 
   it("keeps exact submitted inputs in the private session snapshot but excludes provider IDs", async () => {

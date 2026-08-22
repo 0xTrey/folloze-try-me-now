@@ -65,4 +65,20 @@ describe("engagement event sink", () => {
       context: { sourceBody: "Private source document body" }
     })).toThrow();
   });
+
+  it("accepts resource clicks as generated-experience engagement, separate from product analytics", async () => {
+    const payload = parseEngagementEventPayload({
+      eventId: "event_resource_123456",
+      sessionId: "session_12345678",
+      event: "resource_click",
+      context: { resourceId: "proof-deck", area: "resources" }
+    });
+    await expect(recordEngagementEvent(payload)).resolves.toBe(true);
+    expect(getMemoryEngagementEventsForTest()).toEqual([
+      expect.objectContaining({
+        event: "resource_click",
+        context: { resourceId: "proof-deck", area: "resources" }
+      })
+    ]);
+  });
 });

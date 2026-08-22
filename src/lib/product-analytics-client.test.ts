@@ -12,6 +12,7 @@ vi.mock("posthog-js", () => ({
 
 import {
   captureProductEvent,
+  captureUnifiedProductEvent,
   flushProductAnalytics,
   initializeProductAnalytics,
   productAnalyticsIdentity,
@@ -75,7 +76,44 @@ describe("product analytics browser queue", () => {
       .flatMap((body) => body.events)
       .find((event) => event.event === "visitor_session_started");
     expect(JSON.stringify(started)).not.toContain("buyer@example.com");
-    expect(JSON.stringify(started)).toContain("[email]");
+  });
+
+  it("drops private keys and domain-like property values before enqueue", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(acceptedResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    captureProductEvent("ui_click", {
+      properties: {
+        element_id: "retry",
+        domain: "cisco.com",
+        label: "https://private.example/path"
+      }
+    });
+    await flushProductAnalytics();
+
+    const click = capturedBodies(fetchMock)
+      .flatMap((body) => body.events)
+      .find((event) => event.event === "ui_click") as { properties?: Record<string, unknown> };
+    expect(click.properties).toEqual({ element_id: "retry" });
+    expect(JSON.stringify(click)).not.toContain("cisco.com");
+    expect(JSON.stringify(click)).not.toContain("private.example");
+  });
+
+  it("captures unified events through the typed contract seam", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(acceptedResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(captureUnifiedProductEvent("brief_field_confirmed", {
+      properties: { field_key: "objective", has_value: true }
+    })).toBe(true);
+    expect(captureUnifiedProductEvent("brief_field_confirmed", {
+      properties: { field_key: "objective", prompt: "secret" }
+    })).toBe(false);
+    await flushProductAnalytics();
+
+    const events = capturedBodies(fetchMock).flatMap((body) => body.events);
+    expect(events.some((event) => event.event === "brief_field_confirmed")).toBe(true);
+    expect(JSON.stringify(events)).not.toContain("secret");
   });
 
   it("drops a non-retryable rejected batch so later events can flow", async () => {

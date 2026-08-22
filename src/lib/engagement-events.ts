@@ -7,6 +7,7 @@ export const ENGAGEMENT_EVENT_NAMES = [
   "anchor_click",
   "topic_select",
   "cta_click",
+  "resource_click",
   "signature_select",
   "question_select",
   "section_dwell",
@@ -35,6 +36,7 @@ export const engagementEventPayloadSchema = z
         label: safeContextText.optional(),
         area: safeContextText.optional(),
         ctaId: safeContextText.optional(),
+        resourceId: safeContextText.optional(),
         lensId: safeContextText.optional(),
         seconds: z.number().int().min(1).max(3600).optional()
       })

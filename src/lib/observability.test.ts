@@ -12,21 +12,23 @@ describe("observability redaction", () => {
     vi.restoreAllMocks();
   });
 
-  it("redacts credentials, visitor identifiers, URLs, and editor cookies", () => {
+  it("redacts credentials, visitor identifiers, URLs, bare domains, and editor cookies", () => {
     const key = `sk-proj-${"a".repeat(24)}`;
     const jwt = `eyJ${"a".repeat(12)}.${"b".repeat(12)}.${"c".repeat(12)}`;
     const safe = sanitizeObservabilityText(
-      `Bearer secret-token buyer@example.com https://private.example/a.pdf ${key} ${jwt} tmn_editor_session=token-value`
+      `Bearer secret-token buyer@example.com https://private.example/a.pdf cisco.com ${key} ${jwt} tmn_editor_session=token-value`
     );
 
     expect(safe).toContain("[redacted-authorization]");
     expect(safe).toContain("[redacted-email]");
     expect(safe).toContain("[redacted-url]");
+    expect(safe).toContain("[redacted-domain]");
     expect(safe).toContain("[redacted-secret]");
     expect(safe).toContain("[redacted-jwt]");
     expect(safe).toContain("[redacted-editor-cookie]");
     expect(safe).not.toContain("secret-token");
     expect(safe).not.toContain("buyer@example.com");
+    expect(safe).not.toContain("cisco.com");
     expect(safe).not.toContain(key);
   });
 

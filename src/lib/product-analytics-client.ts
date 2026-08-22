@@ -4,8 +4,15 @@ import posthog from "posthog-js";
 
 import type {
   ProductEventCategory,
-  ProductEventName
-} from "@/lib/product-analytics";
+  ProductEventName,
+  UnifiedProductEventName
+} from "@/lib/product-analytics-contracts";
+import {
+  assertUnifiedProductEventProperties,
+  isPrivateAnalyticsPropertyKey,
+  productEventCategoryFor,
+  UNIFIED_PRODUCT_EVENT_NAMES
+} from "@/lib/product-analytics-contracts";
 
 type ProductProperty = string | number | boolean | null;
 type ProductProperties = Record<string, ProductProperty>;
@@ -95,6 +102,10 @@ function safeText(value: string, max = 160): string {
   return value
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email]")
     .replace(/https?:\/\/\S+/gi, "[url]")
+    .replace(
+      /\b(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|org|net|io|co|ai|dev|app|info|biz|edu|gov|cloud|tech|xyz|us|uk|ca|de|fr|au|jp|nl|eu|tv|me|cc)\b/gi,
+      "[domain]"
+    )
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, max);
@@ -105,10 +116,15 @@ function safeProperties(properties: ProductProperties | undefined): ProductPrope
   return Object.fromEntries(
     Object.entries(properties)
       .map(([key, value]) => [key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase(), value] as const)
-      .filter(([key]) => /^[a-z][a-z0-9_]{0,39}$/.test(key))
+      .filter(([key]) => /^[a-z][a-z0-9_]{0,39}$/.test(key) && !isPrivateAnalyticsPropertyKey(key))
       .slice(0, 24)
-      .map(([key, value]) => [key, typeof value === "string" ? safeText(value) : value] as const)
+      .map(([key, value]) => {
+        if (typeof value !== "string") return [key, value] as const;
+        if (/^TMN-[A-Z0-9]{8,16}$/.test(value)) return [key, value] as const;
+        return [key, safeText(value)] as const;
+      })
       .filter(([, value]) => typeof value !== "string" || value.length > 0)
+      .filter(([, value]) => typeof value !== "string" || !/\[(?:email|url|domain)\]/i.test(value))
   );
 }
 
@@ -178,7 +194,7 @@ export function captureProductEvent(
     ...identity,
     sessionId: options.sessionId ?? activeSessionId,
     event,
-    category: options.category ?? "interaction",
+    category: options.category ?? productEventCategoryFor(event),
     path: window.location.pathname,
     outcome: options.outcome,
     durationMs: options.durationMs,
@@ -195,7 +211,7 @@ export function captureProductEvent(
         try_me_visitor_id: identity.visitorId,
         try_me_browser_session_id: identity.browserSessionId,
         try_me_session_id: options.sessionId ?? activeSessionId,
-        event_category: options.category ?? "interaction",
+        event_category: options.category ?? productEventCategoryFor(event),
         event_outcome: options.outcome,
         duration_ms: options.durationMs
       });
@@ -206,6 +222,40 @@ export function captureProductEvent(
   if (queue.length > maxQueueSize) queue.splice(0, queue.length - maxQueueSize);
   if (options.immediate || queue.length >= 10) void flushProductAnalytics();
   else scheduleFlush();
+}
+
+/**
+ * Typed seam for Wave 2 UI emit hooks. Enforces the unified event property contract
+ * before enqueueing. Returns false when the payload is rejected for privacy or shape.
+ */
+export function captureUnifiedProductEvent(
+  event: UnifiedProductEventName,
+  options: {
+    outcome?: QueuedEvent["outcome"];
+    durationMs?: number;
+    properties?: ProductProperties;
+    sessionId?: string;
+    immediate?: boolean;
+  } = {}
+): boolean {
+  if (!(UNIFIED_PRODUCT_EVENT_NAMES as readonly string[]).includes(event)) return false;
+  try {
+    const properties = assertUnifiedProductEventProperties(
+      event,
+      options.properties as Record<string, string | number | boolean | null> | undefined
+    );
+    captureProductEvent(event, {
+      category: productEventCategoryFor(event),
+      outcome: options.outcome,
+      durationMs: options.durationMs,
+      properties,
+      sessionId: options.sessionId,
+      immediate: options.immediate
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function flushProductAnalytics(useBeacon = false): Promise<void> {

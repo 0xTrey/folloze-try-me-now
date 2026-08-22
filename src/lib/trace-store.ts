@@ -141,7 +141,22 @@ const traceMetaAllowlist = new Set([
   "qualityGate",
   "reason",
   "byteSizeBucket",
-  "mode"
+  "mode",
+  "workerName",
+  "workerOutcome",
+  "fieldKey",
+  "fieldAction",
+  "compositionId",
+  "variantId",
+  "modalKind",
+  "interactionType",
+  "interactionTarget",
+  "entrySurface",
+  "domainRole",
+  "normalization",
+  "interpretation",
+  "retryScope",
+  "receiptKind"
 ]);
 
 function traceMeta(meta: SessionEvent["meta"]): ObservabilityMeta | undefined {
@@ -179,25 +194,36 @@ export function traceIdForSession(session: Pick<TryMeSession, "id" | "traceId">)
     .slice(0, 32)}`;
 }
 
-function stageForEvent(name: string): TraceStage {
+function stageForEvent(name: string, meta?: SessionEvent["meta"]): TraceStage {
   if (/^(?:brand|company_domain)/.test(name)) return "brand";
   if (/^(?:target|audience|account_evidence)/.test(name)) return "audience";
-  if (/^(?:generation|source|offer_source|message_spine|cta_|creative_|asset_|block_|curated_)/.test(name)) {
+  if (/^(?:generation|source|offer_source|message_spine|cta_|creative_|asset_|block_|curated_|composition_)/.test(name)) {
     return "story";
   }
   if (/^upload_/.test(name)) return "story";
   if (/^render_/.test(name)) return "render";
-  if (/^preview_/.test(name)) return "preview";
+  if (/^(?:preview_|provisional_|final_rendered)/.test(name)) return "preview";
   if (/^(?:claim|lead_|followup_)/.test(name)) return "claim";
   if (/^(?:cleanup|reconciliation|maintenance)/.test(name)) return "maintenance";
+  if (/^worker_/.test(name)) {
+    const worker = typeof meta?.workerName === "string" ? meta.workerName : "";
+    if (worker === "brand") return "brand";
+    if (worker === "audience") return "audience";
+    if (worker === "render") return "render";
+    if (worker === "claim") return "claim";
+    return "story";
+  }
   return "session";
 }
 
 function outcomeForEvent(name: string, meta: SessionEvent["meta"]): TraceOutcome {
-  if (/(?:failed|rejected)$/.test(name)) return "error";
-  if (/(?:started|submitted)$/.test(name)) return "started";
-  if (/fallback/.test(name) || meta?.fallbackReason) return "fallback";
-  if (/(?:completed|ready|created|captured|sent|selected|updated|refined|issued)$/.test(name)) {
+  if (/(?:failed|rejected|timed_out)$/.test(name) || name === "worker_failed") return "error";
+  if (/(?:started|submitted)$/.test(name) || name === "worker_started") return "started";
+  if (/fallback|fell_back/.test(name) || meta?.fallbackReason) return "fallback";
+  if (
+    /(?:completed|ready|created|captured|sent|selected|updated|refined|issued|rendered)$/.test(name)
+    || name === "worker_completed"
+  ) {
     return "success";
   }
   return "info";
@@ -219,7 +245,7 @@ function recordForEvent(session: TryMeSession, event: SessionEvent): TraceEventR
     traceId: traceIdForSession(session),
     supportRef: supportRefForTraceId(traceIdForSession(session)),
     event: event.name,
-    stage: stageForEvent(event.name),
+    stage: stageForEvent(event.name, event.meta),
     outcome: outcomeForEvent(event.name, event.meta),
     at: event.at,
     requestId,

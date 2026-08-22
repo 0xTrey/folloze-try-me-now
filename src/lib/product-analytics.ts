@@ -7,60 +7,34 @@ import {
   sanitizeObservabilityText,
   supportRefForTraceId
 } from "@/lib/observability";
+import {
+  assertUnifiedProductEventProperties,
+  isPrivateAnalyticsPropertyKey,
+  PRODUCT_EVENT_CATEGORIES,
+  PRODUCT_EVENT_NAMES,
+  UNIFIED_PRODUCT_EVENT_NAMES,
+  UNSAFE_ANALYTICS_PROPERTY_VALUE_PATTERN,
+  type UnifiedProductEventName
+} from "@/lib/product-analytics-contracts";
 import type { SessionAnalyticsIdentity, SessionAnswers, TryMeSession, UseCase } from "@/lib/types";
 
-export const PRODUCT_EVENT_NAMES = [
-  "analytics_panel_opened",
-  "analytics_prompt_shown",
-  "api_request_completed",
-  "api_request_failed",
-  "browser_error",
-  "brand_logo_failed",
-  "brand_logo_rendered",
-  "build_started",
-  "campaign_type_selected",
-  "claim_completed",
-  "claim_failed",
-  "claim_started",
-  "domain_submitted",
-  "domain_confirmed",
-  "example_opened",
-  "experience_claimed",
-  "experience_revealed",
-  "field_interacted",
-  "page_viewed",
-  "path_selected",
-  "pdf_upload_completed",
-  "pdf_upload_failed",
-  "pdf_upload_started",
-  "preview_interaction",
-  "preview_rendered",
-  "preview_scrolled",
-  "research_started",
-  "session_created",
-  "session_status_changed",
-  "audience_confirmed",
-  "goal_confirmed",
-  "save_opened",
-  "save_completed",
-  "ui_click",
-  "unhandled_rejection",
-  "use_case_selected",
-  "visitor_identified",
-  "visitor_session_started"
-] as const;
-
-export type ProductEventName = (typeof PRODUCT_EVENT_NAMES)[number];
-export const PRODUCT_EVENT_CATEGORIES = [
-  "navigation",
-  "interaction",
-  "input",
-  "workflow",
-  "conversion",
-  "error",
-  "performance"
-] as const;
-export type ProductEventCategory = (typeof PRODUCT_EVENT_CATEGORIES)[number];
+export {
+  assertUnifiedProductEventProperties,
+  isPrivateAnalyticsPropertyKey,
+  PRODUCT_EVENT_CATEGORIES,
+  PRODUCT_EVENT_NAMES,
+  productEventCategoryFor,
+  UNIFIED_BRIEF_FIELD_KEYS,
+  UNIFIED_PRODUCT_EVENT_CONTRACTS,
+  UNIFIED_PRODUCT_EVENT_NAMES,
+  UNIFIED_VARIANT_IDS,
+  UNIFIED_WORKER_NAMES
+} from "@/lib/product-analytics-contracts";
+export type {
+  ProductEventCategory,
+  ProductEventName,
+  UnifiedProductEventName
+} from "@/lib/product-analytics-contracts";
 
 const analyticsId = (prefix: "tmv" | "tmb" | "tme") =>
   z.string().trim().regex(new RegExp(`^${prefix}_[a-zA-Z0-9_-]{16,128}$`));
@@ -70,6 +44,11 @@ const safeText = z
   .min(1)
   .max(160)
   .refine((value) => !value.includes("@"), "Analytics properties cannot contain contact information.")
+  .refine(
+    (value) =>
+      !UNSAFE_ANALYTICS_PROPERTY_VALUE_PATTERN.test(value) || /^TMN-[A-Z0-9]{8,16}$/.test(value),
+    "Analytics properties cannot contain domains, URLs, or contact information."
+  )
   .transform((value) => sanitizeObservabilityText(value, 160));
 const safePropertyValue = z.union([safeText, z.number().finite(), z.boolean(), z.null()]);
 
@@ -92,6 +71,10 @@ export const productEventPayloadSchema = z.object({
   properties: z
     .record(z.string().regex(/^[a-z][a-z0-9_]{0,39}$/), safePropertyValue)
     .refine((value) => Object.keys(value).length <= 24, "Analytics events accept at most 24 properties.")
+    .refine(
+      (value) => !Object.keys(value).some((key) => isPrivateAnalyticsPropertyKey(key)),
+      "Analytics properties cannot use private or identifying keys."
+    )
     .optional(),
   occurredAt: z.string().datetime().optional(),
   landing: z.object({
@@ -101,7 +84,21 @@ export const productEventPayloadSchema = z.object({
     deviceClass: z.enum(["desktop", "tablet", "mobile", "unknown"]),
     browserFamily: z.string().trim().min(1).max(40).regex(/^[a-z0-9 ._-]+$/i)
   }).strict().optional()
-}).strict();
+}).strict().superRefine((payload, context) => {
+  if (!(UNIFIED_PRODUCT_EVENT_NAMES as readonly string[]).includes(payload.event)) return;
+  try {
+    assertUnifiedProductEventProperties(
+      payload.event as UnifiedProductEventName,
+      payload.properties as Record<string, string | number | boolean | null> | undefined
+    );
+  } catch (error) {
+    context.addIssue({
+      code: "custom",
+      message: error instanceof Error ? error.message : "Unified analytics contract violated.",
+      path: ["properties"]
+    });
+  }
+});
 
 export type ProductEventPayload = z.infer<typeof productEventPayloadSchema>;
 
