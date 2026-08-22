@@ -12,12 +12,12 @@ Status: in progress
 
 ## Wave 1: evidence
 
-- Agents:
-- Decisions:
-- Files:
-- Tests:
-- Concerns:
-- Commits:
+- Agents: 1 Identity normalizer; 2 Brandfetch retriever; 3 DOM/CSS harvester; 4 Screenshot analyst; 5 Company researcher; 6 Offer researcher; 7 Audience strategist; 8 Objective/CTA strategist. All completed their bounded assignments without recursive delegation.
+- Decisions: canonical/alias identity changes require explicit evidence; screenshot analysis accepts bounded observations and emits no CSS; company claims require official-source evidence; recommendations return exactly three candidates with one recommendation and preserve explicit visitor edits; target evidence remains ABM context and never becomes seller visual authority.
+- Files: `src/lib/domain-identity.ts`; `src/lib/brandfetch-logo.ts`; `src/lib/brand-visual-evidence.ts`; `src/lib/integrations/brand-harvester.ts`; `src/lib/research/company-research.ts`; `src/lib/research/offer-recommendations.ts`; `src/lib/generation/audience-recommendations.ts`; `src/lib/generation/objective-cta-recommendations.ts`; directly corresponding unit tests.
+- Tests: `npm run typecheck` — passed; `npm test` — 94 files / 846 tests passed in 10.08s; `npm run lint` — exit 0 with four pre-existing warnings; `npm run benchmark:preview` — 5 files / 30 tests passed.
+- Concerns: Wave 1 artifacts are pure typed seams; manager wiring into the reconciler, session projection, and guided UI occurs in Waves 2–4. Live providers were not called.
+- Commits: `6e7ee69 feat: strengthen typed brand evidence collection`; `077c536 feat: add evidence-backed brief recommendations`.
 
 ## Wave 2: reconcile and select
 
