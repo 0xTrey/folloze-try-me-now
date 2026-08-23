@@ -22,6 +22,8 @@ function profile(overrides: Partial<BrandProfile> = {}): BrandProfile {
     primaryColor: "#1B3E51",
     accentColor: "#F44414",
     surfaceColor: "#FFFFFF",
+    displayFontFamily: "Jitterbit Display",
+    bodyFontFamily: "Jitterbit Sans",
     sourceUrl: "https://www.jitterbit.com/",
     source: "fast-extractor",
     designDna: {
@@ -29,6 +31,7 @@ function profile(overrides: Partial<BrandProfile> = {}): BrandProfile {
       source: "verified-profile",
       confidence: "high",
       theme: { hero: "light" },
+      typography: { fallback: "sans", headingWeight: 700, bodyWeight: 400 },
       buttons: { radiusPx: 8, heightPx: 48 },
       cards: { radiusPx: 12 },
       spacing: { contentMaxWidthPx: 1280, sectionBlockPx: 80, gridGapPx: 24 }
@@ -161,6 +164,39 @@ describe("brand readiness", () => {
     expect(assessBrandReadiness(candidate)).toMatchObject({
       status: "incomplete",
       paletteReady: false
+    });
+  });
+
+  it("requires credible ink, surface, and action roles rather than three repeated colors", () => {
+    const candidate = profile({
+      colors: ["#FFFFFF", "#FFFFFF", "#F5F5F5"],
+      primaryColor: "#FFFFFF",
+      accentColor: "#FFFFFF",
+      surfaceColor: "#FFFFFF"
+    });
+
+    expect(assessBrandReadiness(candidate)).toMatchObject({
+      status: "incomplete",
+      paletteReady: false
+    });
+  });
+
+  it("requires both typography character and component geometry evidence", () => {
+    const candidate = profile({
+      displayFontFamily: undefined,
+      bodyFontFamily: undefined,
+      designDna: {
+        version: 1,
+        source: "verified-profile",
+        confidence: "high",
+        theme: { hero: "light" },
+        spacing: { contentMaxWidthPx: 1280 }
+      }
+    });
+
+    expect(assessBrandReadiness(candidate)).toMatchObject({
+      status: "incomplete",
+      designReady: false
     });
   });
 

@@ -6,6 +6,7 @@ import type {
   ScreenshotVisualEvidence,
   TypographyFamilyCue
 } from "@/lib/brand-visual-evidence";
+import { brandHelpRequest } from "@/lib/brand-readiness";
 import type {
   EvidenceValue,
   ProductionArtifact
@@ -23,6 +24,8 @@ export type BrandEvidenceKind =
 export type BrandColorRole = "ink" | "surface" | "accent" | "action";
 export type BrandDensity = "open" | "balanced" | "dense";
 export type BrandAssetKind = "photography" | "product-ui" | "illustration" | "diagram" | "image";
+export type BrandAssetPurpose = "product" | "context" | "diagram" | "evidence" | "unknown";
+export type BrandAssetSourceAuthority = "visitor" | "seller_official" | "third_party";
 
 export interface FontCandidate {
   family: string;
@@ -41,16 +44,34 @@ export interface FontEvidence extends EvidenceValue<string> {
 export interface AssetCandidate {
   ref: string;
   kind: BrandAssetKind;
+  purpose?: BrandAssetPurpose;
+  sourcePage?: string;
+  sourceAuthority?: BrandAssetSourceAuthority;
+  altText?: string;
+  context?: string;
+  width?: number;
+  height?: number;
+  safetyStatus?: "safe" | "unsafe" | "unknown";
+  renderStatus?: "verified" | "failed" | "unknown";
+  transparent?: boolean;
+  utility?: boolean;
+  promotional?: boolean;
+  duplicateKey?: string;
 }
 
 export interface AssetEvidence extends EvidenceValue<string> {
   kind: BrandAssetKind;
+  purpose: BrandAssetPurpose;
+  sourcePage?: string;
+  width?: number;
+  height?: number;
 }
 
 export interface SelectedAssetRole {
   role: "hero" | "supporting";
   ref: string;
   kind: BrandAssetKind;
+  purpose: BrandAssetPurpose;
   evidenceRef: string;
 }
 
@@ -98,6 +119,7 @@ export interface BrandSystemV2 {
 export interface BrandSystemEvidenceSource {
   ref: string;
   kind: BrandEvidenceKind;
+  authorityRole?: "seller" | "target";
   revision: number;
   observedAt: string;
   confidence: number;
@@ -268,6 +290,122 @@ function normalizeDomain(value: string): string {
     .split(/[/?#]/)[0] ?? "";
 }
 
+const ASSET_PURPOSE_RANK: Record<BrandAssetPurpose, number> = {
+  product: 4,
+  context: 3,
+  diagram: 2,
+  evidence: 1,
+  unknown: 0
+};
+
+function assetDescriptor(candidate: AssetCandidate): string {
+  return [
+    candidate.altText,
+    candidate.context,
+    candidate.ref,
+    candidate.kind
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function inferredAssetPurpose(candidate: AssetCandidate): BrandAssetPurpose {
+  if (candidate.purpose) return candidate.purpose;
+  const descriptor = assetDescriptor(candidate);
+  if (
+    candidate.kind === "product-ui" ||
+    /\b(product|platform|dashboard|interface|ui|application|app-screen|console|workspace|device)\b/.test(
+      descriptor
+    )
+  ) return "product";
+  if (
+    /\b(evidence|proof|report|resource|case-study|customer-story|benchmark|research|whitepaper)\b/.test(
+      descriptor
+    )
+  ) return "evidence";
+  if (
+    candidate.kind === "photography" ||
+    /\b(people|person|team|customer|technician|worker|operator|office|field|portrait|photo)\b/.test(
+      descriptor
+    )
+  ) return "context";
+  if (
+    candidate.kind === "diagram" ||
+    /\b(diagram|architecture|workflow|process|explainer|schematic|integration-map)\b/.test(
+      descriptor
+    )
+  ) return "diagram";
+  return "unknown";
+}
+
+function publicHttpsAsset(ref: string): URL | undefined {
+  try {
+    const url = new URL(ref);
+    const host = url.hostname.toLowerCase();
+    const privateIpv4 =
+      /^(?:10|127)\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(?:1[6-9]|2\d|3[01])\./.test(host);
+    if (
+      url.protocol !== "https:" ||
+      url.port ||
+      url.username ||
+      url.password ||
+      host === "localhost" ||
+      host.endsWith(".localhost") ||
+      host.endsWith(".local") ||
+      host.endsWith(".internal") ||
+      privateIpv4
+    ) return undefined;
+    return url;
+  } catch {
+    return undefined;
+  }
+}
+
+function assetDuplicateKey(candidate: AssetCandidate): string {
+  if (candidate.duplicateKey?.trim()) return candidate.duplicateKey.trim().toLowerCase();
+  const url = publicHttpsAsset(candidate.ref);
+  if (!url) return candidate.ref.trim().toLowerCase();
+  const path = url.pathname
+    .toLowerCase()
+    .replace(
+      /[-_](?:\d+x\d+|\d+[wh]|small|medium|large|thumb(?:nail)?|desktop|mobile|crop)(?=[-_.])/g,
+      ""
+    );
+  return `${url.origin.toLowerCase()}${path}`;
+}
+
+function assetIsEligible(
+  candidate: AssetCandidate,
+  source: BrandSystemEvidenceSource
+): boolean {
+  if (!publicHttpsAsset(candidate.ref)) return false;
+  const authority = candidate.sourceAuthority ??
+    (source.kind === "third-party" ? "third_party" : "seller_official");
+  if (!["visitor", "seller_official"].includes(authority)) return false;
+  if (candidate.safetyStatus === "unsafe" || candidate.renderStatus === "failed") return false;
+  if (candidate.transparent || candidate.utility || candidate.promotional) return false;
+  if (
+    (candidate.width !== undefined &&
+      (!Number.isFinite(candidate.width) || candidate.width <= 96 || candidate.width > 10_000)) ||
+    (candidate.height !== undefined &&
+      (!Number.isFinite(candidate.height) || candidate.height <= 96 || candidate.height > 10_000)) ||
+    (candidate.width !== undefined &&
+      candidate.height !== undefined &&
+      candidate.width * candidate.height < 80_000)
+  ) return false;
+  const descriptor = assetDescriptor(candidate);
+  if (
+    /\b(nav(?:igation)?|footer|social|accessibility|cookie|captcha|spinner|utility|icon|logo|wordmark|avatar|badge|rating|stars?)\b/.test(
+      descriptor
+    ) ||
+    /\b(sale|promo(?:tion)?|register|registration|roadshow|webinar|conference|summit|speaker|event-banner)\b/.test(
+      descriptor
+    ) ||
+    /\b(stock-photo|stock-image|placeholder|lorem-picsum)\b/.test(descriptor)
+  ) return false;
+  return true;
+}
+
 function confidenceNumber(value: IntelligenceConfidence | undefined): number {
   return value === "high" ? 0.9 : value === "medium" ? 0.7 : 0.4;
 }
@@ -370,6 +508,7 @@ function observedRatioColorCandidates(
 function currentSources(input: CompileBrandSystemInput): BrandSystemEvidenceSource[] {
   return input.sources.filter(
     (source) =>
+      source.authorityRole !== "target" &&
       source.revision === input.revision &&
       clampConfidence(source.confidence) === source.confidence
   );
@@ -498,12 +637,26 @@ export function brandProfileToBrandSystemEvidence(
     : undefined;
   const density = profileDensity(profile);
   const assets = profile.imageUrls.map((imageRef) =>
-    make<AssetCandidate>({ ref: imageRef, kind: "image" }, sourceConfidence * 0.85)
+    make<AssetCandidate>({
+      ref: imageRef,
+      kind: /\b(?:dashboard|interface|product-ui|platform|console|workspace)\b/i.test(imageRef)
+        ? "product-ui"
+        : /\b(?:diagram|architecture|workflow|schematic)\b/i.test(imageRef)
+          ? "diagram"
+          : /\b(?:people|team|customer|technician|worker|photo)\b/i.test(imageRef)
+            ? "photography"
+            : "image",
+      sourcePage: profile.sourceUrl,
+      sourceAuthority: "seller_official",
+      safetyStatus: "safe",
+      renderStatus: "unknown"
+    }, sourceConfidence * 0.85)
   );
 
   return {
     ref,
     kind,
+    authorityRole: "seller",
     revision: metadata.revision,
     observedAt: metadata.observedAt,
     confidence: clampConfidence(sourceConfidence),
@@ -611,6 +764,7 @@ export function brandfetchArtifactToBrandSystemEvidence(
   return {
     ref: `brandfetch:${value.matchedDomain}`,
     kind: "brandfetch",
+    authorityRole: "seller",
     revision: artifact.revision,
     observedAt,
     confidence: clampConfidence(artifact.confidence),
@@ -683,6 +837,7 @@ export function screenshotArtifactToBrandSystemEvidence(
   const source: BrandSystemEvidenceSource = {
     ref: artifact.evidenceRefs[0]?.split("#")[0] ?? "screenshot:desktop",
     kind: "official-screenshot",
+    authorityRole: "seller",
     revision: artifact.revision,
     observedAt: artifact.completedAt,
     confidence: clampConfidence(artifact.confidence),
@@ -735,6 +890,16 @@ function artifactBase(input: CompileBrandSystemInput) {
   };
 }
 
+function evidenceRefsForSources(
+  sources: readonly BrandSystemEvidenceSource[]
+): string[] {
+  return [
+    ...new Set(
+      sources.flatMap((source) => [source.ref, ...(source.evidenceRefs ?? [])])
+    )
+  ].filter(Boolean).sort();
+}
+
 function selectedOrDefault<T>(
   selected: RankedCandidate<T> | undefined,
   fallback: T
@@ -784,17 +949,14 @@ export function compileBrandSystemV2(
     Boolean(canonicalColor(value))
   );
   if (!selectedInk || !selectedSurface) {
+    const evidenceRefs = evidenceRefsForSources(sources);
     return {
       ...base,
       status: "needs_input",
-      evidenceRefs: [],
+      evidenceRefs,
       confidence: 0,
       errorCode: "verified_neutral_colors_unavailable",
-      userRequest: {
-        kind: "source_url",
-        prompt:
-          "We found the company, but we need a clearer brand source. Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed."
-      }
+      userRequest: brandHelpRequest()
     };
   }
 
@@ -937,25 +1099,39 @@ export function compileBrandSystemV2(
     "imagery",
     (value) => value.trim().length > 0 && value.length <= 48
   );
-  const assets = sources
+  const rankedAssets = sources
     .flatMap((source) =>
       (source.imagery?.candidates ?? [])
-        .filter((candidate) => candidate.revision === source.revision && candidate.value.ref.trim())
-        .map((candidate) => ({ candidate, source }))
+        .filter(
+          (candidate) =>
+            candidate.revision === source.revision &&
+            candidate.value.ref.trim() &&
+            clampConfidence(candidate.confidence) === candidate.confidence &&
+            assetIsEligible(candidate.value, source)
+        )
+        .map((candidate) => ({
+          candidate,
+          source,
+          purpose: inferredAssetPurpose(candidate.value),
+          duplicateKey: assetDuplicateKey(candidate.value)
+        }))
     )
     .sort((left, right) =>
+      ASSET_PURPOSE_RANK[right.purpose] - ASSET_PURPOSE_RANK[left.purpose] ||
       compareCandidates(
         { evidence: left.candidate, source: left.source, specificity: 2 },
         { evidence: right.candidate, source: right.source, specificity: 2 },
         "imagery"
-      )
+      ) ||
+      left.candidate.value.ref.localeCompare(right.candidate.value.ref)
     )
     .filter(
-      ({ candidate }, index, values) =>
-        values.findIndex((other) => other.candidate.value.ref === candidate.value.ref) === index
+      ({ duplicateKey }, index, values) =>
+        values.findIndex((other) => other.duplicateKey === duplicateKey) === index
     )
-    .slice(0, 6)
-    .map(({ candidate }): AssetEvidence => ({
+    .slice(0, 6);
+  const assets = rankedAssets
+    .map(({ candidate, purpose }): AssetEvidence => ({
       ...evidence(
         candidate.value.ref,
         candidate.source,
@@ -963,7 +1139,11 @@ export function compileBrandSystemV2(
         candidate.observedAt,
         input.revision
       ),
-      kind: candidate.value.kind
+      kind: candidate.value.kind,
+      purpose,
+      ...(candidate.value.sourcePage ? { sourcePage: candidate.value.sourcePage } : {}),
+      ...(candidate.value.width !== undefined ? { width: candidate.value.width } : {}),
+      ...(candidate.value.height !== undefined ? { height: candidate.value.height } : {})
     }));
   const compiledImageryStyle = assets.length
     ? selectedOrDefault(imageryStyle, "image-led")
@@ -975,6 +1155,7 @@ export function compileBrandSystemV2(
     role: index === 0 ? "hero" : "supporting",
     ref: asset.value,
     kind: asset.kind,
+    purpose: asset.purpose,
     evidenceRef: asset.source
   }));
   const motionStyle = selectCandidate(
@@ -1026,6 +1207,13 @@ export function compileBrandSystemV2(
     if (!item) continue;
     selectedRefs.push(item.source.ref, item.evidence.source, ...(item.source.evidenceRefs ?? []));
   }
+  for (const item of rankedAssets) {
+    selectedRefs.push(
+      item.source.ref,
+      item.candidate.source,
+      ...(item.source.evidenceRefs ?? [])
+    );
+  }
   const evidenceRefs = [
     ...new Set(selectedRefs)
   ].filter(Boolean).sort();
@@ -1052,11 +1240,25 @@ export function compileBrandSystemV2(
     !assets.length && "missing-imagery",
     !motionStyle && "motion"
   ].filter(Boolean);
+  const canonicalDomain = normalizeDomain(input.identity.canonicalDomain);
+  const identityReady = Boolean(
+    input.identity.name.trim() &&
+    canonicalDomain &&
+    canonicalDomain.includes(".") &&
+    !/\s/.test(canonicalDomain)
+  );
+  const credibleSemanticPalette = Boolean(
+    selectedAction &&
+    ink.value !== surface.value &&
+    action.value !== surface.value &&
+    contrastRatio(ink.value, surface.value) >= 3
+  );
   const minimumBrandReady = Boolean(
+    identityReady &&
     selectedLogo &&
     selectedInk &&
     selectedSurface &&
-    selectedAction &&
+    credibleSemanticPalette &&
     (selectedDisplay || selectedBody) &&
     controlRadius &&
     cardRadius
@@ -1065,7 +1267,7 @@ export function compileBrandSystemV2(
     revision: input.revision,
     identity: {
       name: input.identity.name.trim(),
-      canonicalDomain: normalizeDomain(input.identity.canonicalDomain),
+      canonicalDomain,
       aliases
     },
     logo,
@@ -1125,11 +1327,7 @@ export function compileBrandSystemV2(
       : {}),
     ...(!minimumBrandReady
       ? {
-          userRequest: {
-            kind: "source_url" as const,
-            prompt:
-              "We found the company, but we need a clearer brand source. Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed."
-          }
+          userRequest: brandHelpRequest()
         }
       : {})
   };

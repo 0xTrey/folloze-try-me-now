@@ -634,6 +634,38 @@ describe("fast brand extraction", () => {
     expect(seller.imageUrls.join(" ")).not.toMatch(/roadshow|event-registration/i);
   });
 
+  it("purpose-ranks ServiceTitan-style assets and removes tiny, duplicate, utility, promo, and unsafe candidates", () => {
+    const seller = extractFastBrandProfile({
+      domain: "servicetitan.com",
+      html: `<!doctype html><html><head>
+        <title>ServiceTitan</title>
+        <meta property="og:site_name" content="ServiceTitan">
+      </head><body><main>
+        <img src="/images/benchmark-report.webp" alt="Industry benchmark report" width="1200" height="800">
+        <img src="/images/workflow-diagram.svg" alt="Dispatch workflow diagram" width="1200" height="720">
+        <img src="/images/field-technician-photo.webp" alt="Field technician using ServiceTitan" width="1400" height="900">
+        <img src="/images/platform-dashboard-desktop.webp" alt="ServiceTitan platform dashboard" width="1600" height="1000">
+        <img src="/images/platform-dashboard-mobile.webp" alt="ServiceTitan platform dashboard crop" width="900" height="1200">
+        <img src="/images/navigation-icon.webp" alt="Navigation icon" width="512" height="512">
+        <img src="/images/event-registration-banner.webp" alt="Register for the summit" width="1600" height="900">
+        <img src="/images/tiny-product.webp" alt="Product dashboard thumbnail" width="80" height="80">
+        <img src="http://127.0.0.1/internal-product.webp" alt="Product dashboard" width="1200" height="800">
+        <img src="data:image/png;base64,bad" alt="Product dashboard" width="1200" height="800">
+      </main></body></html>`,
+      finalUrl: new URL("https://www.servicetitan.com/platform/")
+    });
+
+    expect(seller.imageUrls).toEqual([
+      "https://www.servicetitan.com/images/platform-dashboard-desktop.webp",
+      "https://www.servicetitan.com/images/field-technician-photo.webp",
+      "https://www.servicetitan.com/images/workflow-diagram.svg",
+      "https://www.servicetitan.com/images/benchmark-report.webp"
+    ]);
+    expect(seller.imageUrls.join(" ")).not.toMatch(
+      /mobile|navigation-icon|registration|tiny-product|127\.0\.0\.1|data:image/
+    );
+  });
+
   it("captures public context, headings, and the source font family", () => {
     expect(profile.companyName).toBe("Jitterbit");
     expect(profile.publicTopics).toContain("Automation with AI accountability at its core.");

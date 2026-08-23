@@ -569,6 +569,49 @@ function extractLogo(
   };
 }
 
+type HarvestedAssetPurpose = "product" | "context" | "diagram" | "evidence" | "unknown";
+
+const HARVESTED_ASSET_PURPOSE_RANK: Record<HarvestedAssetPurpose, number> = {
+  product: 4,
+  context: 3,
+  diagram: 2,
+  evidence: 1,
+  unknown: 0
+};
+
+function harvestedAssetPurpose(descriptor: string): HarvestedAssetPurpose {
+  if (
+    /\b(product|platform|dashboard|interface|product-ui|app-screen|console|workspace|device)\b/i.test(
+      descriptor
+    )
+  ) return "product";
+  if (
+    /\b(evidence|proof|report|resource|case-study|customer-story|benchmark|research|whitepaper)\b/i.test(
+      descriptor
+    )
+  ) return "evidence";
+  if (
+    /\b(people|person|team|customer|technician|worker|operator|office|field|portrait|photo)\b/i.test(
+      descriptor
+    )
+  ) return "context";
+  if (/\b(diagram|architecture|workflow|process|explainer|schematic|integration-map)\b/i.test(descriptor)) {
+    return "diagram";
+  }
+  return "unknown";
+}
+
+function harvestedAssetDuplicateKey(url: string): string {
+  const parsed = new URL(url);
+  const path = parsed.pathname
+    .toLowerCase()
+    .replace(
+      /[-_](?:\d+x\d+|\d+[wh]|small|medium|large|thumb(?:nail)?|desktop|mobile|crop)(?=[-_.])/g,
+      ""
+    );
+  return `${parsed.origin.toLowerCase()}${path}`;
+}
+
 function extractImageUrls(
   html: string,
   css: string,
@@ -578,6 +621,7 @@ function extractImageUrls(
   const candidates = new Map<string, number>();
   const add = (url: string | undefined, score: number, descriptor = "") => {
     const pathname = url ? new URL(url).pathname : "";
+    const fullDescriptor = `${descriptor} ${pathname}`;
     if (
       !url ||
       url === logoUrl ||
@@ -588,13 +632,18 @@ function extractImageUrls(
       (/\.svg(?:$|[?#])/i.test(url) &&
         !/diagram|architecture|platform|workflow|illustration|visual/i.test(descriptor))
     ) return;
-    const reusableScore =
-      score -
-      (/(?:^|[/_.-])(event|roadshow|webinar|conference|summit|register|registration|speaker|dates?|regions?|promo(?:tion)?)(?:[/_.?-]|$)/i.test(
+    if (
+      /(?:^|[/_.-])(event|roadshow|webinar|conference|summit|register|registration|speaker|dates?|regions?|promo(?:tion)?|sale)(?:[/_.?-]|$)/i.test(
         pathname
-      )
-        ? 90
-        : 0);
+      ) ||
+      /\b(event-banner|roadshow|webinar|conference|summit|register|registration|speaker|promotion|sale)\b/i.test(
+        descriptor
+      ) ||
+      /\b(stock-photo|stock-image|placeholder|lorem-picsum)\b/i.test(fullDescriptor)
+    ) return;
+    const purpose = harvestedAssetPurpose(fullDescriptor);
+    const reusableScore =
+      HARVESTED_ASSET_PURPOSE_RANK[purpose] * 1_000 + score;
     candidates.set(url, Math.max(reusableScore, candidates.get(url) ?? Number.NEGATIVE_INFINITY));
   };
 
@@ -613,10 +662,13 @@ function extractImageUrls(
     let score = 10;
     if (/hero|platform|product|solution|overview|architecture|workflow/.test(descriptor)) score += 45;
     if (/campaign|experience/.test(descriptor)) score += 15;
-    if (/(?:^|[^a-z])(?:event|roadshow|webinar|conference|summit|register|registration|speaker|dates?|regions?|promotion)(?:[^a-z]|$)/.test(descriptor)) score -= 90;
     if (/(?:^|[^a-z])(?:logos?|icons?|avatar|headshot|testimonial|badge|flag|cookie|language|spinner|rating|stars?|review|widget)(?:[^a-z]|$)|g2\.com|trustpilot/.test(descriptor)) score -= 100;
     if (width >= 600 || height >= 400) score += 25;
-    if (width && height && width * height < 80_000) score -= 45;
+    if (
+      (width && width <= 96) ||
+      (height && height <= 96) ||
+      (width && height && width * height < 80_000)
+    ) continue;
     if (/\.svg(?:\?|$)/.test(source) && !/diagram|architecture|platform|workflow/.test(descriptor)) score -= 20;
     add(source, score, descriptor);
   }
@@ -648,6 +700,12 @@ function extractImageUrls(
   return [...candidates.entries()]
     .filter(([, score]) => score >= 25)
     .sort((a, b) => b[1] - a[1])
+    .filter(
+      ([url], index, values) =>
+        values.findIndex(([other]) =>
+          harvestedAssetDuplicateKey(other) === harvestedAssetDuplicateKey(url)
+        ) === index
+    )
     .slice(0, 6)
     .map(([url]) => url);
 }

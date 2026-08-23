@@ -5,12 +5,14 @@ import {
   type DesktopScreenshotObservations
 } from "@/lib/brand-visual-evidence";
 import {
+  type AssetCandidate,
   brandProfileToBrandSystemEvidence,
   compileBrandSystemV2,
   screenshotArtifactToBrandSystemEvidence,
   type BrandSystemEvidenceSource,
   type CompileBrandSystemInput
 } from "@/lib/brand-system";
+import { BRAND_HELP_PROMPT } from "@/lib/brand-readiness";
 import type { EvidenceValue } from "@/lib/orchestration/worker-types";
 import type { BrandProfile } from "@/lib/types";
 
@@ -340,8 +342,284 @@ describe("BrandSystemV2 compiler", () => {
     });
     expect(result.value?.imagery.candidates[0]).toMatchObject({
       value: "https://www.servicetitan.com/images/platform.webp",
-      kind: "image"
+      kind: "product-ui",
+      purpose: "product"
     });
+  });
+
+  it("purpose-ranks distinct ServiceTitan-style assets and rejects unsafe failure modes", () => {
+    const sourceUrl = "https://www.servicetitan.com/platform/";
+    const asset = (
+      value: AssetCandidate,
+      confidence = 0.9
+    ) => evidence(value, sourceUrl, confidence);
+    const seller: BrandSystemEvidenceSource = {
+      ref: "official:servicetitan.com",
+      kind: "official-dom",
+      authorityRole: "seller",
+      revision,
+      observedAt,
+      confidence: 0.9,
+      evidenceRefs: [sourceUrl],
+      logo: {
+        status: "verified",
+        ref: "portable-logo:servicetitan",
+        source: "https://www.servicetitan.com/logo.svg",
+        confidence: 0.95
+      },
+      colorRoles: {
+        ink: evidence("#040404", sourceUrl),
+        surface: evidence("#FFFFFF", sourceUrl),
+        accent: evidence("#0265DC", sourceUrl),
+        action: evidence("#0265DC", `${sourceUrl}#primary-button`)
+      },
+      colorRoleSpecificity: {
+        ink: "explicit",
+        surface: "explicit",
+        accent: "explicit",
+        action: "explicit"
+      },
+      typography: {
+        display: evidence({ family: "Inter", portable: false, fallback: "sans" }, sourceUrl),
+        body: evidence({ family: "Inter", portable: false, fallback: "sans" }, sourceUrl)
+      },
+      geometry: {
+        controlRadius: evidence(6, `${sourceUrl}#primary-button`),
+        cardRadius: evidence(6, `${sourceUrl}#feature-card`)
+      },
+      imagery: {
+        style: evidence("mixed", sourceUrl),
+        candidates: [
+          asset({
+            ref: "https://www.servicetitan.com/images/customer-proof-report.webp",
+            kind: "image",
+            purpose: "evidence",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            width: 1200,
+            height: 800,
+            safetyStatus: "safe",
+            renderStatus: "verified"
+          }, 0.99),
+          asset({
+            ref: "https://www.servicetitan.com/images/platform-dashboard-desktop.webp",
+            kind: "product-ui",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            altText: "ServiceTitan platform dashboard",
+            width: 1600,
+            height: 1000,
+            safetyStatus: "safe",
+            renderStatus: "verified"
+          }, 0.8),
+          asset({
+            ref: "https://www.servicetitan.com/images/platform-dashboard-mobile.webp",
+            kind: "product-ui",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            altText: "ServiceTitan platform dashboard crop",
+            width: 900,
+            height: 1200,
+            safetyStatus: "safe",
+            renderStatus: "verified"
+          }, 0.95),
+          asset({
+            ref: "https://www.servicetitan.com/images/field-technician-photo.webp",
+            kind: "photography",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            width: 1400,
+            height: 900,
+            safetyStatus: "safe",
+            renderStatus: "verified"
+          }),
+          asset({
+            ref: "https://www.servicetitan.com/images/workflow-diagram.svg",
+            kind: "diagram",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            width: 1200,
+            height: 720,
+            safetyStatus: "safe",
+            renderStatus: "verified"
+          }),
+          asset({
+            ref: "https://www.servicetitan.com/images/event-registration-banner.webp",
+            kind: "image",
+            purpose: "product",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            width: 1600,
+            height: 900,
+            promotional: true,
+            safetyStatus: "safe"
+          }),
+          asset({
+            ref: "https://www.servicetitan.com/images/navigation-icon.webp",
+            kind: "image",
+            purpose: "product",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            width: 512,
+            height: 512,
+            utility: true,
+            safetyStatus: "safe"
+          }),
+          asset({
+            ref: "https://www.servicetitan.com/images/tiny-product.webp",
+            kind: "product-ui",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            width: 80,
+            height: 80,
+            safetyStatus: "safe"
+          }),
+          asset({
+            ref: "https://www.servicetitan.com/images/broken-product.webp",
+            kind: "product-ui",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            width: 1200,
+            height: 800,
+            safetyStatus: "safe",
+            renderStatus: "failed"
+          }),
+          asset({
+            ref: "https://www.servicetitan.com/images/transparent-product.webp",
+            kind: "product-ui",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            width: 1200,
+            height: 800,
+            safetyStatus: "safe",
+            transparent: true
+          }),
+          asset({
+            ref: "https://stock.example/generic-team.webp",
+            kind: "photography",
+            sourcePage: sourceUrl,
+            sourceAuthority: "third_party",
+            width: 1200,
+            height: 800,
+            safetyStatus: "safe"
+          })
+        ]
+      }
+    };
+
+    const result = compile([seller], {
+      identity: {
+        name: "ServiceTitan",
+        canonicalDomain: "servicetitan.com"
+      }
+    });
+
+    expect(result.value?.imagery.candidates.map(({ purpose }) => purpose)).toEqual([
+      "product",
+      "context",
+      "diagram",
+      "evidence"
+    ]);
+    expect(result.value?.imagery.selected).toEqual([
+      expect.objectContaining({
+        role: "hero",
+        purpose: "product",
+        ref: "https://www.servicetitan.com/images/platform-dashboard-mobile.webp"
+      }),
+      expect.objectContaining({
+        role: "supporting",
+        purpose: "context",
+        ref: "https://www.servicetitan.com/images/field-technician-photo.webp"
+      })
+    ]);
+    expect(result.value?.imagery.candidates.map(({ value }) => value).join(" ")).not.toMatch(
+      /registration|navigation-icon|tiny-product|broken-product|transparent-product|stock\.example/
+    );
+    expect(new Set(result.value?.imagery.selected.map(({ ref }) => ref)).size).toBe(
+      result.value?.imagery.selected.length
+    );
+  });
+
+  it("never lets target-account evidence reskin seller tokens or imagery", () => {
+    const sellerProfile = brandProfile({
+      domain: "seller.example",
+      companyName: "Seller",
+      portableLogo: portableLogo("seller-logo"),
+      logoUrl: "https://seller.example/logo.svg",
+      logoSourceUrl: "https://seller.example/logo.svg",
+      imageUrls: ["https://seller.example/product-dashboard.webp"],
+      colors: ["#101820", "#0057B8", "#FFFFFF"],
+      primaryColor: "#101820",
+      accentColor: "#0057B8",
+      surfaceColor: "#FFFFFF",
+      displayFontFamily: "Seller Sans",
+      bodyFontFamily: "Seller Sans",
+      designDna: {
+        version: 1,
+        source: "remote-harvester",
+        confidence: "high",
+        typography: { fallback: "sans", headingWeight: 700, bodyWeight: 400 },
+        buttons: { primaryBackground: "#0057B8", radiusPx: 8 },
+        cards: { radiusPx: 12 }
+      },
+      diagnostics: {
+        logo: {
+          strategy: "official-remote-portable",
+          imageCandidateCount: 1,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0
+        },
+        palette: {
+          strategy: "semantic-tokens",
+          confidence: "high",
+          candidateCount: 3,
+          semanticCandidateCount: 3,
+          rejectedCandidateCount: 0,
+          gradientCandidateCount: 0
+        }
+      }
+    });
+    const target: BrandSystemEvidenceSource = {
+      ref: "official:target.example",
+      kind: "visitor-supplied",
+      authorityRole: "target",
+      revision,
+      observedAt: "2026-08-22T18:00:00.000Z",
+      confidence: 1,
+      colorRoles: {
+        ink: evidence("#330033", "target:ink", 1),
+        surface: evidence("#FFF0FF", "target:surface", 1),
+        accent: evidence("#FF00FF", "target:accent", 1),
+        action: evidence("#FF00FF", "target:action", 1)
+      },
+      imagery: {
+        candidates: [
+          evidence<AssetCandidate>({
+            ref: "https://target.example/hero.webp",
+            kind: "photography",
+            purpose: "context",
+            sourceAuthority: "seller_official"
+          }, "target:image", 1)
+        ]
+      }
+    };
+    const result = compile([
+      brandProfileToBrandSystemEvidence(sellerProfile, { revision, observedAt }),
+      target
+    ], {
+      identity: { name: "Seller", canonicalDomain: "seller.example" }
+    });
+
+    expect(result.value?.colorRoles).toMatchObject({
+      ink: { value: "#101820" },
+      surface: { value: "#FFFFFF" },
+      accent: { value: "#0057B8" },
+      action: { value: "#0057B8" }
+    });
+    expect(result.value?.imagery.selected[0]?.ref).toBe(
+      "https://seller.example/product-dashboard.webp"
+    );
+    expect(result.evidenceRefs.join(" ")).not.toContain("target");
   });
 
   it("uses an explicit missing logo and type-led composition without inventing media", () => {
@@ -381,8 +659,9 @@ describe("BrandSystemV2 compiler", () => {
     expect(result).toMatchObject({
       status: "needs_input",
       value: { readiness: "needs_input" },
-      userRequest: { kind: "source_url" }
+      userRequest: { kind: "source_url", prompt: BRAND_HELP_PROMPT }
     });
+    expect(result.evidenceRefs).toContain("official:no-media.example");
     expect(JSON.stringify(result.value)).not.toMatch(/placeholder|generic-palette/i);
   });
 
@@ -415,6 +694,61 @@ describe("BrandSystemV2 compiler", () => {
       result.value?.colorRoles.accent.value,
       result.value?.colorRoles.action.value
     ])).toEqual(new Set(["#202124", "#FFFFFF"]));
+  });
+
+  it("requires a verified logo, credible semantic palette, typography, and geometry", () => {
+    const sourceUrl = "https://washed-out.example/";
+    const source: BrandSystemEvidenceSource = {
+      ref: "official:washed-out.example",
+      kind: "official-dom",
+      revision,
+      observedAt,
+      confidence: 0.9,
+      evidenceRefs: [sourceUrl],
+      logo: {
+        status: "verified",
+        ref: "portable-logo:washed-out",
+        source: `${sourceUrl}logo.svg`,
+        confidence: 0.9
+      },
+      colorRoles: {
+        ink: evidence("#F9F9F9", sourceUrl),
+        surface: evidence("#FFFFFF", sourceUrl),
+        accent: evidence("#FFFFFF", sourceUrl),
+        action: evidence("#FFFFFF", `${sourceUrl}#button`)
+      },
+      colorRoleSpecificity: {
+        ink: "explicit",
+        surface: "explicit",
+        accent: "explicit",
+        action: "explicit"
+      },
+      typography: {
+        display: evidence({ family: "Seller Sans", portable: false }, sourceUrl),
+        body: evidence({ family: "Seller Sans", portable: false }, sourceUrl)
+      },
+      geometry: {
+        controlRadius: evidence(8, `${sourceUrl}#button`),
+        cardRadius: evidence(12, `${sourceUrl}#card`)
+      }
+    };
+    const result = compile([source], {
+      identity: { name: "Washed Out", canonicalDomain: "washed-out.example" }
+    });
+
+    expect(result).toMatchObject({
+      status: "needs_input",
+      value: {
+        readiness: "needs_input",
+        logo: { status: "verified" },
+        typography: {
+          display: { requestedFamily: "Seller Sans" }
+        },
+        geometry: { controlRadius: 8, cardRadius: 12 }
+      },
+      userRequest: { prompt: BRAND_HELP_PROMPT }
+    });
+    expect(result.evidenceRefs).toContain("official:washed-out.example");
   });
 
   it("rejects generic harvester fallback colors instead of promoting them to brand roles", () => {
@@ -451,9 +785,13 @@ describe("BrandSystemV2 compiler", () => {
       status: "needs_input",
       errorCode: "verified_neutral_colors_unavailable",
       confidence: 0,
-      userRequest: { kind: "source_url" }
+      userRequest: { kind: "source_url", prompt: BRAND_HELP_PROMPT }
     });
     expect(result.value).toBeUndefined();
+    expect(result.evidenceRefs).toEqual([
+      "https://blocked.example/",
+      "official:blocked.example"
+    ]);
   });
 
   it("resolves conflicting colors by authority, freshness, semantic role, then confidence", () => {

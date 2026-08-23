@@ -1,5 +1,14 @@
 import type { BrandProfile, BrandReadiness } from "@/lib/types";
 
+export const BRAND_HELP_PROMPT =
+  "We found the company, but we need a clearer brand source. Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed.";
+
+export function brandHelpRequest(
+  kind: "logo" | "brand_guide" | "screenshot" | "source_url" = "source_url"
+) {
+  return { kind, prompt: BRAND_HELP_PROMPT };
+}
+
 export type ProspectBrandState =
   | "researching"
   | "verified"
@@ -28,6 +37,30 @@ function sourceMatchesDomain(profile: BrandProfile): boolean {
   } catch {
     return false;
   }
+}
+
+function canonicalHex(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toUpperCase();
+  if (!normalized) return undefined;
+  if (/^#[0-9A-F]{6}$/.test(normalized)) return normalized;
+  if (!/^#[0-9A-F]{3}$/.test(normalized)) return undefined;
+  const [red, green, blue] = normalized.slice(1);
+  return `#${red}${red}${green}${green}${blue}${blue}`;
+}
+
+function luminance(color: string): number {
+  const channels = [1, 3, 5].map((index) => {
+    const channel = Number.parseInt(color.slice(index, index + 2), 16) / 255;
+    return channel <= 0.03928
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+}
+
+function contrastRatio(left: string, right: string): number {
+  const [lighter, darker] = [luminance(left), luminance(right)].sort((a, b) => b - a);
+  return (lighter! + 0.05) / (darker! + 0.05);
 }
 
 /**
@@ -99,20 +132,52 @@ export function assessBrandReadiness(profile: BrandProfile): BrandReadiness {
       !["none", "favicon", "inline-svg-unportable"].includes(logoStrategy)
   );
   const palette = profile.diagnostics?.palette;
+  const ink = canonicalHex(profile.primaryColor);
+  const surface = canonicalHex(profile.surfaceColor);
+  const action = canonicalHex(
+    profile.designDna?.buttons?.primaryBackground ?? profile.accentColor
+  );
+  const distinctColors = new Set(profile.colors.map(canonicalHex).filter(Boolean));
   const paletteReady = Boolean(
     palette &&
       palette.strategy !== "fallback" &&
       palette.confidence !== "low" &&
-      profile.colors.length >= 3
+      distinctColors.size >= 3 &&
+      ink &&
+      surface &&
+      action &&
+      ink !== surface &&
+      action !== surface &&
+      contrastRatio(ink, surface) >= 3
   );
   const identityReady = profile.identity
     ? profile.identity.confirmationStatus === "confirmed" && profile.identity.confidence !== "low"
     : false;
   const sourceEvidenceReady = profile.source !== "fallback" && sourceMatchesDomain(profile);
   const designFidelity = profile.diagnostics?.designFidelity;
+  const typographyEvidence = Boolean(
+    profile.displayFontFamily ||
+      profile.bodyFontFamily ||
+      profile.designDna?.typography?.fallback ||
+      profile.designDna?.typography?.headingWeight ||
+      profile.designDna?.typography?.bodyWeight
+  );
+  const controlGeometryEvidence = Boolean(
+    profile.designDna?.buttons?.radiusPx !== undefined ||
+      profile.designDna?.buttons?.heightPx !== undefined ||
+      profile.designDna?.buttons?.borderWidthPx !== undefined
+  );
+  const cardGeometryEvidence = Boolean(
+    profile.designDna?.cards?.radiusPx !== undefined ||
+      profile.designDna?.cards?.borderWidthPx !== undefined ||
+      profile.designDna?.cards?.shadow
+  );
   const designReady = Boolean(
     profile.designDna &&
       profile.designDna.confidence !== "low" &&
+      typographyEvidence &&
+      controlGeometryEvidence &&
+      cardGeometryEvidence &&
       (designFidelity
         ? designFidelity.designReady
         : ["verified-profile", "legacy-presentation"].includes(profile.designDna.source))
