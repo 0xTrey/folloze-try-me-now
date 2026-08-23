@@ -42,7 +42,6 @@ type QueuedEvent = {
   occurredAt: string;
   landing?: {
     path: string;
-    referrerHost?: string;
     utm?: Partial<Record<"source" | "medium" | "campaign" | "term" | "content", string>>;
     deviceClass: "desktop" | "tablet" | "mobile" | "unknown";
     browserFamily: string;
@@ -150,15 +149,8 @@ function landingContext(): QueuedEvent["landing"] {
       .map((key) => [key, safeText(parameters.get(`utm_${key}`) ?? "", 160)] as const)
       .filter((entry): entry is readonly [typeof entry[0], string] => Boolean(entry[1]))
   );
-  let referrerHost: string | undefined;
-  try {
-    if (document.referrer) referrerHost = new URL(document.referrer).hostname;
-  } catch {
-    referrerHost = undefined;
-  }
   return {
     path: window.location.pathname,
-    referrerHost,
     utm,
     deviceClass: deviceClass(),
     browserFamily: browserFamily()
@@ -291,6 +283,7 @@ export function setProductAnalyticsSessionId(sessionId: string | undefined): voi
 }
 
 export function identifyProductVisitor(email: string): void {
+  void email;
   const identity = productAnalyticsIdentity();
   if (!identity) return;
   captureProductEvent("visitor_identified", {
@@ -301,7 +294,7 @@ export function identifyProductVisitor(email: string): void {
   });
   if (!posthogEnabled) return;
   try {
-    posthog.identify(identity.visitorId, { email });
+    posthog.identify(identity.visitorId, { identity_source: "business_email_claim" });
   } catch {
     // The server-side lead and session ledgers remain authoritative.
   }

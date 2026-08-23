@@ -1,14 +1,45 @@
 import { createHash } from "node:crypto";
 
 import {
-  sanitizeObservabilityMeta,
-  sanitizeObservabilityText,
+  isPrivateObservabilityKey,
+  sanitizeObservabilityMeta as baseSanitizeObservabilityMeta,
+  sanitizeObservabilityText as baseSanitizeObservabilityText,
   type ObservabilityMeta,
   type ObservabilityValue
 } from "@/lib/observability-sanitize";
 
 export type { ObservabilityMeta, ObservabilityValue };
-export { sanitizeObservabilityMeta, sanitizeObservabilityText };
+
+const prohibitedTelemetryKeyPattern =
+  /(?:rawsource|sourcebod(?:y|ies)|sourcecontent|modelprompt|providerprompt|promptinput|promptoutput|providerresponse|modelresponse|providermessage|generatedcopy|generatedhtml|uploadedfile|uploadpayload|queryurl|accesstoken|refreshtoken|clientsecret|privatekey)/i;
+
+export function sanitizeObservabilityText(value: string, maxLength = 240): string {
+  return baseSanitizeObservabilityText(value, maxLength)
+    .replace(
+      /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|credential)\s*[:=]\s*[^\s,;]+/gi,
+      "[redacted-credential]"
+    )
+    .replace(/(?:^|\s)\/[^\s?]*\?[^\s]+/g, " [redacted-query-url]")
+    .slice(0, maxLength);
+}
+
+export function sanitizeObservabilityMeta(
+  meta: ObservabilityMeta | undefined
+): ObservabilityMeta | undefined {
+  const sanitized = baseSanitizeObservabilityMeta(meta);
+  if (!sanitized) return undefined;
+  return Object.fromEntries(
+    Object.entries(sanitized)
+      .filter(([key]) => {
+        const normalized = key.replace(/[^a-z0-9]/gi, "");
+        return !isPrivateObservabilityKey(key) && !prohibitedTelemetryKeyPattern.test(normalized);
+      })
+      .map(([key, value]) => [
+        key,
+        typeof value === "string" ? sanitizeObservabilityText(value) : value
+      ])
+  );
+}
 
 type StructuredLogRecord = {
   type: "try_me_request" | "try_me_trace" | "try_me_error";
@@ -33,8 +64,17 @@ const safeTopLevelKeys = new Set([
   "code",
   "errorName",
   "durationMs",
+  "revision",
   "useCase",
   "reason",
+  "reasonCode",
+  "family",
+  "sectionCount",
+  "evidenceCount",
+  "fallbackCode",
+  "errorCode",
+  "worker",
+  "receiptKind",
   "model",
   "scanned",
   "completed",
@@ -76,7 +116,10 @@ const safeDetailKeys = new Set([
   "emailStatus",
   "error",
   "durationMs",
+  "revision",
   "fallbackReason",
+  "fallbackCode",
+  "errorCode",
   "model",
   "logoStrategy",
   "logoAvailable",
@@ -137,7 +180,13 @@ const safeDetailKeys = new Set([
   "colorSpan",
   "contrastPermille",
   "workerName",
+  "worker",
   "workerOutcome",
+  "evidenceCount",
+  "confidenceBand",
+  "family",
+  "reasonCode",
+  "sectionCount",
   "fieldKey",
   "fieldAction",
   "compositionId",

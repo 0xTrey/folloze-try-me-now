@@ -83,7 +83,7 @@ export const productEventPayloadSchema = z.object({
     utm: z.partialRecord(z.enum(["source", "medium", "campaign", "term", "content"]), safeText).optional(),
     deviceClass: z.enum(["desktop", "tablet", "mobile", "unknown"]),
     browserFamily: z.string().trim().min(1).max(40).regex(/^[a-z0-9 ._-]+$/i)
-  }).strict().optional()
+  }).strict().transform(({ referrerHost: _referrerHost, ...landing }) => landing).optional()
 }).strict().superRefine((payload, context) => {
   if (!(UNIFIED_PRODUCT_EVENT_NAMES as readonly string[]).includes(payload.event)) return;
   try {
@@ -191,7 +191,7 @@ export async function recordProductEvents(events: ProductEventPayload[]): Promis
         first_referrer_host, first_utm
       ) VALUES (
         ${event.visitorId}, ${createdAt}, ${createdAt}, ${landing?.path ?? event.path ?? null},
-        ${landing?.referrerHost ?? null}, CAST(${JSON.stringify(landing?.utm ?? {})} AS jsonb)
+        ${null}, CAST(${JSON.stringify(landing?.utm ?? {})} AS jsonb)
       )
       ON CONFLICT (visitor_id) DO UPDATE SET
         last_seen_at = GREATEST(try_me_visitors.last_seen_at, EXCLUDED.last_seen_at),
@@ -203,7 +203,7 @@ export async function recordProductEvents(events: ProductEventPayload[]): Promis
         referrer_host, utm, device_class, browser_family
       ) VALUES (
         ${event.browserSessionId}, ${event.visitorId}, ${createdAt}, ${createdAt},
-        ${landing?.path ?? event.path ?? null}, ${landing?.referrerHost ?? null},
+        ${landing?.path ?? event.path ?? null}, ${null},
         CAST(${JSON.stringify(landing?.utm ?? {})} AS jsonb),
         ${landing?.deviceClass ?? null}, ${landing?.browserFamily ?? null}
       )
@@ -230,20 +230,47 @@ export async function recordProductEvents(events: ProductEventPayload[]): Promis
   return inserted;
 }
 
-const userInputKeys: (keyof SessionAnswers)[] = [
-  "sellerConfirmed", "targetDomain", "targetConfirmed", "audience", "customAudience",
-  "objective", "campaignType", "eventSource", "sourceUrl", "sourceTitle", "promotedOffer",
-  "promotedOfferConfirmed", "offerSourceUrl", "offerSourceTitle", "offerSourceConfirmed",
-  "exampleMode", "exampleKey", "sourceConfirmed", "sourceTopicConfirmed", "messageBelief",
-  "messageAction", "ctaType", "ctaStyle", "styleVariant", "toneVariant", "layoutVariant",
-  "selectedAssetIds"
+const boundedInputKeys: (keyof SessionAnswers)[] = [
+  "sellerConfirmed",
+  "targetConfirmed",
+  "campaignType",
+  "promotedOfferConfirmed",
+  "offerSourceConfirmed",
+  "exampleMode",
+  "sourceConfirmed",
+  "sourceTopicConfirmed",
+  "ctaType",
+  "ctaStyle",
+  "styleVariant",
+  "toneVariant",
+  "layoutVariant"
 ];
 
 export function userInputSnapshot(answers: SessionAnswers): Record<string, unknown> {
   const snapshot: Record<string, unknown> = {};
-  for (const key of userInputKeys) {
+  for (const key of boundedInputKeys) {
     const value = answers[key];
     if (value !== undefined && value !== "") snapshot[key] = structuredClone(value);
+  }
+  const presenceSignals: Array<[string, unknown]> = [
+    ["hasTargetDomain", answers.targetDomain],
+    ["hasAudience", answers.audience || answers.customAudience],
+    ["hasObjective", answers.objective],
+    ["hasEventSource", answers.eventSource],
+    ["hasSourceUrl", answers.sourceUrl],
+    ["hasSourceTitle", answers.sourceTitle],
+    ["hasPromotedOffer", answers.promotedOffer],
+    ["hasOfferSourceUrl", answers.offerSourceUrl],
+    ["hasOfferSourceTitle", answers.offerSourceTitle],
+    ["hasExampleKey", answers.exampleKey],
+    ["hasMessageBelief", answers.messageBelief],
+    ["hasMessageAction", answers.messageAction]
+  ];
+  for (const [key, value] of presenceSignals) {
+    if (value !== undefined && value !== "") snapshot[key] = true;
+  }
+  if (answers.selectedAssetIds?.length) {
+    snapshot.selectedAssetCount = Math.min(20, answers.selectedAssetIds.length);
   }
   if (answers.sourceUploadId || answers.sourceName) snapshot.sourceType = "pdf-upload";
   return snapshot;
@@ -277,9 +304,7 @@ export function productSessionSnapshot(session: TryMeSession): ProductSessionSna
     supportRef: session.traceId ? supportRefForTraceId(session.traceId) : undefined,
     useCase: session.useCase,
     status: session.status,
-    companyDomain: session.companyDomain,
-    targetDomain: session.answers.targetDomain,
-    businessEmail: session.claim?.email,
+    companyDomain: "redacted",
     inputSnapshot: userInputSnapshot(session.answers),
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
@@ -419,6 +444,10 @@ export function analyticsIdentityWithAttributionFromRequest(request: Request):
   const entries = (["source", "medium", "campaign", "term", "content"] as const)
     .map((key) => [key, request.headers.get(`x-try-me-utm-${key}`)?.trim()] as const)
     .filter((entry): entry is readonly [typeof entry[0], string] =>
-      Boolean(entry[1] && entry[1].length <= 160 && !entry[1].includes("@")));
+      Boolean(
+        entry[1]
+        && entry[1].length <= 160
+        && !UNSAFE_ANALYTICS_PROPERTY_VALUE_PATTERN.test(entry[1])
+      ));
   return entries.length ? { ...identity, utm: Object.fromEntries(entries) } : identity;
 }

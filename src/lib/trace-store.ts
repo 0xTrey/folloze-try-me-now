@@ -9,6 +9,11 @@ import {
   supportRefForTraceId,
   type ObservabilityMeta
 } from "@/lib/observability";
+import {
+  parseOperationalTraceReceipt,
+  projectOperationalTraceReceipt,
+  type OperationalTraceReceipt
+} from "@/lib/telemetry-receipt-projection";
 import type { SessionEvent, TryMeSession } from "@/lib/types";
 
 export const TRACE_RETENTION_DAYS = 30;
@@ -24,7 +29,13 @@ export type TraceStage =
   | "preview"
   | "claim"
   | "maintenance";
-export type TraceOutcome = "started" | "success" | "fallback" | "error" | "info";
+export type TraceOutcome =
+  | "started"
+  | "success"
+  | "fallback"
+  | "error"
+  | "needs_input"
+  | "info";
 
 export interface TraceEventRecord {
   eventId: string;
@@ -38,6 +49,7 @@ export interface TraceEventRecord {
   spanId?: string;
   durationMs?: number;
   meta?: ObservabilityMeta;
+  receipt?: OperationalTraceReceipt;
 }
 
 declare global {
@@ -142,8 +154,18 @@ const traceMetaAllowlist = new Set([
   "reason",
   "byteSizeBucket",
   "mode",
+  "worker",
   "workerName",
   "workerOutcome",
+  "evidenceCount",
+  "confidenceBand",
+  "fallbackCode",
+  "errorCode",
+  "sectionCount",
+  "frameworkId",
+  "archetypeId",
+  "reveal",
+  "supportCode",
   "fieldKey",
   "fieldAction",
   "compositionId",
@@ -159,11 +181,31 @@ const traceMetaAllowlist = new Set([
   "receiptKind"
 ]);
 
+const structuredDetailKeys = new Set([
+  "error",
+  "fallbackReason",
+  "identityRejectionReason",
+  "reason"
+]);
+
+function privacySafeTraceValue(key: string, value: string): string {
+  if (structuredDetailKeys.has(key) && !/^[a-z0-9][a-z0-9_.:-]{0,119}$/i.test(value)) {
+    return "redacted_unstructured_detail";
+  }
+  if (/[?&][a-z0-9_%.-]+=/i.test(value)) return "[redacted-query-url]";
+  return value;
+}
+
 function traceMeta(meta: SessionEvent["meta"]): ObservabilityMeta | undefined {
   const sanitized = sanitizeObservabilityMeta(meta);
   if (!sanitized) return undefined;
   return Object.fromEntries(
-    Object.entries(sanitized).filter(([key]) => traceMetaAllowlist.has(key))
+    Object.entries(sanitized)
+      .filter(([key]) => traceMetaAllowlist.has(key))
+      .map(([key, value]) => [
+        key,
+        typeof value === "string" ? privacySafeTraceValue(key, value) : value
+      ])
   );
 }
 
@@ -206,10 +248,15 @@ function stageForEvent(name: string, meta?: SessionEvent["meta"]): TraceStage {
   if (/^(?:claim|lead_|followup_)/.test(name)) return "claim";
   if (/^(?:cleanup|reconciliation|maintenance)/.test(name)) return "maintenance";
   if (/^worker_/.test(name)) {
-    const worker = typeof meta?.workerName === "string" ? meta.workerName : "";
-    if (worker === "brand") return "brand";
-    if (worker === "audience") return "audience";
-    if (worker === "render") return "render";
+    const worker =
+      typeof meta?.worker === "string"
+        ? meta.worker
+        : typeof meta?.workerName === "string"
+          ? meta.workerName
+          : "";
+    if (/^(?:brand|identity|dom-css|screenshot)/.test(worker)) return "brand";
+    if (/^(?:audience|account)/.test(worker)) return "audience";
+    if (/^(?:render|spec-compiler)/.test(worker)) return "render";
     if (worker === "claim") return "claim";
     return "story";
   }
@@ -217,6 +264,7 @@ function stageForEvent(name: string, meta?: SessionEvent["meta"]): TraceStage {
 }
 
 function outcomeForEvent(name: string, meta: SessionEvent["meta"]): TraceOutcome {
+  if (name.endsWith("needs_input")) return "needs_input";
   if (/(?:failed|rejected|timed_out)$/.test(name) || name === "worker_failed") return "error";
   if (/(?:started|submitted)$/.test(name) || name === "worker_started") return "started";
   if (/fallback|fell_back/.test(name) || meta?.fallbackReason) return "fallback";
@@ -240,10 +288,12 @@ function recordForEvent(session: TryMeSession, event: SessionEvent): TraceEventR
   const meta = traceMeta(event.meta);
   const requestId = typeof event.meta?.requestId === "string" ? event.meta.requestId : undefined;
   const spanId = typeof event.meta?.attemptId === "string" ? event.meta.attemptId : undefined;
+  const traceId = traceIdForSession(session);
+  const receipt = projectOperationalTraceReceipt(session, event, traceId);
   return {
     eventId: event.id,
-    traceId: traceIdForSession(session),
-    supportRef: supportRefForTraceId(traceIdForSession(session)),
+    traceId,
+    supportRef: supportRefForTraceId(traceId),
     event: event.name,
     stage: stageForEvent(event.name, event.meta),
     outcome: outcomeForEvent(event.name, event.meta),
@@ -251,7 +301,8 @@ function recordForEvent(session: TryMeSession, event: SessionEvent): TraceEventR
     requestId,
     spanId,
     durationMs: boundedDuration(event.meta?.durationMs),
-    meta
+    meta,
+    ...(receipt ? { receipt } : {})
   };
 }
 
@@ -275,7 +326,10 @@ async function persistRecords(records: TraceEventRecord[]): Promise<void> {
     request_id: record.requestId ?? null,
     span_id: record.spanId ?? null,
     duration_ms: record.durationMs ?? null,
-    metadata: record.meta ?? {},
+    metadata: {
+      ...(record.meta ?? {}),
+      ...(record.receipt ? { operationalReceipt: record.receipt } : {})
+    },
     created_at: record.at,
     expires_at: new Date(
       Date.parse(record.at) + TRACE_RETENTION_DAYS * 86_400_000
@@ -346,7 +400,23 @@ export async function recordCommittedSessionEvents(
       requestId: record.requestId,
       spanId: record.spanId,
       durationMs: record.durationMs,
-      details: record.meta
+      details: {
+        ...(record.meta ?? {}),
+        ...(record.receipt
+          ? {
+              receiptKind: record.receipt.kind,
+              revision: record.receipt.revision,
+              status: record.receipt.status,
+              worker: record.receipt.worker,
+              family: record.receipt.family,
+              reasonCode: record.receipt.reasonCode,
+              sectionCount: record.receipt.sectionPlan?.length,
+              evidenceCount: record.receipt.evidenceIds.length,
+              fallbackCode: record.receipt.fallbackCode,
+              errorCode: record.receipt.errorCode
+            }
+          : {})
+      }
     });
   }
   try {
@@ -389,21 +459,36 @@ export async function readTraceEvents(traceId: string): Promise<TraceEventRecord
     ) AS recent_events
     ORDER BY created_at ASC
   `;
-  return rows.map((row) => ({
-    eventId: String(row.event_id),
-    traceId: String(row.trace_id),
-    supportRef: String(row.support_ref),
-    event: String(row.event_name),
-    stage: row.stage as TraceStage,
-    outcome: row.outcome as TraceOutcome,
-    at: new Date(String(row.created_at)).toISOString(),
-    requestId: row.request_id ? String(row.request_id) : undefined,
-    spanId: row.span_id ? String(row.span_id) : undefined,
-    durationMs: row.duration_ms === null ? undefined : Number(row.duration_ms),
-    meta: row.metadata && typeof row.metadata === "object"
-      ? (row.metadata as ObservabilityMeta)
-      : undefined
-  }));
+  return rows.map((row) => {
+    const storedMeta =
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? (row.metadata as Record<string, unknown>)
+        : {};
+    const { operationalReceipt, ...metadata } = storedMeta;
+    const meta = sanitizeObservabilityMeta(
+      Object.fromEntries(
+        Object.entries(metadata).filter((entry): entry is [string, string | number | boolean | null] =>
+          entry[1] === null
+          || ["string", "number", "boolean"].includes(typeof entry[1])
+        )
+      )
+    );
+    const receipt = parseOperationalTraceReceipt(operationalReceipt);
+    return {
+      eventId: String(row.event_id),
+      traceId: String(row.trace_id),
+      supportRef: String(row.support_ref),
+      event: String(row.event_name),
+      stage: row.stage as TraceStage,
+      outcome: row.outcome as TraceOutcome,
+      at: new Date(String(row.created_at)).toISOString(),
+      requestId: row.request_id ? String(row.request_id) : undefined,
+      spanId: row.span_id ? String(row.span_id) : undefined,
+      durationMs: row.duration_ms === null ? undefined : Number(row.duration_ms),
+      meta,
+      ...(receipt ? { receipt } : {})
+    };
+  });
 }
 
 export async function purgeExpiredTraceEvents(): Promise<number> {

@@ -1,0 +1,200 @@
+import { describe, expect, it } from "vitest";
+
+import { selectThreeFamilyDecision } from "@/lib/generation/three-family-contract";
+import {
+  parseOperationalTraceReceipt,
+  projectOperationalTraceReceipt
+} from "@/lib/telemetry-receipt-projection";
+import type { SessionEvent, TryMeSession } from "@/lib/types";
+
+function session(): TryMeSession {
+  const decision = selectThreeFamilyDecision({
+    sessionId: "session-private",
+    revision: 7,
+    useCase: "abm",
+    targetDomain: "buyer.example",
+    firstDecision: "Review a private account plan",
+    evidenceRefs: [
+      "https://seller.example/private?token=secret",
+      "prompt:raw-private-copy"
+    ]
+  });
+  return {
+    id: "session-private",
+    traceId: "trace-private",
+    editorTokenHash: "private",
+    useCase: "abm",
+    companyDomain: "seller.example",
+    status: "generating",
+    createdAt: "2026-08-23T12:00:00.000Z",
+    updatedAt: "2026-08-23T12:00:02.000Z",
+    temporaryUrl: "https://preview.example/e/session-private",
+    revision: 7,
+    stages: {
+      brand: { status: "complete" },
+      audience: { status: "complete" },
+      story: { status: "running" }
+    },
+    answers: {},
+    audienceSuggestions: [],
+    workerReceipts: [
+      {
+        worker: "wireframe-ranker",
+        status: "completed",
+        queuedAt: "2026-08-23T12:00:00.000Z",
+        startedAt: "2026-08-23T12:00:00.100Z",
+        completedAt: "2026-08-23T12:00:00.180Z",
+        durationMs: 80,
+        evidenceRefs: decision.evidenceRefs.map((id) => ({ id })),
+        dependencies: []
+      },
+      {
+        worker: "brand-compiler",
+        status: "needs_input",
+        queuedAt: "2026-08-23T12:00:00.000Z",
+        startedAt: "2026-08-23T12:00:00.000Z",
+        completedAt: "2026-08-23T12:00:02.000Z",
+        durationMs: 2_000,
+        evidenceRefs: [{ id: "brand:private-source-body" }],
+        dependencies: [],
+        fallback: "brand_evidence_incomplete",
+        error: {
+          name: "ArtifactError",
+          message: "provider said buyer@example.com is unavailable"
+        }
+      }
+    ],
+    experienceSpec: {
+      schemaVersion: "2.0",
+      revision: 7,
+      sourceBriefRevision: 7,
+      artifactDigest: "digest",
+      route: { kind: "abm" },
+      wireframeSelection: {
+        version: 1,
+        family: "account",
+        archetypeId: "account-executive",
+        compositionId: "workflow-spine",
+        selectedBy: "system",
+        reasonCode: "account-default",
+        locked: true,
+        alternativeIds: []
+      },
+      wireframeDecisionV2: decision,
+      compositionRecipe: {
+        family: "account",
+        productionFamily: "align",
+        archetypeId: "account-executive",
+        compositionId: "workflow-spine",
+        selectedBy: "system",
+        locked: true
+      },
+      brief: {
+        seller: "Seller",
+        target: "Buyer",
+        offer: "Offer",
+        audience: "Audience",
+        objective: "Objective",
+        provenance: [],
+        notes: []
+      },
+      sections: [],
+      contentItems: [],
+      actions: [],
+      contentContracts: [],
+      cta: {
+        intent: "book-meeting",
+        style: "solid",
+        label: "Book a meeting",
+        actionId: "primary"
+      },
+      selectedAssetIds: [],
+      evidenceItemIds: [],
+      curatedSections: [],
+      analytics: { events: [] },
+      renderers: {
+        web: { status: "ready", hosting: "app" },
+        folloze: { status: "disabled", reason: "public-runtime-html-only" }
+      }
+    } as unknown as NonNullable<TryMeSession["experienceSpec"]>,
+    events: []
+  };
+}
+
+function event(name: string, meta: SessionEvent["meta"]): SessionEvent {
+  return {
+    id: `event-${name}`,
+    name,
+    at: "2026-08-23T12:00:02.000Z",
+    meta
+  };
+}
+
+describe("operational telemetry receipt projection", () => {
+  it("projects family, reason, section plan, timing, and opaque evidence IDs", () => {
+    const current = session();
+    const receipt = projectOperationalTraceReceipt(
+      current,
+      event("wireframe_selected", { revision: 7 }),
+      current.traceId!
+    );
+
+    expect(receipt).toMatchObject({
+      version: 2,
+      kind: "family_selection",
+      revision: 7,
+      status: "complete",
+      durationMs: 80,
+      family: "align",
+      reasonCode: "v2-named-account-first-decision-align",
+      worker: "wireframe-ranker"
+    });
+    expect(receipt?.sectionPlan).toHaveLength(6);
+    expect(receipt?.sectionPlan?.[0]).toMatchObject({
+      id: "align-1",
+      role: "shared-priority",
+      optional: false
+    });
+    expect(receipt?.evidenceIds).toHaveLength(2);
+    expect(receipt?.evidenceIds.every((id) => /^ev_[a-f0-9]{20}$/.test(id))).toBe(true);
+    expect(JSON.stringify(receipt)).not.toMatch(
+      /seller\.example|buyer\.example|token=|private-copy|Review a private/i
+    );
+  });
+
+  it("records brand needs-input without provider messages or raw evidence IDs", () => {
+    const current = session();
+    const receipt = projectOperationalTraceReceipt(
+      current,
+      event("worker_needs_input", {
+        worker: "brand-compiler",
+        revision: 7,
+        durationMs: 2_000,
+        fallbackCode: "brand_evidence_incomplete"
+      }),
+      current.traceId!
+    );
+
+    expect(receipt).toMatchObject({
+      kind: "brand_needs_input",
+      revision: 7,
+      status: "needs_input",
+      durationMs: 2_000,
+      worker: "brand-compiler",
+      fallbackCode: "brand_evidence_incomplete"
+    });
+    expect(receipt?.errorCode).toBe("ArtifactError");
+    expect(JSON.stringify(receipt)).not.toMatch(/buyer@example|private-source-body|provider said/i);
+  });
+
+  it("rejects malformed persisted receipt payloads", () => {
+    expect(parseOperationalTraceReceipt({
+      version: 2,
+      kind: "worker",
+      revision: 1,
+      status: "completed",
+      durationMs: 4,
+      evidenceIds: ["https://private.example/evidence"]
+    })).toBeUndefined();
+  });
+});

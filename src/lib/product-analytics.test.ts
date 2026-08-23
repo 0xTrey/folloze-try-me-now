@@ -101,7 +101,7 @@ describe("first-party product analytics", () => {
     })).not.toThrow();
   });
 
-  it("keeps exact submitted inputs in the private session snapshot but excludes provider IDs", async () => {
+  it("keeps only bounded presence signals in the behavior session snapshot", async () => {
     const session = {
       id: "session_12345678",
       traceId: "trace_12345678",
@@ -129,16 +129,51 @@ describe("first-party product analytics", () => {
       events: []
     } satisfies TryMeSession;
 
-    expect(userInputSnapshot(session.answers)).toMatchObject({
+    expect(userInputSnapshot(session.answers)).toEqual({
       campaignType: "product",
-      offerSourceUrl: "https://6sense.com/platform/revvyai/",
+      hasOfferSourceUrl: true,
       sourceType: "pdf-upload"
     });
     expect(userInputSnapshot(session.answers)).not.toHaveProperty("sourceOpenAIFileId");
+    expect(userInputSnapshot(session.answers)).not.toHaveProperty("offerSourceUrl");
     expect(productSessionSnapshot(session).visitorId).toBe(identity.visitorId);
+    expect(productSessionSnapshot(session)).toMatchObject({
+      companyDomain: "redacted",
+      inputSnapshot: {
+        campaignType: "product",
+        hasOfferSourceUrl: true,
+        sourceType: "pdf-upload"
+      }
+    });
+    expect(productSessionSnapshot(session)).not.toHaveProperty("targetDomain");
+    expect(productSessionSnapshot(session)).not.toHaveProperty("businessEmail");
     await recordProductSessionSnapshot(session);
     expect(getMemoryProductSessionForTest(session.id)?.inputSnapshot).toMatchObject({
       campaignType: "product"
     });
+    expect(JSON.stringify(getMemoryProductSessionForTest(session.id))).not.toMatch(
+      /6sense\.com|revvyai|file-secret|upload-secret/i
+    );
+  });
+
+  it("accepts legacy referrer host input but removes the raw domain before storage", () => {
+    const [event] = parseProductEventBatch({
+      events: [{
+        eventId: "tme_referrerredact01",
+        ...identity,
+        event: "visitor_session_started",
+        category: "navigation",
+        path: "/",
+        landing: {
+          path: "/",
+          referrerHost: "private.example",
+          deviceClass: "desktop",
+          browserFamily: "Chrome"
+        }
+      }]
+    });
+
+    expect(event.landing).not.toHaveProperty("referrerHost");
+    expect(JSON.stringify(event)).not.toContain("private.example");
   });
 });

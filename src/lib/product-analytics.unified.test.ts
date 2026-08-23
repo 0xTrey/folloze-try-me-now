@@ -135,6 +135,18 @@ describe("unified product analytics contracts", () => {
         },
         {
           ...baseEvent({
+            eventId: "tme_brandhelprequest",
+            event: "brand_help_requested",
+            category: "workflow",
+            properties: {
+              artifact_revision: 3,
+              requested_input_kind: "brand_guide",
+              duration_bucket: "lt_15s"
+            }
+          })
+        },
+        {
+          ...baseEvent({
             eventId: "tme_workerstarted001",
             event: "worker_started",
             category: "workflow",
@@ -184,6 +196,18 @@ describe("unified product analytics contracts", () => {
             event: "composition_selected",
             category: "workflow",
             properties: { composition_id: "account_proof_spine", route_family: "abm", rank: 1 }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_planready0000010",
+            event: "production_plan_ready",
+            category: "performance",
+            properties: {
+              artifact_revision: 3,
+              section_count: 6,
+              duration_bucket: "lt_1s"
+            }
           })
         },
         {
@@ -328,6 +352,14 @@ describe("unified product analytics contracts", () => {
       worker_name: "story",
       error_code: "timeout",
       prompt: "secret prompt body"
+    })).toThrow(/not allow property|not permitted/i);
+    expect(() => assertUnifiedProductEventProperties("production_plan_ready", {
+      artifact_revision: 3,
+      section_count: 6,
+      duration_bucket: "lt_1s",
+      family: "align",
+      reason_code: "v2-named-account-align",
+      evidence_ids: "ev_private"
     })).toThrow(/not allow property|not permitted/i);
   });
 

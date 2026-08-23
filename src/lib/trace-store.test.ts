@@ -85,7 +85,7 @@ describe("server-only operational trace store", () => {
         logoSelectedSource: "json-ld",
         logoAssetPath: "/assets/logo-open-graph.gif",
         harvestedSource: "brand-harvester",
-        identityRejectionReason: "The logo owner signal did not match."
+        identityRejectionReason: "redacted_unstructured_detail"
       }
     });
     expect(JSON.stringify(records)).not.toContain("cisco.com");
@@ -109,6 +109,89 @@ describe("server-only operational trace store", () => {
 
     const records = await readTraceEvents(current.traceId!);
     expect(records.map((record) => record.event)).toEqual(["brand_harvest_completed"]);
+  });
+
+  it("stores current-revision worker timing, status, opaque evidence IDs, and needs-input state", async () => {
+    const current = session();
+    current.revision = 4;
+    current.workerReceipts = [{
+      worker: "brand-compiler",
+      status: "needs_input",
+      queuedAt: "2026-07-31T00:00:00.000Z",
+      startedAt: "2026-07-31T00:00:00.000Z",
+      completedAt: "2026-07-31T00:00:01.250Z",
+      durationMs: 1_250,
+      evidenceRefs: [
+        { id: "https://private.example/source?token=secret" },
+        { id: "brand:observed-palette" }
+      ],
+      dependencies: [],
+      fallback: "brand_evidence_incomplete"
+    }];
+    appendEvent(current, "worker_needs_input", {
+      worker: "brand-compiler",
+      revision: 4,
+      durationMs: 1_250,
+      evidenceCount: 2,
+      fallbackCode: "brand_evidence_incomplete",
+      sourceBody: "private source body",
+      providerMessage: "provider returned private content",
+      generatedCopy: "private generated copy",
+      queryUrl: "/callback?token=secret",
+      accessToken: "secret-token"
+    });
+
+    await recordCommittedSessionEvents(current);
+
+    const [record] = await readTraceEvents(current.traceId!);
+    expect(record).toMatchObject({
+      event: "worker_needs_input",
+      stage: "brand",
+      outcome: "needs_input",
+      durationMs: 1_250,
+      meta: {
+        worker: "brand-compiler",
+        revision: 4,
+        durationMs: 1_250,
+        evidenceCount: 2,
+        fallbackCode: "brand_evidence_incomplete"
+      },
+      receipt: {
+        version: 2,
+        kind: "brand_needs_input",
+        revision: 4,
+        status: "needs_input",
+        durationMs: 1_250,
+        worker: "brand-compiler",
+        fallbackCode: "brand_evidence_incomplete"
+      }
+    });
+    expect(record.receipt?.evidenceIds).toHaveLength(2);
+    expect(record.receipt?.evidenceIds.every((id) => /^ev_[a-f0-9]{20}$/.test(id))).toBe(true);
+    expect(JSON.stringify(record)).not.toMatch(
+      /private\.example|token=secret|private source|provider returned|private generated|secret-token/i
+    );
+  });
+
+  it("replaces unstructured reason fields instead of retaining prompt or provider text", async () => {
+    const current = session();
+    appendEvent(current, "generation_failed", {
+      revision: 2,
+      reason: "Provider response included the complete model prompt and generated HTML",
+      error: "buyer@example.com failed at https://private.example/path"
+    });
+
+    await recordCommittedSessionEvents(current);
+
+    const [record] = await readTraceEvents(current.traceId!);
+    expect(record.meta).toMatchObject({
+      revision: 2,
+      reason: "redacted_unstructured_detail",
+      error: "redacted_unstructured_detail"
+    });
+    expect(JSON.stringify(record)).not.toMatch(
+      /provider response|model prompt|generated html|buyer@example|private\.example/i
+    );
   });
 
   it("uses a stable non-public legacy trace ID when an old session has none", () => {

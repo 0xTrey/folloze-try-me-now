@@ -6,6 +6,7 @@ export const PRODUCT_EVENT_NAMES = [
   "api_request_completed",
   "api_request_failed",
   "browser_error",
+  "brand_help_requested",
   "brand_logo_failed",
   "brand_logo_rendered",
   "brief_field_confirmed",
@@ -38,6 +39,7 @@ export const PRODUCT_EVENT_NAMES = [
   "preview_interaction",
   "preview_rendered",
   "preview_scrolled",
+  "production_plan_ready",
   "provisional_rendered",
   "research_started",
   "resource_interaction",
@@ -72,12 +74,14 @@ export const UNIFIED_PRODUCT_EVENT_NAMES = [
   "brief_field_confirmed",
   "brief_field_edited",
   "brief_field_skipped",
+  "brand_help_requested",
   "worker_started",
   "worker_completed",
   "worker_timed_out",
   "worker_fell_back",
   "worker_failed",
   "composition_selected",
+  "production_plan_ready",
   "provisional_rendered",
   "final_rendered",
   "personalization_variant_viewed",
@@ -166,6 +170,10 @@ export const UNIFIED_PRODUCT_EVENT_CONTRACTS: Record<
     category: "input",
     allowedProperties: ["field_key"]
   },
+  brand_help_requested: {
+    category: "workflow",
+    allowedProperties: ["artifact_revision", "requested_input_kind", "duration_bucket"]
+  },
   worker_started: {
     category: "workflow",
     allowedProperties: ["worker_name", "attempt_bucket"]
@@ -189,6 +197,10 @@ export const UNIFIED_PRODUCT_EVENT_CONTRACTS: Record<
   composition_selected: {
     category: "workflow",
     allowedProperties: ["composition_id", "route_family", "rank"]
+  },
+  production_plan_ready: {
+    category: "performance",
+    allowedProperties: ["artifact_revision", "section_count", "duration_bucket"]
   },
   provisional_rendered: {
     category: "performance",

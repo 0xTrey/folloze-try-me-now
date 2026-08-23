@@ -39,6 +39,10 @@ describe("observability redaction", () => {
         durationMs: 842,
         logoStrategy: "inline-svg-unportable",
         sourceContent: "private source body",
+        rawSourceBodies: "private source body collection",
+        providerMessage: "private provider message",
+        generatedHtmlPreview: "<html>private</html>",
+        uploadedFilePayload: "private upload bytes",
         editorToken: "private-editor-token",
         response_body: "private provider response"
       })
@@ -47,6 +51,18 @@ describe("observability redaction", () => {
       durationMs: 842,
       logoStrategy: "inline-svg-unportable"
     });
+  });
+
+  it("redacts generic credentials and query-bearing relative URLs", () => {
+    const safe = sanitizeObservabilityText(
+      "client_secret=private-value /callback?email=buyer@example.com&token=secret"
+    );
+
+    expect(safe).toContain("[redacted-credential]");
+    expect(safe).toContain("[redacted-query-url]");
+    expect(safe).not.toContain("private-value");
+    expect(safe).not.toContain("buyer@example.com");
+    expect(safe).not.toContain("token=secret");
   });
 
   it("emits one-line JSON with a stable event envelope and sanitized details", () => {
