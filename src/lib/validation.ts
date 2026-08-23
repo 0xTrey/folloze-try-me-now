@@ -43,10 +43,29 @@ const httpsDestinationSchema = z
     }
   }, "Use a public HTTPS destination.");
 
+const brandSourceUrlSchema = z
+  .string()
+  .trim()
+  .max(1000)
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      return (
+        url.protocol === "https:" &&
+        !url.username &&
+        !url.password &&
+        !url.port
+      );
+    } catch {
+      return false;
+    }
+  }, "Use a public HTTPS brand source.");
+
 const assetIdSchema = z.string().min(4).max(96).regex(/^[a-z0-9][a-z0-9_-]*$/i);
 
 export const answersSchema = z
   .object({
+    brandSourceUrl: brandSourceUrlSchema.optional(),
     targetDomain: z.string().max(300).optional(),
     audience: z.string().min(2).max(120).optional(),
     customAudience: z.string().min(2).max(160).optional(),

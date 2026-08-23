@@ -71,9 +71,11 @@ describe("isGenerationReady", () => {
   });
 
   it("requires a content URL or uploaded source", () => {
+    expect(isGenerationReady("content", {})).toBe(false);
+    expect(isGenerationReady("content", { sourceUrl: "https://example.com/report" })).toBe(true);
+    expect(isGenerationReady("content", { sourceName: "report.pdf" })).toBe(true);
+    // Content Magic does not block on campaign/account questions.
     expect(isGenerationReady("content", common)).toBe(false);
-    expect(isGenerationReady("content", { ...common, sourceUrl: "https://example.com/report" })).toBe(true);
-    expect(isGenerationReady("content", { ...common, sourceName: "report.pdf" })).toBe(true);
   });
 });
 
@@ -320,6 +322,10 @@ describe("PDF source finalization", () => {
         campaignType: "demand" as const,
         promotedOffer: "Folloze Buyer Experience Platform"
       }
+    },
+    {
+      useCase: "content" as const,
+      answers: {}
     }
   ])("adds optional PDF context to $useCase without changing its identity", async ({ useCase, answers }) => {
     const id = `finalize-pdf-${useCase}`;

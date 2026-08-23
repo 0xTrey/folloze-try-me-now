@@ -204,6 +204,22 @@ describe("PDF validation", () => {
 });
 
 describe("expanded session workspace validation", () => {
+  it("accepts the seller brand recovery source URL in a direct answer patch", () => {
+    expect(
+      answersSchema.parse({ brandSourceUrl: " https://seller.example.com/platform#overview " })
+    ).toEqual({ brandSourceUrl: "https://seller.example.com/platform#overview" });
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "http://seller.example.com/brand",
+    "https://user:password@seller.example.com/brand",
+    "https://seller.example.com:8443/brand",
+    "not-a-url"
+  ])("rejects unsafe brand recovery source URL %s", (brandSourceUrl) => {
+    expect(() => answersSchema.parse({ brandSourceUrl })).toThrow();
+  });
+
   it("keeps the legacy answer patch contract valid", () => {
     expect(
       answersSchema.parse({

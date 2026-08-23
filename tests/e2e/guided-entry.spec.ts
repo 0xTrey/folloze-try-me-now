@@ -96,7 +96,8 @@ function publicSession(input: {
 async function mockSessionApis(
   page: Page,
   sessions: Map<string, PublicTryMeSession>,
-  createFixture?: (input: { useCase: UseCase; companyDomain: string }) => PublicTryMeSession
+  createFixture?: (input: { useCase: UseCase; companyDomain: string }) => PublicTryMeSession,
+  patches?: SessionAnswers[]
 ): Promise<void> {
   await page.route("**/api/sessions**", async (route: Route) => {
     const request = route.request();
@@ -137,6 +138,7 @@ async function mockSessionApis(
       }
       if (method === "PATCH") {
         const patch = (request.postDataJSON() ?? {}) as SessionAnswers;
+        patches?.push(patch);
         const next: PublicTryMeSession = {
           ...current,
           answers: { ...current.answers, ...patch },
@@ -417,6 +419,39 @@ test.describe("unified guided first-run experience", () => {
     });
     expect([...sessions.values()].some((session) => session.useCase === "content")).toBe(true);
     await expect(page.locator('input[type="email"]')).toHaveCount(0);
+  });
+
+  test("Content Magic source submission goes straight to build without audience or goal questions", async ({ page }) => {
+    const sessions = new Map<string, PublicTryMeSession>();
+    const patches: SessionAnswers[] = [];
+    await mockSessionApis(page, sessions, undefined, patches);
+
+    const secondary = page.locator(".unifiedSecondaryCta");
+    await expect(secondary).toBeVisible();
+    // SSR markup may be visible before React hydrates under the parallel suite.
+    // Retry the click until the Content Magic domain stage owns the page.
+    await expect(async () => {
+      if (await page.locator(".domainStage").count()) return;
+      await secondary.click({ trial: false });
+      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 15_000 });
+    await page.getByLabel("Company domain").fill("northpeak.com");
+    await page.getByRole("button", { name: /Use this company/i }).click();
+
+    await expect(page.getByText(/Live brief/i).first()).toBeVisible({ timeout: 10_000 });
+    const contentUrl = page.getByLabel("Content URL");
+    await expect(contentUrl).toBeVisible();
+    await contentUrl.fill("https://northpeak.com/research/governed-automation");
+
+    await expect.poll(
+      () => patches.filter((patch) => patch.sourceUrl === "https://northpeak.com/research/governed-automation").length,
+      { timeout: 10_000 }
+    ).toBe(1);
+    await expect(page.getByText(/building|research|reading|composing/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Who should|What should they do after|Choose the buyer role|Choose one goal/i)).toHaveCount(0);
+    expect([...sessions.values()][0]?.answers.sourceUrl).toBe(
+      "https://northpeak.com/research/governed-automation"
+    );
   });
 
   test("Start over is prominent and returns to the unified door", async ({ page }) => {

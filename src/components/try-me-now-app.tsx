@@ -748,6 +748,9 @@ function productContextNeedsAttention(session: PublicTryMeSession): boolean {
 
 function generationInputsReady(session: PublicTryMeSession): boolean {
   const answers = session.answers;
+  if (session.useCase === "content") {
+    return Boolean(answers.sourceName || answers.sourceUrl);
+  }
   if (!answers.audience || !answers.objective) return false;
   if (session.useCase === "abm") {
     return Boolean(
@@ -2263,6 +2266,7 @@ export function ProgressiveQuestions({
   const lastOfferResearchRef = useRef<string | undefined>(undefined);
   const lastProductResearchRef = useRef<string | undefined>(undefined);
   const pendingProductResearchRef = useRef<Promise<void> | undefined>(undefined);
+  const lastContentSourceRef = useRef<string | undefined>(undefined);
   const textValue = fieldValues[questionKey] ?? "";
   const sourceUrlValue = fieldValues["content-source-url"] ?? "";
   const campaignOfferSourceValue = fieldValues["campaign-offer-source"] ?? "";
@@ -2272,6 +2276,21 @@ export function ProgressiveQuestions({
     setFieldValues((current) => ({ ...current, [questionKey]: value }));
   const setSourceUrlValue = (value: string) =>
     setFieldValues((current) => ({ ...current, "content-source-url": value }));
+  const patchContentUrl = useCallback((canonicalUrl: string) => {
+    const signature = `${session.id}:${canonicalUrl}`;
+    if (lastContentSourceRef.current === signature || answers.sourceUrl === canonicalUrl) return;
+    lastContentSourceRef.current = signature;
+    void onPatch({ sourceUrl: canonicalUrl }).catch(() => {
+      if (lastContentSourceRef.current === signature) {
+        lastContentSourceRef.current = undefined;
+      }
+    });
+  }, [answers.sourceUrl, onPatch, session.id]);
+  const submitContentUrl = () => {
+    const normalizedUrl = sourceUrlValue.trim();
+    if (!isCampaignOfferSourceUrl(normalizedUrl)) return;
+    patchContentUrl(new URL(normalizedUrl).toString());
+  };
   const questionCopy = getGuidedQuestionCopy(session);
   const sourceInsight = session.useCase === "content" && session.sourceInsight
     ? <SourceUnderstandingSummary insight={session.sourceInsight} />
@@ -2301,6 +2320,15 @@ export function ProgressiveQuestions({
     }, 650);
     return () => window.clearTimeout(timer);
   }, [activeCampaignChoice, campaignOfferSourceValue, session.id, session.useCase]);
+
+  useEffect(() => {
+    if (session.useCase !== "content") return;
+    const normalizedUrl = sourceUrlValue.trim();
+    if (!isCampaignOfferSourceUrl(normalizedUrl)) return;
+    const canonicalUrl = new URL(normalizedUrl).toString();
+    const timer = window.setTimeout(() => patchContentUrl(canonicalUrl), 650);
+    return () => window.clearTimeout(timer);
+  }, [patchContentUrl, session.useCase, sourceUrlValue]);
 
   useEffect(() => {
     if (
@@ -2463,9 +2491,9 @@ export function ProgressiveQuestions({
           <button type="button" role="tab" id="source-tab-pdf" aria-controls="source-panel-pdf" aria-selected={sourceMode === "pdf"} className={sourceMode === "pdf" ? "isActive" : ""} onClick={() => setSourceMode("pdf")}>Upload a PDF</button>
         </div>
         {sourceMode === "url" ? (
-          <form className="sourceForm" role="tabpanel" id="source-panel-url" aria-labelledby="source-tab-url" onSubmit={(event) => { event.preventDefault(); void onPatch({ sourceUrl: sourceUrlValue.trim() }); }}>
+          <form className="sourceForm" role="tabpanel" id="source-panel-url" aria-labelledby="source-tab-url" onSubmit={(event) => { event.preventDefault(); submitContentUrl(); }}>
             <label className="lineInput"><span>Content URL</span><div><ExternalLink size={19} /><input value={sourceUrlValue} onChange={(event) => setSourceUrlValue(event.target.value)} placeholder="https://yourcompany.com/report" /></div></label>
-            <button className="buttonPrimary" disabled={!/^https:\/\//i.test(sourceUrlValue.trim()) || isSaving}>Use this content<ArrowRight size={17} /></button>
+            <button className="buttonPrimary" disabled={!isCampaignOfferSourceUrl(sourceUrlValue) || isSaving}>Use this content<ArrowRight size={17} /></button>
           </form>
         ) : (
           <label className={`uploadBox is-${pdfUpload.status}`} role="tabpanel" id="source-panel-pdf" aria-labelledby="source-tab-pdf" aria-busy={pdfUpload.status === "uploading" || pdfUpload.status === "processing" || undefined}>
@@ -2487,6 +2515,34 @@ export function ProgressiveQuestions({
             />
           </label>
         )}
+      </div>
+    );
+  }
+
+  // Content Magic is intentionally source-led. Once a URL or PDF is attached,
+  // the source itself is the brief and the production engine infers audience,
+  // objective, and structure. Keep the visitor in a truthful build state
+  // instead of routing them through the campaign/account questions below.
+  if (session.useCase === "content") {
+    const sourceReady = Boolean(answers.sourceUrl || answers.sourceName);
+    const sourceStatus = session.sourceInsight?.status;
+    const isComplete = Boolean(session.experience);
+    const statusCopy = isComplete
+      ? "The source has been preserved and the guided experience is ready to explore."
+      : sourceStatus === "failed" || sourceStatus === "unreadable"
+        ? "We could not read enough of this source to build responsibly. Try another public URL or PDF."
+        : sourceStatus === "ready" || sourceStatus === "needs-review"
+          ? "Source understood. Folloze is composing its facts, proof, and buyer moments into a guided experience."
+          : "Reading the source and extracting the facts, proof, and buyer moments now.";
+    return (
+      <div className="questionSequence">
+        {sourceInsight}
+        <div className="questionCard generationCard" role="status" aria-live="polite" aria-busy={!isComplete}>
+          <span className="generationGlyph">{isComplete ? <CircleCheck size={24} /> : <LoaderCircle className="spin" size={24} />}</span>
+          <span className="questionCount">{isComplete ? "Content path ready" : "Folloze is building"}</span>
+          <h2>{isComplete ? "Your content experience is ready." : "Turning the source into a buyer path."}</h2>
+          <p>{sourceReady ? statusCopy : "Add a public URL or PDF to start."}</p>
+        </div>
       </div>
     );
   }

@@ -551,6 +551,33 @@ describe("guided campaign workspace", () => {
     expect(onSelect).toHaveBeenCalledWith("content");
   });
 
+  it("starts building Content Magic from its source without asking audience or goal questions", () => {
+    const contentSession: PublicTryMeSession = {
+      ...readySession,
+      useCase: "content",
+      status: "generating",
+      experience: undefined,
+      answers: { sourceUrl: "https://example.test/report" },
+      sourceInsight: readyProductInsight,
+      audienceSuggestions: [],
+      audienceRecommendations: []
+    };
+    render(
+      <ProgressiveQuestions
+        session={contentSession}
+        answers={contentSession.answers}
+        isSaving={false}
+        onPatch={vi.fn().mockResolvedValue(undefined)}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: /turning the source into a buyer path/i })).toBeInTheDocument();
+    expect(screen.queryByText(/who should get the most/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/what should they do after exploring/i)).not.toBeInTheDocument();
+  });
+
   it("collects a named campaign offer and optional public source before audience selection", () => {
     const onPatch = vi.fn().mockResolvedValue(undefined);
     const campaignSession = {

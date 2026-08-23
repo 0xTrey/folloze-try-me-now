@@ -462,6 +462,33 @@ describe("verified fallback brand recovery", () => {
     );
   });
 
+  it("uses a same-seller Content Magic URL as brand authority while preserving source research", async () => {
+    const id = `content-brand-source-${Date.now()}`;
+    const session = fallbackSession(id, "servicenow.com");
+    session.useCase = "content";
+    session.answers.sourceUrl = "https://servicenow.com/platform/ai";
+    ids.add(id);
+    await putSession(session);
+
+    await patchSessionAnswers(id, { sourceUrl: session.answers.sourceUrl });
+    const stored = await getSession(id);
+    expect(stored?.answers.sourceUrl).toBe("https://servicenow.com/platform/ai");
+    expect(stored?.answers.brandSourceUrl).toBe("https://servicenow.com/platform/ai");
+  });
+
+  it("keeps a third-party Content Magic URL as content evidence only", async () => {
+    const id = `content-third-party-source-${Date.now()}`;
+    const session = fallbackSession(id, "servicenow.com");
+    session.useCase = "content";
+    ids.add(id);
+    await putSession(session);
+
+    await patchSessionAnswers(id, { sourceUrl: "https://reports.example.com/servicenow.pdf" });
+    const stored = await getSession(id);
+    expect(stored?.answers.sourceUrl).toBe("https://reports.example.com/servicenow.pdf");
+    expect(stored?.answers.brandSourceUrl).toBeUndefined();
+  });
+
   it("rejects a cross-domain canonical candidate until seller identity verifies it", async () => {
     const id = `brand-source-unverified-alias-${Date.now()}`;
     const session = fallbackSession(id, "datadoghq.com");

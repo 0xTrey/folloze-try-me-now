@@ -1278,7 +1278,9 @@ function brandProfileNeedsRefresh(
   return profile.diagnostics?.logo.resolutionComplete !== true;
 }
 
-function needsBrandRefresh(session: Pick<TryMeSession, "brand" | "companyDomain" | "experience">): boolean {
+function needsBrandRefresh(session: Pick<TryMeSession, "brand" | "companyDomain" | "experience" | "answers">): boolean {
+  const expectedSourceUrl = session.answers.brandSourceUrl;
+  if (expectedSourceUrl && session.brand?.sourceUrl !== expectedSourceUrl) return true;
   return brandProfileNeedsRefresh(
     session.brand,
     session.companyDomain,
@@ -1976,6 +1978,22 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
     patch.sourceUrl = new URL(patch.sourceUrl).toString();
     if (!sourceTitleWasSupplied) {
       patch.sourceTitle = inferPublicSourceTitle(patch.sourceUrl);
+    }
+    // Content URL and brand authority are separate concerns. When the content
+    // itself is hosted on the seller's verified domain, it is safe to use that
+    // page as a stronger brand-harvest source. Third-party reports remain
+    // content evidence only and never replace seller brand authority.
+    if (session.useCase === "content" && !session.answers.brandSourceUrl) {
+      try {
+        patch.brandSourceUrl = normalizeOfficialBrandSourceUrl(
+          session.companyDomain,
+          patch.sourceUrl,
+          verifiedSellerSourceDomains(session)
+        );
+      } catch {
+        // Cross-domain content is expected for Content Magic; leave brand
+        // authority on the seller domain while source intelligence proceeds.
+      }
     }
   }
   if (patch.offerSourceUrl) {

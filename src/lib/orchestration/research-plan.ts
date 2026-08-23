@@ -66,6 +66,12 @@ export function isMaterialBriefEligible(
   useCase: UseCase,
   answers: PlanEarlyResearchInput["answers"]
 ): boolean {
+  // Content Magic is source-led: the uploaded document or public URL is the
+  // brief. Audience and objective are inferred by the production engine rather
+  // than collected as blocking questions.
+  if (useCase === "content") {
+    return Boolean(answers.sourceUrl || answers.sourceName);
+  }
   const common = Boolean(answers.audience && answers.objective);
   if (!common) return false;
   if (useCase === "abm") {
@@ -81,7 +87,7 @@ export function isMaterialBriefEligible(
         (answers.campaignType !== "event" || answers.eventSource)
     );
   }
-  return Boolean(answers.sourceUrl || answers.sourceName);
+  return false;
 }
 
 function normalizeStabilizedDomain(value: string | undefined): string | undefined {

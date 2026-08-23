@@ -8,6 +8,16 @@ import {
 } from "./research-plan";
 
 describe("planEarlyResearch", () => {
+  it("makes Content Magic eligible from a source without audience or objective", () => {
+    expect(isMaterialBriefEligible("content", {
+      sourceUrl: "https://example.com/report"
+    })).toBe(true);
+    expect(isMaterialBriefEligible("content", {
+      sourceName: "report.pdf"
+    })).toBe(true);
+    expect(isMaterialBriefEligible("content", {})).toBe(false);
+  });
+
   it("starts seller brand work from a normalized valid domain before confirmation", () => {
     const plan = planEarlyResearch({
       sessionId: "session-stable-domain",
