@@ -164,8 +164,13 @@ test.describe("analytics experience completion contract", () => {
     const consoleErrors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
-    await expect(page.getByRole("button", { name: /Build a buyer experience/i })).toBeVisible();
-    await page.getByRole("button", { name: /Build a buyer experience/i }).click();
+    const primary = page.getByRole("button", { name: /Build a buyer experience/i });
+    await expect(primary).toBeVisible();
+    await expect(async () => {
+      if (await page.locator(".domainStage").count()) return;
+      await primary.click();
+      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 15_000 });
     await page.getByLabel("Company domain").fill("northpeak.com");
     await page.getByRole("button", { name: /Use this company/i }).click();
 

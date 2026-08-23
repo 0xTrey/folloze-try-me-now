@@ -373,7 +373,7 @@ test.describe("unified guided first-run experience", () => {
     await expect(page.locator(".revealRail, .revealEvidenceRail")).toHaveCount(0);
     await engagementButton.click();
     await expect(page.getByRole("dialog", { name: /See what buyers engage with/i })).toBeVisible();
-    await expect(page.getByText("Explore the preview to see engagement appear here.")).toBeVisible();
+    await expect(page.getByText("Live signals are captured. Engaged time appears after 15 foreground seconds.")).toBeVisible();
     await expect(page.getByText(/\b\d+s engaged\b/i)).toHaveCount(0);
   });
 
