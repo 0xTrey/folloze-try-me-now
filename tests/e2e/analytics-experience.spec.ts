@@ -196,6 +196,7 @@ test.describe("analytics experience completion contract", () => {
     await expect(dialog.getByText(/Simulated|Illustrative examples/i).first()).toBeVisible();
     await expect(dialog.getByText(/Not captured leads/i)).toBeVisible();
     await expect(dialog.getByText(/\b\d+s engaged\b/i)).toHaveCount(0);
+    await page.waitForTimeout(450);
     await page.screenshot({ path: testInfo.outputPath("analytics-panel-open.png"), fullPage: false });
 
     await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))).toBe(true);
