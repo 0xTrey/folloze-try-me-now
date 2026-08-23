@@ -368,6 +368,7 @@ test.describe("unified guided first-run experience", () => {
     }
     await expect(page.getByRole("dialog", { name: /See what buyers engage with/i })).toHaveCount(0);
     await expect(page.getByText(/Evidence and activity|Build receipts|Account depth|Your exploration/i)).toHaveCount(0);
+    await expect(page.getByText("Refine this experience", { exact: true })).toHaveCount(0);
     await expect(page.locator(".revealGrid")).toHaveCSS("display", "block");
     await expect(page.locator(".revealRail, .revealEvidenceRail")).toHaveCount(0);
     await engagementButton.click();

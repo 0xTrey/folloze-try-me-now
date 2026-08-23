@@ -45,10 +45,8 @@ import {
 import {
   AnalyticsSignalPanel,
   AudienceEvidenceTray,
-  CtaStyleControl,
   ExpirySaveValuePanel,
   InstantBrandLockStrip,
-  ToneChips,
   type AnalyticsSignal,
   type CtaValue,
   type EntryPathOption
@@ -376,13 +374,6 @@ function uiCtaType(value?: SessionAnswers["ctaType"]): CtaValue["type"] {
   if (value === "download" || value === "explore") return "content";
   if (value === "custom" || value === "contact-sales") return "custom";
   return "meeting";
-}
-
-function serverCtaType(value: CtaValue["type"]): NonNullable<SessionAnswers["ctaType"]> {
-  if (value === "registration") return "register";
-  if (value === "content") return "download";
-  if (value === "custom") return "custom";
-  return "book-meeting";
 }
 
 function defaultCtaLabel(value: CtaValue["type"]): string {
@@ -3192,14 +3183,12 @@ export function TryMeNowApp() {
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showAnalyticsPanel, setShowAnalyticsPanel] = useState(false);
   const [pdfUpload, setPdfUpload] = useState<PdfUploadFeedback>(idlePdfUpload);
-  const [ctaValue, setCtaValue] = useState<CtaValue>({ type: "meeting", label: "Book a meeting", style: "solid" });
   const [claimEmail, setClaimEmail] = useState("");
   const [claimStatus, setClaimStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [claimError, setClaimError] = useState("");
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([]);
   const [revealedAt, setRevealedAt] = useState<number>();
   const [previewClockNow, setPreviewClockNow] = useState(() => Date.now());
-  const [tuneOpen, setTuneOpen] = useState(false);
   const [personalizationSelection, setPersonalizationSelection] = useState<{
     key: string;
     variantId: PersonalizationVariantId;
@@ -3208,9 +3197,7 @@ export function TryMeNowApp() {
   const stabilizedSellerDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
   const initialPreviewScrolled = useRef(false);
-  const ctaSessionSignature = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
-  const tunedSession = useRef<string | undefined>(undefined);
   const patchRequestRef = useRef(0);
   const persistedSectionSignals = useRef(new Set<string>());
   const lastTrackedStatus = useRef<string | undefined>(undefined);
@@ -3278,11 +3265,9 @@ export function TryMeNowApp() {
     setConnectionError("");
     setClientEvents([]);
     setRevealedAt(undefined);
-    setTuneOpen(false);
     setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
     setPdfUpload(idlePdfUpload);
-    setCtaValue({ type: "meeting", label: "Book a meeting", style: "solid" });
     setClaimEmail("");
     setClaimStatus("idle");
     setClaimError("");
@@ -3291,7 +3276,6 @@ export function TryMeNowApp() {
     activePreflightKey.current = undefined;
     revealTracked.current = false;
     initialPreviewScrolled.current = false;
-    ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
     buildTrackedSession.current = undefined;
     previewScrolledSession.current = undefined;
@@ -3320,19 +3304,16 @@ export function TryMeNowApp() {
     setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
     setPdfUpload(idlePdfUpload);
-    setCtaValue({ type: "meeting", label: "Book a meeting", style: "solid" });
     setClaimEmail("");
     setClaimStatus("idle");
     setClaimError("");
     setClientEvents([]);
     setRevealedAt(undefined);
-    setTuneOpen(false);
     startedDomain.current = undefined;
     stabilizedSellerDomain.current = undefined;
     activePreflightKey.current = undefined;
     revealTracked.current = false;
     initialPreviewScrolled.current = false;
-    ctaSessionSignature.current = undefined;
     persistedSectionSignals.current.clear();
     buildTrackedSession.current = undefined;
     previewScrolledSession.current = undefined;
@@ -3425,15 +3406,6 @@ export function TryMeNowApp() {
       setIsStarting(false);
     }
   }, [campaignEntryMode, preflightCoordinator]);
-
-  useEffect(() => {
-    if (!session) return;
-    const next = ctaValueForSession(session);
-    const signature = `${session.id}:${next.type}:${next.style}:${next.label}`;
-    if (ctaSessionSignature.current === signature) return;
-    ctaSessionSignature.current = signature;
-    setCtaValue(next);
-  }, [session]);
 
   const pollSessionId = session?.id;
   const pollSessionStatus = session?.status;
@@ -3531,12 +3503,6 @@ export function TryMeNowApp() {
     // from remounting the iframe that emitted the signal.
     void recordPreviewSignal(session.id, "preview-opened", "experience-preview").catch(() => undefined);
   }, [session]);
-
-  useEffect(() => {
-    if (!session?.experience || session.status === "claimed" || tunedSession.current === session.id) return;
-    tunedSession.current = session.id;
-    setTuneOpen(false);
-  }, [session?.experience, session?.id, session?.status]);
 
   const personalizationSourceKey = session?.experienceSpec?.personalizationVariantIds?.length
     ? `${session.id}:${session.experienceSpec.artifactDigest ?? session.revision}`
@@ -3761,21 +3727,6 @@ export function TryMeNowApp() {
     } finally {
       if (requestNumber === patchRequestRef.current) setIsSaving(false);
     }
-  };
-
-  const saveCreativeDirection = async () => {
-    await patchWorkspace({
-      answers: {
-        ctaType: serverCtaType(ctaValue.type),
-        ctaStyle: ctaValue.style
-      },
-      blockControls: [{
-        id: "closing",
-        visible: true,
-        locked: false,
-        ctaLabel: ctaValue.label.trim() || defaultCtaLabel(ctaValue.type)
-      }]
-    });
   };
 
   const uploadPdf = async (file: File) => {
@@ -4173,18 +4124,6 @@ export function TryMeNowApp() {
     ? Math.max(0, Math.ceil((Date.parse(session.expiresAt) - previewClockNow) / 1_000))
     : 30 * 60;
   const previewCountdown = `${String(Math.floor(previewSecondsRemaining / 60)).padStart(2, "0")}:${String(previewSecondsRemaining % 60).padStart(2, "0")}`;
-  const selectedToneLabel = ({
-    executive: "Concise",
-    consultative: "Business value",
-    technical: "Technical detail",
-    provocative: "Bold point of view"
-  } as const)[answers.toneVariant || "executive"];
-  const selectedStyleLabel = ({
-    "brand-led": "Brand-led",
-    editorial: "Editorial",
-    technical: "Technical",
-    minimal: "Minimal"
-  } as const)[answers.styleVariant || "brand-led"];
   const headerStatus = !useCase
     ? "Build a buyer experience in about a minute"
     : !session
@@ -4510,59 +4449,6 @@ export function TryMeNowApp() {
               <div className="desktopPreviewShell">
                 <AssemblyPreview session={session} iframeRef={previewFrameRef} />
               </div>
-              {session.status !== "claimed" && !isProvisionalPreview && (
-                <details className="experienceControlDeck" open={tuneOpen} onToggle={(event) => setTuneOpen(event.currentTarget.open)}>
-                  <summary>
-                    <span className="tuneSummaryTitle"><Sparkles size={17} />Refine this experience</span>
-                    <span className="tuneSummaryChips" aria-label={`Current choices: ${selectedToneLabel}, ${selectedStyleLabel}`}><i>{selectedToneLabel}</i><i>{selectedStyleLabel}</i></span>
-                    <ChevronDown size={16} />
-                  </summary>
-                  <div className="experienceControlBody">
-                    <ToneChips
-                      label="Message tone"
-                      selectedId={answers.toneVariant || "executive"}
-                      options={[
-                        { id: "executive", label: "Concise", description: "Use tighter, more direct copy." },
-                        { id: "consultative", label: "Lead with business value", description: "Put the buyer outcome and value first." },
-                        { id: "technical", label: "Add technical detail", description: "Use more precise language for expert buyers." },
-                        { id: "provocative", label: "Sharpen the point of view", description: "Make the tension and argument more direct." }
-                      ]}
-                      onChange={(id) => void patchWorkspace({ answers: { toneVariant: id as NonNullable<SessionAnswers["toneVariant"]> } })}
-                    />
-                    <ToneChips
-                      label="Visual direction"
-                      selectedId={answers.styleVariant || "brand-led"}
-                      options={[
-                        { id: "brand-led", label: "Brand-led" },
-                        { id: "editorial", label: "Editorial" },
-                        { id: "technical", label: "Technical" },
-                        { id: "minimal", label: "Minimal" }
-                      ]}
-                      onChange={(id) => void patchWorkspace({ answers: { styleVariant: id as NonNullable<SessionAnswers["styleVariant"]> } })}
-                    />
-                    <CtaStyleControl
-                      value={ctaValue}
-                      onChange={(next) => {
-                        setCtaValue((current) => ({
-                          ...next,
-                          label: current.type !== next.type && current.label === defaultCtaLabel(current.type)
-                            ? defaultCtaLabel(next.type)
-                            : next.label
-                        }));
-                      }}
-                    />
-                    <button
-                      className="buttonSecondary creativeApply"
-                      type="button"
-                      disabled={isSaving}
-                      onClick={() => void saveCreativeDirection()}
-                    >
-                      {isSaving ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}
-                      Update preview
-                    </button>
-                  </div>
-                </details>
-              )}
               <a
                 className="mobilePreviewCta"
                 href={session.liveUrl || session.temporaryUrl}
@@ -4584,25 +4470,6 @@ export function TryMeNowApp() {
                   : "Expires 30 minutes after generation"}
             </span>
           </div>
-          {isProvisionalPreview && tuneOpen && (
-            <section className="provisionalBriefEditor" aria-labelledby="provisional-brief-title">
-              <div className="provisionalBriefEditorIntro">
-                <span className="sectionKicker">One signal at a time</span>
-                <h2 id="provisional-brief-title">Improve the live preview.</h2>
-                <p>Answer the next useful question. Folloze keeps the current page visible while it updates.</p>
-              </div>
-              <ProgressiveQuestions
-                session={session}
-                answers={answers}
-                isSaving={isSaving}
-                onPatch={patchAnswers}
-                onBackgroundPatch={patchAnswersInBackground}
-                onWorkspacePatch={patchWorkspace}
-                onUpload={uploadPdf}
-                pdfUpload={pdfUpload}
-              />
-            </section>
-          )}
         </section>
       )}
 
