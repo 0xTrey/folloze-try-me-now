@@ -8,7 +8,8 @@ import {
   type SourceLink,
   type SourceSection
 } from "@/lib/content-intelligence";
-import { fetchPinnedPublicText } from "@/lib/safe-fetch";
+import { extractPdfSourceArtifact } from "@/lib/content-pdf";
+import { fetchPinnedPublicBytes } from "@/lib/safe-fetch";
 
 const htmlEntityMap: Record<string, string> = {
   amp: "&",
@@ -336,7 +337,7 @@ export async function fetchPublicUrlSourceArtifact(
 ): Promise<SourceArtifact> {
   const sanitizedUrl = safeSourceUrl(sourceUrl);
   try {
-    const response = await fetchPinnedPublicText(sourceUrl, {
+    const response = await fetchPinnedPublicBytes(sourceUrl, {
       signal: options.signal,
       timeoutMs: options.timeoutMs ?? 12_000,
       maxBytes: options.maxBytes ?? 2_000_000,
@@ -355,6 +356,36 @@ export async function fetchPublicUrlSourceArtifact(
         createdAt: options.createdAt
       });
     }
+    if (contentType?.includes("application/pdf")) {
+      if (response.truncated) {
+        return createFailedSourceArtifact({
+          kind: "public-url",
+          ...(sanitizedUrl ? { sourceUrl: sanitizedUrl } : {}),
+          mediaType: "application/pdf",
+          method: "pdf-text",
+          failureCode: "public_source_pdf_truncated",
+          warning: "The PDF exceeded the protected fetch limit and was not extracted.",
+          createdAt: options.createdAt
+        });
+      }
+      const originalName = decodeURIComponent(
+        new URL(response.finalUrl.toString()).pathname.split("/").filter(Boolean).at(-1) ?? "source.pdf"
+      ).slice(0, 255) || "source.pdf";
+      const extracted = await extractPdfSourceArtifact(response.bytes, originalName, {
+        createdAt: options.createdAt
+      });
+      return createSourceArtifact({
+        source: {
+          kind: "public-url",
+          ...(sanitizedUrl ? { sourceUrl: sanitizedUrl } : {}),
+          finalUrl: response.finalUrl.toString(),
+          mediaType: "application/pdf"
+        },
+        extraction: extracted.extraction,
+        content: extracted.content,
+        createdAt: options.createdAt
+      });
+    }
     if (contentType && !contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) {
       return createFailedSourceArtifact({
         kind: "public-url",
@@ -367,7 +398,7 @@ export async function fetchPublicUrlSourceArtifact(
       });
     }
     return normalizePublicHtmlSource({
-      html: response.text,
+      html: Buffer.from(response.bytes).toString("utf8"),
       sourceUrl: sanitizedUrl ?? sourceUrl,
       finalUrl: response.finalUrl.toString(),
       truncated: response.truncated,

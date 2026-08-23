@@ -1987,6 +1987,43 @@ export type PdfUploadFeedback = {
   message?: string;
 };
 
+export const PDF_UPLOAD_PROCESSING_DEADLINE_MS = 90_000;
+
+export function pdfUploadProcessingCopy(elapsedMs: number): string {
+  if (elapsedMs >= 60_000) return "This is a larger document, so extraction is still running. We’ll keep checking for up to 90 seconds.";
+  if (elapsedMs >= 20_000) return "The PDF is accepted and still being read. Larger documents can take a little longer.";
+  return "Upload complete. Extracting the document title and factual anchors now.";
+}
+
+type PdfUploadStatus = "pending" | "processing" | "complete" | "failed";
+
+export async function pollPdfUploadStatus({
+  getStatus,
+  onProgress,
+  wait = (ms) => new Promise<void>((resolve) => window.setTimeout(resolve, ms)),
+  now = () => Date.now(),
+  deadlineMs = PDF_UPLOAD_PROCESSING_DEADLINE_MS
+}: {
+  getStatus: () => Promise<{ status: PdfUploadStatus; errorCode?: string; requestId?: string }>;
+  onProgress?: (message: string) => void;
+  wait?: (ms: number) => Promise<void>;
+  now?: () => number;
+  deadlineMs?: number;
+}): Promise<{ status: "complete" | "failed" | "timed-out"; errorCode?: string; requestId?: string }> {
+  const startedAt = now();
+  let attempt = 0;
+  while (now() - startedAt < deadlineMs) {
+    await wait(attempt === 0 ? 350 : 700);
+    const result = await getStatus();
+    if (result.status === "complete" || result.status === "failed") {
+      return { ...result, status: result.status };
+    }
+    onProgress?.(pdfUploadProcessingCopy(now() - startedAt));
+    attempt += 1;
+  }
+  return { status: "timed-out" };
+}
+
 const idlePdfUpload: PdfUploadFeedback = { status: "idle" };
 
 function PdfUploadProgress({ feedback }: { feedback: PdfUploadFeedback }) {
@@ -2028,6 +2065,11 @@ export function IntentComposer({
   const [mode, setMode] = useState<ContextMode>("text");
   const [contextText, setContextText] = useState(answers.messageBelief ?? "");
   const [contextUrl, setContextUrl] = useState("");
+  // Content Magic is source-led. Its URL/PDF intake lives in
+  // ProgressiveQuestions, and attaching the source starts the build. Keeping
+  // this generic composer visible reintroduced the retired
+  // "understand/believe/do" question.
+  if (session.useCase === "content") return null;
   const textValue = contextText.trim();
   const sourceOpen = !answers.sourceUrl && !answers.sourceName;
   const savedText = answers.messageBelief?.trim() ?? "";
@@ -2147,7 +2189,7 @@ export function IntentComposer({
           <label htmlFor="optional-context-url">Public HTTPS URL</label>
           <div className="contextUrlInput"><ExternalLink size={17} /><input id="optional-context-url" value={contextUrl} disabled={!sourceOpen || isSaving} onChange={(event) => setContextUrl(event.target.value)} placeholder="https://yourcompany.com/resource" inputMode="url" /></div>
           <div className="contextPanelFooter">
-            <small>{sourceOpen ? session.useCase === "content" ? "Uses this URL as the factual content source." : "Adds optional evidence or context. Seller, target, and offer stay separate." : "One source is already attached to this brief."}</small>
+            <small>{sourceOpen ? "Adds optional evidence or context. Seller, target, and offer stay separate." : "One source is already attached to this brief."}</small>
             <button className="contextAddButton" type="button" disabled={isSaving || !canSaveUrl} onClick={() => void onPatch({ sourceUrl: contextUrl.trim() })}>
               <ExternalLink size={15} />Use this URL
             </button>
@@ -2157,7 +2199,7 @@ export function IntentComposer({
       {mode === "pdf" && (
         <div className={`contextPanel contextPdfPanel ${sourceOpen ? "" : "isUnavailable"} is-${pdfUpload.status}`} role="tabpanel" id="context-panel-pdf" aria-labelledby="context-tab-pdf" aria-busy={pdfUpload.status === "uploading" || pdfUpload.status === "processing" || undefined}>
           {pdfUpload.status === "accepted" ? <CircleCheck size={21} /> : pdfUpload.status === "error" ? <X size={21} /> : <FileText size={21} />}
-          <div><strong>{pdfUpload.status === "accepted" ? "PDF accepted and added" : pdfUpload.status === "error" ? "That PDF was not added" : sourceOpen ? session.useCase === "content" ? "Add a PDF source" : "Add a supporting PDF" : "One source is already attached"}</strong><span>{pdfUpload.status === "accepted" ? pdfUpload.message || pdfUpload.fileName : pdfUpload.status === "error" ? pdfUpload.message : sourceOpen ? session.useCase === "content" ? "Up to 10 MB. Used only to build this experience." : "Adds optional evidence or context. Seller, target, and offer stay separate." : "A brief accepts one public URL or PDF at a time."}</span></div>
+          <div><strong>{pdfUpload.status === "accepted" ? "PDF accepted and added" : pdfUpload.status === "error" ? "That PDF was not added" : sourceOpen ? "Add a supporting PDF" : "One source is already attached"}</strong><span>{pdfUpload.status === "accepted" ? pdfUpload.message || pdfUpload.fileName : pdfUpload.status === "error" ? pdfUpload.message : sourceOpen ? "Adds optional evidence or context. Seller, target, and offer stay separate." : "A brief accepts one public URL or PDF at a time."}</span></div>
           {(sourceOpen || pdfUpload.status === "error") && pdfUpload.status !== "accepted" && (
             <label className={`contextUploadButton ${sourceOpen ? "" : "isDisabled"}`}>
               {pdfUpload.status === "error" ? "Choose another PDF" : "Choose PDF"}
@@ -2190,6 +2232,13 @@ export function SourceUnderstandingSummary({
   insight: NonNullable<PublicTryMeSession["sourceInsight"]>;
 }) {
   const ready = insight.status === "ready";
+  const terminalFailure = insight.status === "failed" || insight.status === "unreadable";
+  const heading = terminalFailure
+    ? "We could not read this source."
+    : ready
+      ? "Here’s what we found."
+      : "We found partial source evidence.";
+  const statusLabel = terminalFailure ? "Needs another source" : ready ? "Grounded" : "Reviewing";
   const pages = insight.extraction.extractedPageCount ?? insight.extraction.pageCount;
   return (
     <section className={`sourceInsightCard is-${insight.status}`} aria-labelledby="source-insight-title">
@@ -2197,9 +2246,9 @@ export function SourceUnderstandingSummary({
         <span className="sourceInsightIcon" aria-hidden="true"><ShieldCheck size={18} /></span>
         <div>
           <span>Source understanding</span>
-          <h2 id="source-insight-title">Here&apos;s what we understood.</h2>
+          <h2 id="source-insight-title">{heading}</h2>
         </div>
-        <span className="sourceInsightStatus">{ready ? "Grounded" : "Reviewing"}</span>
+        <span className="sourceInsightStatus">{statusLabel}</span>
       </div>
       {insight.title && <strong className="sourceInsightTitle">{insight.title}</strong>}
       {insight.premise && <p>{insight.premise}</p>}
@@ -2527,20 +2576,28 @@ export function ProgressiveQuestions({
     const sourceReady = Boolean(answers.sourceUrl || answers.sourceName);
     const sourceStatus = session.sourceInsight?.status;
     const isComplete = Boolean(session.experience);
+    const terminalFailure = sourceStatus === "failed" || sourceStatus === "unreadable";
+    const needsReview = sourceStatus === "needs-review";
+    const activelyBuilding = !isComplete && !terminalFailure && !needsReview;
     const statusCopy = isComplete
       ? "The source has been preserved and the guided experience is ready to explore."
-      : sourceStatus === "failed" || sourceStatus === "unreadable"
-        ? "We could not read enough of this source to build responsibly. Try another public URL or PDF."
-        : sourceStatus === "ready" || sourceStatus === "needs-review"
+      : terminalFailure
+        ? "We could not read enough of this source to build responsibly. Replace it with another public URL or searchable PDF."
+        : needsReview
+          ? "We found partial evidence, but not enough to support a confident buyer story. Review the source details or replace it."
+        : sourceStatus === "ready"
           ? "Source understood. Folloze is composing its facts, proof, and buyer moments into a guided experience."
           : "Reading the source and extracting the facts, proof, and buyer moments now.";
     return (
       <div className="questionSequence">
+        {pdfUpload.status !== "idle" && <PdfUploadProgress feedback={pdfUpload} />}
         {sourceInsight}
-        <div className="questionCard generationCard" role="status" aria-live="polite" aria-busy={!isComplete}>
-          <span className="generationGlyph">{isComplete ? <CircleCheck size={24} /> : <LoaderCircle className="spin" size={24} />}</span>
-          <span className="questionCount">{isComplete ? "Content path ready" : "Folloze is building"}</span>
-          <h2>{isComplete ? "Your content experience is ready." : "Turning the source into a buyer path."}</h2>
+        <div className="questionCard generationCard" role="status" aria-live="polite" aria-busy={activelyBuilding || undefined}>
+          <span className={`generationGlyph ${terminalFailure ? "isFailed" : needsReview ? "isReview" : ""}`}>
+            {isComplete ? <CircleCheck size={24} /> : terminalFailure ? <X size={24} /> : needsReview ? <FileText size={24} /> : <LoaderCircle className="spin" size={24} />}
+          </span>
+          <span className="questionCount">{isComplete ? "Content path ready" : terminalFailure ? "Source needs attention" : needsReview ? "Review source evidence" : "Folloze is building"}</span>
+          <h2>{isComplete ? "Your content experience is ready." : terminalFailure ? "Choose another source to continue." : needsReview ? "This source needs a quick review." : "Turning the source into a buyer path."}</h2>
           <p>{sourceReady ? statusCopy : "Add a public URL or PDF to start."}</p>
         </div>
       </div>
@@ -3493,6 +3550,15 @@ export function TryMeNowApp() {
         const nextSession = await confirmHighConfidenceSource(result.session);
         setSession((current) => preservePreviewDuringRegeneration(current, nextSession));
         setAnswers(nextSession.answers);
+        if (nextSession.answers.sourceName) {
+          setPdfUpload((current) => current.status === "processing"
+            ? {
+                status: "accepted",
+                fileName: nextSession.answers.sourceName,
+                message: `${nextSession.answers.sourceTitle?.trim() || nextSession.answers.sourceName} is ready and shaping the experience.`
+              }
+            : current);
+        }
       } catch {
         if (cancelled) return;
         failures += 1;
@@ -3853,37 +3919,25 @@ export function TryMeNowApp() {
         })
       });
 
-      setPdfUpload({
-        status: "processing",
-        fileName: file.name,
-        message: "Upload complete. Extracting the document title and factual anchors now."
-      });
+      setPdfUpload({ status: "processing", fileName: file.name, message: pdfUploadProcessingCopy(0) });
 
-      let processedSession: PublicTryMeSession | undefined;
-      for (let attempt = 0; attempt < 30; attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 350 : 700));
-        const statusResult = await api<{
-          upload: { status: "pending" | "processing" | "complete" | "failed"; errorCode?: string; requestId?: string };
-        }>(`/api/sessions/${activeSession.id}/upload?uploadId=${encodeURIComponent(uploadId)}`);
-        if (statusResult.upload.status === "failed") {
-          throw new ApiResponseError("We could not process that PDF. Try again or choose another file.", {
-            status: 422,
-            code: statusResult.upload.errorCode ?? "upload_processing_failed",
-            requestId: statusResult.upload.requestId
-          });
-        }
-        if (statusResult.upload.status === "complete") {
-          const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${activeSession.id}`);
-          processedSession = result.session;
-          break;
-        }
+      const statusResult = await pollPdfUploadStatus({
+        onProgress: (message) => setPdfUpload((current) => ({ ...current, status: "processing", message })),
+        getStatus: () => api<{ upload: { status: "pending" | "processing" | "complete" | "failed"; errorCode?: string; requestId?: string } }>(`/api/sessions/${activeSession.id}/upload?uploadId=${encodeURIComponent(uploadId)}`).then((result) => result.upload)
+      });
+      if (statusResult.status === "failed") {
+        throw new ApiResponseError("We could not process that PDF. Try again or choose another file.", {
+          status: 422,
+          code: statusResult.errorCode ?? "upload_processing_failed",
+          requestId: statusResult.requestId
+        });
       }
-      if (!processedSession) {
-        throw new ApiResponseError(
-          "Your PDF uploaded, but processing is taking longer than expected. Please try again.",
-          { status: 408, code: "upload_processing_timeout" }
-        );
+      if (statusResult.status === "timed-out") {
+        setPdfUpload({ status: "processing", fileName: file.name, message: "Your PDF is accepted and still processing. You can continue while we finish reading it." });
+        return;
       }
+      const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${activeSession.id}`);
+      const processedSession = result.session;
 
       const nextSession = await confirmHighConfidenceSource(processedSession);
       setSession(nextSession);
@@ -4377,7 +4431,7 @@ export function TryMeNowApp() {
                     onWorkspacePatch={patchWorkspace}
                     onUpload={uploadPdf}
                   />
-                  {!(session.useCase === "abm" && !answers.targetDomain) && <IntentComposer
+                  {session.useCase !== "content" && !(session.useCase === "abm" && !answers.targetDomain) && <IntentComposer
                     session={session}
                     answers={answers}
                     isSaving={isSaving}

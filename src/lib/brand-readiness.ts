@@ -227,6 +227,23 @@ export function assessBrandReadiness(profile: BrandProfile): BrandReadiness {
   };
 }
 
+/**
+ * A provisional preview may render once the seller's identity and core visual
+ * authority are trustworthy. Advanced design DNA (geometry, typography, and
+ * component measurements) is enrichment, not a reason to discard the page.
+ * This deliberately remains stricter than "profile exists" so an unrelated
+ * source, missing logo, or invented palette can never silently become a page.
+ */
+export function canRenderProvisionalPreview(profile: BrandProfile): boolean {
+  const readiness = assessBrandReadiness(profile);
+  return Boolean(
+    readiness.sourceEvidenceReady &&
+      readiness.identityReady &&
+      readiness.logoReady &&
+      readiness.paletteReady
+  );
+}
+
 export function withBrandReadiness(profile: BrandProfile): BrandProfile {
   return { ...profile, readiness: assessBrandReadiness(profile) };
 }

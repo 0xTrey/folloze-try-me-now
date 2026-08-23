@@ -3,7 +3,10 @@ import { handleUpload } from "@vercel/blob/client";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createSourceArtifact } from "@/lib/content-intelligence";
+import {
+  createFailedSourceArtifact,
+  createSourceArtifact
+} from "@/lib/content-intelligence";
 import { extractPdfSourceArtifact } from "@/lib/content-pdf";
 import { canEditSession, finalizePdfSource } from "@/lib/orchestrator";
 import { supportRefForTraceId } from "@/lib/observability";
@@ -305,7 +308,7 @@ describe("PDF client upload route", () => {
     expect(put).not.toHaveBeenCalled();
   });
 
-  it("validates the stored PDF, completes the correlated status, and deletes the private artifact", async () => {
+  it("retries bounded PDF extraction, completes the correlated status, and deletes the private artifact", async () => {
     const statusRecord = JSON.stringify({
       sessionId,
       uploadId,
@@ -328,6 +331,16 @@ describe("PDF client upload route", () => {
       ) as never;
     });
     vi.mocked(head).mockResolvedValue({ size: 18, contentType: "application/pdf" } as never);
+    vi.mocked(extractPdfSourceArtifact)
+      .mockResolvedValueOnce(createFailedSourceArtifact({
+        kind: "uploaded-pdf",
+        displayName: "brief.pdf",
+        mediaType: "application/pdf",
+        method: "pdf-text",
+        failureCode: "pdf_extraction_failed",
+        warning: "The full document contained a difficult page."
+      }))
+      .mockResolvedValueOnce(readyPdfArtifact);
     vi.mocked(finalizePdfSource).mockResolvedValue({
       session: { answers: { sourceName: "brief.pdf" } },
       shouldGenerate: false
@@ -364,6 +377,10 @@ describe("PDF client upload route", () => {
       supportRefForTraceId(uploadTraceId)
     );
     expect(committedEventNames).toContain("upload_completed");
+    expect(extractPdfSourceArtifact).toHaveBeenNthCalledWith(2, expect.any(Uint8Array), "brief.pdf", {
+      maxPages: 36,
+      maxTextChars: 100_000
+    });
     expect(finalizePdfSource).toHaveBeenCalledWith(sessionId, {
       uploadId,
       sourceName: "brief.pdf",

@@ -6,6 +6,10 @@ import sharp from "sharp";
 
 import { logServerError } from "@/lib/http";
 import {
+  isBrandfetchHostedLogoUrl,
+  isBrandfetchLogoApiUrl
+} from "@/lib/brandfetch-logo";
+import {
   parseImageSlot,
   sourceImageUrlForSlot,
   type ImageSlot
@@ -184,6 +188,31 @@ function portableLogoForSlot(
   const bytes = decodePortableBrandLogo(profile.portableLogo);
   const kind = bytes ? detectImageKind(bytes) : undefined;
   return bytes && kind ? { bytes, kind } : undefined;
+}
+
+/**
+ * Brandfetch-hosted logos are explicitly intended for browser hotlinking.
+ * Keep the session route as the stable URL used by older rendered artifacts,
+ * but redirect a validated Brandfetch logo instead of treating its omission
+ * from the server proxy source registry as a missing image.
+ */
+function brandfetchLogoForSlot(
+  session: TryMeSession | null,
+  slot: ImageSlot
+): string | undefined {
+  if (!session || !slot.endsWith("-logo")) return undefined;
+  const profile = slot.startsWith("seller-") ? session.brand : session.targetBrand;
+  const candidate = profile?.logoUrl;
+  const expectedDomain = profile?.canonicalDomain ?? profile?.domain;
+  if (isBrandfetchLogoApiUrl(candidate, expectedDomain)) return candidate;
+  // Versioned Brand API assets do not encode a domain in their URL. Only
+  // allow that shape when the stored server-side extraction receipt records
+  // Brandfetch Brand API as the selected source; URL shape alone is not
+  // enough to bind an opaque asset ID to this seller.
+  return profile?.diagnostics?.logo.strategy === "brandfetch-brand-api"
+    && isBrandfetchHostedLogoUrl(candidate)
+    ? candidate
+    : undefined;
 }
 
 function contentTypeHint(value: string | string[] | undefined): ImageKind | "generic" | "invalid" {
@@ -419,6 +448,18 @@ export async function GET(request: Request, context: RouteContext) {
 
   const portableLogo = portableLogoForSlot(session, slot);
   if (portableLogo) return imageResponse(portableLogo.bytes, portableLogo.kind);
+
+  const brandfetchLogo = brandfetchLogoForSlot(session, slot);
+  if (brandfetchLogo) {
+    return new Response(null, {
+      status: 307,
+      headers: {
+        ...deliveryHeaders,
+        "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
+        Location: brandfetchLogo
+      }
+    });
+  }
 
   if (!sourceUrl || !isExplicitHttpsUrl(sourceUrl)) {
     return imageError(404, "image_not_found", "This image asset is unavailable.");

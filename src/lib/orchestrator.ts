@@ -5,7 +5,10 @@ import {
   audienceSuggestionsFor,
   withBrandIdentity
 } from "@/lib/brand-intelligence";
-import { assessBrandReadiness } from "@/lib/brand-readiness";
+import {
+  assessBrandReadiness,
+  canRenderProvisionalPreview
+} from "@/lib/brand-readiness";
 import { config } from "@/lib/config";
 import type { SourceArtifact } from "@/lib/content-intelligence";
 import {
@@ -3084,7 +3087,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     // Existing final previews remain visible during later regenerations.
     if (
       !latest.experience &&
-      assessBrandReadiness(selectedBrands.brand).status === "ready"
+      canRenderProvisionalPreview(selectedBrands.brand)
     ) {
       const provisionalSourceRevision = latest.revision;
       const provisionalStartedAt = Date.now();
@@ -3243,8 +3246,12 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       generationSource: generated.source,
       trustFallbackReason
     });
-    const finalBrandHelpRequired =
-      assessBrandReadiness(selectedBrands.brand).status !== "ready";
+    // A complete design-DNA pass is valuable enrichment, but it must not
+    // erase a usable page after the seller's identity, official logo, source
+    // evidence, and semantic palette have been verified. Keep the strict gate
+    // for genuinely untrusted brand authority while allowing a labelled
+    // provisional preview to continue when geometry/typography is incomplete.
+    const finalBrandHelpRequired = !canRenderProvisionalPreview(selectedBrands.brand);
     if (generated.error) {
       logServerError(generated.error, {
         sessionId: id,

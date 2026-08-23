@@ -493,19 +493,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
             throw new HttpError(400, "invalid_pdf_signature", "That file is not a valid PDF.");
           }
 
-          const sourceArtifact = await extractPdfSourceArtifact(bytes, payload.originalName);
-          if (
-            sourceArtifact.status === "failed" ||
-            sourceArtifact.status === "unreadable" ||
-            sourceArtifact.extraction.ocr.status === "required"
-          ) {
-            throw new HttpError(
-              422,
-              "pdf_source_unreadable",
-              "That PDF does not contain enough readable text yet. Upload a searchable PDF or use a public URL."
-            );
+          let sourceArtifact = await extractPdfSourceArtifact(bytes, payload.originalName);
+          // A single difficult page, font program, or embedded visual must not
+          // invalidate an otherwise readable long-form document. Retry a
+          // bounded first chapter before falling back to the model's native
+          // PDF reader below.
+          if (sourceArtifact.status === "failed") {
+            const boundedRetry = await extractPdfSourceArtifact(bytes, payload.originalName, {
+              maxPages: 36,
+              maxTextChars: 100_000
+            });
+            if (boundedRetry.status !== "failed") sourceArtifact = boundedRetry;
           }
-          const sourceTitle = sourceArtifact.content.title ?? pdfTitleFallback(payload.originalName);
 
           let sourceOpenAIFileId = hasOpenAI ? processingStatus.openAIFileId : undefined;
           if (hasOpenAI && !sourceOpenAIFileId) {
@@ -520,12 +519,27 @@ export async function POST(request: NextRequest, context: RouteContext) {
             await writeOwnedUploadStatus(processingStatus, leaseOwner);
           }
 
+          const localExtractionUnavailable =
+            sourceArtifact.status === "failed" ||
+            sourceArtifact.status === "unreadable" ||
+            sourceArtifact.extraction.ocr.status === "required";
+          if (localExtractionUnavailable && !sourceOpenAIFileId) {
+            throw new HttpError(
+              422,
+              "pdf_source_unreadable",
+              "That PDF does not contain enough readable text yet. Upload a searchable PDF or use a public URL."
+            );
+          }
+          const sourceTitle = localExtractionUnavailable
+            ? pdfTitleFallback(payload.originalName)
+            : sourceArtifact.content.title ?? pdfTitleFallback(payload.originalName);
+
           const updated = await finalizePdfSource(id, {
             uploadId: payload.uploadId,
             sourceName: payload.originalName,
             sourceTitle,
             sourceOpenAIFileId,
-            sourceArtifact
+            sourceArtifact: localExtractionUnavailable ? undefined : sourceArtifact
           });
           processingSucceeded = true;
           await writeOwnedUploadStatus(
@@ -553,11 +567,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
                     ? "1mb-to-5mb"
                     : "5mb-to-limit",
               mode: sourceOpenAIFileId ? "openai-file" : "fixture-metadata",
-              extractionStatus: sourceArtifact.extraction.status,
-              extractionMethod: sourceArtifact.extraction.method,
-              extractionConfidence: sourceArtifact.confidence,
-              claimCount: sourceArtifact.diagnostics.claimCount,
-              citationCount: sourceArtifact.diagnostics.citationCount
+              extractionStatus: localExtractionUnavailable ? "openai-file-fallback" : sourceArtifact.extraction.status,
+              extractionMethod: localExtractionUnavailable ? "openai-file" : sourceArtifact.extraction.method,
+              extractionConfidence: localExtractionUnavailable ? "model-grounded" : sourceArtifact.confidence,
+              claimCount: localExtractionUnavailable ? 0 : sourceArtifact.diagnostics.claimCount,
+              citationCount: localExtractionUnavailable ? 0 : sourceArtifact.diagnostics.citationCount
             },
             trace.errorContext()
           );

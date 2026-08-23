@@ -117,4 +117,61 @@ describe("StreamingBriefComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit Offer" }));
     expect(onSummaryEdit).toHaveBeenCalledWith("offer");
   });
+
+  it("makes active build work unmistakable and exposes it as live status", () => {
+    render(
+      <StreamingBriefComposer
+        mode="campaign"
+        questions={questions}
+        currentQuestionId="intent"
+        answers={[]}
+        receipts={[{ id: "brand", label: "Brand", detail: "Reading the public site", state: "working" }]}
+        onAnswer={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Building your experience now.");
+    expect(screen.getByRole("status")).toHaveTextContent("Research, messaging, and page composition are running in the background.");
+  });
+
+  it("communicates completion and attention without fake percentage progress", () => {
+    const { rerender } = render(
+      <StreamingBriefComposer
+        mode="campaign"
+        questions={questions}
+        answers={[]}
+        receipts={[{ id: "preview", label: "Build", detail: "Ready", state: "complete" }]}
+        onAnswer={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Your experience is ready to explore.");
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+
+    rerender(
+      <StreamingBriefComposer
+        mode="campaign"
+        questions={questions}
+        answers={[]}
+        receipts={[{ id: "build", label: "Build", detail: "Retry", state: "attention" }]}
+        onAnswer={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("We need one more signal to continue.");
+  });
+
+  it("does not call a completed brand scan a completed experience", () => {
+    render(
+      <StreamingBriefComposer
+        mode="campaign"
+        questions={questions}
+        currentQuestionId="intent"
+        answers={[]}
+        receipts={[{ id: "brand", label: "Brand", detail: "Brand verified", state: "complete" }]}
+        onAnswer={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Waiting for the next signal.");
+    expect(screen.queryByText("Your experience is ready to explore.")).not.toBeInTheDocument();
+  });
 });

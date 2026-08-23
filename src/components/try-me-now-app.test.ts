@@ -20,6 +20,9 @@ import {
   liveBriefFilledCount,
   objectiveContextPrompt,
   overviewRowsFor,
+  PDF_UPLOAD_PROCESSING_DEADLINE_MS,
+  pdfUploadProcessingCopy,
+  pollPdfUploadStatus,
   personalizationVariantOptionsFor,
   preservePreviewDuringRegeneration,
   previewBoundaryScrollDelta,
@@ -29,6 +32,38 @@ import {
   streamingCampaignQuestions,
   streamingCampaignSkipPatch
 } from "./try-me-now-app";
+
+describe("Content Magic PDF processing", () => {
+  it("keeps polling a long-running accepted upload until the bounded deadline", async () => {
+    let now = 0;
+    const statuses = ["pending", "processing", "complete"] as const;
+    const progress: string[] = [];
+    const result = await pollPdfUploadStatus({
+      deadlineMs: PDF_UPLOAD_PROCESSING_DEADLINE_MS,
+      now: () => now,
+      wait: async () => { now += 30_000; },
+      getStatus: async () => ({ status: statuses[Math.min(progress.length, statuses.length - 1)] }),
+      onProgress: (message) => progress.push(message)
+    });
+
+    expect(result.status).toBe("complete");
+    expect(progress).toContain("The PDF is accepted and still being read. Larger documents can take a little longer.");
+    expect(now).toBe(90_000);
+  });
+
+  it("returns a non-terminal timeout while keeping copy honest", async () => {
+    let now = 0;
+    const result = await pollPdfUploadStatus({
+      deadlineMs: 90_000,
+      now: () => now,
+      wait: async () => { now += 30_000; },
+      getStatus: async () => ({ status: "processing" })
+    });
+
+    expect(result.status).toBe("timed-out");
+    expect(pdfUploadProcessingCopy(60_000)).toMatch(/still running/);
+  });
+});
 
 function brand(domain: string, companyName: string): PublicBrandProfile {
   return {

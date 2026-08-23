@@ -108,6 +108,61 @@ describe("harvested image delivery route", () => {
     );
   });
 
+  it("redirects a validated Brandfetch logo for legacy session image URLs", async () => {
+    const logoUrl = "https://cdn.brandfetch.io/domain/amazon.com/w/320/h/96/theme/light/fallback/404/type/logo?c=abcdefgh";
+    vi.mocked(getSession).mockResolvedValue({
+      answers: {},
+      brand: { domain: "amazon.com", canonicalDomain: "amazon.com", logoUrl }
+    } as never);
+
+    const response = await GET(request, context());
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(logoUrl);
+    expect(fetchPinnedPublicBytes).not.toHaveBeenCalled();
+  });
+
+  it("redirects an opaque Brand API asset only with a server-side Brandfetch receipt", async () => {
+    const logoUrl = "https://cdn.brandfetch.io/idj3Bp2d82/theme/dark/logo.svg?c=asset_client_12345";
+    vi.mocked(getSession).mockResolvedValue({
+      answers: {},
+      brand: {
+        domain: "amazon.com",
+        canonicalDomain: "amazon.com",
+        logoUrl,
+        diagnostics: {
+          logo: {
+            strategy: "brandfetch-brand-api",
+            imageCandidateCount: 1,
+            rejectedImageCount: 0,
+            inlineSvgCandidateCount: 0
+          }
+        }
+      }
+    } as never);
+
+    const response = await GET(request, context());
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(logoUrl);
+  });
+
+  it("does not trust an opaque Brandfetch asset URL without provider provenance", async () => {
+    vi.mocked(getSession).mockResolvedValue({
+      answers: {},
+      brand: {
+        domain: "amazon.com",
+        canonicalDomain: "amazon.com",
+        logoUrl: "https://cdn.brandfetch.io/idWrongBrand/theme/dark/logo.svg?c=asset_client_12345"
+      }
+    } as never);
+
+    const response = await GET(request, context());
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
   it("delivers a validated inline Cisco-style logo from the session without hotlinking", async () => {
     const portable = portableBrandLogoFromSvg(
       '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cisco logo" viewBox="0 0 100 52"><title>Cisco</title><path fill="#1BA0D7" d="M1 1h98v50H1z"/></svg>'

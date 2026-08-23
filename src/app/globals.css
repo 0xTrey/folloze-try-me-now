@@ -137,6 +137,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .inlineError { margin-top: 24px; padding: 13px 15px; color: #8f1e17; background: #fff1f0; border: 1px solid #ffc9c5; border-radius: 12px; font-size: 13px; }
 .connectionNotice { margin-top: 18px; padding: 11px 14px; display: flex; align-items: center; gap: 9px; color: var(--fz-body); background: var(--fz-band); border: 1px solid var(--fz-border); border-radius: 12px; font-size: 12px; }
 .generationGlyph.isFailed { color: #b42318; background: #fff1f0; animation: none; }
+.generationGlyph.isReview { color: #9a5b00; background: #fff7e8; animation: none; }
 
 .buildPanel { background: var(--fz-canvas); }
 .buildTop { min-height: 96px; display: flex; justify-content: space-between; align-items: flex-start; gap: 22px; }.buildTopCopy{max-width:660px}.buildTop h2{margin:7px 0 0;font:520 clamp(22px,2vw,31px)/1.1 var(--font-display),sans-serif;letter-spacing:-.025em}.buildTop p{max-width:590px;margin:8px 0 0;color:var(--fz-muted-strong);font-size:11px;line-height:1.45}.tempLink{display:flex;align-items:center;gap:8px;color:var(--fz-muted-strong);font-size:11px;white-space:nowrap}

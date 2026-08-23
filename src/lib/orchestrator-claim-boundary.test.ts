@@ -4,6 +4,7 @@ import { sendClaimEmail } from "@/lib/integrations/email";
 import { publishClaimedExperience } from "@/lib/integrations/folloze";
 import { generateExperienceDraft, SourceFetchError } from "@/lib/integrations/openai";
 import { recordLeadCapture, updateLeadOutcome } from "@/lib/lead-store";
+import { portableBrandLogoFromSvg } from "@/lib/portable-brand-logo";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import {
   claimSession,
@@ -339,6 +340,57 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(final!.experience!.artifactRevision).toBeGreaterThan(
       provisional!.experience!.artifactRevision
     );
+  });
+
+  it("keeps a verified brand with incomplete design DNA on the provisional path", async () => {
+    const pending = session({ id: "provisional-incomplete-design-dna" });
+    pending.brand = {
+      ...brand,
+      portableLogo: portableBrandLogoFromSvg(
+        '<svg xmlns="http://www.w3.org/2000/svg" aria-label="Jitterbit logo"><path fill="#F44414" d="M0 0h20v10H0z"/></svg>',
+        "official-remote-asset"
+      ),
+      designDna: {
+        version: 1,
+        source: "remote-harvester",
+        confidence: "low",
+        theme: { hero: "light" },
+        typography: {},
+        buttons: {},
+        cards: {},
+        spacing: {}
+      }
+    };
+    let resolveGeneration!: (value: Awaited<ReturnType<typeof generateExperienceDraft>>) => void;
+    vi.mocked(generateExperienceDraft).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveGeneration = resolve;
+      })
+    );
+    await putSession(pending);
+
+    const completion = runStoryStage(pending.id);
+    await vi.waitFor(async () => {
+      expect(await getSession(pending.id)).toMatchObject({
+        status: "preview_provisional",
+        experience: { readiness: "provisional" }
+      });
+    });
+    expect((await getSession(pending.id))?.events).not.toContainEqual(
+      expect.objectContaining({ name: "brand_help_required" })
+    );
+
+    resolveGeneration({
+      draft: { ...draft, sections: draft.sections.map((section) => ({ ...section })) },
+      source: "openai",
+      durationMs: 18_000
+    });
+    await completion;
+
+    expect(await getSession(pending.id)).toMatchObject({
+      status: "preview_ready_unclaimed",
+      experience: { readiness: "final" }
+    });
   });
 
   it("does not start generation before the material brief is eligible", async () => {

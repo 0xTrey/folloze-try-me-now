@@ -120,6 +120,21 @@ export function StreamingBriefComposer({
         value: fieldValue,
         editable: false
       }));
+  const previewReady = receipts.some((receipt) => receipt.id === "preview" && receipt.state === "complete");
+  const workHasStarted = answers.length > 0 || receipts.some((receipt) => receipt.id !== "brand");
+  const progressState = receipts.some((receipt) => receipt.state === "attention")
+    ? "attention"
+    : previewReady
+      ? "complete"
+      : receipts.some((receipt) => receipt.state === "working") || workHasStarted
+        ? "working"
+        : "waiting";
+  const progressCopy = {
+    waiting: { eyebrow: "Ready when you are", title: "Waiting for the next signal.", detail: "Your answers will appear here as Folloze prepares the experience." },
+    working: { eyebrow: "Folloze is working", title: "Building your experience now.", detail: "Research, messaging, and page composition are running in the background." },
+    attention: { eyebrow: "A step needs attention", title: "We need one more signal to continue.", detail: "Your work is safe. Review the highlighted step and we will keep building." },
+    complete: { eyebrow: "Build ready", title: "Your experience is ready to explore.", detail: "The build receipts below show what Folloze completed." }
+  }[progressState];
 
   useEffect(() => {
     if (!activeQuestionId || disabled) return;
@@ -258,6 +273,7 @@ export function StreamingBriefComposer({
                   type="button"
                   className={styles.skip}
                   disabled={disabled || !canSkip}
+                  title={!canSkip ? "Add enough campaign detail to create a useful preview." : undefined}
                   onClick={onSkip}
                 >
                   {skipLabel}
@@ -279,6 +295,15 @@ export function StreamingBriefComposer({
           </div>
         )}
       </div>
+
+      <section className={styles.progressPanel} data-state={progressState} aria-live="polite" aria-atomic="true" role="status">
+        <span className={styles.progressOrb} aria-hidden="true"><i /></span>
+        <div>
+          <span className={styles.progressEyebrow}>{progressCopy.eyebrow}</span>
+          <strong>{progressCopy.title}</strong>
+          <p>{progressCopy.detail}</p>
+        </div>
+      </section>
 
       <section className={styles.receipts} aria-live="polite" aria-atomic="false" aria-label="Live build progress">
         {receipts.map((receipt) => (

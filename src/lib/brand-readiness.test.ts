@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assessBrandReadiness,
+  canRenderProvisionalPreview,
   prospectBrandPresentation
 } from "@/lib/brand-readiness";
 import { portableBrandLogoFromSvg } from "@/lib/portable-brand-logo";
@@ -121,6 +122,48 @@ describe("brand readiness", () => {
       sourceEvidenceReady: true,
       reasons: []
     });
+  });
+
+  it("allows a provisional preview when only advanced design DNA is incomplete", () => {
+    const candidate = profile({
+      designDna: {
+        version: 1,
+        source: "remote-harvester",
+        confidence: "low",
+        theme: { hero: "light" },
+        typography: {},
+        buttons: {},
+        cards: {},
+        spacing: {}
+      }
+    });
+
+    expect(assessBrandReadiness(candidate)).toMatchObject({
+      identityReady: true,
+      logoReady: true,
+      paletteReady: true,
+      designReady: false,
+      sourceEvidenceReady: true
+    });
+    expect(canRenderProvisionalPreview(candidate)).toBe(true);
+  });
+
+  it("does not allow provisional rendering from a cross-domain source", () => {
+    const candidate = profile({ sourceUrl: "https://unrelated.example.com/brand" });
+    expect(canRenderProvisionalPreview(candidate)).toBe(false);
+  });
+
+  it("does not allow provisional rendering without confirmed identity or logo", () => {
+    expect(
+      canRenderProvisionalPreview(
+        profile({
+          identity: undefined,
+          portableLogo: undefined,
+          logoSourceUrl: undefined,
+          logoUrl: undefined
+        })
+      )
+    ).toBe(false);
   });
 
   it("does not report ready after resolution completes without an official wordmark", () => {

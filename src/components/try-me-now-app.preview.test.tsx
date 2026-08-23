@@ -180,7 +180,7 @@ describe("SourceUnderstandingSummary", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "Here's what we understood." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Here’s what we found." })).toBeInTheDocument();
     expect(screen.getByText("Enterprise Automation Guide")).toBeInTheDocument();
     expect(screen.getByText("Page 4")).toBeInTheDocument();
     expect(screen.getByText("12 cited source blocks")).toBeInTheDocument();
@@ -576,6 +576,34 @@ describe("guided campaign workspace", () => {
     expect(screen.getByRole("heading", { name: /turning the source into a buyer path/i })).toBeInTheDocument();
     expect(screen.queryByText(/who should get the most/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/what should they do after exploring/i)).not.toBeInTheDocument();
+  });
+
+  it.each(["failed", "unreadable"] as const)("stops the Content Magic spinner for a %s source and offers recovery", (status) => {
+    const contentSession: PublicTryMeSession = {
+      ...readySession,
+      useCase: "content",
+      status: "collecting",
+      experience: undefined,
+      answers: { sourceUrl: "https://example.test/report" },
+      sourceInsight: { ...readyProductInsight, status },
+      audienceSuggestions: [],
+      audienceRecommendations: []
+    };
+    const { container } = render(
+      <ProgressiveQuestions
+        session={contentSession}
+        answers={contentSession.answers}
+        isSaving={false}
+        onPatch={vi.fn().mockResolvedValue(undefined)}
+        onWorkspacePatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    const statusPanel = screen.getByRole("status");
+    expect(statusPanel).not.toHaveAttribute("aria-busy", "true");
+    expect(statusPanel).toHaveTextContent("Choose another source to continue.");
+    expect(container.querySelector(".generationGlyph .spin")).not.toBeInTheDocument();
   });
 
   it("collects a named campaign offer and optional public source before audience selection", () => {
@@ -1059,7 +1087,7 @@ describe("guided campaign workspace", () => {
     expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
   });
 
-  it.each(["abm", "campaign", "content"] as const)("uses the same intent composer grammar for %s", (useCase) => {
+  it.each(["abm", "campaign"] as const)("uses the same intent composer grammar for %s", (useCase) => {
     const onPatch = vi.fn().mockResolvedValue(undefined);
     const composerSession = {
       ...readySession,
@@ -1083,6 +1111,29 @@ describe("guided campaign workspace", () => {
     expect(screen.getByLabelText("What should the buyer understand, believe, or do?")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Attach URL" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Attach PDF" })).toBeInTheDocument();
+  });
+
+  it("keeps Content Magic source-only and never renders the legacy belief prompt", () => {
+    const contentSession = {
+      ...readySession,
+      useCase: "content" as const,
+      status: "collecting" as const,
+      experience: undefined,
+      answers: {}
+    };
+    const { container } = render(
+      <IntentComposer
+        session={contentSession}
+        answers={contentSession.answers}
+        isSaving={false}
+        onPatch={vi.fn().mockResolvedValue(undefined)}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/what should this content help buyers understand/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/understand, believe, or do/i)).not.toBeInTheDocument();
   });
 
   it("submits composer text by keyboard without changing structured answer submission", () => {
@@ -1198,19 +1249,17 @@ describe("guided campaign workspace", () => {
 
     cleanup();
     render(
-      <OptionalContextComposer
+      <ProgressiveQuestions
+        {...props}
         session={{ ...contentSession, answers: { sourceName: "platform-guide.pdf", sourceTitle: "Platform Guide" } }}
         answers={{ sourceName: "platform-guide.pdf", sourceTitle: "Platform Guide" }}
         isSaving={false}
         pdfUpload={{ status: "accepted", fileName: "platform-guide.pdf", message: "Platform Guide is ready and shaping the experience." }}
-        onPatch={props.onPatch}
-        onUpload={props.onUpload}
       />
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Attach PDF" }));
-    expect(screen.getByText("PDF accepted and added")).toBeInTheDocument();
+    expect(screen.getByText("PDF accepted")).toBeInTheDocument();
     expect(screen.getAllByRole("status").some((node) => node.textContent?.includes("PDF accepted"))).toBe(true);
-    expect(screen.queryByText("Choose PDF")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Upload a PDF" })).not.toBeInTheDocument();
   });
 
   it("keeps a failed PDF filename out of the public URL field", () => {
