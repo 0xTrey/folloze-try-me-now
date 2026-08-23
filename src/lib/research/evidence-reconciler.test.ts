@@ -10,6 +10,7 @@ import type {
   ProductionArtifact,
   WorkerKind
 } from "@/lib/orchestration/worker-types";
+import type { EvidenceRecordV2 } from "@/lib/orchestration/research-query-plan-v2";
 
 import type {
   CompanyResearchBrief,
@@ -18,6 +19,7 @@ import type {
 } from "./company-research";
 import {
   reconcileLiveBriefEvidence,
+  reconcileResearchEvidenceV2,
   type ReconcileLiveBriefEvidenceInput
 } from "./evidence-reconciler";
 import {
@@ -142,7 +144,8 @@ function audienceCandidate(input: {
         ? "https://target.example/priorities"
         : "https://acme.example/offer",
       summary: "Bounded source summary",
-      confidence: input.confidence ?? 0.85
+      confidence: input.confidence ?? 0.85,
+      statementType: "fact"
     }],
     authority: {
       pageBrandOwner: "seller",
@@ -178,6 +181,12 @@ function audienceArtifact(input: {
       sellerName: "Acme",
       sellerDomain: "acme.example",
       targetUse: input.entityRole === "target" ? "abm-context-only" : "none"
+    },
+    presentation: {
+      mode: "recommendations",
+      candidateIds: [selected.id, ...alternatives.map(({ id }) => id)],
+      showFreeform: true,
+      showSourceUrl: true
     }
   }, {
     completedAt: input.completed ?? completedAt,
@@ -475,5 +484,104 @@ describe("reconcileLiveBriefEvidence", () => {
         resolution: "visitor-authority"
       })
     );
+  });
+});
+
+describe("reconcileResearchEvidenceV2", () => {
+  function record(
+    overrides: Partial<EvidenceRecordV2> & Pick<EvidenceRecordV2, "id">
+  ): EvidenceRecordV2 {
+    return {
+      revision,
+      kind: "seller_fact",
+      statement: "Bounded seller fact",
+      sourceAuthority: "seller_official",
+      confidence: 0.8,
+      observedAt: completedAt,
+      supports: ["brief:positioning"],
+      ...overrides
+    };
+  }
+
+  it("applies visitor then seller-official then third-party authority", () => {
+    const reconciled = reconcileResearchEvidenceV2({
+      revision,
+      family: "guide",
+      records: [
+        record({
+          id: "third-party-positioning",
+          kind: "third_party_context",
+          statement: "Directory positioning",
+          sourceAuthority: "third_party",
+          confidence: 0.99
+        }),
+        record({
+          id: "seller-positioning",
+          statement: "Official seller positioning",
+          sourceAuthority: "seller_official",
+          confidence: 0.7
+        }),
+        record({
+          id: "visitor-positioning",
+          kind: "visitor_input",
+          statement: "Visitor supplied positioning",
+          sourceAuthority: "visitor",
+          confidence: 0.6
+        })
+      ]
+    });
+
+    expect(reconciled.facts).toEqual([
+      expect.objectContaining({
+        id: "visitor-positioning",
+        statement: "Visitor supplied positioning"
+      })
+    ]);
+    expect(reconciled.rejectedIds).toEqual([
+      "seller-positioning",
+      "third-party-positioning"
+    ]);
+  });
+
+  it("keeps Align target facts separate from bounded inference and rejects both elsewhere", () => {
+    const targetFact = record({
+      id: "target-priority",
+      kind: "target_fact",
+      statement: "Target states a laboratory modernization priority.",
+      sourceAuthority: "target_official",
+      supports: ["align:target-priority"]
+    });
+    const inference = {
+      id: "target-relevance-inference",
+      revision,
+      subject: "target" as const,
+      statement: "Laboratory operations leaders may prioritize throughput standardization.",
+      evidenceRefs: ["target-priority"],
+      confidence: 0.72,
+      observedAt: completedAt
+    };
+    const align = reconcileResearchEvidenceV2({
+      revision,
+      family: "align",
+      records: [targetFact],
+      inferences: [inference]
+    });
+
+    expect(align.targetFacts).toEqual([targetFact]);
+    expect(align.inferences).toEqual([inference]);
+    expect(align.targetFacts[0]?.statement).not.toContain("may prioritize");
+
+    const guide = reconcileResearchEvidenceV2({
+      revision,
+      family: "guide",
+      records: [targetFact],
+      inferences: [inference]
+    });
+    expect(guide.targetFacts).toEqual([]);
+    expect(guide.inferences).toEqual([]);
+    expect(guide.rejectedIds).toEqual([
+      "target-priority",
+      "target-relevance-inference"
+    ]);
   });
 });

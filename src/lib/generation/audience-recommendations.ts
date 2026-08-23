@@ -20,6 +20,7 @@ export interface AudienceCandidateProvenance {
   sourceUrl?: string;
   summary: string;
   confidence: number;
+  statementType: "fact" | "inference";
 }
 
 export interface AudienceAccountCandidate {
@@ -44,6 +45,11 @@ export interface AudienceAccountCandidate {
     accountName: string;
     accountDomain: string;
     evidenceRefs: string[];
+    facts: Array<{
+      evidenceRef: string;
+      statement: string;
+    }>;
+    inference: string;
   };
 }
 
@@ -59,6 +65,12 @@ export interface AudienceRecommendationSet {
     sellerName: string;
     sellerDomain: string;
     targetUse: "none" | "abm-context-only";
+  };
+  presentation: {
+    mode: "recommendations" | "freeform-with-url";
+    candidateIds: string[];
+    showFreeform: true;
+    showSourceUrl: true;
   };
 }
 
@@ -203,6 +215,22 @@ const optionStopWords = new Set([
   "responsible"
 ]);
 
+const genericAudienceTokens = new Set([
+  "business",
+  "decision",
+  "executive",
+  "leaders",
+  "leadership",
+  "makers",
+  "operations",
+  "owners",
+  "process",
+  "sponsors",
+  "teams",
+  "technical",
+  "transformation"
+]);
+
 function cleanText(value: string, max = 180): string {
   const clean = value
     .replace(/<[^>]*>/g, " ")
@@ -282,6 +310,34 @@ function similarity(left: string, right: string): number {
   return intersection / union;
 }
 
+function isSpecificAudienceLabel(value: string): boolean {
+  const tokens = optionTokens(value);
+  return (
+    /\b[A-Z]{2,}\b/.test(value) ||
+    tokens.length > 0 &&
+    tokens.some((token) => !genericAudienceTokens.has(token))
+  );
+}
+
+function evidenceAudienceLabels(evidence: readonly UsableEvidence[]): string[] {
+  const rolePattern =
+    /\b((?:[a-z][a-z0-9&/-]*\s+){0,4}(?:leaders?|managers?|directors?|administrators?|scientists?|owners?|architects?|executives?|officers?|teams?))\b/i;
+  return dedupeNearIdenticalAudienceOptions(
+    evidence.flatMap((item) => {
+      const match = rolePattern.exec(item.text);
+      if (!match?.[1]) return [];
+      const role = cleanText(
+        match[1].replace(/^(?:and|for|the|with)\s+/i, ""),
+        90
+      );
+      if (!isSpecificAudienceLabel(role)) return [];
+      const startsWithRole =
+        item.text.toLocaleLowerCase().startsWith(match[1].toLocaleLowerCase());
+      return [startsWithRole ? cleanText(item.text, 120) : role];
+    })
+  );
+}
+
 /**
  * Removes repeated and near-identical audience options while preserving the
  * strategy rank of the first option.
@@ -307,6 +363,26 @@ export function dedupeNearIdenticalAudienceOptions(options: readonly string[]): 
 }
 
 function roleFor(label: string): RoleDefinition {
+  const explicitRole = /\b((?:[a-z][a-z0-9&/-]*\s+){0,4}(?:leaders?|managers?|directors?|administrators?|scientists?|owners?|architects?|executives?|officers?|teams?))\b/i.exec(
+    label
+  );
+  if (explicitRole?.[1]) {
+    const buyerRole = cleanText(
+      explicitRole[1].replace(/^(?:and|for|the|with)\s+/i, ""),
+      90
+    );
+    const trailingJob = cleanText(
+      label.slice((explicitRole.index ?? 0) + explicitRole[0].length),
+      120
+    ).replace(/^(?:who|that|responsible for)\s+/i, "");
+    return {
+      family: `named:${optionTokens(buyerRole).slice(0, 3).join("-")}`,
+      buyerRole,
+      buyerJob: trailingJob
+        ? trailingJob.replace(/^./, (character) => character.toLocaleLowerCase())
+        : "evaluate the offer against the team's operating priorities and next decision"
+    };
+  }
   return (
     roleDefinitions.find(({ pattern }) => pattern.test(label))?.definition ?? {
       family: "business",
@@ -398,7 +474,8 @@ function sellerAuthorityProvenance(seller: BrandProfile): AudienceCandidateProve
     summary: official
       ? `${seller.companyName} is the seller and owns the offer and page brand`
       : "Seller identity is present, but public seller evidence is sparse",
-    confidence: official ? profileConfidence(seller) : 0.3
+    confidence: official ? profileConfidence(seller) : 0.3,
+    statementType: "fact"
   };
 }
 
@@ -430,7 +507,7 @@ function rankedEvidence(
         ((left.index - candidateIndex + evidence.length) % Math.max(evidence.length, 1)) -
           ((right.index - candidateIndex + evidence.length) % Math.max(evidence.length, 1))
     )[0];
-  return ranked && ranked.score > 0 ? ranked.item : undefined;
+  return ranked && ranked.score >= 2 ? ranked.item : undefined;
 }
 
 function evidenceProvenance(evidence: UsableEvidence): AudienceCandidateProvenance {
@@ -440,7 +517,8 @@ function evidenceProvenance(evidence: UsableEvidence): AudienceCandidateProvenan
     kind: "public-evidence",
     sourceUrl: evidence.sourceUrl,
     summary: cleanText(evidence.text, 140),
-    confidence: evidence.confidence
+    confidence: evidence.confidence,
+    statementType: "fact"
   };
 }
 
@@ -543,7 +621,10 @@ export function buildAudienceRecommendations(
     promotedOffer: input.offerLabel,
     objective: "Evaluate the next step"
   });
-  const options = distinctRoleOptions(suggestions);
+  const options = distinctRoleOptions([
+    ...evidenceAudienceLabels(contextEvidence),
+    ...suggestions
+  ]);
   const offerLabel =
     cleanText(input.offerLabel ?? narrativeProfileFor(input.seller).offerLabel, 96) ||
     `${input.seller.companyName}'s offering`;
@@ -587,7 +668,10 @@ export function buildAudienceRecommendations(
       confidence,
       confidenceBand: band,
       recommendationKind:
-        evidence && band !== "hypothesis" && authorityProvenance.kind !== "deterministic-fallback"
+        evidence &&
+        band !== "hypothesis" &&
+        authorityProvenance.kind !== "deterministic-fallback" &&
+        isSpecificAudienceLabel(label)
           ? "evidence-backed"
           : "fallback",
       provenance,
@@ -603,7 +687,12 @@ export function buildAudienceRecommendations(
             targetContext: {
               accountName: input.target.companyName,
               accountDomain: input.target.domain,
-              evidenceRefs: targetEvidence.map(({ id }) => id)
+              evidenceRefs: targetEvidence.map(({ id }) => id),
+              facts: targetEvidence.map((item) => ({
+                evidenceRef: item.id,
+                statement: cleanText(item.text, 140)
+              })),
+              inference: `These public target facts may make ${role.buyerRole} relevant while evaluating ${offerLabel}.`
             }
           }
         : {})
@@ -622,10 +711,15 @@ export function buildAudienceRecommendations(
       candidate.provenance.map(({ evidenceRef }) => evidenceRef)
     ))
   ];
+  const visibleCandidates = tuple.filter(
+    ({ recommendationKind }) => recommendationKind === "evidence-backed"
+  );
+  const hasCredibleChoices = visibleCandidates.length >= 2;
   const complete =
     input.seller.source !== "fallback" &&
     contextEvidence.length > 0 &&
-    (input.route === "generic-campaign" || targetContextAvailable);
+    (input.route === "generic-campaign" || targetContextAvailable) &&
+    hasCredibleChoices;
 
   return {
     worker: "audience-strategist",
@@ -640,6 +734,14 @@ export function buildAudienceRecommendations(
         sellerName: input.seller.companyName,
         sellerDomain: input.seller.domain,
         targetUse
+      },
+      presentation: {
+        mode: hasCredibleChoices ? "recommendations" : "freeform-with-url",
+        candidateIds: hasCredibleChoices
+          ? visibleCandidates.map(({ id }) => id)
+          : [],
+        showFreeform: true,
+        showSourceUrl: true
       }
     },
     evidenceRefs,

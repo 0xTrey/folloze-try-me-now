@@ -1,11 +1,17 @@
 import type { PreviewWorkerKind } from "./worker-types";
 import type { SessionAnswers, UseCase } from "@/lib/types";
+import {
+  buildResearchQueryPlanV2,
+  type ResearchQueryPlanV2
+} from "./research-query-plan-v2";
 
 export type ResearchAuthorityRole = "seller" | "target" | "source";
 
 export interface StabilizedResearchJob {
   worker: PreviewWorkerKind;
   role: ResearchAuthorityRole;
+  sessionId?: string;
+  revision?: number;
   /** Stable key for single-flight dedupe (domain or URL). */
   key: string;
   reason:
@@ -21,20 +27,31 @@ export interface EarlyResearchPlan {
   jobs: StabilizedResearchJob[];
   sellerAuthorityKey: string;
   targetEvidenceKey?: string;
+  queryPlan?: ResearchQueryPlanV2;
   generationEligible: boolean;
   /** True when a target job is planned without mutating seller authority. */
   sellerAuthorityPreserved: boolean;
+  deadlineAt?: number;
+  fallbackCode?: "research_attempt_deadline_elapsed";
 }
 
 export interface PlanEarlyResearchInput {
+  sessionId?: string;
+  revision?: number;
   useCase: UseCase;
   companyDomain: string;
+  companyName?: string;
+  officialNavigationTerms?: readonly string[];
   answers: Pick<
     SessionAnswers,
     "targetDomain" | "sourceUrl" | "offerSourceUrl" | "audience" | "objective" | "campaignType" | "promotedOffer" | "eventSource" | "sourceName" | "messageBelief"
   >;
   /** Skip jobs whose artifacts are already present for the same key. */
   completedKeys?: Iterable<string>;
+  /** Current coordinator time for deterministic deadline tests. */
+  nowMs?: number;
+  /** Shared attempt cutoff. No new jobs are planned at or after this time. */
+  attemptDeadlineAt?: number;
 }
 
 const SELLER_BRAND_TIMEOUT_MS = 25_000;
@@ -69,7 +86,14 @@ export function isMaterialBriefEligible(
 
 function normalizeStabilizedDomain(value: string | undefined): string | undefined {
   if (!value) return undefined;
-  const trimmed = value.trim().toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
+  const raw = value.trim().toLowerCase();
+  let trimmed = raw;
+  try {
+    trimmed = new URL(raw.includes("://") ? raw : `https://${raw}`).hostname;
+  } catch {
+    return undefined;
+  }
+  trimmed = trimmed.replace(/^www\./, "").replace(/\.$/, "");
   if (!trimmed || trimmed.includes(" ") || !trimmed.includes(".")) return undefined;
   return trimmed;
 }
@@ -96,14 +120,31 @@ export function planEarlyResearch(input: PlanEarlyResearchInput): EarlyResearchP
   );
   const sellerAuthorityKey = normalizeStabilizedDomain(input.companyDomain) ?? "";
   const jobs: StabilizedResearchJob[] = [];
+  const nowMs = input.nowMs;
+  const deadlineAt = input.attemptDeadlineAt;
+  const canStartWork =
+    nowMs === undefined || deadlineAt === undefined || nowMs < deadlineAt;
+  const boundedTimeout = (timeoutMs: number) =>
+    nowMs !== undefined && deadlineAt !== undefined
+      ? Math.max(0, Math.min(timeoutMs, deadlineAt - nowMs))
+      : timeoutMs;
+  const jobContext =
+    input.sessionId && input.revision !== undefined
+      ? { sessionId: input.sessionId, revision: input.revision }
+      : {};
 
-  if (sellerAuthorityKey && !completed.has(`seller:${sellerAuthorityKey}`)) {
+  if (
+    canStartWork &&
+    sellerAuthorityKey &&
+    !completed.has(`seller:${sellerAuthorityKey}`)
+  ) {
     jobs.push({
+      ...jobContext,
       worker: "brand-enrichment",
       role: "seller",
       key: sellerAuthorityKey,
       reason: "seller_domain_stabilized",
-      timeoutMs: SELLER_BRAND_TIMEOUT_MS
+      timeoutMs: boundedTimeout(SELLER_BRAND_TIMEOUT_MS)
     });
   }
 
@@ -111,13 +152,18 @@ export function planEarlyResearch(input: PlanEarlyResearchInput): EarlyResearchP
     input.useCase === "abm"
       ? normalizeStabilizedDomain(input.answers.targetDomain)
       : undefined;
-  if (targetEvidenceKey && !completed.has(`target:${targetEvidenceKey}`)) {
+  if (
+    canStartWork &&
+    targetEvidenceKey &&
+    !completed.has(`target:${targetEvidenceKey}`)
+  ) {
     jobs.push({
+      ...jobContext,
       worker: "account-research",
       role: "target",
       key: targetEvidenceKey,
       reason: "target_domain_stabilized",
-      timeoutMs: TARGET_ACCOUNT_TIMEOUT_MS
+      timeoutMs: boundedTimeout(TARGET_ACCOUNT_TIMEOUT_MS)
     });
   }
 
@@ -130,15 +176,36 @@ export function planEarlyResearch(input: PlanEarlyResearchInput): EarlyResearchP
       ? normalizeStabilizedUrl(input.answers.sourceUrl)
       : undefined;
   const activeSourceUrl = offerSourceUrl ?? sourceUrl;
-  if (activeSourceUrl && !completed.has(`source:${activeSourceUrl}`)) {
+  if (
+    canStartWork &&
+    activeSourceUrl &&
+    !completed.has(`source:${activeSourceUrl}`)
+  ) {
     jobs.push({
+      ...jobContext,
       worker: "source-intelligence",
       role: "source",
       key: activeSourceUrl,
       reason: offerSourceUrl ? "offer_source_url_stabilized" : "source_url_stabilized",
-      timeoutMs: SOURCE_INTELLIGENCE_TIMEOUT_MS
+      timeoutMs: boundedTimeout(SOURCE_INTELLIGENCE_TIMEOUT_MS)
     });
   }
+
+  const queryPlan =
+    sellerAuthorityKey &&
+    input.sessionId &&
+    input.revision !== undefined
+      ? buildResearchQueryPlanV2({
+          sessionId: input.sessionId,
+          revision: input.revision,
+          sellerDomain: sellerAuthorityKey,
+          companyName: input.companyName,
+          officialNavigationTerms: input.officialNavigationTerms,
+          sourceUrls: activeSourceUrl ? [activeSourceUrl] : [],
+          targetDomain:
+            input.useCase === "abm" ? targetEvidenceKey : undefined
+        })
+      : undefined;
 
   // Target evidence is a separate lane. It may share a domain string with the
   // seller, but it never claims the seller brand-enrichment worker.
@@ -151,14 +218,21 @@ export function planEarlyResearch(input: PlanEarlyResearchInput): EarlyResearchP
     jobs,
     sellerAuthorityKey,
     ...(targetEvidenceKey ? { targetEvidenceKey } : {}),
+    ...(queryPlan ? { queryPlan } : {}),
     generationEligible: isMaterialBriefEligible(input.useCase, input.answers),
-    sellerAuthorityPreserved
+    sellerAuthorityPreserved,
+    ...(deadlineAt !== undefined ? { deadlineAt } : {}),
+    ...(!canStartWork ? { fallbackCode: "research_attempt_deadline_elapsed" as const } : {})
   };
 }
 
 /** Single-flight key for a planned research job. */
 export function researchFlightKey(job: StabilizedResearchJob): string {
-  return `${job.role}:${job.key}`;
+  const scope =
+    job.sessionId && job.revision !== undefined
+      ? `${job.sessionId}:${job.revision}:`
+      : "";
+  return `${scope}${job.role}:${job.key}`;
 }
 
 /** Deduplicate planned jobs that share the same flight key. */

@@ -10,8 +10,12 @@ import {
 describe("planEarlyResearch", () => {
   it("starts seller brand work from a normalized valid domain before confirmation", () => {
     const plan = planEarlyResearch({
+      sessionId: "session-stable-domain",
+      revision: 4,
       useCase: "campaign",
       companyDomain: "ServiceTitan.com",
+      companyName: "ServiceTitan",
+      officialNavigationTerms: ["Industries", "Products", "Webinars"],
       answers: {}
     });
 
@@ -25,6 +29,25 @@ describe("planEarlyResearch", () => {
         reason: "seller_domain_stabilized"
       })
     ]);
+    expect(plan.queryPlan).toMatchObject({
+      sessionId: "session-stable-domain",
+      revision: 4,
+      sellerDomain: "servicetitan.com"
+    });
+    expect([
+      ...plan.queryPlan!.sellerQueries,
+      ...plan.queryPlan!.offerQueries,
+      ...plan.queryPlan!.audienceQueries,
+      ...plan.queryPlan!.proofQueries
+    ].map(({ intent }) => intent)).toEqual(expect.arrayContaining([
+      "company_positioning",
+      "official_products",
+      "official_solutions",
+      "official_industries",
+      "events_and_resources",
+      "buyer_roles_and_jobs",
+      "proof_and_demonstrations"
+    ]));
   });
 
   it("plans separate target evidence without replacing seller authority", () => {
@@ -76,6 +99,62 @@ describe("planEarlyResearch", () => {
       "source:https://folloze.com/product"
     ]);
     expect(duplicated).toHaveLength(2);
+  });
+
+  it("scopes single-flight dedupe to session and revision", () => {
+    const current = planEarlyResearch({
+      sessionId: "session-flight",
+      revision: 8,
+      useCase: "campaign",
+      companyDomain: "example.com",
+      answers: {}
+    }).jobs[0]!;
+    const duplicate = { ...current };
+    const newer = { ...current, revision: 9 };
+
+    expect(dedupeResearchJobs([current, duplicate, newer])).toEqual([
+      current,
+      newer
+    ]);
+    expect(researchFlightKey(current)).toBe(
+      "session-flight:8:seller:example.com"
+    );
+    expect(researchFlightKey(newer)).toBe(
+      "session-flight:9:seller:example.com"
+    );
+  });
+
+  it("bounds every lane by the shared attempt deadline and starts no work after cutoff", () => {
+    const bounded = planEarlyResearch({
+      sessionId: "session-deadline",
+      revision: 2,
+      useCase: "abm",
+      companyDomain: "seller.example",
+      answers: {
+        targetDomain: "target.example",
+        sourceUrl: "https://seller.example/product"
+      },
+      nowMs: 50_000,
+      attemptDeadlineAt: 53_500
+    });
+
+    expect(bounded.jobs).toHaveLength(3);
+    expect(bounded.jobs.every(({ timeoutMs }) => timeoutMs === 3_500)).toBe(true);
+    expect(bounded.deadlineAt).toBe(53_500);
+
+    const expired = planEarlyResearch({
+      sessionId: "session-deadline",
+      revision: 2,
+      useCase: "campaign",
+      companyDomain: "seller.example",
+      answers: {},
+      nowMs: 60_000,
+      attemptDeadlineAt: 60_000
+    });
+
+    expect(expired.jobs).toEqual([]);
+    expect(expired.fallbackCode).toBe("research_attempt_deadline_elapsed");
+    expect(expired.queryPlan?.sellerQueries.length).toBeGreaterThan(0);
   });
 
   it("marks generation eligible only after the material brief is complete", () => {

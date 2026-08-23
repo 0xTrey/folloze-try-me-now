@@ -60,13 +60,13 @@ describe("audience recommendation strategy", () => {
       evidenceItems: [
         evidence({
           id: "seller-integration",
-          text: "Application integration and API management",
+          text: "Integration and automation leaders governing application integration and API management",
           sourceUrl: "https://jitterbit.com/platform",
           entityRole: "seller"
         }),
         evidence({
           id: "seller-workflows",
-          text: "Workflow automation across business processes",
+          text: "Application operations teams automating workflows across business processes",
           sourceUrl: "https://jitterbit.com/automation",
           entityRole: "seller",
           confidence: "medium"
@@ -89,7 +89,6 @@ describe("audience recommendation strategy", () => {
         (candidate) =>
           candidate.buyerJob.length > 20 &&
           candidate.rationale.length > 40 &&
-          candidate.recommendationKind === "evidence-backed" &&
           candidate.provenance.length > 0 &&
           candidate.provenance.every(({ evidenceRef, confidence }) =>
             Boolean(evidenceRef) && confidence > 0
@@ -100,6 +99,12 @@ describe("audience recommendation strategy", () => {
           !candidate.targetContext
       )
     ).toBe(true);
+    expect(
+      artifact.value?.candidates.filter(
+        ({ recommendationKind }) => recommendationKind === "evidence-backed"
+      ).length
+    ).toBeGreaterThanOrEqual(2);
+    expect(artifact.value?.presentation.mode).toBe("recommendations");
   });
 
   it("uses a named account only as sourced ABM context under seller authority", () => {
@@ -121,13 +126,13 @@ describe("audience recommendation strategy", () => {
       evidenceItems: [
         evidence({
           id: "target-network",
-          text: "Secure networking and cloud operations",
+          text: "Network and infrastructure leaders securing cloud operations",
           sourceUrl: "https://cisco.com/solutions",
           entityRole: "target"
         }),
         evidence({
           id: "target-resilience",
-          text: "Digital resilience across infrastructure",
+          text: "Security operations teams improving digital resilience across infrastructure",
           sourceUrl: "https://cisco.com/security",
           entityRole: "target",
           confidence: "medium"
@@ -158,6 +163,10 @@ describe("audience recommendation strategy", () => {
           candidate.authority.targetUse === "abm-context-only" &&
           candidate.targetContext?.accountName === "Cisco" &&
           candidate.targetContext.evidenceRefs.includes("target-network") &&
+          candidate.targetContext.facts.some(
+            ({ evidenceRef }) => evidenceRef === "target-network"
+          ) &&
+          candidate.targetContext.inference.startsWith("These public target facts may") &&
           candidate.rationale.includes("Jitterbit remains the offer and page authority") &&
           candidate.provenance
             .filter(({ entityRole }) => entityRole === "target")
@@ -200,6 +209,12 @@ describe("audience recommendation strategy", () => {
           candidate.provenance.every(({ kind }) => kind === "deterministic-fallback")
       )
     ).toBe(true);
+    expect(artifact.value?.presentation).toEqual({
+      mode: "freeform-with-url",
+      candidateIds: [],
+      showFreeform: true,
+      showSourceUrl: true
+    });
   });
 
   it("dedupes near-identical options before selecting alternatives", () => {
@@ -215,6 +230,113 @@ describe("audience recommendation strategy", () => {
       "Security and governance leaders",
       "Executive sponsors"
     ]);
+  });
+
+  it.each([
+    [
+      "ADP-like",
+      [
+        "Payroll administrators managing multi-state payroll compliance",
+        "HR leaders improving workforce planning and talent decisions",
+        "Finance leaders evaluating labor cost visibility"
+      ]
+    ],
+    [
+      "Thermo Fisher-like",
+      [
+        "Laboratory operations leaders standardizing sample throughput",
+        "Mass spectrometry scientists evaluating analytical sensitivity",
+        "Quality managers governing validated laboratory workflows"
+      ]
+    ],
+    [
+      "ServiceTitan-like",
+      [
+        "Field service dispatch managers improving technician utilization",
+        "Contact center leaders increasing booking consistency",
+        "Marketing leaders measuring campaign-to-job revenue"
+      ]
+    ]
+  ])(
+    "derives deterministic company-specific personas for %s evidence",
+    (_fixture, roleStatements) => {
+      const fixtureSeller = profile({
+        domain: "seller.example",
+        companyName: "Fixture Seller",
+        description: roleStatements.join(". "),
+        publicTopics: roleStatements
+      });
+      const build = () => buildAudienceRecommendations({
+        sessionId: "persona-fixture",
+        revision: 14,
+        activeRevision: 14,
+        route: "generic-campaign",
+        seller: fixtureSeller,
+        offerLabel: "Official offer",
+        evidenceItems: roleStatements.map((text, index) => evidence({
+          id: `role-${index}`,
+          text,
+          sourceUrl: `https://seller.example/solutions/${index}`,
+          entityRole: "seller"
+        })),
+        generatedAt
+      });
+
+      expect(build()).toEqual(build());
+      expect(build().status).toBe("complete");
+      expect(build().value?.presentation.mode).toBe("recommendations");
+      expect(build().value?.candidates.map(({ buyerRole }) => buyerRole)).toEqual(
+        roleStatements.map((statement) =>
+          statement.match(
+            /^(.+?(?:leaders?|managers?|directors?|administrators?|scientists?|owners?|architects?|executives?|officers?|teams?))\b/i
+          )?.[1]
+        )
+      );
+      expect(
+        build().value?.candidates.every(
+          ({ buyerJob }) => buyerJob.length > 8
+        )
+      ).toBe(true);
+      expect(
+        build().value?.candidates.every(
+          ({ recommendationKind }) => recommendationKind === "evidence-backed"
+        )
+      ).toBe(true);
+    }
+  );
+
+  it("suppresses generic taxonomy choices when fewer than two specific personas pass", () => {
+    const genericSeller = profile({
+      domain: "generic.example",
+      companyName: "Generic",
+      description: "Business transformation and operations",
+      publicTopics: ["Business transformation", "Operations"]
+    });
+    const artifact = buildAudienceRecommendations({
+      sessionId: "generic-taxonomy",
+      revision: 15,
+      activeRevision: 15,
+      route: "generic-campaign",
+      seller: genericSeller,
+      evidenceItems: [
+        evidence({
+          id: "generic-operations",
+          text: "Operations teams",
+          sourceUrl: "https://generic.example/solutions",
+          entityRole: "seller"
+        })
+      ],
+      generatedAt
+    });
+
+    expect(artifact.status).toBe("fallback");
+    expect(artifact.value?.presentation.mode).toBe("freeform-with-url");
+    expect(artifact.value?.presentation.candidateIds).toEqual([]);
+    expect(
+      artifact.value?.candidates.every(
+        ({ recommendationKind }) => recommendationKind === "fallback"
+      )
+    ).toBe(true);
   });
 });
 

@@ -62,6 +62,12 @@ describe("rankOfferRecommendations", () => {
     ).toBe(true);
     expect(result.candidates.filter(({ recommended }) => recommended)).toHaveLength(1);
     expect(result.recommendedId).toBe(result.candidates[0].id);
+    expect(result.presentation).toEqual({
+      mode: "recommendations",
+      candidateIds: result.candidates.map(({ id }) => id),
+      showFreeform: true,
+      showSourceUrl: true
+    });
     expect(result.candidates[0].reasonCodes).toEqual(
       expect.arrayContaining(["homepage_discovery", "motion_match"])
     );
@@ -243,7 +249,16 @@ describe("rankOfferRecommendations", () => {
     ).toBe(true);
     expect(result.candidates.some(({ label }) => label.includes("Unverified"))).toBe(false);
     expect(result.evidenceRefs).toEqual([]);
-    expect(result.reasonCodes).toEqual(["weak_evidence_fallback"]);
+    expect(result.reasonCodes).toEqual([
+      "weak_evidence_fallback",
+      "insufficient_specific_evidence"
+    ]);
+    expect(result.presentation).toEqual({
+      mode: "freeform-with-url",
+      candidateIds: [],
+      showFreeform: true,
+      showSourceUrl: true
+    });
   });
 
   it("uses the webinar subtype to rank webinar evidence above generic event evidence", () => {
@@ -280,5 +295,83 @@ describe("rankOfferRecommendations", () => {
       label: "Webinar overview",
       source: "fallback"
     });
+  });
+
+  it.each([
+    [
+      "ADP-like",
+      ["RUN Powered Payroll", "Workforce Now", "DataCloud Benchmarking"]
+    ],
+    [
+      "Thermo Fisher-like",
+      ["Orbitrap Astral Mass Spectrometer", "QuantStudio PCR Systems", "Chromeleon CDS"]
+    ],
+    [
+      "ServiceTitan-like",
+      ["Dispatch Pro", "Contact Center Pro", "Marketing Pro"]
+    ]
+  ])(
+    "keeps deterministic company-specific %s offers without domain rules",
+    (_fixture, labels) => {
+      const build = () => rankOfferRecommendations({
+        revision: 12,
+        motion: "product",
+        evidence: labels.map((label, index) => evidence({
+          ref: `official:${index}`,
+          label,
+          kind: "product",
+          source: "official-page",
+          sourceUrl: `https://seller.example/products/${index}`,
+          confidence: 0.9 - index * 0.05
+        }))
+      });
+
+      expect(build()).toEqual(build());
+      expect(build().status).toBe("complete");
+      expect(build().candidates.map(({ label }) => label)).toEqual(labels);
+      expect(build().presentation.mode).toBe("recommendations");
+    }
+  );
+
+  it("keeps generic taxonomy internal and requires two credible choices", () => {
+    const result = rankOfferRecommendations({
+      revision: 13,
+      motion: "solution",
+      evidence: [
+        evidence({
+          ref: "generic:overview",
+          label: "Solution overview",
+          kind: "solution",
+          source: "official-page",
+          confidence: 0.99
+        }),
+        evidence({
+          ref: "specific:one",
+          label: "Connected Payroll Compliance",
+          kind: "solution",
+          source: "official-page",
+          confidence: 0.91
+        })
+      ]
+    });
+
+    expect(result.status).toBe("fallback");
+    expect(result.presentation).toEqual({
+      mode: "freeform-with-url",
+      candidateIds: [],
+      showFreeform: true,
+      showSourceUrl: true
+    });
+    expect(
+      result.candidates.find(({ label }) => label === "Solution overview")
+    ).toMatchObject({
+      recommendationKind: "fallback",
+      reasonCodes: expect.arrayContaining(["generic_taxonomy_suppressed"])
+    });
+    expect(
+      result.candidates.filter(
+        ({ recommendationKind }) => recommendationKind === "evidence-backed"
+      )
+    ).toHaveLength(1);
   });
 });

@@ -25,6 +25,8 @@ export type OfferRecommendationReasonCode =
   | "high_confidence_evidence"
   | "medium_confidence_evidence"
   | "duplicate_evidence_merged"
+  | "generic_taxonomy_suppressed"
+  | "insufficient_specific_evidence"
   | "weak_evidence_fallback";
 
 /**
@@ -84,6 +86,12 @@ export interface OfferRecommendationSet {
   reasonCodes: OfferRecommendationReasonCode[];
   evidenceRefs: string[];
   confidence: number;
+  presentation: {
+    mode: "recommendations" | "freeform-with-url";
+    candidateIds: string[];
+    showFreeform: true;
+    showSourceUrl: true;
+  };
 }
 
 type OfferCandidateDraft = Omit<
@@ -99,7 +107,7 @@ interface RankedEvidenceGroup {
   reasonCodes: OfferRecommendationReasonCode[];
 }
 
-const MIN_SUPPORTED_CONFIDENCE = 0.35;
+const MIN_SUPPORTED_CONFIDENCE = 0.58;
 
 const sourceScores: Record<OfferEvidenceSource, number> = {
   "visitor-input": 400,
@@ -129,6 +137,47 @@ function dedupeKey(value: string): string {
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+}
+
+const genericOfferTokens = new Set([
+  "agenda",
+  "audience",
+  "business",
+  "evaluation",
+  "event",
+  "general",
+  "industry",
+  "overview",
+  "platform",
+  "priorities",
+  "product",
+  "questions",
+  "services",
+  "solution",
+  "topic",
+  "use",
+  "uses",
+  "webinar"
+]);
+
+function isCompanySpecificOfferLabel(value: string): boolean {
+  const key = dedupeKey(value);
+  if (!key) return false;
+  const tokens = key.split(/\s+/).filter(Boolean);
+  if (tokens.every((token) => genericOfferTokens.has(token))) return false;
+  return !/^(?:product|solution|industry|event|webinar)(?:\s+(?:overview|agenda|priorities|use cases|evaluation questions|audience questions))?$/i.test(
+    key
+  );
+}
+
+function isEvidenceBackedOffer(
+  evidence: ExtractedOfferEvidence
+): boolean {
+  return (
+    evidence.source !== "visitor-input" &&
+    evidence.confidence >= MIN_SUPPORTED_CONFIDENCE &&
+    isCompanySpecificOfferLabel(evidence.label)
+  );
 }
 
 function clampConfidence(value: number): number {
@@ -312,9 +361,15 @@ export function rankOfferRecommendations(
       Boolean(canonicalUrl(input.suppliedUrl))
         ? ("supplied-url" as const)
         : group.best.source,
-    recommendationKind:
-      group.best.source === "visitor-input" ? "fallback" as const : "evidence-backed" as const,
-    reasonCodes: group.reasonCodes,
+    recommendationKind: isEvidenceBackedOffer(group.best)
+      ? "evidence-backed" as const
+      : "fallback" as const,
+    reasonCodes: isCompanySpecificOfferLabel(group.best.label)
+      ? group.reasonCodes
+      : [...new Set([
+          ...group.reasonCodes,
+          "generic_taxonomy_suppressed" as const
+        ])],
     evidenceRefs: group.evidenceRefs,
     confidence: group.best.confidence
   }));
@@ -346,7 +401,16 @@ export function rankOfferRecommendations(
     OfferRecommendationCandidate
   ];
   const evidenceRefs = [...new Set(candidates.flatMap((candidate) => candidate.evidenceRefs))];
-  const reasonCodes = [...new Set(candidates.flatMap((candidate) => candidate.reasonCodes))];
+  const visibleCandidates = candidates.filter(
+    ({ recommendationKind }) => recommendationKind === "evidence-backed"
+  );
+  const hasCredibleChoices = visibleCandidates.length >= 2;
+  const reasonCodes = [...new Set([
+    ...candidates.flatMap((candidate) => candidate.reasonCodes),
+    ...(!hasCredibleChoices
+      ? ["insufficient_specific_evidence" as const]
+      : [])
+  ])];
 
   return {
     revision: input.revision,
@@ -354,11 +418,19 @@ export function rankOfferRecommendations(
     ...(input.motion === "event" && input.eventSubtype
       ? { eventSubtype: input.eventSubtype }
       : {}),
-    status: groups.length === 0 ? "fallback" : "complete",
+    status: hasCredibleChoices ? "complete" : "fallback",
     recommendedId: candidates[0].id,
     candidates,
     reasonCodes,
     evidenceRefs,
-    confidence: candidates[0].confidence
+    confidence: candidates[0].confidence,
+    presentation: {
+      mode: hasCredibleChoices ? "recommendations" : "freeform-with-url",
+      candidateIds: hasCredibleChoices
+        ? visibleCandidates.map(({ id }) => id)
+        : [],
+      showFreeform: true,
+      showSourceUrl: true
+    }
   };
 }

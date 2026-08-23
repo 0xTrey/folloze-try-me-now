@@ -19,12 +19,140 @@ import type {
   WorkerKind
 } from "@/lib/orchestration/worker-types";
 import type { CtaType } from "@/lib/types";
+import {
+  reconcileEvidenceRecordsV2,
+  type EvidenceRecordV2
+} from "@/lib/orchestration/research-query-plan-v2";
 
 import type { CompanyResearchBrief } from "./company-research";
 import type {
   OfferEvidenceKind,
   OfferRecommendationSet
 } from "./offer-recommendations";
+
+export interface ResearchInferenceV2 {
+  id: string;
+  revision: number;
+  subject: "seller" | "target";
+  statement: string;
+  evidenceRefs: string[];
+  confidence: number;
+  observedAt: string;
+}
+
+export interface ReconciledResearchEvidenceV2 {
+  revision: number;
+  facts: EvidenceRecordV2[];
+  sellerFacts: EvidenceRecordV2[];
+  targetFacts: EvidenceRecordV2[];
+  thirdPartyContext: EvidenceRecordV2[];
+  inferences: ResearchInferenceV2[];
+  rejectedIds: string[];
+}
+
+export interface ReconcileResearchEvidenceV2Input {
+  revision: number;
+  family: "launch" | "guide" | "align";
+  records: readonly EvidenceRecordV2[];
+  inferences?: readonly ResearchInferenceV2[];
+}
+
+function validResearchRecord(
+  record: EvidenceRecordV2,
+  family: ReconcileResearchEvidenceV2Input["family"]
+): boolean {
+  if (record.sourceAuthority === "target_official") {
+    return family === "align" && record.kind === "target_fact";
+  }
+  if (record.kind === "target_fact") return false;
+  if (record.sourceAuthority === "third_party") {
+    return record.kind === "third_party_context";
+  }
+  return true;
+}
+
+/**
+ * Applies the V2 authority order while preserving target observations as facts
+ * and all derived relevance statements as separate inferences.
+ */
+export function reconcileResearchEvidenceV2(
+  input: ReconcileResearchEvidenceV2Input
+): ReconciledResearchEvidenceV2 {
+  const current = input.records.filter(
+    (record) =>
+      record.revision === input.revision &&
+      validResearchRecord(record, input.family)
+  );
+  const targetFacts = reconcileEvidenceRecordsV2(
+    current.filter((record) => record.kind === "target_fact"),
+    input.revision
+  );
+  const sellerAndContextFacts = reconcileEvidenceRecordsV2(
+    current.filter((record) => record.kind !== "target_fact"),
+    input.revision
+  );
+  const facts = [...sellerAndContextFacts, ...targetFacts].sort((left, right) =>
+    left.id.localeCompare(right.id)
+  );
+  const factIds = new Set(facts.map(({ id }) => id));
+  const targetFactIds = new Set(targetFacts.map(({ id }) => id));
+  const inferences = [...(input.inferences ?? [])]
+    .filter((inference) => {
+      if (
+        inference.revision !== input.revision ||
+        !inference.id.trim() ||
+        inference.statement.replace(/\s+/g, " ").trim().length < 3
+      ) {
+        return false;
+      }
+      const evidenceRefs = inference.evidenceRefs.filter((id) => factIds.has(id));
+      if (evidenceRefs.length === 0) return false;
+      if (inference.subject === "target") {
+        return (
+          input.family === "align" &&
+          evidenceRefs.some((id) => targetFactIds.has(id))
+        );
+      }
+      return true;
+    })
+    .map((inference) => ({
+      ...inference,
+      statement: inference.statement.replace(/\s+/g, " ").trim(),
+      evidenceRefs: [...new Set(
+        inference.evidenceRefs.filter((id) => factIds.has(id))
+      )].sort(),
+      confidence: boundedConfidence(inference.confidence)
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .filter(
+      (inference, index, values) =>
+        index === 0 || inference.id !== values[index - 1]?.id
+    );
+  const acceptedIds = new Set([
+    ...facts.map(({ id }) => id),
+    ...inferences.map(({ id }) => id)
+  ]);
+  const rejectedIds = [
+    ...new Set([
+      ...input.records.map(({ id }) => id),
+      ...(input.inferences ?? []).map(({ id }) => id)
+    ].filter((id) => !acceptedIds.has(id)))
+  ].sort();
+
+  return {
+    revision: input.revision,
+    facts,
+    sellerFacts: sellerAndContextFacts.filter(
+      (record) => record.kind !== "third_party_context"
+    ),
+    targetFacts,
+    thirdPartyContext: sellerAndContextFacts.filter(
+      (record) => record.kind === "third_party_context"
+    ),
+    inferences,
+    rejectedIds
+  };
+}
 
 export const materialLiveBriefFields = [
   "companyName",
