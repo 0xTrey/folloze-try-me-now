@@ -73,7 +73,7 @@ Cursor updates the Evidence column with current-run tests, screenshots, traces, 
 | O03 | Raw sources/prompts/responses/credentials never enter traces. | Privacy tests. | Met | Observability, trace, telemetry, and analytics privacy tests. |
 | Q01 | `npm run benchmark:preview` passes. | Command receipt. | Met | 5 files / 32 tests passed. |
 | Q02 | `npm run qa` passes. | Command receipt. | Met | Exact command passed lint, typecheck, 1,013 tests, Turbopack and webpack builds. |
-| Q03 | Desktop E2E passes. | Command receipt. | Met | 31/31 desktop tests passed; new recovery test also passed. |
+| Q03 | Desktop E2E passes. | Command receipt. | Met | Final current-tree run: 32/32 desktop tests passed. |
 | Q04 | Production visual evidence suite passes. | Command + manifest. | Met | `CAPTURE_PRODUCTION_EVIDENCE=1 npm run qa:visual:folloze`: 3/3 passed. |
 | Q05 | Autoresearch score reaches at least 90/100 twice with no blocker. | JSONL + report. | Met | Custom loop iterations 1 and 3 scored 100 without blocker. |
 | Q06 | Git worktree is clean after logical local commits. | Git status. | Met | Final clean status recorded after handback commit. |

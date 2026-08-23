@@ -20,7 +20,8 @@ remain inside the existing session/orchestration lifecycle.
 - `f0e2f10` — add privacy-safe production receipts.
 - `385249d` — route production through Launch, Guide, and Align.
 - `ab65973` — prove the production system with autoresearch and browser evidence.
-- Final documentation/acceptance commit — this handback and the completed matrix.
+- `f9e712c` — complete this handback and the acceptance matrix.
+- `9ba2243` — refresh evidence from the final desktop run.
 
 ## Files and contracts
 
@@ -49,7 +50,7 @@ remain inside the existing session/orchestration lifecycle.
   - unit/integration: 112 files, 1,013 tests passed;
   - Turbopack production build: passed;
   - webpack production build: passed.
-- `npm run test:e2e -- --project=desktop` — 31/31 passed.
+- `npm run test:e2e -- --project=desktop` — 32/32 passed.
 - Brand-help seller-URL resume browser test — passed.
 - `CAPTURE_PRODUCTION_EVIDENCE=1 npm run qa:visual:folloze` — 3/3 passed.
 
@@ -101,7 +102,7 @@ remain inside the existing session/orchestration lifecycle.
 STATUS: READY_FOR_CODEX_QA
 OBJECTIVE: Launch, Guide, and Align are the only V2 production families.
 FILES: Contracts, research, brand, copy, orchestration, telemetry, UI recovery, QA, and handback updated.
-TESTS: npm run qa passed; benchmark 32/32; desktop E2E 31/31; visual acceptance 3/3.
+TESTS: npm run qa passed; benchmark 32/32; desktop E2E 32/32; visual acceptance 3/3.
 EVIDENCE: Four committed desktop fixture pairs plus manifest and autoresearch report.
 CONTRACT: ExperienceSpecV2 carries a hidden evidence-bound WireframeDecisionV2 through the existing renderer adapter.
 AUTORESEARCH: custom target improved from 43/100 to 100/100 with no blocker across a five-iteration bounded loop.
