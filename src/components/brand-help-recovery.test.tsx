@@ -9,6 +9,7 @@ import {
   BrandHelpRecovery,
   type BrandHelpFileKind
 } from "./brand-help-recovery";
+import { BrandHelpRecoveryPanel } from "./try-me-now-app";
 
 afterEach(() => {
   cleanup();
@@ -17,7 +18,36 @@ afterEach(() => {
 const approvedPrompt =
   "We found the company, but we need a clearer brand source. Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed.";
 
+const urlOnlyPrompt =
+  "We found the company, but we need a clearer brand source. Add a more specific official page URL, and we will continue from the research already completed.";
+
 describe("BrandHelpRecovery", () => {
+  it("keeps the live recovery path URL-only and resumes through the session patch callback", () => {
+    const onPatch = vi.fn().mockResolvedValue(undefined);
+    render(
+      <BrandHelpRecoveryPanel
+        isSaving={false}
+        onPatch={onPatch}
+      />
+    );
+
+    expect(screen.getByText(urlOnlyPrompt)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Add a more specific official page URL" })).toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/logo|brand guide|screenshot|upload/i);
+    expect(screen.getByRole("status")).toHaveTextContent("Your earlier research is preserved");
+
+    fireEvent.change(screen.getByLabelText("More specific official page URL"), {
+      target: { value: "https://company.example/products/official-offer" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue with this source" }));
+
+    expect(onPatch).toHaveBeenCalledWith({
+      brandSourceUrl: "https://company.example/products/official-offer"
+    });
+  });
+
   it("accepts a more specific official URL and preserves the research-resume message", () => {
     const onUrlSubmit = vi.fn();
     render(

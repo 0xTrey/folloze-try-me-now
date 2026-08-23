@@ -3156,6 +3156,23 @@ function MobileProcessDialog({ session, onClose }: { session: PublicTryMeSession
   );
 }
 
+export function BrandHelpRecoveryPanel({
+  isSaving,
+  onPatch
+}: {
+  isSaving: boolean;
+  onPatch: (patch: SessionAnswers) => void | Promise<void>;
+}) {
+  return (
+    <BrandHelpRecovery
+      availableKinds={["source_url"]}
+      disabled={isSaving}
+      status={isSaving ? "submitting" : "waiting"}
+      onUrlSubmit={(url) => void onPatch({ brandSourceUrl: url })}
+    />
+  );
+}
+
 export function TryMeNowApp() {
   const interactionReady = true;
   const [useCase, setUseCase] = useState<UseCase>();
@@ -4241,12 +4258,9 @@ export function TryMeNowApp() {
             <div className="guidedWorkspaceInner">
               <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
               {session.status === "brand_help_required" ? (
-                <BrandHelpRecovery
-                  availableKinds={["source_url"]}
-                  disabled={isSaving}
-                  status={isSaving ? "submitting" : "waiting"}
-                  onUrlSubmit={(url) => void patchAnswers({ brandSourceUrl: url })}
-                  onFileSubmit={() => undefined}
+                <BrandHelpRecoveryPanel
+                  isSaving={isSaving}
+                  onPatch={patchAnswers}
                 />
               ) : session.useCase === "campaign" ? (
                 <StreamingBriefComposer

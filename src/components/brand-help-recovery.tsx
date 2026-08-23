@@ -18,13 +18,16 @@ export type BrandHelpRecoveryProps = {
   disabled?: boolean;
   status?: BrandHelpRecoveryStatus;
   onUrlSubmit: (url: string) => void;
-  onFileSubmit: (input: BrandHelpFileInput) => void;
+  onFileSubmit?: (input: BrandHelpFileInput) => void;
 };
 
 export type BrandHelpSourceKind = "source_url" | BrandHelpFileKind;
 
 const approvedPrompt =
   "We found the company, but we need a clearer brand source. Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed.";
+
+const urlOnlyPrompt =
+  "We found the company, but we need a clearer brand source. Add a more specific official page URL, and we will continue from the research already completed.";
 
 const sourceOptions: readonly { kind: BrandHelpSourceKind; label: string }[] = [
   { kind: "source_url", label: "Official page URL" },
@@ -106,11 +109,18 @@ export function BrandHelpRecovery({
   const inputHintId = useId();
   const errorId = useId();
   const visibleStatus = status ?? localStatus;
-  const fileKind = sourceKind === "source_url" ? null : sourceKind;
+  const requestedKinds = availableKinds?.length
+    ? availableKinds
+    : sourceOptions.map((option) => option.kind);
+  const visibleSourceOptions = sourceOptions.filter((option) =>
+    requestedKinds.includes(option.kind) && (option.kind === "source_url" || Boolean(onFileSubmit))
+  );
+  const activeSourceKind = visibleSourceOptions.some((option) => option.kind === sourceKind)
+    ? sourceKind
+    : visibleSourceOptions[0]?.kind ?? "source_url";
+  const fileKind = activeSourceKind === "source_url" ? null : activeSourceKind;
   const selectedFileConfig = fileKind ? fileConfig[fileKind] : null;
-  const visibleSourceOptions = availableKinds?.length
-    ? sourceOptions.filter((option) => availableKinds.includes(option.kind))
-    : sourceOptions;
+  const urlOnly = visibleSourceOptions.length === 1 && visibleSourceOptions[0]?.kind === "source_url";
 
   const chooseSourceKind = (kind: BrandHelpSourceKind) => {
     setSourceKind(kind);
@@ -138,7 +148,7 @@ export function BrandHelpRecovery({
     event.preventDefault();
     setError("");
 
-    if (sourceKind === "source_url") {
+    if (activeSourceKind === "source_url") {
       const trimmedUrl = url.trim();
       if (!isValidOfficialUrl(trimmedUrl)) {
         setError("Enter a full official page URL beginning with http:// or https://.");
@@ -150,13 +160,13 @@ export function BrandHelpRecovery({
       return;
     }
 
-    if (!file || !isAcceptedFile(file, sourceKind)) {
-      setError(`Choose a ${fileConfig[sourceKind].hint} file.`);
+    if (!file || !isAcceptedFile(file, activeSourceKind)) {
+      setError(`Choose a ${fileConfig[activeSourceKind].hint} file.`);
       setLocalStatus("waiting");
       return;
     }
 
-    onFileSubmit({ kind: sourceKind, file });
+    onFileSubmit?.({ kind: activeSourceKind, file });
     setLocalStatus("resuming");
   };
 
@@ -170,29 +180,31 @@ export function BrandHelpRecovery({
       <header className={styles.header}>
         <span><i aria-hidden="true" />Brand source needed</span>
         <h2 id={titleId}>Add a clearer brand source.</h2>
-        <p id={promptId}>{approvedPrompt}</p>
+        <p id={promptId}>{urlOnly ? urlOnlyPrompt : approvedPrompt}</p>
       </header>
 
       <form className={styles.request} onSubmit={submit} noValidate>
         <fieldset disabled={disabled || visibleStatus === "submitting"}>
-          <legend>Choose one brand source</legend>
-          <div className={styles.sourceOptions}>
-            {visibleSourceOptions.map((option) => (
-              <label key={option.kind}>
-                <input
-                  type="radio"
-                  name="brand-help-source"
-                  value={option.kind}
-                  checked={sourceKind === option.kind}
-                  onChange={() => chooseSourceKind(option.kind)}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </div>
+          <legend>{urlOnly ? "Add a more specific official page URL" : "Choose one brand source"}</legend>
+          {!urlOnly && (
+            <div className={styles.sourceOptions}>
+              {visibleSourceOptions.map((option) => (
+                <label key={option.kind}>
+                  <input
+                    type="radio"
+                    name="brand-help-source"
+                    value={option.kind}
+                    checked={activeSourceKind === option.kind}
+                    onChange={() => chooseSourceKind(option.kind)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
 
           <div className={styles.inputArea}>
-            {sourceKind === "source_url" ? (
+            {activeSourceKind === "source_url" ? (
               <>
                 <label htmlFor={`${titleId}-url`}>More specific official page URL</label>
                 <input
@@ -215,7 +227,7 @@ export function BrandHelpRecovery({
               <>
                 <label htmlFor={`${titleId}-file`}>{selectedFileConfig?.label}</label>
                 <input
-                  key={sourceKind}
+                  key={activeSourceKind}
                   ref={fileInputRef}
                   id={`${titleId}-file`}
                   type="file"
@@ -238,7 +250,7 @@ export function BrandHelpRecovery({
             disabled={
               disabled
               || visibleStatus === "submitting"
-              || (sourceKind === "source_url" ? !url.trim() : !file)
+              || (activeSourceKind === "source_url" ? !url.trim() : !file)
             }
           >
             Continue with this source <span aria-hidden="true">→</span>
