@@ -1,111 +1,126 @@
 # Cursor Handback
 
-Status: READY_FOR_CODEX_QA
+Status: DONE_WITH_CONCERNS
 
 ## Objective
 
-Implemented Launch, Guide, and Align as the only V2 backend-selected production
-families. The current-revision family decision now precedes copy writing, carries
-an evidence-bound six-section plan into `ExperienceSpecV2`, and adapts through
-the existing V1 renderer contract. Research, seller-brand compilation,
-family-specific copy, privacy-safe receipts, and explicit brand-help recovery
-remain inside the existing session/orchestration lifecycle.
+Closed Codex repair items R1-R6 on the current branch. The real session engine
+now carries its locked Launch, Guide, or Align decision through a family message
+spine, bounded writers, the compatibility adapter, and rendered customer HTML.
+Official recovery URLs stay authoritative across harvesters, verified aliases
+remain SSRF-safe, the live recovery panel advertises only its working URL action,
+operational receipt statuses normalize explicitly, and visual proof now runs
+through the production engine and brand gate.
 
 ## Commits
 
-- `74c93a1` — establish three-family production contracts.
-- `f973062` — ground production research in reconciled evidence.
-- `99c018f` — enforce family-specific production copy contracts.
-- `48d623b` — make seller brand recovery evidence-aware.
-- `f0e2f10` — add privacy-safe production receipts.
-- `385249d` — route production through Launch, Guide, and Align.
-- `ab65973` — prove the production system with autoresearch and browser evidence.
-- `f9e712c` — complete this handback and the acceptance matrix.
-- `9ba2243` — refresh evidence from the final desktop run.
+- `5695d70` — render family-specific production copy while preserving accepted
+  provider refinement and explicit workspace overrides.
+- `f63a6f9` — preserve official source URLs and verified seller aliases across
+  local and remote brand harvesters.
+- `139c611` — make the live brand recovery interface truthfully URL-only.
+- `89ca9bf` — normalize operational receipt statuses and reject unsafe fields.
+- `16a3354` — replace placeholder evidence with runtime engine/browser proof.
+
+No existing commit was rewritten or discarded.
 
 ## Files and contracts
 
-- Family/section compatibility: `src/lib/generation/three-family-contract.ts`
-  and the V2-to-V1 renderer adapter.
-- Research: deterministic query planning, source authority reconciliation,
-  offer ranking, and evidence-gated audience recommendations.
-- Brand: semantic tokens, asset-purpose selection, verified readiness,
-  needs-input artifacts, same-domain source recovery, and the
-  `BrandHelpRecovery` UI.
-- Copy: family argument order, section evidence contracts, CTA bounds,
-  novelty/swap/claim checks, and bounded factuality repairs.
-- Orchestration/spec: current-revision family artifacts, brand-help terminal
-  state, `WireframeDecisionV2`, and `compositionRecipe.productionFamily`.
-- Observability: privacy-safe worker/family/brand-help projections for traces
-  and product analytics.
-- No legacy session, renderer, analytics, or claim/publication path was removed.
+- Family runtime: `session-production-engine.ts`,
+  `production-message-spine.ts`, writer modules, generic engine, draft adapter,
+  and `experience-template.ts`.
+- Brand authority: `brand-harvester.ts`, orchestrator seller-source validation,
+  and focused canonical/alias/unsafe-URL tests.
+- Recovery UI: `brand-help-recovery.tsx`, its live app panel, and component tests.
+- Receipts: `telemetry-receipt-projection.ts` and full positive/privacy-negative
+  round-trip coverage.
+- Runtime proof: `three-family-runtime-fixture.ts`,
+  `generic-production-visual-evidence.spec.ts`, manifest evaluator, screenshots,
+  manifest, and contract-score report.
+- Acceptance: `acceptance-matrix.md` and this handback.
 
 ## Tests
 
-- `npm run benchmark:preview` — 5 files, 32 tests passed.
-- `npm run qa` — passed:
-  - lint: 0 errors (3 pre-existing warnings in
-    `cloudflare-upload-contract.test.ts`);
+- `npm run benchmark:preview` — passed, 5 files / 32 tests.
+- `npm run qa` — final run passed:
+  - lint: 0 errors; 3 existing warnings in
+    `cloudflare-upload-contract.test.ts`;
   - typecheck: passed;
-  - unit/integration: 112 files, 1,013 tests passed;
+  - Vitest: 113 files / 1,055 tests;
   - Turbopack production build: passed;
   - webpack production build: passed.
-- `npm run test:e2e -- --project=desktop` — 32/32 passed.
-- Brand-help seller-URL resume browser test — passed.
-- `CAPTURE_PRODUCTION_EVIDENCE=1 npm run qa:visual:folloze` — 3/3 passed.
+- `npm run test:e2e -- --project=desktop` — passed, 32/32.
+- `CAPTURE_PRODUCTION_EVIDENCE=1 npm run qa:visual:folloze` — passed, 3/3.
+- `npm run autoresearch:three-family` — manifest contract score 100/100,
+  no blockers.
+- `git diff --check` — passed.
 
-## Evidence
+The first full `npm run qa` found four precedence regressions where family copy
+overwrote accepted provider refinement and workspace controls. The repair now
+applies saved controls last and preserves accepted provider headline/subhead
+fields while family section structure and rendered family flow stay
+authoritative. The final full gate passed.
 
-- `evidence/visual-evidence-manifest.json` records family/subtype/reason,
-  section navigation, evidence refs, semantic brand tokens, selected image
-  roles, computed contrast, broken images, overflow, and page height.
-- Committed first-viewport and full-page screenshots:
-  - ADP / Launch;
-  - Apple / Guide;
-  - ServiceTitan / Align;
-  - no-logo recovery/fallback.
-- All four fixtures report zero broken images, no horizontal overflow, and
-  body/button contrast of at least 4.5.
-- The complete desktop suite also verifies responsive containment, keyboard
-  navigation, safe asset fallback, and existing wrapper/logo contracts.
+## Runtime evidence
 
-## Autoresearch
+- `evidence/visual-evidence-manifest.json`
+- `evidence/adp-launch-first-viewport.png`
+- `evidence/adp-launch-full-page.png`
+- `evidence/apple-guide-first-viewport.png`
+- `evidence/apple-guide-full-page.png`
+- `evidence/servicetitan-align-first-viewport.png`
+- `evidence/servicetitan-align-full-page.png`
+- `evidence/brand-help-recovery-first-viewport.png`
+- `evidence/brand-help-recovery-full-page.png`
+- `evidence/autoresearch/three-family-loop.json`
 
-- Target: `custom`.
-- Pre-implementation baseline: 43/100.
-- Bounded loop: 5 iterations.
-- Best retained result: 100/100, no blockers.
-- A second legal section-shape candidate also scored 100/100 with no blocker
-  but was not retained because it did not improve the current default.
-- Misrouting, missing evidence, and broken-asset mutations were rejected by
-  hard blockers.
-- Report: `evidence/autoresearch/three-family-loop.json`.
+The screenshots were inspected after the final capture. Launch, Guide, and
+Align have distinct navigation and copy order, concrete offers or account
+priorities, named buyer personas, contained seller logos, and purposeful local
+product/workflow media. The recovery fixture shows only the official-page URL
+form and no customer-ready iframe. The manifest reports zero broken or clipped
+images, no horizontal overflow, unique journey anchors, valid navigation
+targets, CTA/body contrast of at least 4.5, and no packet-banned phrases.
 
-## Acceptance matrix summary
+## Fixed
 
-74/74 gates are `Met` with current-run evidence. There are no `Partial`,
-`Blocked`, or `Pending` rows.
+- R1: The locked V2 family decision now compiles the family spine before writer
+  slots. Session-to-HTML integration asserts distinct order, labels, copy, CTA
+  semantics, and anchors for all three families.
+- R2: The normalized caller-supplied source URL reaches both the local public
+  page pass and configured remote/browser request.
+- R3: Confirmed canonical aliases and regional hosts are accepted. Cross-brand,
+  HTTP, credentialed, custom-port, and loopback URLs are rejected.
+- R4: The live panel asks only for a more-specific official page URL. No upload
+  action or no-op file handler is advertised.
+- R5: `complete` and `completed` normalize to `completed`; every legal status
+  round-trips and unsafe operational payloads fail closed.
+- R6: Visual and manifest evidence run the production session engine, family
+  copy path, renderer, and brand gate. Missing-logo evidence stops at recovery.
 
-## Concerns and blocked live proof
+## Remaining
 
-- No live provider, credentialed, deployment, publication, or infrastructure
-  proof was attempted; these actions were outside the authorized local scope.
-- Visual evidence uses deterministic local assets, so it proves renderer and
-  contract behavior without making a live-brand availability claim.
-- The only remaining lint output is three existing unused-variable warnings in
-  `src/lib/cloudflare-upload-contract.test.ts`; lint exits successfully.
-- No implementation blocker remains for Codex QA.
+- No live provider, credentialed harvester, external browser, deployment,
+  publication, or infrastructure proof was run; those actions were outside this
+  packet.
+- Local first-party-style media proves selection, purpose, rendering, and
+  containment. It does not claim live seller asset availability or aesthetic
+  approval.
+- The 100/100 result is only a manifest contract score. It is not a
+  product-design or live-brand score.
+- Secure logo, guide, and screenshot uploads remain a separately scoped
+  follow-up. The current live UI does not advertise them.
 
 ## Final receipt
 
 ```text
-STATUS: READY_FOR_CODEX_QA
-OBJECTIVE: Launch, Guide, and Align are the only V2 production families.
-FILES: Contracts, research, brand, copy, orchestration, telemetry, UI recovery, QA, and handback updated.
-TESTS: npm run qa passed; benchmark 32/32; desktop E2E 32/32; visual acceptance 3/3.
-EVIDENCE: Four committed desktop fixture pairs plus manifest and autoresearch report.
-CONTRACT: ExperienceSpecV2 carries a hidden evidence-bound WireframeDecisionV2 through the existing renderer adapter.
-AUTORESEARCH: custom target improved from 43/100 to 100/100 with no blocker across a five-iteration bounded loop.
-CONCERNS: Deterministic local proof only; no live providers or external mutations were authorized.
-STOP: Local logical commits only. No push, deploy, publish, credential, or infrastructure mutation occurred.
+STATUS: DONE_WITH_CONCERNS
+OBJECTIVE: Close R1-R6 so the current production path proves family copy, source authority, truthful recovery, normalized receipts, and runtime visual evidence.
+COMMITS: 5695d70, f63a6f9, 139c611, 89ca9bf, 16a3354, plus the final handback commit.
+FILES: Family generation/renderer, orchestrator/harvester, recovery UI, telemetry projection, runtime E2E fixtures, screenshots/manifests, acceptance matrix, and handback.
+TESTS: benchmark 32/32; qa 1,055/1,055 plus two production builds; desktop E2E 32/32; captured visual suite 3/3; manifest contract score 100/100; git diff --check passed.
+EVIDENCE: Three runtime family screenshot pairs, one runtime recovery pair, visual-evidence-manifest.json, and autoresearch/three-family-loop.json.
+FIXED: R1 family spine reaches writers/HTML; R2 supplied URL reaches remote/local harvesters; R3 verified aliases accepted and unsafe/cross-brand URLs rejected; R4 URL-only live recovery; R5 explicit status normalization/privacy checks; R6 runtime engine/brand-gate/media/copy visual proof.
+REMAINING: No live-provider or aesthetic approval claim; secure uploads remain separately scoped.
+STOP: Local commits only; no push, deploy, publish, credential, or infrastructure mutation.
 ```
