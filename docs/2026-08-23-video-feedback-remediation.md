@@ -156,6 +156,18 @@ The items below are deliberately separated into **confirmed/likely** causes and 
 - Whole-document PDF extraction receives a bounded 36-page retry. When local extraction remains unavailable and the configured OpenAI file path succeeds, the uploaded PDF remains usable as a native model-grounded source instead of being rejected before generation.
 - The streaming composer now exposes a large stage-state panel for waiting, active work, attention, and completed preview states without fabricated percentages.
 
+## Verification and release evidence
+
+- Release commit: `44788b3` (`fix: repair provisional previews and content ingestion`).
+- Vercel deployment `dpl_BkP35s5cV8EPsNyiaMDHQxRe1n3z` reached `READY` and owns `https://folloze-try-me-now.vercel.app`.
+- The canonical root and `/api/health` both returned `200`; health reports a production-capable runtime with Vercel Blob, OpenAI generation, Brandfetch Logo and Brand APIs, Neon persistence, and no readiness blockers.
+- Exact Amazon/AWS campaign replay: session `VVl2sZv7y9mz0IcNSadyk2bux3pml66c`, support reference `TMN-8722181BA893`. Verified identity, logo, palette, and official source evidence produced `preview_provisional` while `designReady=false`; the seller-logo route returned `307` to `cdn.brandfetch.io` instead of `404`.
+- Exact recorded PDF replay: session `QQPX4bJIomQee9X85HBQtD6MSu9d0xrN`, support reference `TMN-95C1BFA61F7A`. The 1,624,124-byte, 95-page PDF completed the deployed Blob callback in about 5.1 seconds, recovered the title `Aws In Gxp Systems`, and produced a provisional preview with no upload error.
+- Fresh browser readback confirmed that Content Magic contains only the URL/PDF source intake; the retired understand/believe/do composer is absent.
+- Full local gate: 113 Vitest files and 1,085 tests passed; lint and typecheck passed; Turbopack and webpack production builds passed; desktop Playwright passed 34/34; the preview benchmark passed 33/33.
+- A separate claim-ledger command was not executed because its required isolated local fixture server was not running; this was a harness precondition, not a failure in the release build.
+- One synthetic zero-delay PATCH immediately after session creation returned a transient `500`; a paced API replay and the normal interactive browser flow both succeeded. Keep this write-contention edge in the observability backlog rather than treating it as a reproduced terminal defect.
+
 ## Remediation workstreams
 
 ### A. Preserve a provisional campaign artifact
