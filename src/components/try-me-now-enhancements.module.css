@@ -933,6 +933,44 @@ fieldset.controlCard { min-inline-size:0 }
   line-height: 1.5;
 }
 
+.signalSnapshot {
+  margin: 0 0 20px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid #bfe2f8;
+  border-radius: 16px;
+  background: linear-gradient(105deg,#edf8ff,#fff 76%);
+}
+.signalSnapshot > div { min-width: 0; }
+.signalSnapshot span:first-child { color: var(--accent);font-size:10px;font-weight:850;letter-spacing:.14em;text-transform:uppercase }
+.signalSnapshot h3 { margin:5px 0 0;color:var(--ink);font:600 21px/1.1 var(--font-display),sans-serif;letter-spacing:-.025em }
+.signalSnapshot p { margin:6px 0 0;color:var(--body);font-size:12px;line-height:1.45 }
+.snapshotBadge { flex:0 0 auto;padding:7px 9px;color:#087348;border:1px solid #b9ead4;border-radius:999px;background:#ebfbf4;font-size:10px;font-weight:800;white-space:nowrap }
+
+.signalInsightGrid {
+  margin: 0 0 22px;
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 10px;
+}
+.signalInsightGrid article {
+  min-width: 0;
+  min-height: 142px;
+  padding: 17px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(10,22,48,.04);
+}
+.signalInsightGrid article > span { display:flex;align-items:center;gap:7px;color:var(--accent);font-size:10px;font-weight:850;letter-spacing:.12em;text-transform:uppercase }
+.signalInsightGrid article > strong { margin:18px 0 6px;color:var(--ink);font:600 17px/1.15 var(--font-display),sans-serif;letter-spacing:-.02em }
+.signalInsightGrid article > p { margin:auto 0 0;color:var(--body);font-size:11px;line-height:1.5 }
+
 .exampleSignalSection {
   margin-top: 0;
 }
@@ -943,6 +981,7 @@ fieldset.controlCard { min-inline-size:0 }
 .exampleSignalDetails>summary::after,.signalCapabilityDetails>summary::after { content:"+";margin-left:auto;color:var(--accent);font-size:15px }
 .exampleSignalDetails[open]>summary::after,.signalCapabilityDetails[open]>summary::after { content:"−" }
 .exampleSignalDetails>summary span { padding:4px 7px;color:var(--muted);border-radius:999px;background:var(--canvas);font-size:10px;font-weight:700 }
+.exampleSignalDetails>summary strong { color:#6a6895;font-size:10px;font-weight:750;letter-spacing:.02em }
 .exampleSignalDetails .exampleSignalSection { padding:0 14px 14px }
 
 .signalCapabilitySection {
@@ -978,6 +1017,8 @@ fieldset.controlCard { min-inline-size:0 }
 .signalCapabilityGrid strong {
   line-height: 1.2;
 }
+.signalCapabilityGrid article > div { min-width:0; }
+.signalCapabilityGrid article p { margin:4px 0 0;color:var(--muted);font-size:10px;line-height:1.35 }
 
 .saveCopy {
   padding-right: 38px;
@@ -1117,6 +1158,9 @@ fieldset.controlCard { min-inline-size:0 }
 }
 
 @media (max-width: 430px) {
+  .signalSnapshot { align-items:flex-start;flex-direction:column;gap:10px;padding:16px; }
+  .snapshotBadge { white-space:normal; }
+  .signalInsightGrid { grid-template-columns:1fr; }
   .valueReceipt { padding: 18px; }
   .valueReceiptHeader h3 { font-size: 21px; }
   .blockActions { grid-template-columns: repeat(2,minmax(0,1fr)); }

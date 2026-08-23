@@ -468,11 +468,25 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("topic_select:true");
     expect(html).toContain("cta_click:true");
     expect(html).toContain("fullscreen_change:true");
+    expect(html).toContain("journey_complete:true");
+    expect(html).toContain("var textKeys={sectionTitle:96,sectionHeadline:160,lensTitle:96,lensHeadline:160}");
+    expect(html).toContain("function safeText(value,maxLength)");
+    expect(html).toContain("function textFor(node){return node&&String(node.textContent||'').replace(/\\s+/g,' ')");
+    expect(html).toContain("replace(/[\\u0000-\\u001f\\u007f]+/g,' ')");
+    expect(html).toContain("replace(/\\s+/g,' ')");
     expect(html).toContain("document.referrer");
     expect(html).toContain("parentOrigin=referrer.origin");
     expect(html).toContain("cleanPayload(data)");
     expect(html).not.toContain("text:this.innerText");
     expect(html).not.toContain("url:this.href");
+  });
+
+  it("emits a single end-of-journey signal only after a real scroll reaches the bottom", () => {
+    expect(html).toContain("var journeyCompleteReported=false");
+    expect(html).toContain("if(journeyCompleteReported||!journeyStarted)return");
+    expect(html).toContain("root.scrollTop+window.innerHeight>=root.scrollHeight-8");
+    expect(html).toContain("window.flzAnalytic('journey_complete'");
+    expect(html).not.toContain("setTimeout(function(){window.flzAnalytic('journey_complete'");
   });
 
   it("keeps the generated analytics runtime syntactically valid", () => {

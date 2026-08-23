@@ -35,6 +35,7 @@ export const PREVIEW_INTERACTION_TYPES = [
   "section-viewed",
   "lens-selected",
   "cta-clicked",
+  "journey-complete",
   "share-started",
   "email-prompt-viewed"
 ] as const;

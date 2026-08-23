@@ -578,13 +578,31 @@ describe("Try Me Now experience copy", () => {
   });
 
   it("turns bounded preview context into semantic engagement labels", () => {
-    expect(describePreviewAnalyticsEvent("section_view", { sectionId: "supporting-resources" })).toEqual({
-      label: "Viewed Evidence",
-      detail: "The visitor reached a new part of the buyer journey."
+    expect(describePreviewAnalyticsEvent("section_view", {
+      sectionId: "supporting-resources",
+      sectionTitle: "Proof that earns the next conversation",
+      sectionHeadline: "Three source-backed signals make the case concrete."
+    })).toEqual({
+      label: "Viewed Proof that earns the next conversation",
+      detail: "Three source-backed signals make the case concrete."
     });
-    expect(describePreviewAnalyticsEvent("topic_select", { lensId: "lens-2" }).label).toBe(
-      "Selected decision lens 3"
-    );
+    expect(describePreviewAnalyticsEvent("topic_select", {
+      lensId: "lens-2",
+      lensTitle: "Connect the first workflow",
+      lensHeadline: "Start with the operating boundary the team can prove."
+    })).toEqual({
+      label: "Selected Connect the first workflow",
+      detail: "Start with the operating boundary the team can prove."
+    });
+    expect(describePreviewAnalyticsEvent("topic_select", { lensId: "lens-2" }).label).toBe("Selected a topic");
+    expect(describePreviewAnalyticsEvent("journey_complete", {
+      sectionId: "next-step",
+      sectionTitle: "Choose the first use case",
+      sectionHeadline: "Turn the evidence into a focused next step."
+    })).toEqual({
+      label: "Reached Choose the first use case",
+      detail: "Turn the evidence into a focused next step."
+    });
     expect(describePreviewAnalyticsEvent("cta_click", { ctaId: "close-primary" })).toEqual({
       label: "Tested the closing CTA",
       detail: "This preview captured next-step intent without leaving or losing the experience."

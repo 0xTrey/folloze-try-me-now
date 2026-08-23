@@ -833,9 +833,13 @@ export interface AnalyticsSignal {
   occurredAt?: number;
   context?: {
     sectionId?: string;
+    sectionTitle?: string;
+    sectionHeadline?: string;
     targetId?: string;
     ctaId?: string;
     lensId?: string;
+    lensTitle?: string;
+    lensHeadline?: string;
     area?: string;
   };
   actorLabel?: string;
@@ -892,13 +896,85 @@ export function AnalyticsSignalToast({ signal, open, onDismiss, onOpenPanel }: {
 }
 
 const ANALYTICS_CAPABILITIES = [
-  { id: "attention", label: "Attention", detail: "Views, dwell time, and return visits", icon: Eye },
-  { id: "journey", label: "Journey path", detail: "Sections and sequences buyers explore", icon: Route },
-  { id: "topics", label: "Topics", detail: "Decision lenses and questions selected", icon: Layers3 },
-  { id: "content", label: "Content", detail: "Resources and proof opened", icon: FileText },
-  { id: "intent", label: "Intent", detail: "Next-step and CTA interactions", icon: MousePointerClick },
-  { id: "group", label: "Buying group", detail: "Account-level engagement across people", icon: Users }
+  { id: "attention", label: "Attention", detail: "What held attention, for how long, and whether the visitor returned.", icon: Eye },
+  { id: "journey", label: "Journey path", detail: "The order of sections and paths explored, not just a page view.", icon: Route },
+  { id: "topics", label: "Topics", detail: "The questions, themes, and decision lenses that earned a deeper look.", icon: Layers3 },
+  { id: "content", label: "Content", detail: "Which proof, resources, or experiences were opened.", icon: FileText },
+  { id: "intent", label: "Intent", detail: "The next step, CTA, or action the visitor showed interest in.", icon: MousePointerClick },
+  { id: "group", label: "Buying group", detail: "Engagement across people and roles in a live account.", icon: Users }
 ] as const;
+
+function analyticsSignalTitle(signal: AnalyticsSignal): string {
+  if (signal.action === "topic_select" && signal.context?.lensTitle) return `Selected ${signal.context.lensTitle}`;
+  if (signal.action === "signature_select" && signal.context?.lensTitle) return `Chose ${signal.context.lensTitle}`;
+  if (signal.action === "journey_complete" && signal.context?.sectionTitle) return `Reached ${signal.context.sectionTitle}`;
+  if (signal.action === "section_view" && signal.context?.sectionTitle) return `Viewed ${signal.context.sectionTitle}`;
+  if (signal.action === "anchor_click" && signal.context?.sectionTitle) return `Navigated to ${signal.context.sectionTitle}`;
+  return signal.label;
+}
+
+function analyticsSignalKind(signal: AnalyticsSignal): string {
+  if (signal.action === "journey_complete") return "Journey complete";
+  if (signal.type === "cta" || signal.action === "cta_click") return "Next step";
+  if (signal.type === "choice" || ["topic_select", "signature_select", "question_select"].includes(signal.action ?? "")) return "Topic choice";
+  if (signal.action === "anchor_click") return "Navigation";
+  return "Section view";
+}
+
+function uniqueSignals(signals: AnalyticsSignal[], keyFor: (signal: AnalyticsSignal) => string | undefined): AnalyticsSignal[] {
+  const seen = new Set<string>();
+  return signals.filter((signal) => {
+    const key = keyFor(signal)?.trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function analyticsJourneyInsights(signals: AnalyticsSignal[]) {
+  const journey = uniqueSignals(
+    signals.filter((signal) => ["preview_viewed", "section_view", "anchor_click", "journey_complete"].includes(signal.action ?? "")),
+    (signal) => signal.context?.sectionTitle ?? signal.context?.sectionId ?? signal.label
+  );
+  const topics = uniqueSignals(
+    signals.filter((signal) => ["topic_select", "signature_select", "question_select"].includes(signal.action ?? "")),
+    (signal) => signal.context?.lensTitle ?? signal.context?.lensId ?? signal.label
+  );
+  const intent = [...signals].reverse().find((signal) => signal.action === "cta_click" || signal.type === "cta");
+  const completed = signals.some((signal) => signal.action === "journey_complete");
+  const latestTopic = topics.at(-1);
+  return {
+    journey,
+    topics,
+    intent,
+    completed,
+    journeyHeadline: completed
+      ? `Completed ${Math.max(journey.length, 1)} meaningful stage${journey.length === 1 ? "" : "s"}`
+      : journey.length
+        ? `${journey.length} stage${journey.length === 1 ? "" : "s"} explored`
+        : "Journey activity will appear here",
+    topicHeadline: latestTopic?.context?.lensTitle
+      ?? (topics.length ? analyticsSignalTitle(topics.at(-1)!) : "No topic choice yet"),
+    intentHeadline: intent ? analyticsSignalTitle(intent) : "No next-step click yet",
+    nextMove: intent
+      ? "Follow up on the action this visitor selected."
+      : latestTopic
+        ? `Lead with ${latestTopic.context?.lensTitle ?? "the topic they explored"} and the proof that supports it.`
+        : completed
+          ? "Ask which part of the journey should become the first working session."
+          : "Let the visitor explore; Folloze will turn the next signal into follow-up context."
+  };
+}
+
+function analyticsSignalSummary(signals: AnalyticsSignal[]): { headline: string; detail: string } {
+  if (!signals.length) return { headline: "No live interest yet", detail: "Explore the experience and Folloze will show the sections that earn attention." };
+  const views = signals.filter((signal) => signal.type === "view" || signal.action?.includes("view")).length;
+  const choices = signals.filter((signal) => signal.type === "choice" || signal.action?.includes("choice") || signal.action?.includes("lens")).length;
+  const ctas = signals.filter((signal) => signal.type === "cta" || signal.action?.includes("cta") || signal.action?.includes("click")).length;
+  const latest = analyticsSignalTitle(signals[signals.length - 1]);
+  const parts = [views && `${views} section${views === 1 ? "" : "s"} viewed`, choices && `${choices} topic${choices === 1 ? "" : "s"} explored`, ctas && `${ctas} next-step action${ctas === 1 ? "" : "s"}`].filter(Boolean);
+  return { headline: latest, detail: parts.length ? parts.join(" · ") : `${signals.length} live signal${signals.length === 1 ? "" : "s"} captured from this preview.` };
+}
 
 export interface AnalyticsSignalPanelProps {
   open: boolean;
@@ -931,6 +1007,8 @@ export function AnalyticsSignalPanel({
     : []);
   if (!open) return null;
   const showCounters = engagedSeconds >= 15;
+  const interestSummary = analyticsSignalSummary(liveSignals);
+  const journeyInsights = analyticsJourneyInsights(liveSignals);
   return (
     <div className={classes(styles.modalBackdrop, styles.signalBackdrop)} onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
       <aside ref={ref} className={styles.signalPanel} role="dialog" aria-modal="true" aria-labelledby="signal-panel-title" onKeyDown={(event) => trapModalFocus(event, ref.current)}>
@@ -938,22 +1016,43 @@ export function AnalyticsSignalPanel({
         {showCounters ? (
           <div className={styles.signalStats}><div><strong>1</strong><span>{visitorLabel}</span></div><div><strong>{liveSignals.length}</strong><span>meaningful interactions</span></div><div><strong>{engagedSeconds}s</strong><span>engaged</span></div></div>
         ) : (
-          <p className={styles.sparseSignalSummary}>Explore the preview to see engagement appear here.</p>
+          <p className={styles.sparseSignalSummary}>{liveSignals.length ? "Live signals are captured. Engaged time appears after 15 foreground seconds." : "Explore the preview to see engagement appear here."}</p>
         )}
+        <section className={styles.signalSnapshot} aria-labelledby="signal-snapshot-title">
+          <div><span>Live journey snapshot</span><h3 id="signal-snapshot-title">{interestSummary.headline}</h3><p>{interestSummary.detail}</p></div>
+          <span className={styles.snapshotBadge}>{liveSignals.length ? "Based on this visit" : "Waiting for activity"}</span>
+        </section>
+        <section className={styles.signalInsightGrid} aria-label="Engagement summary">
+          <article>
+            <span><Route size={16} />Journey</span>
+            <strong>{journeyInsights.journeyHeadline}</strong>
+            <p>{journeyInsights.journey.length ? journeyInsights.journey.slice(-3).map(analyticsSignalTitle).join(" → ") : "Section depth and completion will build as the visitor explores."}</p>
+          </article>
+          <article>
+            <span><Layers3 size={16} />Topic depth</span>
+            <strong>{journeyInsights.topicHeadline}</strong>
+            <p>{journeyInsights.topics.length ? `${journeyInsights.topics.length} distinct topic ${journeyInsights.topics.length === 1 ? "signal" : "signals"} captured.` : "Selections reveal which value proposition deserves a deeper conversation."}</p>
+          </article>
+          <article>
+            <span><MousePointerClick size={16} />Intent</span>
+            <strong>{journeyInsights.intentHeadline}</strong>
+            <p>{journeyInsights.nextMove}</p>
+          </article>
+        </section>
         <div className={styles.signalColumns}>
           <section className={styles.realSignalSection} aria-labelledby="real-signal-title">
             <div className={styles.signalSectionHeading}><div><span>Real-time proof</span><h3 id="real-signal-title">Your activity in this preview</h3></div><b>Live</b></div>
             <p className={styles.signalSectionIntro}>This feed updates as you explore, so follow-up can start with what actually earned your attention.</p>
             <div className={styles.signalTimeline}>
-              {[...liveSignals].reverse().map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel}</span><strong>{signal.label}</strong><p>{signal.detail}</p></div></article>)}
+              {[...liveSignals].reverse().map((signal) => <article key={signal.id}><span className={styles.timelineDot} /><div><span>{signal.atLabel} · {analyticsSignalKind(signal)}</span><strong>{analyticsSignalTitle(signal)}</strong><p>{signal.detail}</p></div></article>)}
               {!liveSignals.length && <p className={styles.signalEmpty}>Explore the preview to see your first live signal arrive here.</p>}
             </div>
           </section>
           {buyingGroupSignals.length > 0 && (
             <details className={styles.exampleSignalDetails}>
-              <summary>Show a live-campaign example <span>Simulated</span></summary>
+              <summary>Show a live-campaign example <span>Simulated</span><strong>Not captured leads</strong></summary>
               <section className={styles.exampleSignalSection} aria-labelledby="example-signal-title">
-                <div className={styles.exampleSignalLabel}><span>Illustrative examples</span><strong>Not captured leads</strong></div>
+                <div className={styles.exampleSignalLabel}><span>Illustrative examples</span><strong>Fictional roles only</strong></div>
                 <div className={styles.signalSectionHeading}><div><span>Buying-group view</span><h3 id="example-signal-title">What account-level depth could look like</h3></div></div>
                 <p className={styles.exampleSignalDisclosure}>Simulated activity only. These placeholder names and actions demonstrate what Folloze can report in a live campaign.</p>
                 <div className={classes(styles.signalTimeline, styles.exampleTimeline)}>
@@ -964,13 +1063,13 @@ export function AnalyticsSignalPanel({
           )}
         </div>
         <details className={styles.signalCapabilityDetails}>
-          <summary>See the full analytics picture</summary>
+          <summary>See the full analytics picture <span>6 reporting lenses</span></summary>
           <section className={styles.signalCapabilitySection} aria-labelledby="signal-capability-title">
             <div className={styles.signalSectionHeading}><div><span>What Folloze reports</span><h3 id="signal-capability-title">A live campaign turns activity into usable context</h3></div></div>
             <div className={styles.signalCapabilityGrid}>
               {ANALYTICS_CAPABILITIES.map((capability) => {
                 const Icon = capability.icon;
-                return <article key={capability.id} title={capability.detail}><span><Icon size={15} /></span><strong>{capability.label}</strong></article>;
+                return <article key={capability.id}><span><Icon size={15} /></span><div><strong>{capability.label}</strong><p>{capability.detail}</p></div></article>;
               })}
             </div>
           </section>

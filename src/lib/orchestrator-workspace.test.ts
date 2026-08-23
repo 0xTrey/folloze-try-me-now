@@ -616,18 +616,27 @@ describe("session workspace foundation", () => {
       elementId: "decision-lens-2",
       value: "Automation control"
     });
+    const completedSession = await recordPreviewInteraction(id, {
+      event: "journey-complete",
+      elementId: "next-step"
+    });
     const stored = await getSession(id);
 
-    expect(publicSession.previewAnalytics).toEqual({
+    expect(publicSession.previewAnalytics).toMatchObject({
       totalInteractions: 2,
-      lastInteractionAt: expect.any(String),
-      lastElementId: "decision-lens-2",
       counts: { "preview-opened": 1, "lens-selected": 1 }
+    });
+    expect(completedSession.previewAnalytics).toEqual({
+      totalInteractions: 3,
+      lastInteractionAt: expect.any(String),
+      lastElementId: "next-step",
+      counts: { "preview-opened": 1, "lens-selected": 1, "journey-complete": 1 }
     });
     expect(publicSession).not.toHaveProperty("events");
     expect(stored?.events.map((event) => event.name)).toEqual([
       "preview_preview_opened",
-      "preview_lens_selected"
+      "preview_lens_selected",
+      "preview_journey_complete"
     ]);
     expect(JSON.stringify(stored?.events)).not.toContain("Automation control");
   });

@@ -122,10 +122,16 @@ import type { ProductEventName } from "@/lib/product-analytics";
 
 type AnalyticsEventContext = {
   sectionId?: string;
+  sectionTitle?: string;
+  sectionHeadline?: string;
   targetId?: string;
   ctaId?: string;
   lensId?: string;
+  lensTitle?: string;
+  lensHeadline?: string;
   area?: string;
+  position?: string;
+  completionKey?: string;
 };
 
 type ClientEvent = {
@@ -144,13 +150,14 @@ const ANALYTICS_SECTION_LABELS: Record<string, string> = {
   "next-step": "Next step"
 };
 
-function analyticsSectionLabel(value: string | undefined): string {
+function analyticsSectionLabel(value: string | undefined, title?: string): string {
+  if (title?.trim()) return title.trim();
   return value ? ANALYTICS_SECTION_LABELS[value] ?? value.replaceAll("-", " ") : "the experience";
 }
 
-function analyticsLensLabel(value: string | undefined): string {
-  const match = value?.match(/^lens-(\d{1,2})$/);
-  return match ? `decision lens ${Number(match[1]) + 1}` : "a decision lens";
+function analyticsLensLabel(title?: string): string {
+  if (title?.trim()) return title.trim();
+  return "a topic";
 }
 
 export function describePreviewAnalyticsEvent(
@@ -162,20 +169,26 @@ export function describePreviewAnalyticsEvent(
     detail: "The private buyer experience entered the viewport."
   };
   if (action === "section_view") return {
-    label: `Viewed ${analyticsSectionLabel(context.sectionId)}`,
-    detail: "The visitor reached a new part of the buyer journey."
+    label: `Viewed ${analyticsSectionLabel(context.sectionId, context.sectionTitle)}`,
+    detail: context.sectionHeadline || "The visitor reached a new part of the buyer journey."
   };
   if (action === "anchor_click") return {
-    label: `Navigated to ${analyticsSectionLabel(context.targetId)}`,
-    detail: "The visitor used the guided journey navigation."
+    label: `Navigated to ${analyticsSectionLabel(context.targetId, context.sectionTitle)}`,
+    detail: context.sectionHeadline || "The visitor used the guided journey navigation."
   };
   if (action === "topic_select") return {
-    label: `Selected ${analyticsLensLabel(context.lensId)}`,
-    detail: "The visitor revealed which topic deserved a deeper look."
+    label: `Selected ${analyticsLensLabel(context.lensTitle)}`,
+    detail: context.lensHeadline || "The visitor revealed which topic deserved a deeper look."
   };
   if (action === "signature_select") return {
-    label: "Chose a recommended starting point",
-    detail: "The visitor moved from a highlighted signal into the decision path."
+    label: context.lensTitle ? `Chose ${context.lensTitle}` : "Chose a recommended starting point",
+    detail: context.lensHeadline || "The visitor moved from a highlighted signal into the decision path."
+  };
+  if (action === "journey_complete") return {
+    label: `Reached ${analyticsSectionLabel(context.sectionId, context.sectionTitle)}`,
+    detail: context.lensTitle
+      ? `After exploring ${context.lensTitle}, the visitor reached the end of the guided experience.`
+      : context.sectionHeadline || "The visitor reached the end of the guided experience."
   };
   if (action === "question_select") return {
     label: "Explored a meeting question",
@@ -1288,7 +1301,7 @@ export function PreviewUpdateNotice({
 
 async function recordPreviewSignal(
   sessionId: string,
-  event: "preview-opened" | "section-viewed" | "lens-selected" | "cta-clicked",
+  event: "preview-opened" | "section-viewed" | "lens-selected" | "cta-clicked" | "journey-complete",
   elementId?: string,
   value?: string
 ): Promise<PublicTryMeSession> {
@@ -3200,6 +3213,7 @@ export function TryMeNowApp() {
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const patchRequestRef = useRef(0);
   const persistedSectionSignals = useRef(new Set<string>());
+  const journeyCompleteAnalyticsOpened = useRef<string | undefined>(undefined);
   const lastTrackedStatus = useRef<string | undefined>(undefined);
   const buildTrackedSession = useRef<string | undefined>(undefined);
   const previewScrolledSession = useRef<string | undefined>(undefined);
@@ -3583,7 +3597,8 @@ export function TryMeNowApp() {
         "signature_select",
         "question_select",
         "section_view",
-        "fullscreen_change"
+        "fullscreen_change",
+        "journey_complete"
       ]);
       if (typeof event.data.action !== "string" || !allowedActions.has(event.data.action)) return;
       const payload = event.data.payload && typeof event.data.payload === "object"
@@ -3591,23 +3606,44 @@ export function TryMeNowApp() {
         : event.data.data && typeof event.data.data === "object"
           ? event.data.data as Record<string, unknown>
           : {};
-      const safeContextValue = (key: keyof AnalyticsEventContext) => {
+      const safeContextValue = (key: keyof AnalyticsEventContext, maxLength = 96) => {
         const value = payload[key];
-        return typeof value === "string" && value.length <= 96 ? value : undefined;
+        return typeof value === "string" && value.length <= maxLength ? value : undefined;
       };
       const context: AnalyticsEventContext = {
         sectionId: safeContextValue("sectionId"),
+        sectionTitle: safeContextValue("sectionTitle"),
+        sectionHeadline: safeContextValue("sectionHeadline", 160),
         targetId: safeContextValue("targetId"),
         ctaId: safeContextValue("ctaId"),
         lensId: safeContextValue("lensId"),
-        area: safeContextValue("area")
+        lensTitle: safeContextValue("lensTitle"),
+        lensHeadline: safeContextValue("lensHeadline", 160),
+        area: safeContextValue("area"),
+        position: safeContextValue("position", 16),
+        completionKey: safeContextValue("completionKey", 160)
       };
+      if (
+        event.data.action === "journey_complete"
+        && (
+          context.position !== "final"
+          || !context.sectionId
+          || !context.sectionTitle
+          || !context.completionKey
+        )
+      ) return;
+      if (event.data.action === "journey_complete" && journeyCompleteAnalyticsOpened.current === session.id) return;
       const next: ClientEvent = {
         action: event.data.action,
         ...describePreviewAnalyticsEvent(event.data.action, context),
         context,
         at: Date.now()
       };
+      if (event.data.action === "journey_complete") {
+        journeyCompleteAnalyticsOpened.current = session.id;
+        setShowAnalyticsPanel(true);
+        track("analytics_panel_opened", { useCase: session.useCase, source: "journey-complete" });
+      }
       const semanticKey = [next.action, context.ctaId, context.lensId, context.sectionId, context.targetId, context.area]
         .filter(Boolean)
         .join(":");
@@ -3625,7 +3661,9 @@ export function TryMeNowApp() {
       const elementId = [payload.blockId, payload.ctaId, payload.sectionId, payload.targetId, payload.lensId]
         .find((candidate): candidate is string => typeof candidate === "string" && candidate.length > 0)
         ?.slice(0, 80);
-      const serverEvent = event.data.action === "cta_click"
+      const serverEvent = event.data.action === "journey_complete"
+        ? "journey-complete"
+        : event.data.action === "cta_click"
         ? "cta-clicked"
         : ["topic_select", "signature_select", "question_select"].includes(event.data.action)
           ? "lens-selected"
@@ -4115,7 +4153,7 @@ export function TryMeNowApp() {
     label: event.label,
     detail: event.detail,
     atLabel: new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(event.at),
-    type: ["preview_viewed", "section_view"].includes(event.action) ? "view" : event.action === "cta_click" ? "cta" : "choice",
+    type: ["preview_viewed", "section_view", "journey_complete", "anchor_click"].includes(event.action) ? "view" : event.action === "cta_click" ? "cta" : "choice",
     action: event.action,
     occurredAt: event.at,
     context: event.context
