@@ -1379,7 +1379,9 @@ async function runBrandStageUnlocked(
   if (!shouldHarvest) return;
 
   try {
-    const harvested = await harvestBrand(expectedDomain, expectedSourceUrl);
+    const harvested = expectedSourceUrl
+      ? await harvestBrand(expectedDomain, expectedSourceUrl)
+      : await harvestBrand(expectedDomain);
     const trusted = trustedBrandProfile(harvested, expectedDomain);
     const profile = brandWithSessionLogoDelivery(id, "seller", trusted.profile);
     const harvestedEvidence = trusted.rejectedProfile ?? harvested;

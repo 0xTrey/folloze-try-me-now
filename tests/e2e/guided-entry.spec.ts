@@ -140,6 +140,15 @@ async function mockSessionApis(
         const next: PublicTryMeSession = {
           ...current,
           answers: { ...current.answers, ...patch },
+          ...(patch.brandSourceUrl
+            ? {
+                status: "generating" as const,
+                stages: {
+                  ...current.stages,
+                  brand: { status: "running" as const, detail: "Checking the supplied brand source." }
+                }
+              }
+            : {}),
           revision: current.revision + 1,
           updatedAt: new Date().toISOString()
         };
@@ -233,6 +242,17 @@ test.describe("unified guided first-run experience", () => {
     await expect(page.locator('input[type="email"]')).toHaveCount(0);
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByText(/Preview waits on the material brief|Live Brief|What are you taking to market/i).first()).toBeVisible();
+    const workbenchGeometry = await page.locator(".workbench").evaluate((workbench) => {
+      const composer = workbench.querySelector<HTMLElement>(".briefPanel")?.getBoundingClientRect();
+      const rail = workbench.querySelector<HTMLElement>(".processRail")?.getBoundingClientRect();
+      return {
+        composerWidth: composer?.width ?? 0,
+        railWidth: rail?.width ?? 0
+      };
+    });
+    expect(workbenchGeometry.composerWidth).toBeGreaterThan(
+      workbenchGeometry.railWidth * 1.5
+    );
 
     const intent = page.getByLabel(/What are you taking to market/i);
     await expect(intent).toBeVisible();
@@ -410,6 +430,31 @@ test.describe("unified guided first-run experience", () => {
     expect(box!.height).toBeGreaterThanOrEqual(36);
     await startOver.click();
     await expect(page.locator(".unifiedPrimaryCta")).toBeVisible();
+  });
+
+  test("brand-help accepts an official seller page and resumes the preserved build", async ({
+    page
+  }) => {
+    const sessions = new Map<string, PublicTryMeSession>();
+    await mockSessionApis(page, sessions, ({ useCase, companyDomain }) => publicSession({
+      useCase,
+      companyDomain,
+      status: "brand_help_required"
+    }));
+    await startBuyerExperience(page, "northpeak.com");
+
+    await expect(page.getByRole("heading", { name: "Add a clearer brand source." })).toBeVisible();
+    await expect(page.getByText(/research is preserved/i)).toBeVisible();
+    await page.getByLabel("More specific official page URL").fill(
+      "https://northpeak.com/platform"
+    );
+    await page.getByRole("button", { name: /Continue with this source/i }).click();
+
+    await expect(page.getByRole("heading", { name: "Add a clearer brand source." })).toHaveCount(0);
+    expect([...sessions.values()][0]?.answers.brandSourceUrl).toBe(
+      "https://northpeak.com/platform"
+    );
+    expect([...sessions.values()][0]?.status).toBe("generating");
   });
 
   test("keyboard focus reaches the primary CTA and domain field", async ({ page }) => {

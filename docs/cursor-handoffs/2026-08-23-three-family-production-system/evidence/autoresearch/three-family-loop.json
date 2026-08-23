@@ -1,0 +1,105 @@
+{
+  "target": "custom",
+  "baselineScore": 43,
+  "best": {
+    "iteration": 1,
+    "mutation": "current",
+    "score": 100,
+    "blockers": []
+  },
+  "stopReason": "all rubric checks passed",
+  "iterationCount": 5,
+  "iterations": [
+    {
+      "iteration": 1,
+      "changedVariable": "current",
+      "target": "custom",
+      "mutation": "current",
+      "score": 100,
+      "rubric": {
+        "familySelection": 25,
+        "brandFidelity": 25,
+        "audienceRelevance": 25,
+        "artifactIntegrity": 25
+      },
+      "blockers": [],
+      "passed": true,
+      "fixtureCount": 4,
+      "retained": true
+    },
+    {
+      "iteration": 2,
+      "changedVariable": "family-threshold",
+      "target": "custom",
+      "mutation": "family-threshold",
+      "score": 91,
+      "rubric": {
+        "familySelection": 16,
+        "brandFidelity": 25,
+        "audienceRelevance": 25,
+        "artifactIntegrity": 25
+      },
+      "blockers": [
+        "family_misroute"
+      ],
+      "passed": false,
+      "fixtureCount": 4,
+      "retained": false
+    },
+    {
+      "iteration": 3,
+      "changedVariable": "section-shape",
+      "target": "custom",
+      "mutation": "section-shape",
+      "score": 100,
+      "rubric": {
+        "familySelection": 25,
+        "brandFidelity": 25,
+        "audienceRelevance": 25,
+        "artifactIntegrity": 25
+      },
+      "blockers": [],
+      "passed": true,
+      "fixtureCount": 4,
+      "retained": false
+    },
+    {
+      "iteration": 4,
+      "changedVariable": "evidence-authority",
+      "target": "custom",
+      "mutation": "evidence-authority",
+      "score": 96,
+      "rubric": {
+        "familySelection": 25,
+        "brandFidelity": 25,
+        "audienceRelevance": 21,
+        "artifactIntegrity": 25
+      },
+      "blockers": [
+        "ungrounded_family_decision"
+      ],
+      "passed": false,
+      "fixtureCount": 4,
+      "retained": false
+    },
+    {
+      "iteration": 5,
+      "changedVariable": "sparse-asset",
+      "target": "custom",
+      "mutation": "sparse-asset",
+      "score": 88,
+      "rubric": {
+        "familySelection": 25,
+        "brandFidelity": 18,
+        "audienceRelevance": 25,
+        "artifactIntegrity": 20
+      },
+      "blockers": [
+        "broken_asset"
+      ],
+      "passed": false,
+      "fixtureCount": 4,
+      "retained": false
+    }
+  ]
+}

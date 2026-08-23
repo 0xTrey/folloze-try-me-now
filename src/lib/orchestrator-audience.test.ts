@@ -217,24 +217,12 @@ describe("seller-evidence audience orchestration", () => {
             ({ sourceUrl }) => new URL(sourceUrl).hostname === seller.domain
           )
         ).toBe(true);
-        expect(harvested?.audienceRecommendations).toHaveLength(3);
-        expect(
-          harvested?.audienceRecommendations?.every(
-            ({ source }) => source === "seller-public-evidence"
-          )
-        ).toBe(true);
-        expect(
-          harvested?.audienceRecommendations?.every(
-            ({ evidenceItemIds }) =>
-              evidenceItemIds.length > 0 &&
-              evidenceItemIds.every((evidenceId) => evidenceIds.has(evidenceId))
-          )
-        ).toBe(true);
-        expect(harvested?.audienceRecommendations?.[0]?.rationale).toMatch(
-          /^Recommended because .+ supported by Jitterbit's public .+ evidence\.$/
-        );
-        expect(harvested?.audienceRecommendations?.[0]?.targetName).toBeUndefined();
-        expect(harvested?.offerRecommendations).toHaveLength(3);
+        // Seller topics alone do not establish at least two supported buyer-role
+        // options. The product contract suppresses speculative chips instead of
+        // presenting generic role labels as research-backed recommendations.
+        expect(harvested?.audienceRecommendations).toEqual([]);
+        expect([...evidenceIds].length).toBeGreaterThan(0);
+        expect(harvested?.offerRecommendations).toHaveLength(2);
         expect(harvested?.objectiveRecommendations).toHaveLength(3);
         expect(
           harvested?.offerRecommendations?.filter(({ recommended }) => recommended)

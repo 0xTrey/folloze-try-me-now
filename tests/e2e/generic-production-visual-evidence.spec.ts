@@ -126,14 +126,14 @@ const fixtures: VisualFixture[] = [
         confidence: "high",
         theme: { hero: "light", motif: "none" },
         typography: { fallback: "sans", headingWeight: 600, bodyWeight: 400 },
-        buttons: { primaryBackground: "#ED1C2E", radiusPx: 4, heightPx: 48, borderWidthPx: 0 },
+        buttons: { primaryBackground: "#C21728", radiusPx: 4, heightPx: 48, borderWidthPx: 0 },
         cards: { radiusPx: 2, borderWidthPx: 1, shadow: "none" },
         spacing: { contentMaxWidthPx: 1200, sectionBlockPx: 72, gridGapPx: 32 }
       }
     }),
     headline: "Make the next workforce decision easier to evaluate.",
     expected: {
-      buttonColor: "rgb(237, 28, 46)",
+      buttonColor: "rgb(194, 23, 40)",
       buttonRadius: "4px",
       logoMode: "image",
       noAsset: false
@@ -298,11 +298,32 @@ test("captures bounded desktop visual evidence for materially different brands",
 
     const metrics = await page.evaluate(() => {
       const primary = getComputedStyle(document.querySelector<HTMLElement>(".primary")!);
+      const body = getComputedStyle(document.body);
       const logoImage = document.querySelector<HTMLImageElement>(".seller-wordmark img");
       const fallback = document.querySelector<HTMLElement>(".seller-wordmark .wordmark-fallback");
+      const contrastRatio = (foreground: string, background: string) => {
+        const luminance = (color: string) => {
+          const channels = color.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
+          const [red, green, blue] = channels.map((channel) => {
+            const normalized = channel / 255;
+            return normalized <= 0.03928
+              ? normalized / 12.92
+              : ((normalized + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+        };
+        const foregroundLuminance = luminance(foreground);
+        const backgroundLuminance = luminance(background);
+        return (
+          (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
+          / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+        );
+      };
       return {
         buttonColor: primary.backgroundColor,
         buttonRadius: primary.borderRadius,
+        buttonContrast: contrastRatio(primary.color, primary.backgroundColor),
+        bodyContrast: contrastRatio(body.color, body.backgroundColor),
         logoImageVisible: Boolean(
           logoImage && getComputedStyle(logoImage).display !== "none" && logoImage.naturalWidth > 0
         ),
@@ -319,6 +340,8 @@ test("captures bounded desktop visual evidence for materially different brands",
 
     expect(metrics.buttonColor).toBe(fixture.expected.buttonColor);
     expect(metrics.buttonRadius).toBe(fixture.expected.buttonRadius);
+    expect(metrics.buttonContrast).toBeGreaterThanOrEqual(4.5);
+    expect(metrics.bodyContrast).toBeGreaterThanOrEqual(4.5);
     expect(metrics.brokenImages).toBe(0);
     expect(metrics.horizontalOverflow).toBe(false);
     expect(metrics.logoImageVisible).toBe(fixture.expected.logoMode === "image");
@@ -354,6 +377,7 @@ test("captures bounded desktop visual evidence for materially different brands",
       brandTokens: {
         primary: fixture.brand.primaryColor,
         action: fixture.brand.accentColor,
+        button: fixture.brand.designDna?.buttons?.primaryBackground,
         surface: fixture.brand.surfaceColor,
         buttonRadius: fixture.brand.designDna?.buttons?.radiusPx,
         cardRadius: fixture.brand.designDna?.cards?.radiusPx,

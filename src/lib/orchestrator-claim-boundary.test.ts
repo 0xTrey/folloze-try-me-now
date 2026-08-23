@@ -34,15 +34,54 @@ const brand: BrandProfile = {
   companyName: "Jitterbit",
   description: "Enterprise integration and workflow automation.",
   publicTopics: ["Integration", "Workflow automation", "API management"],
+  logoUrl: "https://jitterbit.com/logo.svg",
   imageUrls: [],
   colors: ["#1B3E51", "#F44414", "#FFFFFF"],
   primaryColor: "#1B3E51",
   accentColor: "#F44414",
   surfaceColor: "#FFFFFF",
   displayFontFamily: "Roboto Slab",
+  bodyFontFamily: "Inter",
   displayFontUrl: "https://cdn.jitterbit.example/fonts/roboto-slab.woff2",
   sourceUrl: "https://jitterbit.com",
-  source: "fast-extractor"
+  source: "fast-extractor",
+  identity: {
+    expectedDomain: "jitterbit.com",
+    canonicalDomain: "jitterbit.com",
+    canonicalName: "Jitterbit",
+    confirmationStatus: "confirmed",
+    confidence: "high",
+    confirmedBy: "system",
+    reasons: [],
+    provenance: []
+  },
+  designDna: {
+    version: 1,
+    source: "verified-profile",
+    confidence: "high",
+    typography: { fallback: "sans", headingWeight: 700, bodyWeight: 400 },
+    buttons: { primaryBackground: "#F44414", radiusPx: 6, heightPx: 44, borderWidthPx: 0 },
+    cards: { radiusPx: 8, borderWidthPx: 1, shadow: "soft" },
+    spacing: { contentMaxWidthPx: 1200, sectionBlockPx: 88, gridGapPx: 24 }
+  },
+  diagnostics: {
+    logo: {
+      strategy: "official-remote-portable",
+      imageCandidateCount: 1,
+      rejectedImageCount: 0,
+      inlineSvgCandidateCount: 0,
+      resolutionComplete: true
+    },
+    palette: {
+      strategy: "semantic-tokens",
+      confidence: "high",
+      candidateCount: 3,
+      semanticCandidateCount: 3,
+      rejectedCandidateCount: 0,
+      gradientCandidateCount: 0,
+      resolutionComplete: true
+    }
+  }
 };
 
 const draft: ExperienceDraft = {

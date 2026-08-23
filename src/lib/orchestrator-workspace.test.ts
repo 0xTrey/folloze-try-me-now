@@ -32,8 +32,47 @@ const seller: BrandProfile = {
   primaryColor: "#123B4A",
   accentColor: "#F4512C",
   surfaceColor: "#FFFFFF",
+  displayFontFamily: "Inter",
+  bodyFontFamily: "Inter",
   sourceUrl: "https://jitterbit.com",
-  source: "fast-extractor"
+  source: "fast-extractor",
+  identity: {
+    expectedDomain: "jitterbit.com",
+    canonicalDomain: "jitterbit.com",
+    canonicalName: "Jitterbit",
+    confirmationStatus: "confirmed",
+    confidence: "high",
+    confirmedBy: "system",
+    reasons: [],
+    provenance: []
+  },
+  designDna: {
+    version: 1,
+    source: "verified-profile",
+    confidence: "high",
+    typography: { fallback: "sans", headingWeight: 700, bodyWeight: 400 },
+    buttons: { primaryBackground: "#F4512C", radiusPx: 6, heightPx: 44, borderWidthPx: 0 },
+    cards: { radiusPx: 8, borderWidthPx: 1, shadow: "soft" },
+    spacing: { contentMaxWidthPx: 1200, sectionBlockPx: 88, gridGapPx: 24 }
+  },
+  diagnostics: {
+    logo: {
+      strategy: "official-remote-portable",
+      imageCandidateCount: 1,
+      rejectedImageCount: 0,
+      inlineSvgCandidateCount: 0,
+      resolutionComplete: true
+    },
+    palette: {
+      strategy: "semantic-tokens",
+      confidence: "high",
+      candidateCount: 3,
+      semanticCandidateCount: 3,
+      rejectedCandidateCount: 0,
+      gradientCandidateCount: 0,
+      resolutionComplete: true
+    }
+  }
 };
 
 const target: BrandProfile = {
@@ -45,7 +84,17 @@ const target: BrandProfile = {
   publicTopics: ["Networking", "Security", "Infrastructure", "Observability"],
   logoUrl: "https://cisco.com/logo.svg",
   imageUrls: [],
-  sourceUrl: "https://cisco.com"
+  sourceUrl: "https://cisco.com",
+  identity: {
+    expectedDomain: "cisco.com",
+    canonicalDomain: "cisco.com",
+    canonicalName: "Cisco",
+    confirmationStatus: "confirmed",
+    confidence: "high",
+    confirmedBy: "system",
+    reasons: [],
+    provenance: []
+  }
 };
 
 function workspaceSession(id: string, status: TryMeSession["status"] = "preview_ready_unclaimed") {

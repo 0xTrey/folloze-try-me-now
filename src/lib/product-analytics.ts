@@ -83,7 +83,14 @@ export const productEventPayloadSchema = z.object({
     utm: z.partialRecord(z.enum(["source", "medium", "campaign", "term", "content"]), safeText).optional(),
     deviceClass: z.enum(["desktop", "tablet", "mobile", "unknown"]),
     browserFamily: z.string().trim().min(1).max(40).regex(/^[a-z0-9 ._-]+$/i)
-  }).strict().transform(({ referrerHost: _referrerHost, ...landing }) => landing).optional()
+  }).strict().transform((value) => {
+    return {
+      path: value.path,
+      ...(value.utm ? { utm: value.utm } : {}),
+      deviceClass: value.deviceClass,
+      browserFamily: value.browserFamily
+    };
+  }).optional()
 }).strict().superRefine((payload, context) => {
   if (!(UNIFIED_PRODUCT_EVENT_NAMES as readonly string[]).includes(payload.event)) return;
   try {

@@ -18,6 +18,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "benchmark:preview": "vitest run src/lib/preview-benchmark.test.ts src/lib/orchestration/preview-worker-coordinator.test.ts src/lib/orchestration/research-plan.test.ts src/lib/orchestration/single-flight.test.ts src/lib/generation-budget.test.ts",
+    "autoresearch:three-family": "node scripts/autoresearch/run-three-family-loop.mjs",
     "qa:visual:folloze": "playwright test tests/e2e/folloze-wrapper-desktop.spec.ts tests/e2e/verified-logo-lockup.spec.ts tests/e2e/generic-production-visual-evidence.spec.ts --project=desktop",
     "qa:visual:folloze:live": "node scripts/compare-folloze-render.mjs",
     "db:migrate:leads": "node scripts/migrate-leads.mjs",
