@@ -325,11 +325,19 @@ describe("campaign contract", () => {
     expect(spec.route).toEqual({ kind: "abm" });
     expect(spec.compositionRecipe).toMatchObject({
       family: "account",
+      productionFamily: "align",
       archetypeId: "account-technical",
       compositionId: "workflow-spine",
       selectedBy: "system",
       locked: true
     });
+    expect(spec.wireframeDecisionV2).toMatchObject({
+      version: 2,
+      family: "align",
+      subtype: "account",
+      locked: true
+    });
+    expect(spec.wireframeDecisionV2.sectionPlan).toHaveLength(6);
     expect(spec.actions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -395,5 +403,6 @@ describe("campaign contract", () => {
       }
     });
     expect(projection.experienceSpec).not.toHaveProperty("draft");
+    expect(projection.experienceSpec).not.toHaveProperty("wireframeDecisionV2");
   });
 });

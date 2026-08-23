@@ -4,17 +4,24 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { renderExperienceHtml } from "../../src/lib/generation/experience-template";
 import type { ExperienceDraft } from "../../src/lib/generation/experience-schema";
+import {
+  applyV2SectionPlanToLegacySelection,
+  selectThreeFamilyDecision,
+  type WireframeFamilyV2
+} from "../../src/lib/generation/three-family-contract";
+import { selectWireframe } from "../../src/lib/generation/wireframe-library";
 import type { BrandProfile } from "../../src/lib/types";
 import { experienceDraft } from "./generated-experience-fixture";
 
 const assetOrigin = "https://assets.production-evidence.test";
 const evidenceDirectory = resolve(
   process.cwd(),
-  "docs/cursor-handoffs/2026-08-22-generic-builder-production-engine/evidence"
+  "docs/cursor-handoffs/2026-08-23-three-family-production-system/evidence"
 );
 
 type VisualFixture = {
   id: "apple" | "adp" | "servicetitan" | "no-logo-recovery";
+  family: WireframeFamilyV2;
   brand: BrandProfile;
   headline: string;
   expected: {
@@ -77,6 +84,7 @@ function brand(
 const fixtures: VisualFixture[] = [
   {
     id: "apple",
+    family: "guide",
     brand: brand({
       id: "apple",
       domain: "apple.com",
@@ -104,6 +112,7 @@ const fixtures: VisualFixture[] = [
   },
   {
     id: "adp",
+    family: "launch",
     brand: brand({
       id: "adp",
       domain: "adp.com",
@@ -132,6 +141,7 @@ const fixtures: VisualFixture[] = [
   },
   {
     id: "servicetitan",
+    family: "align",
     brand: brand({
       id: "servicetitan",
       domain: "servicetitan.com",
@@ -160,6 +170,7 @@ const fixtures: VisualFixture[] = [
   },
   {
     id: "no-logo-recovery",
+    family: "launch",
     brand: brand({
       id: "no-logo-recovery",
       domain: "no-logo.example",
@@ -234,17 +245,52 @@ test("captures bounded desktop visual evidence for materially different brands",
   const manifest: Array<Record<string, unknown>> = [];
 
   for (const fixture of fixtures) {
+    const useCase = fixture.family === "align"
+      ? "abm"
+      : fixture.family === "guide"
+        ? "content"
+        : "campaign";
+    const decision = selectThreeFamilyDecision({
+      sessionId: `visual-${fixture.id}`,
+      revision: 1,
+      useCase,
+      campaignType: fixture.family === "launch" ? "product" : undefined,
+      offerKind:
+        fixture.family === "launch"
+          ? "product"
+          : fixture.family === "guide"
+            ? "industry"
+            : undefined,
+      targetDomain: fixture.family === "align" ? "target.example" : undefined,
+      firstDecision:
+        fixture.family === "align" ? "Choose the service workflow to validate" : undefined,
+      evidenceRefs: [`fixture:${fixture.id}:seller`, `fixture:${fixture.id}:offer`],
+      assetEvidenceRefs: fixture.brand.imageUrls.map((_, index) => `fixture:${fixture.id}:asset:${index}`)
+    });
+    const legacySelection = applyV2SectionPlanToLegacySelection(
+      selectWireframe({
+        family:
+          fixture.family === "align"
+            ? "account"
+            : fixture.family === "guide"
+              ? "content"
+              : "campaign"
+      }),
+      decision
+    );
     const html = renderExperienceHtml({
       draft: draftFor(fixture),
       brand: fixture.brand,
-      useCase: "campaign",
+      useCase,
       answers: {
-        campaignType: "product",
+        ...(fixture.family === "launch" ? { campaignType: "product" as const } : {}),
+        ...(fixture.family === "align" ? { targetDomain: "target.example" } : {}),
         audience: "Buying team",
         objective: "Evaluate the next step",
         ctaType: "book-meeting",
         ctaStyle: "solid"
-      }
+      },
+      wireframeSelection: legacySelection
     });
     await page.setContent(html, { waitUntil: "domcontentloaded" });
     await expect(page.locator("h1")).toContainText(fixture.headline);
@@ -296,6 +342,28 @@ test("captures bounded desktop visual evidence for materially different brands",
     manifest.push({
       brand: fixture.brand.companyName,
       fixture: fixture.id,
+      family: decision.family,
+      subtype: decision.subtype,
+      familyReasonCode: decision.reasonCode,
+      familyEvidenceRefs: decision.evidenceRefs,
+      sectionPlan: decision.sectionPlan.map(({ id, role, navigationLabel }) => ({
+        id,
+        role,
+        navigationLabel
+      })),
+      brandTokens: {
+        primary: fixture.brand.primaryColor,
+        action: fixture.brand.accentColor,
+        surface: fixture.brand.surfaceColor,
+        buttonRadius: fixture.brand.designDna?.buttons?.radiusPx,
+        cardRadius: fixture.brand.designDna?.cards?.radiusPx,
+        density: fixture.brand.designDna?.spacing?.sectionBlockPx
+      },
+      selectedImages: fixture.brand.imageUrls.slice(0, 2).map((url, index) => ({
+        role: index === 0 ? "hero" : "supporting",
+        url,
+        status: "fixture-verified"
+      })),
       viewport: { width: 1440, height: 1000 },
       source: "deterministic local fixture; no live provider requests",
       ...metrics

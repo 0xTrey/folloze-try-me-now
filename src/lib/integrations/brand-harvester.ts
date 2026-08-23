@@ -3073,8 +3073,8 @@ async function copyOfficialRemoteLogo(
   };
 }
 
-export async function harvestBrand(domain: string): Promise<BrandProfile> {
-  const cached = cachedBrandProfile(domain);
+export async function harvestBrand(domain: string, sourceUrl?: string): Promise<BrandProfile> {
+  const cached = sourceUrl ? undefined : cachedBrandProfile(domain);
   if (cached) return cached;
   // This is the synchronous identity budget, not the overall buyer-experience
   // budget. Optional browser/mobile enrichment can continue separately; the
@@ -3107,7 +3107,7 @@ export async function harvestBrand(domain: string): Promise<BrandProfile> {
   > => {
     try {
       const { text: html, finalUrl, attempts } = await fetchPublicTextWithRetry(
-        new URL(`https://${domain}`),
+        new URL(sourceUrl ?? `https://${domain}`),
         budget.signalFor(8_500)
       );
       publicPageAttempts = attempts;

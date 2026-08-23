@@ -1321,10 +1321,11 @@ export async function runBrandStage(
   const current = await getSession(id);
   if (!current || !needsBrandRefresh(current)) return;
   const expectedDomain = current.companyDomain;
+  const expectedSourceUrl = current.answers.brandSourceUrl;
   const lease = await acquireSessionLease(id, "seller-brand", 30);
   if (!lease) return;
   try {
-    await runBrandStageUnlocked(id, expectedDomain, options);
+    await runBrandStageUnlocked(id, expectedDomain, expectedSourceUrl, options);
   } finally {
     await releaseLeaseSafely(lease, id, "seller_brand");
   }
@@ -1333,13 +1334,18 @@ export async function runBrandStage(
 async function runBrandStageUnlocked(
   id: string,
   expectedDomain: string,
+  expectedSourceUrl: string | undefined,
   options: { resumeStory?: boolean }
 ): Promise<void> {
   const attemptId = opaqueId();
   let shouldHarvest = false;
   await updateSession(id, (session) => {
     shouldHarvest = false;
-    if (session.companyDomain !== expectedDomain || !needsBrandRefresh(session)) return session;
+    if (
+      session.companyDomain !== expectedDomain
+      || session.answers.brandSourceUrl !== expectedSourceUrl
+      || !needsBrandRefresh(session)
+    ) return session;
     if (session.brand) {
       appendEvent(
         session,
@@ -1373,7 +1379,7 @@ async function runBrandStageUnlocked(
   if (!shouldHarvest) return;
 
   try {
-    const harvested = await harvestBrand(expectedDomain);
+    const harvested = await harvestBrand(expectedDomain, expectedSourceUrl);
     const trusted = trustedBrandProfile(harvested, expectedDomain);
     const profile = brandWithSessionLogoDelivery(id, "seller", trusted.profile);
     const harvestedEvidence = trusted.rejectedProfile ?? harvested;
@@ -1381,6 +1387,7 @@ async function runBrandStageUnlocked(
     await updateSession(id, (session) => {
       if (
         session.companyDomain !== expectedDomain ||
+        session.answers.brandSourceUrl !== expectedSourceUrl ||
         session.stages.brand.attemptId !== attemptId
       ) {
         return session;
@@ -1440,6 +1447,7 @@ async function runBrandStageUnlocked(
     await updateSession(id, (session) => {
       if (
         session.companyDomain !== expectedDomain ||
+        session.answers.brandSourceUrl !== expectedSourceUrl ||
         session.stages.brand.attemptId !== attemptId
       ) {
         return session;
@@ -1881,6 +1889,7 @@ export function inferCampaignOfferTitle(
 
 function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const patch = { ...input };
+  const brandSourceUrlWasSupplied = Object.hasOwn(patch, "brandSourceUrl");
   const targetWasSupplied = Object.hasOwn(patch, "targetDomain");
   const targetAllowed = targetWasSupplied && session.useCase === "abm";
   if (targetWasSupplied && !targetAllowed) {
@@ -1904,6 +1913,17 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const previousOfferSourceTitle = session.answers.offerSourceTitle;
   const previousSourceFingerprint = sourceFingerprintForAnswers(session.answers);
   if (patch.targetDomain) patch.targetDomain = normalizeDomain(patch.targetDomain);
+  if (patch.brandSourceUrl) {
+    const brandSource = new URL(patch.brandSourceUrl);
+    if (normalizeDomain(brandSource.hostname) !== normalizeDomain(session.companyDomain)) {
+      throw new HttpError(
+        400,
+        "brand_source_domain_mismatch",
+        "Use an official page on the seller company domain."
+      );
+    }
+    patch.brandSourceUrl = brandSource.toString();
+  }
   if (patch.sourceUrl) {
     patch.sourceUrl = new URL(patch.sourceUrl).toString();
     if (!sourceTitleWasSupplied) {
@@ -1947,6 +1967,9 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const targetChanged =
     targetAllowed && patch.targetDomain !== session.answers.targetDomain;
   session.answers = { ...session.answers, ...patch };
+  if (brandSourceUrlWasSupplied && !patch.brandSourceUrl) {
+    delete session.answers.brandSourceUrl;
+  }
   if (targetAllowed && !patch.targetDomain) delete session.answers.targetDomain;
   if (sourceUrlWasSupplied && !patch.sourceUrl) delete session.answers.sourceUrl;
   if (sourceNameWasSupplied && !patch.sourceName) {
@@ -2064,6 +2087,9 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
     });
   }
   if (patch.objective) appendEvent(session, "objective_selected");
+  if (patch.brandSourceUrl) {
+    appendEvent(session, "brand_help_source_submitted", { kind: "source_url" });
+  }
   if (patch.sourceUrl || patch.sourceName) appendEvent(session, "source_submitted");
   if (patch.messageBelief || patch.messageAction) appendEvent(session, "message_spine_updated");
   if (patch.ctaType || patch.ctaStyle) appendEvent(session, "cta_configured");
@@ -2990,7 +3016,10 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     // renderer as the final experience. It is deliberately deterministic so
     // slow model refinement can never hold the first useful preview hostage.
     // Existing final previews remain visible during later regenerations.
-    if (!latest.experience) {
+    if (
+      !latest.experience &&
+      assessBrandReadiness(selectedBrands.brand).status === "ready"
+    ) {
       const provisionalSourceRevision = latest.revision;
       const provisionalStartedAt = Date.now();
       const answers = provisionalAnswersFor(latest);
@@ -3146,6 +3175,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       imageSourceTargetBrand: targetBrand,
       trustFallbackReason
     });
+    const finalBrandHelpRequired =
+      assessBrandReadiness(selectedBrands.brand).status !== "ready";
     if (generated.error) {
       logServerError(generated.error, {
         sessionId: id,
@@ -3200,6 +3231,30 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         }
         session.brand = brand;
         session.targetBrand = targetBrand;
+        if (finalBrandHelpRequired) {
+          session.experience = undefined;
+          session.experienceSpec = undefined;
+          session.experienceSpecRevision = undefined;
+          session.qualityReceipt = undefined;
+          recordProductionEngineResult(session, finalArtifact.productionResult, "final");
+          session.status = "brand_help_required";
+          session.stages.story = {
+            status: "fallback",
+            startedAt: session.stages.story.startedAt,
+            completedAt: new Date().toISOString(),
+            detail:
+              "We found the company, but we need a clearer brand source. Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed."
+          };
+          appendEvent(session, "brand_help_required", {
+            attemptId,
+            revision: session.revision,
+            identityReady: assessBrandReadiness(selectedBrands.brand).identityReady,
+            logoReady: assessBrandReadiness(selectedBrands.brand).logoReady,
+            paletteReady: assessBrandReadiness(selectedBrands.brand).paletteReady,
+            designReady: assessBrandReadiness(selectedBrands.brand).designReady
+          });
+          return session;
+        }
         const finalIsProvisional = !isGenerationReady(session.useCase, session.answers);
         session.experience = {
           ...finalArtifact.webDraft,

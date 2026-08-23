@@ -1,0 +1,276 @@
+[
+  {
+    "brand": "Apple",
+    "fixture": "apple",
+    "family": "guide",
+    "subtype": "industry",
+    "familyReasonCode": "v2-education-evaluation-guide",
+    "familyEvidenceRefs": [
+      "fixture:apple:offer",
+      "fixture:apple:seller"
+    ],
+    "sectionPlan": [
+      {
+        "id": "guide-1",
+        "role": "market-change",
+        "navigationLabel": "What changed"
+      },
+      {
+        "id": "guide-2",
+        "role": "stakes",
+        "navigationLabel": "What is at stake"
+      },
+      {
+        "id": "guide-3",
+        "role": "evaluation-criteria",
+        "navigationLabel": "What to evaluate"
+      },
+      {
+        "id": "guide-4",
+        "role": "solution-mapping",
+        "navigationLabel": "How it answers"
+      },
+      {
+        "id": "guide-5",
+        "role": "applications",
+        "navigationLabel": "Where it applies"
+      },
+      {
+        "id": "guide-6",
+        "role": "evaluation-close",
+        "navigationLabel": "Continue"
+      }
+    ],
+    "brandTokens": {
+      "primary": "#1D1D1F",
+      "action": "#0071E3",
+      "surface": "#FFFFFF",
+      "buttonRadius": 20,
+      "cardRadius": 0,
+      "density": 120
+    },
+    "selectedImages": [],
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "source": "deterministic local fixture; no live provider requests",
+    "buttonColor": "rgb(0, 113, 227)",
+    "buttonRadius": "20px",
+    "logoImageVisible": true,
+    "fallbackVisible": true,
+    "noAssetTreatments": 1,
+    "brokenImages": 0,
+    "horizontalOverflow": false,
+    "documentHeight": 5416
+  },
+  {
+    "brand": "ADP",
+    "fixture": "adp",
+    "family": "launch",
+    "subtype": "product",
+    "familyReasonCode": "v2-offer-promotion-launch",
+    "familyEvidenceRefs": [
+      "fixture:adp:asset:0",
+      "fixture:adp:offer",
+      "fixture:adp:seller"
+    ],
+    "sectionPlan": [
+      {
+        "id": "launch-1",
+        "role": "buyer-outcome",
+        "navigationLabel": "Outcome"
+      },
+      {
+        "id": "launch-2",
+        "role": "current-friction",
+        "navigationLabel": "Why change"
+      },
+      {
+        "id": "launch-3",
+        "role": "mechanism",
+        "navigationLabel": "How it works"
+      },
+      {
+        "id": "launch-4",
+        "role": "use-cases",
+        "navigationLabel": "Use cases"
+      },
+      {
+        "id": "launch-5",
+        "role": "proof",
+        "navigationLabel": "Evidence"
+      },
+      {
+        "id": "launch-6",
+        "role": "next-move",
+        "navigationLabel": "Next step"
+      }
+    ],
+    "brandTokens": {
+      "primary": "#202428",
+      "action": "#ED1C2E",
+      "surface": "#FFFFFF",
+      "buttonRadius": 4,
+      "cardRadius": 2,
+      "density": 72
+    },
+    "selectedImages": [
+      {
+        "role": "hero",
+        "url": "https://assets.production-evidence.test/adp-product.svg",
+        "status": "fixture-verified"
+      }
+    ],
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "source": "deterministic local fixture; no live provider requests",
+    "buttonColor": "rgb(237, 28, 46)",
+    "buttonRadius": "4px",
+    "logoImageVisible": true,
+    "fallbackVisible": true,
+    "noAssetTreatments": 0,
+    "brokenImages": 0,
+    "horizontalOverflow": false,
+    "documentHeight": 4542
+  },
+  {
+    "brand": "ServiceTitan",
+    "fixture": "servicetitan",
+    "family": "align",
+    "subtype": "account",
+    "familyReasonCode": "v2-named-account-first-decision-align",
+    "familyEvidenceRefs": [
+      "fixture:servicetitan:asset:0",
+      "fixture:servicetitan:offer",
+      "fixture:servicetitan:seller"
+    ],
+    "sectionPlan": [
+      {
+        "id": "align-1",
+        "role": "shared-priority",
+        "navigationLabel": "Shared priority"
+      },
+      {
+        "id": "align-2",
+        "role": "account-relevance",
+        "navigationLabel": "Why it matters here"
+      },
+      {
+        "id": "align-3",
+        "role": "shared-opportunity",
+        "navigationLabel": "Opportunity"
+      },
+      {
+        "id": "align-4",
+        "role": "priority-paths",
+        "navigationLabel": "Choose a priority"
+      },
+      {
+        "id": "align-5",
+        "role": "validation-plan",
+        "navigationLabel": "Proof and validation"
+      },
+      {
+        "id": "align-6",
+        "role": "first-decision",
+        "navigationLabel": "First decision"
+      }
+    ],
+    "brandTokens": {
+      "primary": "#040404",
+      "action": "#0265DC",
+      "surface": "#FFFFFF",
+      "buttonRadius": 6,
+      "cardRadius": 6,
+      "density": 88
+    },
+    "selectedImages": [
+      {
+        "role": "hero",
+        "url": "https://assets.production-evidence.test/servicetitan-product.svg",
+        "status": "fixture-verified"
+      }
+    ],
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "source": "deterministic local fixture; no live provider requests",
+    "buttonColor": "rgb(2, 101, 220)",
+    "buttonRadius": "6px",
+    "logoImageVisible": true,
+    "fallbackVisible": true,
+    "noAssetTreatments": 0,
+    "brokenImages": 0,
+    "horizontalOverflow": false,
+    "documentHeight": 4638
+  },
+  {
+    "brand": "No Logo Co.",
+    "fixture": "no-logo-recovery",
+    "family": "launch",
+    "subtype": "product",
+    "familyReasonCode": "v2-offer-promotion-launch",
+    "familyEvidenceRefs": [
+      "fixture:no-logo-recovery:offer",
+      "fixture:no-logo-recovery:seller"
+    ],
+    "sectionPlan": [
+      {
+        "id": "launch-1",
+        "role": "buyer-outcome",
+        "navigationLabel": "Outcome"
+      },
+      {
+        "id": "launch-2",
+        "role": "current-friction",
+        "navigationLabel": "Why change"
+      },
+      {
+        "id": "launch-3",
+        "role": "mechanism",
+        "navigationLabel": "How it works"
+      },
+      {
+        "id": "launch-4",
+        "role": "use-cases",
+        "navigationLabel": "Use cases"
+      },
+      {
+        "id": "launch-5",
+        "role": "proof",
+        "navigationLabel": "Evidence"
+      },
+      {
+        "id": "launch-6",
+        "role": "next-move",
+        "navigationLabel": "Next step"
+      }
+    ],
+    "brandTokens": {
+      "primary": "#18202A",
+      "action": "#2C6BED",
+      "surface": "#FFFFFF",
+      "buttonRadius": 10,
+      "cardRadius": 10,
+      "density": 80
+    },
+    "selectedImages": [],
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "source": "deterministic local fixture; no live provider requests",
+    "buttonColor": "rgb(44, 107, 237)",
+    "buttonRadius": "10px",
+    "logoImageVisible": false,
+    "fallbackVisible": true,
+    "noAssetTreatments": 1,
+    "brokenImages": 0,
+    "horizontalOverflow": false,
+    "documentHeight": 4754
+  }
+]

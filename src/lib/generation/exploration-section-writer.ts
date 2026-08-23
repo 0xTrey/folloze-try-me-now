@@ -320,11 +320,14 @@ function candidateForSlot(
   slot: SectionWriterSlot
 ): { candidate?: SectionCopyCandidate; sparse: boolean } {
   const claims = currentClaimsForSlot(input, slot);
-  const choices = choicesForSlot(input, slot, claims);
-  const evidenceRefs = unique(choices.flatMap((choice) => choice.evidenceRefs));
   const role = slot.role as OwnedRole;
-  const candidate = fitCandidateToBudget(
-    {
+  const build = (
+    choices: [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice]
+  ): SectionCopyCandidate | undefined => {
+    const evidenceRefs = unique(
+      choices.flatMap((choice) => choice.evidenceRefs)
+    );
+    return fitCandidateToBudget({
       sectionId: slot.id,
       role: slot.role,
       ...copyContractMetadata(slot),
@@ -334,11 +337,17 @@ function candidateForSlot(
       choices,
       evidenceRefs,
       wordCount: 0
-    },
-    slot
-  );
+    }, slot);
+  };
+  const choices = choicesForSlot(input, slot, claims);
+  let candidate = build(choices);
+  let usedBudgetFallback = false;
+  if (!candidate && slot.family && claims.length >= 3) {
+    candidate = build(sparseChoices(slot.role, isTechnical(input), claims));
+    usedBudgetFallback = candidate !== undefined;
+  }
 
-  return { candidate, sparse: claims.length < 3 };
+  return { candidate, sparse: claims.length < 3 || usedBudgetFallback };
 }
 
 function failedArtifact(

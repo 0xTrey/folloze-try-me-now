@@ -20,6 +20,21 @@ function brand(source: BrandProfile["source"] = "brand-harvester"): BrandProfile
     description: "Acme provides governed workflow automation.",
     publicContext: "Teams connect approved workflow steps across operations.",
     publicTopics: ["Workflow automation", "Governed operations"],
+    ...(source === "fallback"
+      ? {}
+      : {
+          logoUrl: "https://acme.example/logo.svg",
+          displayFontFamily: "Acme Sans",
+          bodyFontFamily: "Acme Sans",
+          designDna: {
+            version: 1 as const,
+            source: "verified-profile" as const,
+            confidence: "high" as const,
+            buttons: { radiusPx: 6, borderWidthPx: 1 },
+            cards: { radiusPx: 10, borderWidthPx: 1, shadow: "soft" as const },
+            spacing: { contentMaxWidthPx: 1200, sectionBlockPx: 88, gridGapPx: 20 }
+          }
+        }),
     imageUrls: source === "fallback" ? [] : ["https://acme.example/product.png"],
     colors: source === "fallback" ? [] : ["#111111", "#FFFFFF", "#3B82F6"],
     primaryColor: "#111111",
@@ -29,8 +44,8 @@ function brand(source: BrandProfile["source"] = "brand-harvester"): BrandProfile
     source,
     diagnostics: {
       logo: {
-        strategy: "none",
-        imageCandidateCount: 0,
+        strategy: source === "fallback" ? "none" : "verified-profile",
+        imageCandidateCount: source === "fallback" ? 0 : 1,
         rejectedImageCount: 0,
         inlineSvgCandidateCount: 0,
         resolutionComplete: true
@@ -99,6 +114,12 @@ describe("compileSessionProductionPage", () => {
       revision: 7,
       currentRevisionOnly: true
     });
+    expect(result.artifact.value?.familyDecision).toMatchObject({
+      version: 2,
+      family: "launch",
+      subtype: "product",
+      locked: true
+    });
     const page = result.artifact.value!;
     const currentSession = session(profile);
     const draft = deterministicDraft({
@@ -135,8 +156,8 @@ describe("compileSessionProductionPage", () => {
     expect(result).toMatchObject({
       outcome: "safe-deterministic-fallback",
       instruction: {
-        code: "GPE_DEPENDENCY_UNAVAILABLE",
-        action: "compile_safe_deterministic_experience_spec",
+        code: "GPE_BRAND_HELP_REQUIRED",
+        action: "request_brand_input",
         allowProviderWork: false
       }
     });

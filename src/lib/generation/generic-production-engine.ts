@@ -10,6 +10,7 @@ import { writeMechanismProofSections } from "@/lib/generation/mechanism-proof-se
 import { writeOpeningSections } from "@/lib/generation/opening-section-writer";
 import { writeProblemUrgencySections } from "@/lib/generation/problem-urgency-section-writer";
 import type { ProductionMessageSpine } from "@/lib/generation/production-message-spine";
+import type { WireframeDecisionV2 } from "@/lib/generation/three-family-contract";
 import type {
   SectionCopyCandidate,
   SectionEvidenceClaim,
@@ -65,6 +66,7 @@ export type GenericProductionFallbackCode =
   | "GPE_STALE_REVISION"
   | "GPE_DEPENDENCY_UNAVAILABLE"
   | "GPE_CONTRACT_MISMATCH"
+  | "GPE_BRAND_HELP_REQUIRED"
   | "GPE_PROVIDER_DEADLINE_REACHED"
   | "GPE_WRITER_RESULT_INVALID"
   | "GPE_FACTUALITY_REJECTED"
@@ -94,6 +96,7 @@ export interface GenericProductionPage {
   version: 1;
   revision: number;
   brand: BrandSystemV2;
+  familyDecision?: WireframeDecisionV2;
   composition: WireframeSelectionV1;
   framework: ProductionMessageSpine["framework"];
   omissions: ProductionMessageSpine["omissions"];
@@ -119,6 +122,7 @@ export interface GenericProductionSafeFallbackInstruction {
   action:
     | "discard_stale_result"
     | "reveal_existing_current_revision"
+    | "request_brand_input"
     | "compile_safe_deterministic_experience_spec";
   reason: string;
   allowProviderWork: false;
@@ -138,6 +142,7 @@ export interface GenericProductionEngineInput {
   };
   evidenceArtifact: ProductionArtifact<MaterialLiveBriefEvidence>;
   brandArtifact: ProductionArtifact<BrandSystemV2>;
+  familyDecisionArtifact?: ProductionArtifact<WireframeDecisionV2>;
   compositionArtifact: ProductionArtifact<WireframeSelectionV1>;
   messageSpineArtifact: ProductionArtifact<ProductionMessageSpine>;
   allowVisualRepair?: boolean;
@@ -347,9 +352,10 @@ function artifactFailure(
   const artifacts = [
     input.evidenceArtifact,
     input.brandArtifact,
+    ...(input.familyDecisionArtifact ? [input.familyDecisionArtifact] : []),
     input.compositionArtifact,
     input.messageSpineArtifact
-  ] as const;
+  ];
   if (artifacts.some((artifact) => artifact.sessionId !== input.sessionId)) {
     return {
       code: "GPE_ARTIFACT_SESSION_MISMATCH",
@@ -364,6 +370,8 @@ function artifactFailure(
       input.evidenceArtifact.value.revision !== input.revision) ||
     (input.brandArtifact.value !== undefined &&
       input.brandArtifact.value.revision !== input.revision) ||
+    (input.familyDecisionArtifact?.value !== undefined &&
+      input.familyDecisionArtifact.value.revision !== input.revision) ||
     (input.messageSpineArtifact.value !== undefined &&
       input.messageSpineArtifact.value.revision !== input.revision) ||
     Object.values(input.evidenceArtifact.value?.fields ?? {}).some(
@@ -385,6 +393,27 @@ function artifactFailure(
     return {
       code: "GPE_CONTRACT_MISMATCH",
       reason: "A production artifact was supplied by the wrong worker.",
+      status: "failed"
+    };
+  }
+  if (input.brandArtifact.status === "needs_input") {
+    return {
+      code: "GPE_BRAND_HELP_REQUIRED",
+      reason:
+        input.brandArtifact.userRequest?.prompt ??
+        "A clearer seller brand source is required before a customer-ready reveal.",
+      status: "fallback"
+    };
+  }
+  if (
+    input.familyDecisionArtifact &&
+    (input.familyDecisionArtifact.worker !== INPUT_WORKERS.composition ||
+      input.familyDecisionArtifact.value?.version !== 2 ||
+      input.familyDecisionArtifact.value.locked !== true)
+  ) {
+    return {
+      code: "GPE_CONTRACT_MISMATCH",
+      reason: "The V2 family decision is not a locked wireframe-ranker artifact.",
       status: "failed"
     };
   }
@@ -591,6 +620,8 @@ export async function compileGenericProductionPage(
       failure.reason,
       failure.status === "stale"
         ? "discard_stale_result"
+        : failure.code === "GPE_BRAND_HELP_REQUIRED"
+          ? "request_brand_input"
         : "compile_safe_deterministic_experience_spec",
       failure.status,
       workerReceipts,
@@ -923,6 +954,9 @@ export async function compileGenericProductionPage(
     version: 1,
     revision: input.revision,
     brand,
+    ...(input.familyDecisionArtifact?.value
+      ? { familyDecision: structuredClone(input.familyDecisionArtifact.value) }
+      : {}),
     composition: selection,
     framework: {
       ...spine.framework,

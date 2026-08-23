@@ -3,6 +3,10 @@ import type {
   WireframeSectionRole,
   WireframeSelectionV1
 } from "@/lib/generation/wireframe-library";
+import type {
+  WireframeDecisionV2,
+  WireframeFamilyV2
+} from "@/lib/generation/three-family-contract";
 import type { WorkerReceipt } from "@/lib/orchestration/worker-types";
 
 export const USE_CASES = ["abm", "campaign", "content"] as const;
@@ -92,6 +96,7 @@ export type StageStatus = "pending" | "running" | "complete" | "fallback" | "fai
 export type SessionStatus =
   | "collecting"
   | "generating"
+  | "brand_help_required"
   | "preview_provisional"
   | "preview_ready_unclaimed"
   | "claim_pending"
@@ -353,6 +358,7 @@ export interface BrandProfile {
 
 export interface SessionAnswers {
   sellerConfirmed?: boolean;
+  brandSourceUrl?: string;
   targetDomain?: string;
   targetConfirmed?: boolean;
   audience?: string;
@@ -873,6 +879,8 @@ export interface ExperienceProductionReceipt {
   status: "complete" | "fallback";
   frameworkId: string;
   compositionId: string;
+  family: WireframeFamilyV2;
+  familyReasonCode: string;
   mediaIntent: "image-led" | "diagram-led" | "type-led";
   sections: Array<{
     id: string;
@@ -896,8 +904,12 @@ export interface ExperienceSpecV2
     kind: ExperienceRouteKind;
     campaignSubtype?: "product" | "demand" | "launch" | "event" | "webinar" | "replay";
   };
+  /** Authoritative backend-only Launch/Guide/Align production decision. */
+  wireframeDecisionV2: WireframeDecisionV2;
   compositionRecipe: {
+    /** Legacy renderer family retained as a compatibility adapter. */
     family: WireframeSelectionV1["family"];
+    productionFamily: WireframeFamilyV2;
     archetypeId: string;
     compositionId: string;
     selectedBy: "system";

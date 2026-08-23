@@ -53,6 +53,7 @@ import {
   type CtaValue,
   type EntryPathOption
 } from "@/components/try-me-now-enhancements";
+import { BrandHelpRecovery } from "@/components/brand-help-recovery";
 import { usePreviewForegroundSeconds } from "@/components/use-preview-foreground-seconds";
 import {
   StreamingBriefComposer,
@@ -4239,7 +4240,15 @@ export function TryMeNowApp() {
           <div className="briefPanel">
             <div className="guidedWorkspaceInner">
               <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
-              {session.useCase === "campaign" ? (
+              {session.status === "brand_help_required" ? (
+                <BrandHelpRecovery
+                  availableKinds={["source_url"]}
+                  disabled={isSaving}
+                  status={isSaving ? "submitting" : "waiting"}
+                  onUrlSubmit={(url) => void patchAnswers({ brandSourceUrl: url })}
+                  onFileSubmit={() => undefined}
+                />
+              ) : session.useCase === "campaign" ? (
                 <StreamingBriefComposer
                   mode="unified"
                   questions={streamingQuestions}

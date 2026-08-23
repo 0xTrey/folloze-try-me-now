@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyV2SectionPlanToLegacySelection,
   assertWireframeDecisionV2,
   decodeWireframeFamilyV2,
   defaultSectionPlanV2,
   selectThreeFamilyDecision,
   wireframeFamiliesV2
 } from "@/lib/generation/three-family-contract";
+import { selectWireframe } from "@/lib/generation/wireframe-library";
 
 describe("three-family production contract", () => {
   it("permits only Launch, Guide, and Align as V2 families", () => {
@@ -126,5 +128,28 @@ describe("three-family production contract", () => {
     expect(decodeWireframeFamilyV2("campaign", "industry")).toBe("guide");
     expect(decodeWireframeFamilyV2("campaign", "product")).toBe("launch");
     expect(decodeWireframeFamilyV2("launch")).toBe("launch");
+  });
+
+  it.each([
+    ["launch", ["hero", "context", "mechanism", "pathways", "proof", "next-action"]],
+    ["guide", ["hero", "context", "decision-support", "mechanism", "pathways", "next-action"]],
+    ["align", ["hero", "context", "mechanism", "pathways", "proof", "next-action"]]
+  ] as const)("adapts %s section order through the legacy renderer seam", (family, roles) => {
+    const decision = selectThreeFamilyDecision({
+      sessionId: `session-${family}`,
+      revision: 6,
+      useCase: family === "align" ? "abm" : family === "guide" ? "content" : "campaign",
+      offerKind: family === "launch" ? "product" : undefined
+    });
+    const legacy = selectWireframe({
+      family: family === "align" ? "account" : family === "guide" ? "content" : "campaign"
+    });
+    const adapted = applyV2SectionPlanToLegacySelection(legacy, decision);
+    expect(adapted.locked).toBe(true);
+    expect(adapted.alternativeIds).toEqual([]);
+    expect(adapted.compositionPlan.sections.map(({ role }) => role)).toEqual(roles);
+    expect(adapted.compositionPlan.sections.map(({ label }) => label)).toEqual(
+      decision.sectionPlan.map(({ navigationLabel }) => navigationLabel)
+    );
   });
 });

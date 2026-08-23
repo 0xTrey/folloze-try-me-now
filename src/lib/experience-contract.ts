@@ -8,6 +8,10 @@ import { compilePersonalizationPlan } from "@/lib/generation/experience-renderer
 import type { GenericProductionPage } from "@/lib/generation/generic-production-engine";
 import { selectWireframe } from "@/lib/generation/wireframe-library";
 import {
+  selectThreeFamilyDecision,
+  type ExperienceSubtypeV2
+} from "@/lib/generation/three-family-contract";
+import {
   PREVIEW_INTERACTION_TYPES,
   type AudienceLensArtifact,
   type AudienceLensFinding,
@@ -64,6 +68,19 @@ function campaignSubtypeFor(session: TryMeSession): ExperienceSpecV2["route"]["c
   return /replay|follow[- ]?up|nurture/i.test(session.answers.objective ?? "")
     ? "replay"
     : "demand";
+}
+
+function productionOfferKind(
+  session: TryMeSession
+): Exclude<ExperienceSubtypeV2, "account"> | undefined {
+  if (session.answers.campaignType === "event") {
+    return /webinar|virtual/i.test(session.answers.eventSource ?? "") ? "webinar" : "event";
+  }
+  if (session.answers.campaignType === "product") return "product";
+  const signal = `${session.answers.promotedOffer ?? ""} ${session.answers.objective ?? ""}`;
+  if (/\bindustr(?:y|ies)\b/i.test(signal)) return "industry";
+  if (/\b(?:solution|evaluate|evaluation|criteria|guide)\b/i.test(signal)) return "solution";
+  return session.useCase === "campaign" ? "offer" : undefined;
 }
 
 function primaryActionFor(
@@ -503,6 +520,33 @@ export function buildExperienceSpec(
     },
     { selectedBy: "system", locked: true }
   );
+  const productionFamilyDecision = productionPage?.familyDecision ?? selectThreeFamilyDecision({
+    sessionId: session.id,
+    revision: session.revision,
+    useCase: session.useCase,
+    campaignType: session.answers.campaignType,
+    eventSubtype:
+      session.answers.campaignType === "event"
+        ? /webinar|virtual/i.test(session.answers.eventSource ?? "")
+          ? "webinar"
+          : "event"
+        : undefined,
+    offerKind: productionOfferKind(session),
+    intent: `${session.answers.objective ?? ""} ${session.answers.promotedOffer ?? ""}`,
+    targetDomain: session.answers.targetDomain,
+    firstDecision:
+      session.useCase === "abm"
+        ? session.answers.messageBelief ?? session.answers.objective
+        : undefined,
+    evidenceRefs: (session.evidenceItems ?? [])
+      .filter((item) => item.disposition !== "excluded")
+      .map((item) => item.id),
+    proofEvidenceRefs: productionPage?.claimToEvidence
+      .flatMap((mapping) => mapping.evidence.map(({ id }) => id)),
+    assetEvidenceRefs: session.answers.selectedAssetIds,
+    includeProofDepth: (productionPage?.claimToEvidence.length ?? 0) >= 2,
+    includeResource: Boolean(sourceUrl)
+  });
   const payload = {
     schemaVersion: "2.0" as const,
     revision:
@@ -580,6 +624,7 @@ export function buildExperienceSpec(
         : {})
     },
     wireframeSelection,
+    wireframeDecisionV2: productionFamilyDecision,
     route: {
       kind: (session.useCase === "content" ? "content-magic" : session.useCase) as ExperienceRouteKind,
       ...(campaignSubtypeFor(session)
@@ -588,6 +633,7 @@ export function buildExperienceSpec(
     },
     compositionRecipe: {
       family: wireframeSelection.family,
+      productionFamily: productionFamilyDecision.family,
       archetypeId: wireframeSelection.archetypeId,
       compositionId: wireframeSelection.compositionId,
       selectedBy: "system" as const,
@@ -626,6 +672,8 @@ export function buildExperienceSpec(
             status: "complete" as const,
             frameworkId: productionPage.framework.id,
             compositionId: productionPage.composition.compositionId,
+            family: productionFamilyDecision.family,
+            familyReasonCode: productionFamilyDecision.reasonCode,
             mediaIntent: productionPage.mediaIntent,
             sections: productionPage.sections.map((section) => ({
               id: section.sectionId,

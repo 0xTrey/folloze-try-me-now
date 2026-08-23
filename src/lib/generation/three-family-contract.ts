@@ -1,4 +1,10 @@
 import type { UseCase } from "@/lib/types";
+import type {
+  WireframeAllowedInteraction,
+  WireframeComponentSlot,
+  WireframeSectionRole,
+  WireframeSelectionV1
+} from "@/lib/generation/wireframe-library";
 
 export const wireframeFamiliesV2 = ["launch", "guide", "align"] as const;
 export const experienceSubtypesV2 = [
@@ -114,7 +120,7 @@ export interface ThreeFamilySelectionInput {
   sessionId: string;
   revision: number;
   useCase: UseCase;
-  campaignType?: "product" | "solution" | "event";
+  campaignType?: "product" | "solution" | "demand" | "event";
   eventSubtype?: "event" | "webinar";
   intent?: string;
   offerKind?: "product" | "offer" | "solution" | "industry" | "event" | "webinar";
@@ -282,6 +288,10 @@ export function selectThreeFamilyDecision(
     input.offerKind === "webinar" ||
     /\b(?:event|webinar|register|registration|attend|rsvp)\b/.test(intent);
   const namedAccount = input.useCase === "abm" || Boolean(input.targetDomain?.trim());
+  const promotionalIntent =
+    input.campaignType === "product" ||
+    input.offerKind === "product" ||
+    input.offerKind === "offer";
   const educationalIntent =
     input.useCase === "content" ||
     input.campaignType === "solution" ||
@@ -303,6 +313,10 @@ export function selectThreeFamilyDecision(
       : "v2-named-account-align";
     factors.push(factor("named-account", 90, input.evidenceRefs));
     if (input.firstDecision) factors.push(factor("first-decision", 20, input.evidenceRefs));
+  } else if (promotionalIntent) {
+    family = "launch";
+    reasonCode = "v2-offer-promotion-launch";
+    factors.push(factor("promotion-intent", 85, input.evidenceRefs));
   } else if (educationalIntent) {
     family = "guide";
     reasonCode = "v2-education-evaluation-guide";
@@ -385,4 +399,88 @@ export function assertWireframeDecisionV2(
     throw new Error("V2 section plan permits one primary exploration device");
   }
   return decision;
+}
+
+const legacyRoleByV2Role: Record<SectionRoleV2, WireframeSectionRole> = {
+  "buyer-outcome": "hero",
+  "current-friction": "context",
+  mechanism: "mechanism",
+  "use-cases": "pathways",
+  proof: "proof",
+  "next-move": "next-action",
+  "market-change": "hero",
+  stakes: "context",
+  "evaluation-criteria": "decision-support",
+  "solution-mapping": "mechanism",
+  applications: "pathways",
+  "evaluation-close": "next-action",
+  "shared-priority": "hero",
+  "account-relevance": "context",
+  "shared-opportunity": "mechanism",
+  "priority-paths": "pathways",
+  "validation-plan": "proof",
+  "first-decision": "next-action",
+  "proof-depth": "proof",
+  resource: "resources"
+};
+
+const legacyComponentByVisualRole: Record<VisualRoleV2, WireframeComponentSlot> = {
+  "hero-image-or-type": "image-hero",
+  "evidence-type": "narrative-copy",
+  workflow: "step-sequence",
+  "path-selector": "choice-cards",
+  "proof-artifact": "proof-artifact",
+  "cta-panel": "cta-panel",
+  criteria: "decision-matrix",
+  "scenario-map": "choice-cards",
+  "account-observations": "fact-pair"
+};
+
+const legacyInteractionByV2: Record<InteractionRoleV2, WireframeAllowedInteraction> = {
+  "select-path": "select-path",
+  "reveal-evidence": "expand-details",
+  "anchor-navigation": "anchor-scroll"
+};
+
+/**
+ * Keeps existing renderers and persisted V1 archetypes while making the V2
+ * family section contract authoritative for current production.
+ */
+export function applyV2SectionPlanToLegacySelection(
+  selection: WireframeSelectionV1,
+  decision: WireframeDecisionV2
+): WireframeSelectionV1 {
+  assertWireframeDecisionV2(decision);
+  const sections = decision.sectionPlan.map((section) => ({
+    role: legacyRoleByV2Role[section.role],
+    label: section.navigationLabel,
+    wordBudget: {
+      min: section.wordBudget.headline[0] + section.wordBudget.body[0],
+      max: section.wordBudget.headline[1] + section.wordBudget.body[1]
+    },
+    componentSlots: [legacyComponentByVisualRole[section.visualRole]],
+    allowedInteractions: section.interaction
+      ? [legacyInteractionByV2[section.interaction]]
+      : (["none"] as WireframeAllowedInteraction[])
+  }));
+  return {
+    ...selection,
+    locked: true,
+    selectedBy: "system",
+    alternativeIds: [],
+    compositionPlan: {
+      ...selection.compositionPlan,
+      sectionCount: sections.length as 4 | 5 | 6 | 7 | 8,
+      sections,
+      totalWordBudget: sections.reduce(
+        (total, section) => ({
+          min: total.min + section.wordBudget.min,
+          max: total.max + section.wordBudget.max
+        }),
+        { min: 0, max: 0 }
+      ),
+      alternatives: [],
+      visibility: "internal"
+    }
+  };
 }

@@ -14,13 +14,14 @@ export type BrandHelpFileInput = {
 export type BrandHelpRecoveryStatus = "waiting" | "submitting" | "resuming";
 
 export type BrandHelpRecoveryProps = {
+  availableKinds?: readonly BrandHelpSourceKind[];
   disabled?: boolean;
   status?: BrandHelpRecoveryStatus;
   onUrlSubmit: (url: string) => void;
   onFileSubmit: (input: BrandHelpFileInput) => void;
 };
 
-type BrandHelpSourceKind = "source_url" | BrandHelpFileKind;
+export type BrandHelpSourceKind = "source_url" | BrandHelpFileKind;
 
 const approvedPrompt =
   "We found the company, but we need a clearer brand source. Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed.";
@@ -88,6 +89,7 @@ function isAcceptedFile(file: File, kind: BrandHelpFileKind) {
 }
 
 export function BrandHelpRecovery({
+  availableKinds,
   disabled = false,
   status,
   onUrlSubmit,
@@ -106,6 +108,9 @@ export function BrandHelpRecovery({
   const visibleStatus = status ?? localStatus;
   const fileKind = sourceKind === "source_url" ? null : sourceKind;
   const selectedFileConfig = fileKind ? fileConfig[fileKind] : null;
+  const visibleSourceOptions = availableKinds?.length
+    ? sourceOptions.filter((option) => availableKinds.includes(option.kind))
+    : sourceOptions;
 
   const chooseSourceKind = (kind: BrandHelpSourceKind) => {
     setSourceKind(kind);
@@ -172,7 +177,7 @@ export function BrandHelpRecovery({
         <fieldset disabled={disabled || visibleStatus === "submitting"}>
           <legend>Choose one brand source</legend>
           <div className={styles.sourceOptions}>
-            {sourceOptions.map((option) => (
+            {visibleSourceOptions.map((option) => (
               <label key={option.kind}>
                 <input
                   type="radio"

@@ -22,6 +22,11 @@ import {
 } from "@/lib/generation/objective-cta-recommendations";
 import { compileProductionMessageSpine } from "@/lib/generation/production-message-spine";
 import {
+  applyV2SectionPlanToLegacySelection,
+  selectThreeFamilyDecision,
+  type ExperienceSubtypeV2
+} from "@/lib/generation/three-family-contract";
+import {
   selectWireframe,
   type WireframeSectionCount
 } from "@/lib/generation/wireframe-library";
@@ -72,6 +77,14 @@ function campaignMotion(session: TryMeSession): OfferCampaignMotion {
   return /\bindustr(?:y|ies)\b/i.test(session.answers.promotedOffer ?? "")
     ? "industry"
     : "solution";
+}
+
+function experienceSubtype(session: TryMeSession): Exclude<ExperienceSubtypeV2, "account"> {
+  const motion = campaignMotion(session);
+  if (motion === "event") {
+    return /webinar/i.test(session.answers.eventSource ?? "") ? "webinar" : "event";
+  }
+  return motion;
 }
 
 function objectiveMotion(session: TryMeSession): ObjectiveCtaMotion {
@@ -407,7 +420,54 @@ export async function compileSessionProductionPage(input: {
     startedAt,
     completedAt
   });
-  const selection = selectWireframe({
+  const familyDecision = selectThreeFamilyDecision({
+    sessionId: session.id,
+    revision,
+    useCase: session.useCase,
+    campaignType: session.answers.campaignType,
+    eventSubtype:
+      session.answers.campaignType === "event"
+        ? /webinar/i.test(session.answers.eventSource ?? "")
+          ? "webinar"
+          : "event"
+        : undefined,
+    offerKind: experienceSubtype(session),
+    intent: `${session.answers.objective ?? ""} ${session.answers.promotedOffer ?? ""}`,
+    targetDomain: session.answers.targetDomain,
+    firstDecision:
+      session.useCase === "abm"
+        ? session.answers.messageBelief ?? session.answers.objective
+        : undefined,
+    evidenceRefs: evidenceArtifact.evidenceRefs,
+    proofEvidenceRefs: (session.evidenceItems ?? [])
+      .filter((item) => item.disposition !== "excluded")
+      .map((item) => item.id),
+    assetEvidenceRefs: brandArtifact.value?.imagery.selected.map(
+      ({ evidenceRef }) => evidenceRef
+    ),
+    includeProofDepth: (session.evidenceItems?.length ?? 0) >= 2,
+    includeResource: Boolean(
+      session.answers.sourceUrl ||
+      session.answers.offerSourceUrl ||
+      session.answers.eventSource
+    )
+  });
+  const familyDecisionArtifact = productionArtifact({
+    worker: "wireframe-ranker",
+    sessionId: session.id,
+    revision,
+    value: familyDecision,
+    evidenceRefs: [...familyDecision.evidenceRefs],
+    confidence:
+      familyDecision.confidence === "high"
+        ? 0.9
+        : familyDecision.confidence === "medium"
+          ? 0.7
+          : 0.4,
+    startedAt,
+    completedAt
+  });
+  const legacySelection = selectWireframe({
     family: session.useCase === "abm" ? "account" : session.useCase,
     campaignType: session.answers.campaignType,
     audience: audience.label,
@@ -433,6 +493,10 @@ export async function compileSessionProductionPage(input: {
     assetQuality: brand.imageUrls.length > 0 ? "high" : "none",
     sellerLogoAvailable: Boolean(brand.logoUrl || brand.portableLogo)
   }, { selectedBy: "system", locked: true });
+  const selection = applyV2SectionPlanToLegacySelection(
+    legacySelection,
+    familyDecision
+  );
   const compositionArtifact = productionArtifact({
     worker: "wireframe-ranker",
     sessionId: session.id,
@@ -465,6 +529,7 @@ export async function compileSessionProductionPage(input: {
     },
     evidenceArtifact,
     brandArtifact,
+    familyDecisionArtifact,
     compositionArtifact,
     messageSpineArtifact,
     allowVisualRepair: true

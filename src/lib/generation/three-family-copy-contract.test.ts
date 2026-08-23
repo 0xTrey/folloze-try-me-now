@@ -290,9 +290,26 @@ describe("approved three-family copy contract", () => {
         ),
         writeTeamCtaSections(writerInputFor(family, "team-cta-writer"))
       ];
-      const candidates = artifacts.flatMap((artifact) => artifact.value ?? []);
+      const orderById = new Map(
+        writerInputFor(family, "opening-writer").slots.map((slot) => [
+          slot.id,
+          slot.spineOrder ?? 0
+        ])
+      );
+      const candidates = artifacts
+        .flatMap((artifact) => artifact.value ?? [])
+        .sort(
+          (left, right) =>
+            (orderById.get(left.sectionId) ?? 0) -
+            (orderById.get(right.sectionId) ?? 0)
+        );
 
-      expect(artifacts.every(({ status }) => status !== "failed")).toBe(true);
+      for (const artifact of artifacts) {
+        expect(
+          artifact.status,
+          `${artifact.worker}:${artifact.errorCode ?? "no-error"}`
+        ).not.toBe("failed");
+      }
       expect(candidates).toHaveLength(6);
       expect(
         candidates.every((item) => {
@@ -442,6 +459,9 @@ describe("approved three-family copy contract", () => {
     const guide = spine("guide");
     const align = spine("align");
 
+    expect(
+      Array.from({ length: 5 }, () => spine("align"))
+    ).toEqual(Array.from({ length: 5 }, () => align));
     expect(argumentOrderForFamilyV2("launch")).not.toEqual(
       argumentOrderForFamilyV2("guide")
     );
