@@ -373,7 +373,16 @@ describe("BrandSystemV2 compiler", () => {
     const result = compile([source]);
 
     expect(result.value?.logo).toEqual({ confidence: 0, status: "missing" });
-    expect(result.value?.imagery).toEqual({ style: "type-led", candidates: [] });
+    expect(result.value?.imagery).toEqual({
+      style: "type-led",
+      candidates: [],
+      selected: []
+    });
+    expect(result).toMatchObject({
+      status: "needs_input",
+      value: { readiness: "needs_input" },
+      userRequest: { kind: "source_url" }
+    });
     expect(JSON.stringify(result.value)).not.toMatch(/placeholder|generic-palette/i);
   });
 
@@ -439,9 +448,10 @@ describe("BrandSystemV2 compiler", () => {
     ]);
 
     expect(result).toMatchObject({
-      status: "failed",
+      status: "needs_input",
       errorCode: "verified_neutral_colors_unavailable",
-      confidence: 0
+      confidence: 0,
+      userRequest: { kind: "source_url" }
     });
     expect(result.value).toBeUndefined();
   });

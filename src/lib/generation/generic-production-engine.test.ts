@@ -235,12 +235,14 @@ function brandValue(): BrandSystemV2 {
     },
     imagery: {
       style: "type-led",
-      candidates: []
+      candidates: [],
+      selected: []
     },
     motion: {
       style: "none",
       durationRangeMs: [0, 0]
     },
+    readiness: "needs_input",
     confidence: 0.9,
     evidenceRefs: [
       "official:ink",

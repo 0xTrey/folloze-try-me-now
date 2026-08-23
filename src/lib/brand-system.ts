@@ -47,6 +47,13 @@ export interface AssetEvidence extends EvidenceValue<string> {
   kind: BrandAssetKind;
 }
 
+export interface SelectedAssetRole {
+  role: "hero" | "supporting";
+  ref: string;
+  kind: BrandAssetKind;
+  evidenceRef: string;
+}
+
 export interface BrandSystemV2 {
   revision: number;
   identity: { name: string; canonicalDomain: string; aliases: string[] };
@@ -77,8 +84,13 @@ export interface BrandSystemV2 {
     navStyle: string;
     heroStyle: string;
   };
-  imagery: { style: string; candidates: AssetEvidence[] };
+  imagery: {
+    style: string;
+    candidates: AssetEvidence[];
+    selected: SelectedAssetRole[];
+  };
   motion: { style: string; durationRangeMs: [number, number] };
+  readiness: "verified" | "partial" | "needs_input";
   confidence: number;
   evidenceRefs: string[];
 }
@@ -774,10 +786,15 @@ export function compileBrandSystemV2(
   if (!selectedInk || !selectedSurface) {
     return {
       ...base,
-      status: "failed",
+      status: "needs_input",
       evidenceRefs: [],
       confidence: 0,
-      errorCode: "verified_neutral_colors_unavailable"
+      errorCode: "verified_neutral_colors_unavailable",
+      userRequest: {
+        kind: "source_url",
+        prompt:
+          "We found the company, but we need a clearer brand source. Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed."
+      }
     };
   }
 
@@ -954,6 +971,12 @@ export function compileBrandSystemV2(
         selectedOrDefault(imageryStyle, "type-led") === "diagram"
       ? "diagram-led"
       : "type-led";
+  const selectedAssets: SelectedAssetRole[] = assets.slice(0, 2).map((asset, index) => ({
+    role: index === 0 ? "hero" : "supporting",
+    ref: asset.value,
+    kind: asset.kind,
+    evidenceRef: asset.source
+  }));
   const motionStyle = selectCandidate(
     collectCandidates(sources, (source) => source.motion?.style),
     "motion",
@@ -1029,6 +1052,15 @@ export function compileBrandSystemV2(
     !assets.length && "missing-imagery",
     !motionStyle && "motion"
   ].filter(Boolean);
+  const minimumBrandReady = Boolean(
+    selectedLogo &&
+    selectedInk &&
+    selectedSurface &&
+    selectedAction &&
+    (selectedDisplay || selectedBody) &&
+    controlRadius &&
+    cardRadius
+  );
   const system: BrandSystemV2 = {
     revision: input.revision,
     identity: {
@@ -1060,7 +1092,8 @@ export function compileBrandSystemV2(
     },
     imagery: {
       style: compiledImageryStyle,
-      candidates: assets
+      candidates: assets,
+      selected: selectedAssets
     },
     motion: {
       style: selectedOrDefault(motionStyle, "none"),
@@ -1068,18 +1101,36 @@ export function compileBrandSystemV2(
         ? [motionRange.evidence.value[0], motionRange.evidence.value[1]]
         : [0, 0]
     },
+    readiness: minimumBrandReady
+      ? fallbackReasons.length
+        ? "partial"
+        : "verified"
+      : "needs_input",
     confidence,
     evidenceRefs
   };
 
   return {
     ...base,
-    status: fallbackReasons.length ? "fallback" : "complete",
+    status: minimumBrandReady
+      ? fallbackReasons.length
+        ? "fallback"
+        : "complete"
+      : "needs_input",
     value: system,
     evidenceRefs,
     confidence,
     ...(fallbackReasons.length
       ? { fallbackCode: `brand_system_partial:${fallbackReasons.join(",")}` }
+      : {}),
+    ...(!minimumBrandReady
+      ? {
+          userRequest: {
+            kind: "source_url" as const,
+            prompt:
+              "We found the company, but we need a clearer brand source. Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed."
+          }
+        }
       : {})
   };
 }

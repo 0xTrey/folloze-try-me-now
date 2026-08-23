@@ -31,6 +31,7 @@ export type ProductionWorkerKind =
   | "spec-compiler-qa";
 
 export type WorkerKind = PreviewWorkerKind | ProductionWorkerKind;
+export type WorkerKindV2 = WorkerKind;
 
 export type PreviewWorkerStatus =
   | "queued"
@@ -39,7 +40,8 @@ export type PreviewWorkerStatus =
   | "fallback"
   | "timed_out"
   | "failed"
-  | "stale";
+  | "stale"
+  | "needs_input";
 
 export interface WorkerEvidenceRef {
   id: string;
@@ -59,7 +61,7 @@ export interface ProductionArtifact<T> {
   worker: WorkerKind;
   sessionId: string;
   revision: number;
-  status: "complete" | "fallback" | "timed_out" | "failed" | "stale";
+  status: "complete" | "fallback" | "timed_out" | "failed" | "stale" | "needs_input";
   value?: T;
   evidenceRefs: string[];
   confidence: number;
@@ -67,7 +69,13 @@ export interface ProductionArtifact<T> {
   completedAt: string;
   fallbackCode?: string;
   errorCode?: string;
+  userRequest?: {
+    kind: "logo" | "brand_guide" | "screenshot" | "source_url";
+    prompt: string;
+  };
 }
+
+export type ProductionArtifactV2<T> = ProductionArtifact<T>;
 
 export interface WorkerReceipt {
   worker: WorkerKind;
