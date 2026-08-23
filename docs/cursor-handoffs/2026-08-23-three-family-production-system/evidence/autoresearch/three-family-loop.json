@@ -1,10 +1,12 @@
 {
-  "target": "custom",
-  "baselineScore": 43,
+  "metric": "manifest_contract_score",
+  "disclaimer": "Contract/runtime integrity only; not a product-design or live-provider score.",
+  "baselineManifestContractScore": null,
+  "baselineNote": "The prior 43/100 used a different quality rubric and is intentionally not compared to this manifest contract score.",
   "best": {
     "iteration": 1,
     "mutation": "current",
-    "score": 100,
+    "manifestContractScore": 100,
     "blockers": []
   },
   "stopReason": "all rubric checks passed",
@@ -13,9 +15,10 @@
     {
       "iteration": 1,
       "changedVariable": "current",
-      "target": "custom",
+      "metric": "manifest_contract_score",
+      "disclaimer": "Contract/runtime integrity only; not a product-design or live-provider score.",
       "mutation": "current",
-      "score": 100,
+      "manifestContractScore": 100,
       "rubric": {
         "familySelection": 25,
         "brandFidelity": 25,
@@ -30,9 +33,10 @@
     {
       "iteration": 2,
       "changedVariable": "family-threshold",
-      "target": "custom",
+      "metric": "manifest_contract_score",
+      "disclaimer": "Contract/runtime integrity only; not a product-design or live-provider score.",
       "mutation": "family-threshold",
-      "score": 91,
+      "manifestContractScore": 91,
       "rubric": {
         "familySelection": 16,
         "brandFidelity": 25,
@@ -49,9 +53,10 @@
     {
       "iteration": 3,
       "changedVariable": "section-shape",
-      "target": "custom",
+      "metric": "manifest_contract_score",
+      "disclaimer": "Contract/runtime integrity only; not a product-design or live-provider score.",
       "mutation": "section-shape",
-      "score": 100,
+      "manifestContractScore": 100,
       "rubric": {
         "familySelection": 25,
         "brandFidelity": 25,
@@ -66,9 +71,10 @@
     {
       "iteration": 4,
       "changedVariable": "evidence-authority",
-      "target": "custom",
+      "metric": "manifest_contract_score",
+      "disclaimer": "Contract/runtime integrity only; not a product-design or live-provider score.",
       "mutation": "evidence-authority",
-      "score": 96,
+      "manifestContractScore": 96,
       "rubric": {
         "familySelection": 25,
         "brandFidelity": 25,
@@ -85,9 +91,10 @@
     {
       "iteration": 5,
       "changedVariable": "sparse-asset",
-      "target": "custom",
+      "metric": "manifest_contract_score",
+      "disclaimer": "Contract/runtime integrity only; not a product-design or live-provider score.",
       "mutation": "sparse-asset",
-      "score": 88,
+      "manifestContractScore": 88,
       "rubric": {
         "familySelection": 25,
         "brandFidelity": 18,

@@ -1,357 +1,230 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Route } from "@playwright/test";
 
-import { renderExperienceHtml } from "../../src/lib/generation/experience-template";
-import type { ExperienceDraft } from "../../src/lib/generation/experience-schema";
+import type { PublicTryMeSession, UseCase } from "../../src/lib/types";
 import {
-  applyV2SectionPlanToLegacySelection,
-  selectThreeFamilyDecision,
-  type WireframeFamilyV2
-} from "../../src/lib/generation/three-family-contract";
-import { selectWireframe } from "../../src/lib/generation/wireframe-library";
-import type { BrandProfile } from "../../src/lib/types";
-import { experienceDraft } from "./generated-experience-fixture";
+  compileRuntimeBrandHelpResult,
+  compileRuntimeVisualFixture,
+  fulfillRuntimeAssets,
+  publicBrandHelpSession,
+  runtimeVisualFixtures
+} from "./three-family-runtime-fixture";
 
-const assetOrigin = "https://assets.production-evidence.test";
 const evidenceDirectory = resolve(
   process.cwd(),
   "docs/cursor-handoffs/2026-08-23-three-family-production-system/evidence"
 );
-
-type VisualFixture = {
-  id: "apple" | "adp" | "servicetitan" | "no-logo-recovery";
-  family: WireframeFamilyV2;
-  brand: BrandProfile;
-  headline: string;
-  expected: {
-    buttonColor: string;
-    buttonRadius: string;
-    logoMode: "image" | "fallback";
-    noAsset: boolean;
-  };
-};
-
-function brand(
-  input: Pick<BrandProfile, "domain" | "companyName" | "primaryColor" | "accentColor"> & {
-    id: string;
-    surfaceColor?: string;
-    imageLed?: boolean;
-    logo?: boolean;
-    designDna: NonNullable<BrandProfile["designDna"]>;
-  }
-): BrandProfile {
-  const surfaceColor = input.surfaceColor ?? "#FFFFFF";
-  return {
-    domain: input.domain,
-    canonicalDomain: input.domain,
-    domainAliases: [],
-    companyName: input.companyName,
-    title: `${input.companyName} buyer experience`,
-    description: `A guided evaluation experience for ${input.companyName}.`,
-    publicContext: "A bounded local visual fixture with no provider or external mutation.",
-    publicTopics: ["guided evaluation"],
-    logoUrl: input.logo === false ? undefined : `${assetOrigin}/${input.id}-logo.svg`,
-    imageUrls: input.imageLed ? [`${assetOrigin}/${input.id}-product.svg`] : [],
-    colors: [input.primaryColor, input.accentColor, surfaceColor],
-    primaryColor: input.primaryColor,
-    accentColor: input.accentColor,
-    surfaceColor,
-    sourceUrl: `https://${input.domain}/`,
-    source: input.logo === false ? "fast-extractor" : "brand-harvester",
-    designDna: input.designDna,
-    diagnostics: {
-      logo: {
-        strategy: input.logo === false ? "none" : "official-remote-portable",
-        imageCandidateCount: input.logo === false ? 0 : 1,
-        rejectedImageCount: 0,
-        inlineSvgCandidateCount: 0,
-        resolutionComplete: true
-      },
-      palette: {
-        strategy: "semantic-tokens",
-        confidence: "high",
-        candidateCount: 3,
-        semanticCandidateCount: 3,
-        rejectedCandidateCount: 0,
-        gradientCandidateCount: 0,
-        resolutionComplete: true
-      }
-    }
-  };
-}
-
-const fixtures: VisualFixture[] = [
-  {
-    id: "apple",
-    family: "guide",
-    brand: brand({
-      id: "apple",
-      domain: "apple.com",
-      companyName: "Apple",
-      primaryColor: "#1D1D1F",
-      accentColor: "#0071E3",
-      designDna: {
-        version: 1,
-        source: "remote-harvester",
-        confidence: "high",
-        theme: { hero: "light", motif: "none" },
-        typography: { fallback: "sans", headingWeight: 600, bodyWeight: 400 },
-        buttons: { primaryBackground: "#0071E3", radiusPx: 20, heightPx: 44, borderWidthPx: 0 },
-        cards: { radiusPx: 0, borderWidthPx: 1, shadow: "none" },
-        spacing: { contentMaxWidthPx: 1024, sectionBlockPx: 120, gridGapPx: 28 }
-      }
-    }),
-    headline: "Explore the next Apple deployment decision.",
-    expected: {
-      buttonColor: "rgb(0, 113, 227)",
-      buttonRadius: "20px",
-      logoMode: "image",
-      noAsset: true
-    }
-  },
-  {
-    id: "adp",
-    family: "launch",
-    brand: brand({
-      id: "adp",
-      domain: "adp.com",
-      companyName: "ADP",
-      primaryColor: "#202428",
-      accentColor: "#ED1C2E",
-      imageLed: true,
-      designDna: {
-        version: 1,
-        source: "remote-harvester",
-        confidence: "high",
-        theme: { hero: "light", motif: "none" },
-        typography: { fallback: "sans", headingWeight: 600, bodyWeight: 400 },
-        buttons: { primaryBackground: "#C21728", radiusPx: 4, heightPx: 48, borderWidthPx: 0 },
-        cards: { radiusPx: 2, borderWidthPx: 1, shadow: "none" },
-        spacing: { contentMaxWidthPx: 1200, sectionBlockPx: 72, gridGapPx: 32 }
-      }
-    }),
-    headline: "Make the next workforce decision easier to evaluate.",
-    expected: {
-      buttonColor: "rgb(194, 23, 40)",
-      buttonRadius: "4px",
-      logoMode: "image",
-      noAsset: false
-    }
-  },
-  {
-    id: "servicetitan",
-    family: "align",
-    brand: brand({
-      id: "servicetitan",
-      domain: "servicetitan.com",
-      companyName: "ServiceTitan",
-      primaryColor: "#040404",
-      accentColor: "#0265DC",
-      imageLed: true,
-      designDna: {
-        version: 1,
-        source: "remote-harvester",
-        confidence: "high",
-        theme: { hero: "light", motif: "technical-grid" },
-        typography: { fallback: "sans", headingWeight: 700, bodyWeight: 400 },
-        buttons: { primaryBackground: "#0265DC", radiusPx: 6, heightPx: 40, borderWidthPx: 0 },
-        cards: { radiusPx: 6, borderWidthPx: 1, shadow: "soft" },
-        spacing: { contentMaxWidthPx: 1180, sectionBlockPx: 88, gridGapPx: 24 }
-      }
-    }),
-    headline: "Give service operations leaders a clear evaluation path.",
-    expected: {
-      buttonColor: "rgb(2, 101, 220)",
-      buttonRadius: "6px",
-      logoMode: "image",
-      noAsset: false
-    }
-  },
-  {
-    id: "no-logo-recovery",
-    family: "launch",
-    brand: brand({
-      id: "no-logo-recovery",
-      domain: "no-logo.example",
-      companyName: "No Logo Co.",
-      primaryColor: "#18202A",
-      accentColor: "#2C6BED",
-      logo: false,
-      designDna: {
-        version: 1,
-        source: "remote-harvester",
-        confidence: "medium",
-        theme: { hero: "light", motif: "none" },
-        typography: { fallback: "sans", headingWeight: 650, bodyWeight: 400 },
-        buttons: { primaryBackground: "#2C6BED", radiusPx: 10, heightPx: 46, borderWidthPx: 0 },
-        cards: { radiusPx: 10, borderWidthPx: 1, shadow: "none" },
-        spacing: { contentMaxWidthPx: 1120, sectionBlockPx: 80, gridGapPx: 20 }
-      }
-    }),
-    headline: "Turn the next buying decision into a guided path.",
-    expected: {
-      buttonColor: "rgb(44, 107, 237)",
-      buttonRadius: "10px",
-      logoMode: "fallback",
-      noAsset: true
-    }
-  }
+const bannedBuyerFacingPhrases = [
+  "decision path",
+  "account thesis",
+  "supporting proof",
+  "operating outcome",
+  "business fit",
+  "evidence-bounded",
+  "For Buying team",
+  "Explore the decision",
+  "Review the decision path"
 ];
 
-function draftFor(fixture: VisualFixture): ExperienceDraft {
-  return {
-    ...structuredClone(experienceDraft),
-    campaignRegister: "campaign-product",
-    designRegister: fixture.expected.noAsset ? "source-brand-minimal" : "source-brand-image-led",
-    title: `${fixture.brand.companyName} | Guided evaluation`,
-    eyebrow: `${fixture.brand.companyName} buyer experience`,
-    headline: fixture.headline,
-    subhead:
-      "A focused, evidence-bounded path for exploring the decision, comparing priorities, and choosing a practical next step.",
-    audienceLabel: "Buying team",
-    narrativeArc: "Explore the decision, compare the useful paths, and choose a supported next step.",
-    primaryCta: "Review the decision path",
-    thesisHeadline: "Start with the decision the buying team needs to make.",
-    thesisBody:
-      "Keep the experience focused on supported context, useful evaluation questions, and a clear next action.",
-    closingHeadline: "Choose the next question worth answering together.",
-    closingBody:
-      "Use the guided path to identify the stakeholders, evidence, and next action needed for a productive conversation."
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (color: string) => {
+    const channels = color.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
+    const [red, green, blue] = channels.map((channel) => {
+      const normalized = channel / 255;
+      return normalized <= 0.03928
+        ? normalized / 12.92
+        : ((normalized + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
   };
+  const foregroundLuminance = luminance(foreground);
+  const backgroundLuminance = luminance(background);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
+    / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
 }
 
-async function fulfillLocalEvidenceAssets(page: Page): Promise<void> {
-  await page.route(`${assetOrigin}/**`, async (route) => {
-    const fileName = new URL(route.request().url()).pathname.split("/").at(-1) ?? "asset";
-    const label = fileName
-      .replace(/-(?:logo|product)\.svg$/i, "")
-      .replace(/-/g, " ")
-      .toUpperCase();
+async function mockBrandHelpSession(
+  route: Route,
+  session: PublicTryMeSession
+): Promise<void> {
+  const request = route.request();
+  const path = new URL(request.url()).pathname;
+  if (request.method() === "POST" && path.endsWith("/api/sessions")) {
+    const body = request.postDataJSON() as { useCase: UseCase; companyDomain: string };
+    expect(body).toMatchObject({
+      useCase: "campaign",
+      companyDomain: "no-logo.example"
+    });
     await route.fulfill({
       status: 200,
-      contentType: "image/svg+xml",
-      body: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-label="${label}"><rect width="1200" height="720" fill="#f4f5f7"/><path d="M90 560 360 220l210 250 170-170 370 260" fill="none" stroke="#68717d" stroke-width="28"/><text x="90" y="130" font-family="Arial,sans-serif" font-size="72" font-weight="700" fill="#202428">${label}</text></svg>`
+      contentType: "application/json",
+      body: JSON.stringify({ session })
     });
-  });
+    return;
+  }
+  if (request.method() === "GET" && path.endsWith(`/api/sessions/${session.id}`)) {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ session })
+    });
+    return;
+  }
+  if (request.method() === "PATCH" && path.endsWith(`/api/sessions/${session.id}`)) {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ session })
+    });
+    return;
+  }
+  await route.fulfill({ status: 404, body: JSON.stringify({ error: "missing" }) });
 }
 
-test("captures bounded desktop visual evidence for materially different brands", async ({
-  page
-}) => {
+test("proves runtime family production and truthful brand recovery", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await fulfillLocalEvidenceAssets(page);
+  await fulfillRuntimeAssets(page);
   const manifest: Array<Record<string, unknown>> = [];
+  const familyNavigation = new Map<string, string[]>();
 
-  for (const fixture of fixtures) {
-    const useCase = fixture.family === "align"
-      ? "abm"
-      : fixture.family === "guide"
-        ? "content"
-        : "campaign";
-    const decision = selectThreeFamilyDecision({
-      sessionId: `visual-${fixture.id}`,
-      revision: 1,
-      useCase,
-      campaignType: fixture.family === "launch" ? "product" : undefined,
-      offerKind:
-        fixture.family === "launch"
-          ? "product"
-          : fixture.family === "guide"
-            ? "industry"
-            : undefined,
-      targetDomain: fixture.family === "align" ? "target.example" : undefined,
-      firstDecision:
-        fixture.family === "align" ? "Choose the service workflow to validate" : undefined,
-      evidenceRefs: [`fixture:${fixture.id}:seller`, `fixture:${fixture.id}:offer`],
-      assetEvidenceRefs: fixture.brand.imageUrls.map((_, index) => `fixture:${fixture.id}:asset:${index}`)
+  for (const fixture of runtimeVisualFixtures) {
+    const compiled = await compileRuntimeVisualFixture(fixture);
+    const decision = compiled.page.familyDecision;
+    expect(decision).toMatchObject({
+      version: 2,
+      family: fixture.expectedFamily,
+      subtype: fixture.expectedSubtype,
+      locked: true,
+      revision: fixture.session.revision
     });
-    const legacySelection = applyV2SectionPlanToLegacySelection(
-      selectWireframe({
-        family:
-          fixture.family === "align"
-            ? "account"
-            : fixture.family === "guide"
-              ? "content"
-              : "campaign"
-      }),
-      decision
-    );
-    const html = renderExperienceHtml({
-      draft: draftFor(fixture),
-      brand: fixture.brand,
-      useCase,
-      answers: {
-        ...(fixture.family === "launch" ? { campaignType: "product" as const } : {}),
-        ...(fixture.family === "align" ? { targetDomain: "target.example" } : {}),
-        audience: "Buying team",
-        objective: "Evaluate the next step",
-        ctaType: "book-meeting",
-        ctaStyle: "solid"
-      },
-      wireframeSelection: legacySelection
-    });
-    await page.setContent(html, { waitUntil: "domcontentloaded" });
-    await expect(page.locator("h1")).toContainText(fixture.headline);
-    await expect(page.locator(".primary").first()).toBeVisible();
 
-    const metrics = await page.evaluate(() => {
+    await page.setContent(compiled.html, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("h1")).toBeVisible();
+    await expect(page.getByText(fixture.expectedPersona, { exact: false }).first()).toBeVisible();
+    await expect(
+      page.getByText(fixture.expectedOfferOrPriority, { exact: false }).first()
+    ).toBeVisible();
+
+    const expectedNavigation = decision!.sectionPlan.map(({ navigationLabel }) => navigationLabel);
+    const renderedNavigation = (
+      await page.locator("[data-flz-journey-nav] button[data-journey-link]").allTextContents()
+    ).map((label) => label.trim());
+    expect(renderedNavigation).toEqual(expectedNavigation);
+    familyNavigation.set(fixture.expectedFamily, renderedNavigation);
+    for (const image of await page.locator("figure[data-asset-role] img").all()) {
+      await image.scrollIntoViewIfNeeded();
+      await expect(image).toHaveJSProperty("complete", true);
+    }
+    await page.locator("h1").scrollIntoViewIfNeeded();
+
+    const metrics = await page.evaluate((bannedPhrases) => {
       const primary = getComputedStyle(document.querySelector<HTMLElement>(".primary")!);
       const body = getComputedStyle(document.body);
-      const logoImage = document.querySelector<HTMLImageElement>(".seller-wordmark img");
-      const fallback = document.querySelector<HTMLElement>(".seller-wordmark .wordmark-fallback");
-      const contrastRatio = (foreground: string, background: string) => {
-        const luminance = (color: string) => {
-          const channels = color.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
-          const [red, green, blue] = channels.map((channel) => {
-            const normalized = channel / 255;
-            return normalized <= 0.03928
-              ? normalized / 12.92
-              : ((normalized + 0.055) / 1.055) ** 2.4;
-          });
-          return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+      const logo = document.querySelector<HTMLImageElement>(".seller-wordmark img");
+      const wordmark = document.querySelector<HTMLElement>(".seller-wordmark");
+      const logoBox = logo?.getBoundingClientRect();
+      const wordmarkBox = wordmark?.getBoundingClientRect();
+      const media = [...document.querySelectorAll<HTMLElement>(
+        "figure.hero-media[data-asset-role], figure.framework-media[data-asset-role], figure.lens-media[data-asset-role]"
+      )].map((figure) => {
+        const image = figure.querySelector<HTMLImageElement>("img");
+        const imageBox = image?.getBoundingClientRect();
+        const figureBox = figure.getBoundingClientRect();
+        return {
+          role: figure.dataset.assetRole,
+          source: image?.src,
+          visible: Boolean(image && image.complete && image.naturalWidth > 0),
+          contained: Boolean(
+            imageBox &&
+            imageBox.left >= figureBox.left - 1 &&
+            imageBox.right <= figureBox.right + 1 &&
+            imageBox.top >= figureBox.top - 1 &&
+            imageBox.bottom <= figureBox.bottom + 1
+          )
         };
-        const foregroundLuminance = luminance(foreground);
-        const backgroundLuminance = luminance(background);
-        return (
-          (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
-          / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
-        );
-      };
+      });
+      const bodyText = document.body.innerText;
+      const journeySectionIds = [...document.querySelectorAll<HTMLElement>(
+        "[data-journey-section]"
+      )].map((section) => section.dataset.journeySection ?? "");
+      const navigationTargets = [...document.querySelectorAll<HTMLElement>(
+        "[data-journey-link]"
+      )].map((link) => link.dataset.journeyLink ?? "");
       return {
         buttonColor: primary.backgroundColor,
         buttonRadius: primary.borderRadius,
-        buttonContrast: contrastRatio(primary.color, primary.backgroundColor),
-        bodyContrast: contrastRatio(body.color, body.backgroundColor),
-        logoImageVisible: Boolean(
-          logoImage && getComputedStyle(logoImage).display !== "none" && logoImage.naturalWidth > 0
+        buttonContrast: { foreground: primary.color, background: primary.backgroundColor },
+        bodyContrast: { foreground: body.color, background: body.backgroundColor },
+        logoImageVisible: Boolean(logo && logo.complete && logo.naturalWidth > 0),
+        logoContained: Boolean(
+          logoBox &&
+          wordmarkBox &&
+          logoBox.left >= wordmarkBox.left - 1 &&
+          logoBox.right <= wordmarkBox.right + 1 &&
+          logoBox.top >= wordmarkBox.top - 1 &&
+          logoBox.bottom <= wordmarkBox.bottom + 1
         ),
-        fallbackVisible: Boolean(
-          fallback && getComputedStyle(fallback).display !== "none"
-        ),
-        noAssetTreatments: document.querySelectorAll(".no-asset-treatment").length,
-        brokenImages: [...document.images].filter((image) => !image.complete || image.naturalWidth === 0)
-          .length,
+        media,
+        brokenImages: [...document.images].filter(
+          (image) => !image.complete || image.naturalWidth === 0
+        ).length,
+        clippedImages: media.filter(({ contained }) => !contained).length,
         horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
-        documentHeight: document.documentElement.scrollHeight
+        duplicateJourneySections:
+          journeySectionIds.length - new Set(journeySectionIds).size,
+        missingNavigationTargets: navigationTargets.filter(
+          (target) => !document.getElementById(target)
+        ).length,
+        documentHeight: document.documentElement.scrollHeight,
+        bannedPhraseMatches: bannedPhrases.filter((phrase) =>
+          bodyText.toLocaleLowerCase().includes(phrase.toLocaleLowerCase())
+        )
       };
-    });
+    }, bannedBuyerFacingPhrases);
 
-    expect(metrics.buttonColor).toBe(fixture.expected.buttonColor);
-    expect(metrics.buttonRadius).toBe(fixture.expected.buttonRadius);
-    expect(metrics.buttonContrast).toBeGreaterThanOrEqual(4.5);
-    expect(metrics.bodyContrast).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(metrics.buttonContrast.foreground, metrics.buttonContrast.background)
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(metrics.bodyContrast.foreground, metrics.bodyContrast.background)
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(metrics.logoImageVisible).toBe(true);
+    expect(metrics.logoContained).toBe(true);
+    expect(metrics.media.length).toBeGreaterThan(0);
+    expect(metrics.media.every(({ visible, contained }) => visible && contained)).toBe(true);
+    expect(
+      metrics.media.every(({ source, role }) =>
+        Boolean(
+          source &&
+          fixture.brand.imageUrls.includes(source) &&
+          role &&
+          !/chart|graph|placeholder/i.test(source)
+        )
+      )
+    ).toBe(true);
     expect(metrics.brokenImages).toBe(0);
+    expect(metrics.clippedImages).toBe(0);
     expect(metrics.horizontalOverflow).toBe(false);
-    expect(metrics.logoImageVisible).toBe(fixture.expected.logoMode === "image");
-    if (fixture.expected.logoMode === "fallback") {
-      expect(metrics.fallbackVisible).toBe(true);
-    }
-    expect(metrics.noAssetTreatments > 0).toBe(fixture.expected.noAsset);
+    expect(metrics.duplicateJourneySections).toBe(0);
+    expect(metrics.missingNavigationTargets).toBe(0);
+    expect(metrics.bannedPhraseMatches).toEqual([]);
+
+    const selectedImages = compiled.page.brand.imagery.selected;
+    expect(selectedImages.map(({ role }) => role)).toContain("hero");
+    expect(selectedImages.every(({ purpose }) => purpose !== "unknown")).toBe(true);
+    expect(selectedImages.every(({ ref }) => fixture.brand.imageUrls.includes(ref))).toBe(true);
 
     if (process.env.CAPTURE_PRODUCTION_EVIDENCE === "1") {
       mkdirSync(evidenceDirectory, { recursive: true });
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+        const journeyLinks = document.querySelector<HTMLElement>(".journey-links");
+        if (journeyLinks) journeyLinks.scrollLeft = 0;
+      });
       await page.screenshot({
         path: resolve(evidenceDirectory, `${fixture.id}-first-viewport.png`),
         fullPage: false
@@ -363,17 +236,22 @@ test("captures bounded desktop visual evidence for materially different brands",
     }
 
     manifest.push({
-      brand: fixture.brand.companyName,
       fixture: fixture.id,
-      family: decision.family,
-      subtype: decision.subtype,
-      familyReasonCode: decision.reasonCode,
-      familyEvidenceRefs: decision.evidenceRefs,
-      sectionPlan: decision.sectionPlan.map(({ id, role, navigationLabel }) => ({
+      runtimePath: "session-production-engine",
+      outcome: "production-page",
+      brand: fixture.brand.companyName,
+      persona: fixture.expectedPersona,
+      offerOrPriority: fixture.expectedOfferOrPriority,
+      family: decision!.family,
+      subtype: decision!.subtype,
+      familyReasonCode: decision!.reasonCode,
+      familyEvidenceRefs: decision!.evidenceRefs,
+      sectionPlan: decision!.sectionPlan.map(({ id, role, navigationLabel }) => ({
         id,
         role,
         navigationLabel
       })),
+      renderedNavigation,
       brandTokens: {
         primary: fixture.brand.primaryColor,
         action: fixture.brand.accentColor,
@@ -383,16 +261,75 @@ test("captures bounded desktop visual evidence for materially different brands",
         cardRadius: fixture.brand.designDna?.cards?.radiusPx,
         density: fixture.brand.designDna?.spacing?.sectionBlockPx
       },
-      selectedImages: fixture.brand.imageUrls.slice(0, 2).map((url, index) => ({
-        role: index === 0 ? "hero" : "supporting",
-        url,
-        status: "fixture-verified"
-      })),
+      selectedImages,
       viewport: { width: 1440, height: 1000 },
-      source: "deterministic local fixture; no live provider requests",
+      source: "deterministic local first-party-style fixture; no live provider request",
       ...metrics
     });
   }
+
+  expect(new Set([...familyNavigation.values()].map((labels) => labels.join("|"))).size).toBe(3);
+
+  const recoveryResult = await compileRuntimeBrandHelpResult();
+  expect(recoveryResult).toMatchObject({
+    outcome: "safe-deterministic-fallback",
+    instruction: {
+      code: "GPE_BRAND_HELP_REQUIRED",
+      action: "request_brand_input",
+      allowProviderWork: false
+    }
+  });
+  const recoverySession = publicBrandHelpSession();
+  await page.route("**/api/sessions**", async (route) => {
+    await mockBrandHelpSession(route, recoverySession);
+  });
+  await page.route("**/api/analytics/events**", async (route) => {
+    await route.fulfill({ status: 204, body: "" });
+  });
+  await page.route("**/api/events**", async (route) => {
+    await route.fulfill({ status: 204, body: "" });
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const primary = page.locator(".unifiedPrimaryCta");
+  await expect(primary).toBeVisible();
+  await expect(async () => {
+    if (await page.locator(".domainStage").count()) return;
+    await primary.click();
+    await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
+  }).toPass({ timeout: 15_000 });
+  await page.getByLabel("Company domain").fill("no-logo.example");
+  await expect(page.getByRole("button", { name: /Use this company/i })).toBeEnabled();
+  await page.getByRole("button", { name: /Use this company/i }).click();
+
+  await expect(
+    page.getByRole("region", { name: /Add a clearer brand source/i })
+  ).toBeVisible();
+  await expect(page.getByLabel("More specific official page URL")).toBeVisible();
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
+  await expect(page.locator("iframe[title*='preview' i], iframe[title*='experience' i]")).toHaveCount(0);
+  await expect(page.getByText(/research is preserved/i)).toBeVisible();
+
+  if (process.env.CAPTURE_PRODUCTION_EVIDENCE === "1") {
+    await page.screenshot({
+      path: resolve(evidenceDirectory, "brand-help-recovery-first-viewport.png"),
+      fullPage: false
+    });
+    await page.screenshot({
+      path: resolve(evidenceDirectory, "brand-help-recovery-full-page.png"),
+      fullPage: true
+    });
+  }
+  manifest.push({
+    fixture: "brand-help-recovery",
+    runtimePath: "session-production-engine",
+    outcome: "brand_help_required",
+    customerReadyHtml: false,
+    recoveryVisible: true,
+    advertisedKinds: ["source_url"],
+    providerWorkAllowed: false,
+    viewport: { width: 1440, height: 1000 }
+  });
 
   if (process.env.CAPTURE_PRODUCTION_EVIDENCE === "1") {
     writeFileSync(

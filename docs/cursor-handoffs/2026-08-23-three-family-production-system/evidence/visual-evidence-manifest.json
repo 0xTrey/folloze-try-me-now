@@ -1,13 +1,175 @@
 [
   {
+    "fixture": "adp-launch",
+    "runtimePath": "session-production-engine",
+    "outcome": "production-page",
+    "brand": "ADP",
+    "persona": "Payroll and HR operations leaders",
+    "offerOrPriority": "ADP Workforce Now",
+    "family": "launch",
+    "subtype": "product",
+    "familyReasonCode": "v2-offer-promotion-launch",
+    "familyEvidenceRefs": [
+      "adp-payroll-operations",
+      "adp-workforce-management",
+      "https://adp.com/",
+      "official:company:category",
+      "official:company:company",
+      "official:company:positioning",
+      "official:offer:title:adp.com",
+      "visitor:audience",
+      "visitor:cta",
+      "visitor:objective",
+      "visitor:offer",
+      "visitor:seller-company",
+      "visitor:seller-domain"
+    ],
+    "sectionPlan": [
+      {
+        "id": "launch-1",
+        "role": "buyer-outcome",
+        "navigationLabel": "Outcome"
+      },
+      {
+        "id": "launch-2",
+        "role": "current-friction",
+        "navigationLabel": "Why change"
+      },
+      {
+        "id": "launch-3",
+        "role": "mechanism",
+        "navigationLabel": "How it works"
+      },
+      {
+        "id": "launch-4",
+        "role": "use-cases",
+        "navigationLabel": "Use cases"
+      },
+      {
+        "id": "launch-5",
+        "role": "proof",
+        "navigationLabel": "Evidence"
+      },
+      {
+        "id": "launch-7",
+        "role": "proof-depth",
+        "navigationLabel": "More evidence"
+      },
+      {
+        "id": "launch-6",
+        "role": "next-move",
+        "navigationLabel": "Next step"
+      }
+    ],
+    "renderedNavigation": [
+      "Outcome",
+      "Why change",
+      "How it works",
+      "Use cases",
+      "Evidence",
+      "More evidence",
+      "Next step"
+    ],
+    "brandTokens": {
+      "primary": "#202428",
+      "action": "#ED1C2E",
+      "button": "#C21728",
+      "surface": "#FFFFFF",
+      "buttonRadius": 4,
+      "cardRadius": 4,
+      "density": 72
+    },
+    "selectedImages": [
+      {
+        "role": "hero",
+        "ref": "https://runtime-first-party.test/adp-product-ui.svg",
+        "kind": "product-ui",
+        "purpose": "product",
+        "evidenceRef": "https://adp.com/"
+      },
+      {
+        "role": "supporting",
+        "ref": "https://runtime-first-party.test/adp-workflow.svg",
+        "kind": "diagram",
+        "purpose": "diagram",
+        "evidenceRef": "https://adp.com/"
+      }
+    ],
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "source": "deterministic local first-party-style fixture; no live provider request",
+    "buttonColor": "rgb(194, 23, 40)",
+    "buttonRadius": "4px",
+    "buttonContrast": {
+      "foreground": "rgb(255, 255, 255)",
+      "background": "rgb(194, 23, 40)"
+    },
+    "bodyContrast": {
+      "foreground": "rgb(32, 36, 40)",
+      "background": "rgb(255, 255, 255)"
+    },
+    "logoImageVisible": true,
+    "logoContained": true,
+    "media": [
+      {
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/adp-product-ui.svg",
+        "visible": true,
+        "contained": true
+      },
+      {
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/adp-product-ui.svg",
+        "visible": true,
+        "contained": true
+      },
+      {
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/adp-product-ui.svg",
+        "visible": true,
+        "contained": true
+      },
+      {
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/adp-product-ui.svg",
+        "visible": true,
+        "contained": true
+      }
+    ],
+    "brokenImages": 0,
+    "clippedImages": 0,
+    "horizontalOverflow": false,
+    "duplicateJourneySections": 0,
+    "missingNavigationTargets": 0,
+    "documentHeight": 4874,
+    "bannedPhraseMatches": []
+  },
+  {
+    "fixture": "apple-guide",
+    "runtimePath": "session-production-engine",
+    "outcome": "production-page",
     "brand": "Apple",
-    "fixture": "apple",
+    "persona": "Enterprise mobility architects",
+    "offerOrPriority": "Apple Platform Deployment",
     "family": "guide",
-    "subtype": "industry",
+    "subtype": "solution",
     "familyReasonCode": "v2-education-evaluation-guide",
     "familyEvidenceRefs": [
-      "fixture:apple:offer",
-      "fixture:apple:seller"
+      "apple-enrollment",
+      "apple-managed-identity",
+      "https://apple.com/",
+      "official:company:category",
+      "official:company:company",
+      "official:company:positioning",
+      "official:offer:title:apple.com",
+      "visitor:audience",
+      "visitor:cta",
+      "visitor:objective",
+      "visitor:offer",
+      "visitor:seller-company",
+      "visitor:seller-domain"
     ],
     "sectionPlan": [
       {
@@ -36,10 +198,30 @@
         "navigationLabel": "Where it applies"
       },
       {
+        "id": "guide-7",
+        "role": "proof-depth",
+        "navigationLabel": "More evidence"
+      },
+      {
+        "id": "guide-8",
+        "role": "resource",
+        "navigationLabel": "Resources"
+      },
+      {
         "id": "guide-6",
         "role": "evaluation-close",
         "navigationLabel": "Continue"
       }
+    ],
+    "renderedNavigation": [
+      "What changed",
+      "What is at stake",
+      "What to evaluate",
+      "How it answers",
+      "Where it applies",
+      "More evidence",
+      "Resources",
+      "Continue"
     ],
     "brandTokens": {
       "primary": "#1D1D1F",
@@ -47,111 +229,94 @@
       "button": "#0071E3",
       "surface": "#FFFFFF",
       "buttonRadius": 20,
-      "cardRadius": 0,
+      "cardRadius": 20,
       "density": 120
-    },
-    "selectedImages": [],
-    "viewport": {
-      "width": 1440,
-      "height": 1000
-    },
-    "source": "deterministic local fixture; no live provider requests",
-    "buttonColor": "rgb(0, 113, 227)",
-    "buttonRadius": "20px",
-    "buttonContrast": 4.69666146009005,
-    "bodyContrast": 16.829972351390765,
-    "logoImageVisible": true,
-    "fallbackVisible": true,
-    "noAssetTreatments": 1,
-    "brokenImages": 0,
-    "horizontalOverflow": false,
-    "documentHeight": 5416
-  },
-  {
-    "brand": "ADP",
-    "fixture": "adp",
-    "family": "launch",
-    "subtype": "product",
-    "familyReasonCode": "v2-offer-promotion-launch",
-    "familyEvidenceRefs": [
-      "fixture:adp:asset:0",
-      "fixture:adp:offer",
-      "fixture:adp:seller"
-    ],
-    "sectionPlan": [
-      {
-        "id": "launch-1",
-        "role": "buyer-outcome",
-        "navigationLabel": "Outcome"
-      },
-      {
-        "id": "launch-2",
-        "role": "current-friction",
-        "navigationLabel": "Why change"
-      },
-      {
-        "id": "launch-3",
-        "role": "mechanism",
-        "navigationLabel": "How it works"
-      },
-      {
-        "id": "launch-4",
-        "role": "use-cases",
-        "navigationLabel": "Use cases"
-      },
-      {
-        "id": "launch-5",
-        "role": "proof",
-        "navigationLabel": "Evidence"
-      },
-      {
-        "id": "launch-6",
-        "role": "next-move",
-        "navigationLabel": "Next step"
-      }
-    ],
-    "brandTokens": {
-      "primary": "#202428",
-      "action": "#ED1C2E",
-      "button": "#C21728",
-      "surface": "#FFFFFF",
-      "buttonRadius": 4,
-      "cardRadius": 2,
-      "density": 72
     },
     "selectedImages": [
       {
         "role": "hero",
-        "url": "https://assets.production-evidence.test/adp-product.svg",
-        "status": "fixture-verified"
+        "ref": "https://runtime-first-party.test/apple-product-ui.svg",
+        "kind": "product-ui",
+        "purpose": "product",
+        "evidenceRef": "https://apple.com/"
+      },
+      {
+        "role": "supporting",
+        "ref": "https://runtime-first-party.test/apple-workflow.svg",
+        "kind": "diagram",
+        "purpose": "diagram",
+        "evidenceRef": "https://apple.com/"
       }
     ],
     "viewport": {
       "width": 1440,
       "height": 1000
     },
-    "source": "deterministic local fixture; no live provider requests",
-    "buttonColor": "rgb(194, 23, 40)",
-    "buttonRadius": "4px",
-    "buttonContrast": 6.092138358474986,
-    "bodyContrast": 15.620281478422072,
+    "source": "deterministic local first-party-style fixture; no live provider request",
+    "buttonColor": "rgb(0, 113, 227)",
+    "buttonRadius": "20px",
+    "buttonContrast": {
+      "foreground": "rgb(255, 255, 255)",
+      "background": "rgb(0, 113, 227)"
+    },
+    "bodyContrast": {
+      "foreground": "rgb(29, 29, 31)",
+      "background": "rgb(255, 255, 255)"
+    },
     "logoImageVisible": true,
-    "fallbackVisible": true,
-    "noAssetTreatments": 0,
+    "logoContained": true,
+    "media": [
+      {
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/apple-product-ui.svg",
+        "visible": true,
+        "contained": true
+      },
+      {
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/apple-product-ui.svg",
+        "visible": true,
+        "contained": true
+      },
+      {
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/apple-product-ui.svg",
+        "visible": true,
+        "contained": true
+      }
+    ],
     "brokenImages": 0,
+    "clippedImages": 0,
     "horizontalOverflow": false,
-    "documentHeight": 4542
+    "duplicateJourneySections": 0,
+    "missingNavigationTargets": 0,
+    "documentHeight": 6750,
+    "bannedPhraseMatches": []
   },
   {
+    "fixture": "servicetitan-align",
+    "runtimePath": "session-production-engine",
+    "outcome": "production-page",
     "brand": "ServiceTitan",
-    "fixture": "servicetitan",
+    "persona": "Field service operations leaders",
+    "offerOrPriority": "dispatch consistency",
     "family": "align",
     "subtype": "account",
     "familyReasonCode": "v2-named-account-first-decision-align",
     "familyEvidenceRefs": [
-      "fixture:servicetitan:asset:0",
-      "fixture:servicetitan:offer",
-      "fixture:servicetitan:seller"
+      "apex-dispatch-priority",
+      "apex-technician-capacity",
+      "https://servicetitan.com/",
+      "official:company:category",
+      "official:company:company",
+      "official:company:positioning",
+      "official:offer:title:servicetitan.com",
+      "visitor:audience",
+      "visitor:cta",
+      "visitor:objective",
+      "visitor:offer",
+      "visitor:seller-company",
+      "visitor:seller-domain"
     ],
     "sectionPlan": [
       {
@@ -180,10 +345,24 @@
         "navigationLabel": "Proof and validation"
       },
       {
+        "id": "align-7",
+        "role": "proof-depth",
+        "navigationLabel": "More evidence"
+      },
+      {
         "id": "align-6",
         "role": "first-decision",
         "navigationLabel": "First decision"
       }
+    ],
+    "renderedNavigation": [
+      "Shared priority",
+      "Why it matters here",
+      "Opportunity",
+      "Choose a priority",
+      "Proof and validation",
+      "More evidence",
+      "First decision"
     ],
     "brandTokens": {
       "primary": "#040404",
@@ -197,92 +376,83 @@
     "selectedImages": [
       {
         "role": "hero",
-        "url": "https://assets.production-evidence.test/servicetitan-product.svg",
-        "status": "fixture-verified"
+        "ref": "https://runtime-first-party.test/servicetitan-product-ui.svg",
+        "kind": "product-ui",
+        "purpose": "product",
+        "evidenceRef": "https://servicetitan.com/"
+      },
+      {
+        "role": "supporting",
+        "ref": "https://runtime-first-party.test/servicetitan-workflow.svg",
+        "kind": "diagram",
+        "purpose": "diagram",
+        "evidenceRef": "https://servicetitan.com/"
       }
     ],
     "viewport": {
       "width": 1440,
       "height": 1000
     },
-    "source": "deterministic local fixture; no live provider requests",
+    "source": "deterministic local first-party-style fixture; no live provider request",
     "buttonColor": "rgb(2, 101, 220)",
     "buttonRadius": "6px",
-    "buttonContrast": 5.388048855503321,
-    "bodyContrast": 20.502163219344514,
+    "buttonContrast": {
+      "foreground": "rgb(255, 255, 255)",
+      "background": "rgb(2, 101, 220)"
+    },
+    "bodyContrast": {
+      "foreground": "rgb(4, 4, 4)",
+      "background": "rgb(255, 255, 255)"
+    },
     "logoImageVisible": true,
-    "fallbackVisible": true,
-    "noAssetTreatments": 0,
-    "brokenImages": 0,
-    "horizontalOverflow": false,
-    "documentHeight": 4638
-  },
-  {
-    "brand": "No Logo Co.",
-    "fixture": "no-logo-recovery",
-    "family": "launch",
-    "subtype": "product",
-    "familyReasonCode": "v2-offer-promotion-launch",
-    "familyEvidenceRefs": [
-      "fixture:no-logo-recovery:offer",
-      "fixture:no-logo-recovery:seller"
-    ],
-    "sectionPlan": [
+    "logoContained": true,
+    "media": [
       {
-        "id": "launch-1",
-        "role": "buyer-outcome",
-        "navigationLabel": "Outcome"
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/servicetitan-product-ui.svg",
+        "visible": true,
+        "contained": true
       },
       {
-        "id": "launch-2",
-        "role": "current-friction",
-        "navigationLabel": "Why change"
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/servicetitan-product-ui.svg",
+        "visible": true,
+        "contained": true
       },
       {
-        "id": "launch-3",
-        "role": "mechanism",
-        "navigationLabel": "How it works"
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/servicetitan-product-ui.svg",
+        "visible": true,
+        "contained": true
       },
       {
-        "id": "launch-4",
-        "role": "use-cases",
-        "navigationLabel": "Use cases"
-      },
-      {
-        "id": "launch-5",
-        "role": "proof",
-        "navigationLabel": "Evidence"
-      },
-      {
-        "id": "launch-6",
-        "role": "next-move",
-        "navigationLabel": "Next step"
+        "role": "product-ui",
+        "source": "https://runtime-first-party.test/servicetitan-product-ui.svg",
+        "visible": true,
+        "contained": true
       }
     ],
-    "brandTokens": {
-      "primary": "#18202A",
-      "action": "#2C6BED",
-      "button": "#2C6BED",
-      "surface": "#FFFFFF",
-      "buttonRadius": 10,
-      "cardRadius": 10,
-      "density": 80
-    },
-    "selectedImages": [],
+    "brokenImages": 0,
+    "clippedImages": 0,
+    "horizontalOverflow": false,
+    "duplicateJourneySections": 0,
+    "missingNavigationTargets": 0,
+    "documentHeight": 5024,
+    "bannedPhraseMatches": []
+  },
+  {
+    "fixture": "brand-help-recovery",
+    "runtimePath": "session-production-engine",
+    "outcome": "brand_help_required",
+    "customerReadyHtml": false,
+    "recoveryVisible": true,
+    "advertisedKinds": [
+      "source_url"
+    ],
+    "providerWorkAllowed": false,
     "viewport": {
       "width": 1440,
       "height": 1000
-    },
-    "source": "deterministic local fixture; no live provider requests",
-    "buttonColor": "rgb(44, 107, 237)",
-    "buttonRadius": "10px",
-    "buttonContrast": 4.737136847690967,
-    "bodyContrast": 16.420666611980145,
-    "logoImageVisible": false,
-    "fallbackVisible": true,
-    "noAssetTreatments": 1,
-    "brokenImages": 0,
-    "horizontalOverflow": false,
-    "documentHeight": 4754
+    }
   }
 ]
