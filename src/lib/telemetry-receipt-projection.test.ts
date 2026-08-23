@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { selectThreeFamilyDecision } from "@/lib/generation/three-family-contract";
 import {
+  normalizeOperationalReceiptStatus,
   parseOperationalTraceReceipt,
-  projectOperationalTraceReceipt
+  projectOperationalTraceReceipt,
+  type OperationalReceiptStatus,
+  type OperationalTraceReceipt
 } from "@/lib/telemetry-receipt-projection";
 import type { SessionEvent, TryMeSession } from "@/lib/types";
 
@@ -130,6 +133,32 @@ function event(name: string, meta: SessionEvent["meta"]): SessionEvent {
   };
 }
 
+const opaqueEvidenceId = "ev_0123456789abcdefabcd";
+
+function roundTrip(value: unknown): OperationalTraceReceipt | undefined {
+  return parseOperationalTraceReceipt(JSON.parse(JSON.stringify(value)));
+}
+
+function workerReceipt(status: OperationalReceiptStatus): OperationalTraceReceipt {
+  return {
+    version: 2,
+    kind: "worker",
+    revision: 3,
+    status,
+    durationMs: 250,
+    evidenceIds: [opaqueEvidenceId],
+    worker: "message-spine-architect",
+    ...(status === "fallback" ? { fallbackCode: "typed_fallback" } : {}),
+    ...(status === "failed" ? { errorCode: "worker_failed" } : {})
+  };
+}
+
+const sectionPlan = Array.from({ length: 4 }, (_, index) => ({
+  id: `align-${index + 1}`,
+  role: index === 0 ? "shared-priority" : "account-relevance",
+  optional: false
+}));
+
 describe("operational telemetry receipt projection", () => {
   it("projects family, reason, section plan, timing, and opaque evidence IDs", () => {
     const current = session();
@@ -143,7 +172,7 @@ describe("operational telemetry receipt projection", () => {
       version: 2,
       kind: "family_selection",
       revision: 7,
-      status: "complete",
+      status: "completed",
       durationMs: 80,
       family: "align",
       reasonCode: "v2-named-account-first-decision-align",
@@ -195,6 +224,156 @@ describe("operational telemetry receipt projection", () => {
       status: "completed",
       durationMs: 4,
       evidenceIds: ["https://private.example/evidence"]
+    })).toBeUndefined();
+  });
+
+  it.each([
+    ["started", "started"],
+    ["complete", "completed"],
+    ["completed", "completed"],
+    ["fallback", "fallback"],
+    ["timed_out", "timed_out"],
+    ["failed", "failed"],
+    ["stale", "stale"],
+    ["needs_input", "needs_input"]
+  ] as const)(
+    "round-trips legal worker status %s as %s",
+    (status, normalizedStatus) => {
+      const receipt = roundTrip(workerReceipt(status));
+
+      expect(receipt).toEqual({
+        ...workerReceipt(status),
+        status: normalizedStatus
+      });
+      expect(receipt?.kind).toBe("worker");
+    }
+  );
+
+  it.each(["complete", "completed"] as const)(
+    "round-trips family-selection status %s as completed",
+    (status) => {
+      const receipt = roundTrip({
+        version: 2,
+        kind: "family_selection",
+        revision: 5,
+        status,
+        durationMs: 75,
+        evidenceIds: [opaqueEvidenceId],
+        worker: "wireframe-ranker",
+        family: "align",
+        reasonCode: "v2-named-account-align",
+        sectionPlan
+      });
+
+      expect(receipt).toEqual({
+        version: 2,
+        kind: "family_selection",
+        revision: 5,
+        status: "completed",
+        durationMs: 75,
+        evidenceIds: [opaqueEvidenceId],
+        worker: "wireframe-ranker",
+        family: "align",
+        reasonCode: "v2-named-account-align",
+        sectionPlan
+      });
+    }
+  );
+
+  it("round-trips the legal brand needs-input kind and status", () => {
+    const receipt = {
+      version: 2,
+      kind: "brand_needs_input",
+      revision: 8,
+      status: "needs_input",
+      durationMs: 1_500,
+      evidenceIds: [opaqueEvidenceId],
+      worker: "brand-compiler",
+      fallbackCode: "brand_evidence_incomplete"
+    } satisfies OperationalTraceReceipt;
+
+    expect(roundTrip(receipt)).toEqual(receipt);
+  });
+
+  it("normalizes complete and completed explicitly", () => {
+    expect(normalizeOperationalReceiptStatus("complete")).toBe("completed");
+    expect(normalizeOperationalReceiptStatus("completed")).toBe("completed");
+    expect(normalizeOperationalReceiptStatus("unknown")).toBeUndefined();
+  });
+
+  it.each([
+    [
+      "raw evidence URL",
+      { ...workerReceipt("completed"), evidenceIds: ["https://private.example/evidence?token=secret"] }
+    ],
+    [
+      "unknown raw prompt field",
+      { ...workerReceipt("completed"), rawPrompt: "Write private generated copy" }
+    ],
+    [
+      "identifying worker value",
+      { ...workerReceipt("completed"), worker: "buyer@example.com" }
+    ],
+    [
+      "credential-shaped error code",
+      { ...workerReceipt("failed"), errorCode: `sk-proj-${"a".repeat(24)}` }
+    ],
+    [
+      "query-bearing reason code",
+      {
+        version: 2,
+        kind: "family_selection",
+        revision: 5,
+        status: "completed",
+        durationMs: 75,
+        evidenceIds: [opaqueEvidenceId],
+        worker: "wireframe-ranker",
+        family: "align",
+        reasonCode: "https://private.example/reason?email=buyer@example.com",
+        sectionPlan
+      }
+    ],
+    [
+      "generated HTML in section plan",
+      {
+        version: 2,
+        kind: "family_selection",
+        revision: 5,
+        status: "completed",
+        durationMs: 75,
+        evidenceIds: [opaqueEvidenceId],
+        worker: "wireframe-ranker",
+        family: "align",
+        reasonCode: "v2-named-account-align",
+        sectionPlan: [
+          ...sectionPlan.slice(0, 3),
+          { id: "align-4", role: "<html>generated copy</html>", optional: false }
+        ]
+      }
+    ]
+  ])("rejects persisted receipts containing %s", (_label, receipt) => {
+    expect(roundTrip(receipt)).toBeUndefined();
+  });
+
+  it.each([
+    ["family_selection", "failed", "wireframe-ranker"],
+    ["brand_needs_input", "completed", "brand-compiler"]
+  ])("rejects illegal %s/%s kind-status combinations", (kind, status, worker) => {
+    expect(roundTrip({
+      version: 2,
+      kind,
+      revision: 1,
+      status,
+      durationMs: 1,
+      evidenceIds: [opaqueEvidenceId],
+      worker,
+      ...(kind === "family_selection"
+        ? {
+            family: "align",
+            reasonCode: "v2-named-account-align",
+            sectionPlan
+          }
+        : {})
     })).toBeUndefined();
   });
 });

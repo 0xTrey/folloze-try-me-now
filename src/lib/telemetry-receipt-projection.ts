@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { WireframeFamilyV2 } from "@/lib/generation/three-family-contract";
+import { sanitizeObservabilityText } from "@/lib/observability";
 import type { WorkerReceipt } from "@/lib/orchestration/worker-types";
 import type { SessionEvent, TryMeSession } from "@/lib/types";
 
@@ -13,6 +14,11 @@ export type OperationalReceiptStatus =
   | "failed"
   | "stale"
   | "needs_input";
+
+export type NormalizedOperationalReceiptStatus = Exclude<
+  OperationalReceiptStatus,
+  "complete"
+>;
 
 export interface OperationalSectionPlanItem {
   id: string;
@@ -36,9 +42,18 @@ export interface OperationalTraceReceipt {
 }
 
 const safeCodePattern = /^[a-z0-9][a-z0-9_.:-]{0,119}$/i;
-const workerStatusByEvent = new Map<string, OperationalReceiptStatus>([
+const normalizedOperationalReceiptStatuses = new Set<NormalizedOperationalReceiptStatus>([
+  "started",
+  "completed",
+  "fallback",
+  "timed_out",
+  "failed",
+  "stale",
+  "needs_input"
+]);
+const workerStatusByEvent = new Map<string, NormalizedOperationalReceiptStatus>([
   ["worker_started", "started"],
-  ["worker_complete", "complete"],
+  ["worker_complete", "completed"],
   ["worker_completed", "completed"],
   ["worker_fallback", "fallback"],
   ["worker_fell_back", "fallback"],
@@ -47,9 +62,37 @@ const workerStatusByEvent = new Map<string, OperationalReceiptStatus>([
   ["worker_stale", "stale"],
   ["worker_needs_input", "needs_input"]
 ]);
+const receiptKeys = new Set([
+  "version",
+  "kind",
+  "revision",
+  "status",
+  "durationMs",
+  "evidenceIds",
+  "worker",
+  "family",
+  "reasonCode",
+  "sectionPlan",
+  "fallbackCode",
+  "errorCode"
+]);
+const sectionPlanKeys = new Set(["id", "role", "optional"]);
+const wireframeFamilies = new Set<WireframeFamilyV2>(["launch", "guide", "align"]);
+
+export function normalizeOperationalReceiptStatus(
+  value: unknown
+): NormalizedOperationalReceiptStatus | undefined {
+  if (value === "complete" || value === "completed") return "completed";
+  return typeof value === "string"
+    && normalizedOperationalReceiptStatuses.has(value as NormalizedOperationalReceiptStatus)
+    ? value as NormalizedOperationalReceiptStatus
+    : undefined;
+}
 
 function safeCode(value: unknown): string | undefined {
-  return typeof value === "string" && safeCodePattern.test(value) ? value : undefined;
+  if (typeof value !== "string" || !safeCodePattern.test(value)) return undefined;
+  const sanitized = sanitizeObservabilityText(value, 120);
+  return sanitized === value && !/\[redacted-/i.test(sanitized) ? value : undefined;
 }
 
 function boundedDuration(value: unknown): number {
@@ -88,18 +131,15 @@ function workerForEvent(event: SessionEvent): string | undefined {
 function receiptForWorkerEvent(
   session: TryMeSession,
   event: SessionEvent,
-  status: OperationalReceiptStatus
+  status: NormalizedOperationalReceiptStatus
 ): WorkerReceipt | undefined {
   const worker = workerForEvent(event);
   if (!worker) return undefined;
-  const matchingStatus = status === "complete" ? "completed" : status;
   return [...(session.workerReceipts ?? [])]
     .reverse()
     .find((receipt) =>
       receipt.worker === worker
-      && (receipt.status === matchingStatus || (
-        matchingStatus === "fallback" && receipt.status === "fallback"
-      ))
+      && receipt.status === status
     );
 }
 
@@ -122,7 +162,7 @@ function safeFailureCode(
 function projectWorkerReceipt(
   session: TryMeSession,
   event: SessionEvent,
-  status: OperationalReceiptStatus,
+  status: NormalizedOperationalReceiptStatus,
   traceId: string
 ): OperationalTraceReceipt {
   const receipt = receiptForWorkerEvent(session, event, status);
@@ -162,7 +202,7 @@ function projectFamilySelectionReceipt(
     version: 2,
     kind: "family_selection",
     revision: safeRevision(decision.revision, session.revision),
-    status: "complete",
+    status: "completed",
     durationMs: boundedDuration(event.meta?.durationMs ?? workerReceipt?.durationMs),
     evidenceIds: evidenceIds(traceId, decision.evidenceRefs),
     worker: "wireframe-ranker",
@@ -198,16 +238,70 @@ export function parseOperationalTraceReceipt(
 ): OperationalTraceReceipt | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const candidate = value as Partial<OperationalTraceReceipt>;
+  const status = normalizeOperationalReceiptStatus(candidate.status);
+  const kind = candidate.kind;
+  const sectionPlan = parseSectionPlan(candidate.sectionPlan);
   if (
-    candidate.version !== 2
-    || !["worker", "family_selection", "brand_needs_input"].includes(String(candidate.kind))
-    || !workerStatusByEvent.has(`worker_${String(candidate.status)}`)
+    Object.keys(candidate).some((key) => !receiptKeys.has(key))
+    || candidate.version !== 2
+    || !["worker", "family_selection", "brand_needs_input"].includes(String(kind))
+    || !status
     || !Number.isSafeInteger(candidate.revision)
+    || (candidate.revision ?? -1) < 0
     || typeof candidate.durationMs !== "number"
+    || !Number.isSafeInteger(candidate.durationMs)
+    || candidate.durationMs < 0
+    || candidate.durationMs > 300_000
     || !Array.isArray(candidate.evidenceIds)
+    || candidate.evidenceIds.length > 200
     || !candidate.evidenceIds.every((id) => /^ev_[a-f0-9]{20}$/.test(id))
+    || (candidate.worker !== undefined && safeCode(candidate.worker) !== candidate.worker)
+    || (candidate.reasonCode !== undefined && safeCode(candidate.reasonCode) !== candidate.reasonCode)
+    || (candidate.fallbackCode !== undefined
+      && safeCode(candidate.fallbackCode) !== candidate.fallbackCode)
+    || (candidate.errorCode !== undefined && safeCode(candidate.errorCode) !== candidate.errorCode)
+    || (candidate.family !== undefined && !wireframeFamilies.has(candidate.family))
+    || !legalKindStatus(kind, status)
+    || (kind === "family_selection" && (
+      !candidate.family
+      || !candidate.reasonCode
+      || candidate.worker !== "wireframe-ranker"
+      || !sectionPlan
+    ))
+    || (kind === "brand_needs_input" && candidate.worker !== "brand-compiler")
+    || (kind !== "family_selection" && candidate.sectionPlan !== undefined)
+    || (kind !== "family_selection" && candidate.family !== undefined)
+    || (kind !== "family_selection" && candidate.reasonCode !== undefined)
   ) {
     return undefined;
   }
-  return structuredClone(candidate as OperationalTraceReceipt);
+  return {
+    ...(structuredClone(candidate) as OperationalTraceReceipt),
+    status,
+    ...(sectionPlan ? { sectionPlan } : {})
+  };
+}
+
+function legalKindStatus(
+  kind: OperationalTraceReceipt["kind"] | undefined,
+  status: NormalizedOperationalReceiptStatus
+): boolean {
+  if (kind === "family_selection") return status === "completed";
+  if (kind === "brand_needs_input") return status === "needs_input";
+  return kind === "worker";
+}
+
+function parseSectionPlan(value: unknown): OperationalSectionPlanItem[] | undefined {
+  if (!Array.isArray(value) || value.length < 4 || value.length > 8) return undefined;
+  if (!value.every((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const candidate = item as Partial<OperationalSectionPlanItem>;
+    return !Object.keys(candidate).some((key) => !sectionPlanKeys.has(key))
+      && safeCode(candidate.id) === candidate.id
+      && safeCode(candidate.role) === candidate.role
+      && typeof candidate.optional === "boolean";
+  })) {
+    return undefined;
+  }
+  return structuredClone(value as OperationalSectionPlanItem[]);
 }
