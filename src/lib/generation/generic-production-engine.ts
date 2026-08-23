@@ -9,7 +9,11 @@ import { writeExplorationSections } from "@/lib/generation/exploration-section-w
 import { writeMechanismProofSections } from "@/lib/generation/mechanism-proof-section-writer";
 import { writeOpeningSections } from "@/lib/generation/opening-section-writer";
 import { writeProblemUrgencySections } from "@/lib/generation/problem-urgency-section-writer";
-import type { ProductionMessageSpine } from "@/lib/generation/production-message-spine";
+import {
+  writerSlotsFromFamilyMessageSpine,
+  type FamilyProductionMessageSpine,
+  type ProductionMessageSpine
+} from "@/lib/generation/production-message-spine";
 import type { WireframeDecisionV2 } from "@/lib/generation/three-family-contract";
 import type {
   SectionCopyCandidate,
@@ -97,6 +101,7 @@ export interface GenericProductionPage {
   revision: number;
   brand: BrandSystemV2;
   familyDecision?: WireframeDecisionV2;
+  familyMessageSpine?: FamilyProductionMessageSpine;
   composition: WireframeSelectionV1;
   framework: ProductionMessageSpine["framework"];
   omissions: ProductionMessageSpine["omissions"];
@@ -143,6 +148,7 @@ export interface GenericProductionEngineInput {
   evidenceArtifact: ProductionArtifact<MaterialLiveBriefEvidence>;
   brandArtifact: ProductionArtifact<BrandSystemV2>;
   familyDecisionArtifact?: ProductionArtifact<WireframeDecisionV2>;
+  familyMessageSpineArtifact?: ProductionArtifact<FamilyProductionMessageSpine>;
   compositionArtifact: ProductionArtifact<WireframeSelectionV1>;
   messageSpineArtifact: ProductionArtifact<ProductionMessageSpine>;
   allowVisualRepair?: boolean;
@@ -353,6 +359,9 @@ function artifactFailure(
     input.evidenceArtifact,
     input.brandArtifact,
     ...(input.familyDecisionArtifact ? [input.familyDecisionArtifact] : []),
+    ...(input.familyMessageSpineArtifact
+      ? [input.familyMessageSpineArtifact]
+      : []),
     input.compositionArtifact,
     input.messageSpineArtifact
   ];
@@ -418,6 +427,23 @@ function artifactFailure(
     };
   }
   if (
+    input.familyMessageSpineArtifact &&
+    (!input.familyDecisionArtifact ||
+      input.familyMessageSpineArtifact.worker !== INPUT_WORKERS.spine ||
+      input.familyMessageSpineArtifact.value?.version !== 2 ||
+      input.familyMessageSpineArtifact.value.family !==
+        input.familyDecisionArtifact.value?.family ||
+      input.familyMessageSpineArtifact.value.reasonCode !==
+        input.familyDecisionArtifact.value?.reasonCode)
+  ) {
+    return {
+      code: "GPE_CONTRACT_MISMATCH",
+      reason:
+        "The V2 family message spine does not match the locked family decision.",
+      status: "failed"
+    };
+  }
+  if (
     artifacts.some(
       (artifact) => !USABLE_STATUSES.has(artifact.status) || artifact.value === undefined
     )
@@ -431,6 +457,10 @@ function artifactFailure(
 
   const selection = input.compositionArtifact.value!;
   const spine = input.messageSpineArtifact.value!;
+  const familySpine = input.familyMessageSpineArtifact?.value;
+  const familySlots = familySpine
+    ? writerSlotsFromFamilyMessageSpine(familySpine)
+    : undefined;
   const plan = selection.compositionPlan;
   if (
     plan.sectionCount < GENERIC_PRODUCTION_MIN_SECTIONS ||
@@ -446,7 +476,15 @@ function artifactFailure(
       (slot, index) =>
         slot.order !== index + 1 ||
         slot.role !== plan.sections[index]?.role
-    )
+    ) ||
+    (familySpine !== undefined &&
+      (familySpine.sections.length !== plan.sections.length ||
+        familySlots?.some(
+          (slot, index) =>
+            slot.spineOrder !== index + 1 ||
+            slot.role !== plan.sections[index]?.role ||
+            slot.label !== plan.sections[index]?.label
+        )))
   ) {
     return {
       code: "GPE_CONTRACT_MISMATCH",
@@ -595,6 +633,10 @@ export async function compileGenericProductionPage(
   const dependencyArtifacts = [
     input.evidenceArtifact,
     input.brandArtifact,
+    ...(input.familyDecisionArtifact ? [input.familyDecisionArtifact] : []),
+    ...(input.familyMessageSpineArtifact
+      ? [input.familyMessageSpineArtifact]
+      : []),
     input.compositionArtifact,
     input.messageSpineArtifact
   ];
@@ -677,9 +719,12 @@ export async function compileGenericProductionPage(
   const evidenceValue = input.evidenceArtifact.value!;
   const selection = input.compositionArtifact.value!;
   const spine = input.messageSpineArtifact.value!;
+  const familySpine = input.familyMessageSpineArtifact?.value;
   const brand = input.brandArtifact.value!;
   const evidence = sectionEvidence(evidenceValue, input.revision);
-  const slots = writerSlots(spine, selection);
+  const slots = familySpine
+    ? writerSlotsFromFamilyMessageSpine(familySpine)
+    : writerSlots(spine, selection);
   const objectiveField = evidenceValue.fields.objective;
   const ctaField = evidenceValue.fields.cta;
   if (!objectiveField || !ctaField) {
@@ -694,6 +739,8 @@ export async function compileGenericProductionPage(
     );
   }
 
+  const writerArgument = familySpine?.argument ?? spine.argument;
+  const writerCta = familySpine?.cta ?? ctaField.value;
   const baseWriterInput = {
     sessionId: input.sessionId,
     revision: input.revision,
@@ -702,23 +749,34 @@ export async function compileGenericProductionPage(
     completedAt: input.completedAt,
     slots,
     brief: {
-      audience: spine.argument.audience.directive,
-      promise: spine.argument.promise.directive,
-      mechanism: spine.argument.mechanism.directive,
-      proofPlan: spine.argument.proofPlan.directive,
-      decisionHelp: spine.argument.decisionHelp.directive,
-      nextAction: spine.argument.nextAction.directive,
-      ...(spine.argument.tension
-        ? { tension: spine.argument.tension.directive }
+      ...(familySpine
+        ? {
+            family: familySpine.family,
+            ...(familySpine.entities?.sellerName
+              ? { sellerName: familySpine.entities.sellerName }
+              : {}),
+            ...(familySpine.entities?.targetName
+              ? { targetName: familySpine.entities.targetName }
+              : {})
+          }
         : {}),
-      ...(spine.argument.whyNow
-        ? { whyNow: spine.argument.whyNow.directive }
+      audience: writerArgument.audience.directive,
+      promise: writerArgument.promise.directive,
+      mechanism: writerArgument.mechanism.directive,
+      proofPlan: writerArgument.proofPlan.directive,
+      decisionHelp: writerArgument.decisionHelp.directive,
+      nextAction: writerArgument.nextAction.directive,
+      ...(writerArgument.tension
+        ? { tension: writerArgument.tension.directive }
         : {}),
-      unknowns: [...spine.unknowns]
+      ...(writerArgument.whyNow
+        ? { whyNow: writerArgument.whyNow.directive }
+        : {}),
+      unknowns: [...(familySpine?.unknowns ?? spine.unknowns)]
     },
     evidence,
     objective: objectiveField.value,
-    cta: { ...ctaField.value }
+    cta: { ...writerCta }
   } satisfies Omit<SectionWriterInput, "worker">;
 
   const writers = { ...DEFAULT_WRITERS, ...dependencies.writers };
@@ -832,7 +890,20 @@ export async function compileGenericProductionPage(
       slots,
       evidence,
       objective: objectiveField.value,
-      cta: { ...ctaField.value },
+      cta: { ...writerCta },
+      ...(familySpine
+        ? {
+            familyContext: {
+              family: familySpine.family,
+              sellerName:
+                familySpine.entities?.sellerName ??
+                String(evidenceValue.fields.companyName?.value ?? ""),
+              ...(familySpine.entities?.targetName
+                ? { targetName: familySpine.entities.targetName }
+                : {})
+            }
+          }
+        : {}),
       writerArtifacts
     })
   );
@@ -957,12 +1028,15 @@ export async function compileGenericProductionPage(
     ...(input.familyDecisionArtifact?.value
       ? { familyDecision: structuredClone(input.familyDecisionArtifact.value) }
       : {}),
+    ...(familySpine
+      ? { familyMessageSpine: structuredClone(familySpine) }
+      : {}),
     composition: selection,
     framework: {
       ...spine.framework,
       reasonCodes: [...spine.framework.reasonCodes]
     },
-    omissions: [...spine.omissions],
+    omissions: [...(familySpine?.omissions ?? spine.omissions)],
     sections,
     claimToEvidence: [...editorArtifact.value.claimToEvidence],
     mediaIntent: mediaIntentFor(brand, slots),

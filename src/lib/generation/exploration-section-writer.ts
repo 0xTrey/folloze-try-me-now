@@ -280,6 +280,33 @@ function choicesForSlot(
   claims: readonly SectionEvidenceClaim[]
 ): [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice] {
   const technical = isTechnical(input);
+  if (slot.v2Role === "applications") {
+    const definitions = [
+      [
+        "Operational application",
+        "Operational workflow ownership"
+      ],
+      [
+        "Cross-team application",
+        "Cross-team coordination trigger"
+      ],
+      [
+        "Expansion application",
+        "Validated expansion scope"
+      ]
+    ] as const;
+    const choice = (index: 0 | 1 | 2): SectionCopyChoice => {
+      const [label, prefix] = definitions[index];
+      const claim = claims[index % Math.max(claims.length, 1)];
+      const detail = claim ? safeClaimText(claim) : undefined;
+      return {
+        label,
+        body: `${prefix}: ${detail ?? "confirm the relevant evidence before choosing this scenario"}.`,
+        evidenceRefs: claim ? [claim.id] : []
+      };
+    };
+    return [choice(0), choice(1), choice(2)];
+  }
   if (claims.length < 3) return sparseChoices(slot.role, technical, claims);
 
   const labels = richChoiceLabels(slot.role, technical);
@@ -333,7 +360,10 @@ function candidateForSlot(
       ...copyContractMetadata(slot),
       status: "complete",
       headline: headlineForSlot(slot, input),
-      body: sectionBodies[role],
+      body:
+        slot.v2Role === "priority-paths" && input.brief.targetName
+          ? `For ${input.brief.targetName}, compare the current evidence and choose the priority that should be validated first.`
+          : sectionBodies[role],
       choices,
       evidenceRefs,
       wordCount: 0

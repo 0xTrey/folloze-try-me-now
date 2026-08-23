@@ -51,6 +51,9 @@ export interface SectionWriterSlot {
 }
 
 export interface SectionWriterBrief {
+  family?: WireframeFamilyV2;
+  sellerName?: string;
+  targetName?: string;
   audience: string;
   promise: string;
   mechanism: string;

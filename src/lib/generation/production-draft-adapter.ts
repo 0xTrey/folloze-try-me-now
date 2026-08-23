@@ -5,8 +5,6 @@ import {
 import type { GenericProductionPage } from "@/lib/generation/generic-production-engine";
 
 const evidenceIdPattern = /^[a-z0-9][a-z0-9._:-]{1,71}$/i;
-const internalDirectivePattern =
-  /^(?:frame|use|explain|review|present|position|describe|show|write)\b|\b(?:do not claim|only when supported|evidence-bounded|unknowns?)\b/i;
 
 function bounded(
   value: string | undefined,
@@ -17,8 +15,7 @@ function bounded(
   const clean = value?.replace(/\s+/g, " ").trim();
   return clean &&
     clean.length >= min &&
-    clean.length <= max &&
-    !internalDirectivePattern.test(clean)
+    clean.length <= max
     ? clean
     : fallback;
 }
@@ -42,6 +39,11 @@ export function applyProductionPageToDraft(
   const next = structuredClone(draft);
   const framework = next.persuasionFramework;
   const byRole = new Map(page.sections.map((section) => [section.role, section]));
+  const byV2Role = new Map(
+    page.sections.flatMap((section) =>
+      section.v2Role ? [[section.v2Role, section] as const] : []
+    )
+  );
   const opening = byRole.get("hero");
   if (opening?.status === "complete") {
     next.eyebrow = bounded(opening.eyebrow, 2, 52, next.eyebrow);
@@ -65,7 +67,11 @@ export function applyProductionPageToDraft(
         opening.evidenceRefs,
         framework.opening.evidenceIds
       );
+      if (opening.cta?.label) {
+        framework.opening.ctaLabel = opening.cta.label;
+      }
     }
+    if (opening.cta?.label) next.primaryCta = opening.cta.label;
   }
 
   const context = byRole.get("context");
@@ -98,43 +104,57 @@ export function applyProductionPageToDraft(
     }
   }
 
-  const exploration = page.sections.find(
-    (section) =>
-      section.status === "complete" &&
-      ["pathways", "agenda", "chapter-navigation", "decision-support", "resources"].includes(
-        section.role
-      )
-  );
-  if (exploration?.choices?.length === 3) {
-    next.sections = exploration.choices.map((choice, index) => ({
+  const pathExploration =
+    byV2Role.get("use-cases") ??
+    byV2Role.get("applications") ??
+    byV2Role.get("priority-paths") ??
+    page.sections.find(
+      (section) => section.status === "complete" && section.role === "pathways"
+    );
+  const criteriaExploration =
+    byV2Role.get("evaluation-criteria") ??
+    page.sections.find(
+      (section) =>
+        section.status === "complete" && section.role === "decision-support"
+    );
+  if (pathExploration?.choices?.length === 3) {
+    next.sectionLabels.lenses = bounded(
+      pathExploration.headline,
+      6,
+      100,
+      next.sectionLabels.lenses
+    );
+    next.sections = pathExploration.choices.map((choice, index) => ({
       eyebrow: bounded(choice.label, 2, 44, next.sections[index]!.eyebrow),
       headline: bounded(choice.label, 6, 100, next.sections[index]!.headline),
       body: bounded(choice.body, 12, 320, next.sections[index]!.body),
       proof: bounded(choice.body, 8, 180, next.sections[index]!.proof)
     })) as ExperienceDraft["sections"];
-    next.signalLabels = exploration.choices.map((choice, index) =>
+    next.signalLabels = pathExploration.choices.map((choice, index) =>
       bounded(choice.label, 2, 56, next.signalLabels[index]!)
     ) as ExperienceDraft["signalLabels"];
-    if (framework) {
+  }
+  const frameworkExploration = criteriaExploration ?? pathExploration;
+  if (frameworkExploration?.choices?.length === 3 && framework) {
       framework.startingPoints.eyebrow = bounded(
-        exploration.eyebrow,
+        frameworkExploration.eyebrow,
         2,
         60,
         framework.startingPoints.eyebrow
       );
       framework.startingPoints.headline = bounded(
-        exploration.headline,
+        frameworkExploration.headline,
         8,
         120,
         framework.startingPoints.headline
       );
       framework.startingPoints.intro = bounded(
-        exploration.body,
+        frameworkExploration.body,
         12,
         220,
         framework.startingPoints.intro
       );
-      framework.startingPoints.choices = exploration.choices.map((choice, index) => ({
+      framework.startingPoints.choices = frameworkExploration.choices.map((choice, index) => ({
         ...framework.startingPoints.choices[index]!,
         label: bounded(
           choice.label,
@@ -153,7 +173,6 @@ export function applyProductionPageToDraft(
           framework.startingPoints.choices[index]!.evidenceIds
         )
       })) as typeof framework.startingPoints.choices;
-    }
   }
 
   const mechanism = byRole.get("mechanism");
@@ -248,7 +267,9 @@ export function applyProductionPageToDraft(
         close.evidenceRefs,
         framework.nextStep.evidenceIds
       );
+      if (close.cta?.label) framework.nextStep.ctaLabel = close.cta.label;
     }
+    if (close.cta?.label) next.primaryCta = close.cta.label;
   }
 
   return experienceDraftSchema.parse(next);

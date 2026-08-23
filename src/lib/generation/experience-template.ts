@@ -550,6 +550,28 @@ export function renderExperienceHtml(input: {
     : input.wireframeSelection?.compositionPlan
       ? new Set(input.wireframeSelection.compositionPlan.sections.map(({ role }) => role))
       : undefined;
+  const plannedSections = input.wireframeSelection?.compositionPlan.sections;
+  const anchorForRole = (role: WireframeSectionRole, label?: string): string => {
+    if (role === "hero") return "experience-overview";
+    if (role === "context") return "why-change-now";
+    if (role === "mechanism") return "outcome-mechanism";
+    if (role === "proof") {
+      return /\bmore evidence\b/i.test(label ?? "")
+        ? "additional-evidence"
+        : "credibility-anchor";
+    }
+    if (role === "pathways") return "application-paths";
+    if (
+      role === "agenda" ||
+      role === "chapter-navigation" ||
+      role === "decision-support"
+    ) {
+      return "starting-points";
+    }
+    if (role === "seller-validation") return "team-value";
+    if (role === "resources") return "supporting-resources";
+    return "next-step";
+  };
   const frameworkSections = [
     { id: "experience-overview", roles: ["hero"] },
     { id: "credibility-anchor", roles: ["proof"] },
@@ -567,15 +589,20 @@ export function renderExperienceHtml(input: {
     roles: readonly WireframeSectionRole[];
   }>;
   const journeyNavItems = framework
-    ? frameworkSections
-      .filter(({ roles }) => !plannedRoles || roles.some((role) => plannedRoles.has(role)))
-      .map(({ id }, index) => ({
-        id,
-        label: sanitizeBuyerFacingLabel(
-          template.journeyNavigation[index] ?? `Section ${index + 1}`,
-          "Overview"
-        )
-      }))
+    ? plannedSections
+      ? plannedSections.map((section) => ({
+          id: anchorForRole(section.role, section.label),
+          label: sanitizeBuyerFacingLabel(section.label, "Overview")
+        }))
+      : frameworkSections
+        .filter(({ roles }) => !plannedRoles || roles.some((role) => plannedRoles.has(role)))
+        .map(({ id }, index) => ({
+          id,
+          label: sanitizeBuyerFacingLabel(
+            template.journeyNavigation[index] ?? `Section ${index + 1}`,
+            "Overview"
+          )
+        }))
     : [
         { id: "experience-overview", label: "Overview" },
         ...template.regionOrder.map((region) => ({
@@ -757,7 +784,61 @@ export function renderExperienceHtml(input: {
           .join("")}</div>
       </section>` : ""}${rolePlanned("resources") ? regions.resources : ""}`
     : "";
-  const pageFlow = framework ? frameworkFlow : `${signatureMoment}${experienceFlow}`;
+  const familyProduction = input.productionSections?.some(({ id }) =>
+    /^(?:launch|guide|align)-\d+$/.test(id)
+  );
+  const familyFrameworkFlow =
+    framework && familyProduction && plannedSections
+      ? plannedSections
+          .filter(
+            ({ role }) => role !== "hero" && role !== "next-action"
+          )
+          .map((section) => {
+            const label = escapeHtml(
+              sanitizeBuyerFacingLabel(section.label, "Overview")
+            );
+            if (section.role === "context") {
+              return `<section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)}><header class="framework-heading"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.urgency.headline)}</h2></header><p class="region-intro">${escapeHtml(framework.urgency.change)}</p></section>`;
+            }
+            if (section.role === "mechanism") {
+              return `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism"><div class="framework-copy"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.mechanism.headline)}</h2><p class="region-intro">${escapeHtml(framework.mechanism.intro)}</p></div>${frameworkImage(images, framework.mechanism.imageBrief, "framework-media mechanism-media")}</section>`;
+            }
+            if (section.role === "proof") {
+              const sectionId = anchorForRole(section.role, section.label);
+              const headline = sectionId === "additional-evidence"
+                ? "More evidence to carry forward"
+                : framework.credibility.headline;
+              return `<section class="framework-section credibility-anchor" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)}><div class="framework-copy"><p class="eyebrow">${label}</p><h2>${escapeHtml(headline)}</h2><p class="region-intro">${escapeHtml(framework.credibility.fact)}</p></div>${frameworkImage(images, framework.credibility.imageBrief, "framework-media")}</section>`;
+            }
+            if (section.role === "decision-support") {
+              const criteria = framework.startingPoints.choices
+                .map(
+                  (choice, index) =>
+                    `<article><span class="lens-number">0${index + 1}</span><h3>${escapeHtml(choice.label)}</h3><p>${escapeHtml(choice.buyerJob)}</p></article>`
+                )
+                .join("");
+              return `<section class="lens-lab framework-starting-points" id="starting-points" data-journey-section="starting-points" data-template-primitive="starting-points"><header class="region-heading"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.startingPoints.headline)}</h2><p class="region-intro">${escapeHtml(framework.startingPoints.intro)}</p></header><div class="journey-grid">${criteria}</div></section>`;
+            }
+            if (section.role === "pathways") {
+              const paths = draft.sections
+                .map(
+                  (path, index) =>
+                    `<article><span class="lens-number">0${index + 1}</span><p class="eyebrow">${escapeHtml(path.eyebrow)}</p><h3>${escapeHtml(path.headline)}</h3><p>${escapeHtml(path.body)}</p></article>`
+                )
+                .join("");
+              return `<section class="lens-lab framework-starting-points" id="application-paths" data-journey-section="application-paths" data-template-primitive="starting-points"><header class="region-heading"><p class="eyebrow">${label}</p><h2>${escapeHtml(draft.sectionLabels.lenses)}</h2></header><div class="journey-grid">${paths}</div></section>`;
+            }
+            if (section.role === "seller-validation") {
+              return `<section class="framework-section team-value-section" id="team-value" data-journey-section="team-value"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.teamValue.headline)}</h2><p class="region-intro">${escapeHtml(framework.teamValue.intro)}</p></section>`;
+            }
+            if (section.role === "resources") return regions.resources;
+            return "";
+          })
+          .join("")
+      : undefined;
+  const pageFlow = framework
+    ? familyFrameworkFlow ?? frameworkFlow
+    : `${signatureMoment}${experienceFlow}`;
   const closeMarkup = framework
     ? `<section class="close framework-close" id="next-step" data-journey-section="next-step" ${evidenceAttribute(framework.nextStep.evidenceIds)} aria-labelledby="next-step-heading">
         <div><p class="eyebrow" ${editableBlock("nextStep.eyebrow", "section-label")}>${escapeHtml(framework.nextStep.eyebrow)}</p><h2 id="next-step-heading" ${editableBlock("nextStep.headline", "headline")}>${escapeHtml(framework.nextStep.headline)}</h2><p ${editableBlock("nextStep.body", "body")}>${escapeHtml(framework.nextStep.body)}</p></div>
@@ -788,6 +869,7 @@ export function renderExperienceHtml(input: {
     .media.media .media-fallback>strong{position:relative;max-width:520px;font-family:var(--display);font-size:clamp(34px,4.4vw,62px);line-height:.98;letter-spacing:-.035em}
     .media.media .media-fallback-steps{width:100%;padding-top:16px;display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid color-mix(in srgb,var(--brand-ink) 20%,transparent)}
     .media.media .media-fallback-steps i{font-style:normal;font-size:11px;font-weight:850;letter-spacing:.12em}
+    .media.has-asset img{object-fit:contain;background:var(--brand-surface)}
     .no-asset-treatment{isolation:isolate}.no-asset-treatment:before{content:"";position:absolute;inset:0;z-index:-1;opacity:.92}.no-asset-editorial-evidence:before{background:linear-gradient(135deg,color-mix(in srgb,var(--brand-accent) 18%,transparent),transparent 46%),repeating-linear-gradient(90deg,transparent 0 48px,color-mix(in srgb,var(--brand-ink) 8%,transparent) 49px 50px)}.no-asset-proof-receipt:before{background:radial-gradient(circle at 82% 16%,color-mix(in srgb,var(--brand-accent) 28%,transparent),transparent 28%),linear-gradient(135deg,var(--brand-soft-surface),var(--brand-surface))}.no-asset-choice-map:before{background:linear-gradient(90deg,color-mix(in srgb,var(--brand-accent) 14%,transparent) 1px,transparent 1px),linear-gradient(color-mix(in srgb,var(--brand-accent) 14%,transparent) 1px,transparent 1px);background-size:64px 64px}.no-asset-system-map:before{background:linear-gradient(135deg,transparent 49.5%,color-mix(in srgb,var(--brand-accent) 28%,transparent) 50%,transparent 50.5%),radial-gradient(circle at 20% 72%,color-mix(in srgb,var(--brand-support) 28%,transparent),transparent 28%)}.no-asset-data-frame:before{background:linear-gradient(90deg,transparent 0 18%,color-mix(in srgb,var(--brand-accent) 34%,transparent) 18% 20%,transparent 20% 44%,color-mix(in srgb,var(--brand-support) 28%,transparent) 44% 46%,transparent 46%)}.no-asset-chapter-index:before{background:repeating-linear-gradient(0deg,color-mix(in srgb,var(--brand-ink) 8%,transparent) 0 1px,transparent 1px 72px),linear-gradient(145deg,var(--brand-dark),var(--brand-surface));opacity:.38}
     *{box-sizing:border-box}[hidden]{display:none!important}html{scroll-behavior:auto;overflow-x:clip;scroll-padding-top:70px}body{margin:0;background:var(--brand-surface);color:var(--brand-ink);font-family:var(--body);line-height:1.5;overflow-x:clip;overscroll-behavior-y:contain;-webkit-font-smoothing:antialiased}button,a{font:inherit;touch-action:manipulation}.hero-copy,.lens-copy,.journey-copy,.close>div,.region-heading{min-width:0}.shell{max-width:1600px;min-height:100dvh;margin:0 auto;background:var(--brand-surface);overflow:clip}.eyebrow{margin:0 0 18px;color:var(--brand-accent);font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.skip-link{position:fixed;left:16px;top:12px;z-index:1000;padding:10px 14px;border-radius:6px;background:var(--brand-ink);color:#fff;text-decoration:none;transform:translateY(-180%);transition:transform .16s ease}.skip-link:focus{transform:translateY(0)}.nav{height:78px;padding:0 clamp(22px,6vw,96px);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:var(--brand-surface)}.brand-lockup{display:flex;flex:0 0 auto;align-items:center;gap:12px;min-width:0}.lockup-divider{min-width:38px;min-height:32px;padding:0 9px;display:grid;place-items:center;border-inline:1px solid color-mix(in srgb,var(--muted) 32%,transparent);color:var(--muted);font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.wordmark{display:inline-grid;grid-template-areas:"mark";flex:0 0 auto;align-items:center;max-width:172px;min-height:36px;color:var(--brand-ink);font-weight:800;font-size:19px;line-height:1;white-space:nowrap}.wordmark img,.wordmark-fallback{grid-area:mark}.wordmark img{display:block;width:auto;height:auto;max-width:172px;max-height:32px;object-fit:contain;opacity:0}.wordmark-fallback{max-width:100%;overflow:hidden;text-overflow:ellipsis}.wordmark.has-image img{opacity:1}.wordmark.has-image .wordmark-fallback{visibility:hidden}.target-wordmark{max-width:142px}.target-wordmark img{max-width:142px;max-height:30px}.nav-action{border:0;background:transparent;color:var(--brand-ink);min-height:44px;padding:0;cursor:pointer;font-weight:750}.nav-action:hover,.nav-action:focus-visible{color:var(--brand-accent)}
     .journey-nav{position:sticky;top:0;z-index:40;min-height:58px;border-bottom:1px solid color-mix(in srgb,var(--brand-ink) 14%,transparent);background:color-mix(in srgb,var(--brand-surface) 92%,transparent);box-shadow:0 12px 34px color-mix(in srgb,var(--brand-ink) 7%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}.journey-nav-inner{min-height:58px;padding:0 clamp(22px,6vw,96px);display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:clamp(18px,3vw,42px)}.journey-nav-title{display:grid;min-width:124px;line-height:1.1}.journey-nav-title strong{font-size:11px;letter-spacing:.13em;text-transform:uppercase}.journey-nav-title small{max-width:170px;margin-top:4px;overflow:hidden;color:var(--muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.journey-links{min-width:0;width:100%;display:flex;align-self:stretch;align-items:center;justify-content:flex-start;gap:clamp(4px,1vw,14px);overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none}.journey-links::-webkit-scrollbar{display:none}.journey-links button{position:relative;display:inline-flex;flex:0 0 auto;align-items:center;gap:8px;min-height:44px;padding:0 9px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-weight:750;white-space:nowrap}.journey-links button>span{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.35;transition:opacity .18s ease,transform .18s ease}.journey-links button:after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:var(--brand-accent);transform:scaleX(0);transform-origin:center;transition:transform .18s ease}.journey-links button:hover,.journey-links button:focus-visible,.journey-links button[aria-current="location"]{color:var(--brand-ink)}.journey-links button[aria-current="location"]>span{background:var(--brand-accent);opacity:1;transform:scale(1.45)}.journey-links button[aria-current="location"]:after{transform:scaleX(1)}.fullscreen-control{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:var(--brand-surface);color:var(--brand-ink);cursor:pointer;font-size:11px;font-weight:800;white-space:nowrap}.fullscreen-control svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.6}.fullscreen-control:hover,.fullscreen-control:focus-visible,.fullscreen-control[aria-pressed="true"]{border-color:var(--brand-accent);color:var(--brand-accent)}

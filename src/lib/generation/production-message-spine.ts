@@ -17,9 +17,11 @@ import type {
 } from "@/lib/research/evidence-reconciler";
 import {
   adaptSectionSlotV2,
+  boundedCtaV2,
   type SectionWriterSlot
 } from "@/lib/generation/section-copy-types";
 import type {
+  CtaIdV2,
   SectionRoleV2,
   SectionSlotV2,
   WireframeDecisionV2,
@@ -135,6 +137,11 @@ export interface FamilyProductionMessageSpine {
   reasonCode: string;
   argumentOrder: ProductionArgumentRole[];
   argument: RequiredProductionArgument;
+  entities?: {
+    sellerName: string;
+    targetName?: string;
+  };
+  cta?: ReturnType<typeof boundedCtaV2>;
   sections: FamilyProductionMessageSpineSectionSlot[];
   evidenceRefs: string[];
   unknowns: string[];
@@ -152,6 +159,9 @@ export interface CompileFamilyProductionMessageSpineInput {
   activeRevision: number;
   decision: WireframeDecisionV2;
   argument: RequiredProductionArgument;
+  sellerName?: string;
+  targetName?: string;
+  ctaId?: CtaIdV2;
   startedAt: string;
   completedAt: string;
 }
@@ -752,6 +762,16 @@ export function compileFamilyProductionMessageSpine(
       "family_message_spine_section_contract_mismatch"
     );
   }
+  const allowedCtas = new Set(
+    input.decision.sectionPlan.flatMap((slot) => slot.allowedCtas ?? [])
+  );
+  if (input.ctaId && !allowedCtas.has(input.ctaId)) {
+    return failedFamilySpineArtifact(
+      input,
+      "failed",
+      "family_message_spine_cta_not_allowed"
+    );
+  }
 
   const omissions = (["tension", "whyNow"] as const).filter(
     (role) => !(role in input.argument)
@@ -810,6 +830,17 @@ export function compileFamilyProductionMessageSpine(
     reasonCode: input.decision.reasonCode,
     argumentOrder: argumentOrderForFamilyV2(input.decision.family),
     argument: input.argument,
+    ...(input.sellerName?.trim()
+      ? {
+          entities: {
+            sellerName: input.sellerName.trim(),
+            ...(input.targetName?.trim()
+              ? { targetName: input.targetName.trim() }
+              : {})
+          }
+        }
+      : {}),
+    ...(input.ctaId ? { cta: boundedCtaV2(input.ctaId) } : {}),
     sections,
     evidenceRefs,
     unknowns: unique(

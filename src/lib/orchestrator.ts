@@ -41,7 +41,11 @@ import {
   brandWithSessionLogoDelivery,
   imageDeliverySources
 } from "@/lib/image-delivery";
-import { harvestBrand, fallbackBrand } from "@/lib/integrations/brand-harvester";
+import {
+  harvestBrand,
+  fallbackBrand,
+  normalizeOfficialBrandSourceUrl
+} from "@/lib/integrations/brand-harvester";
 import { sendClaimEmail } from "@/lib/integrations/email";
 import {
   deterministicDraft,
@@ -149,6 +153,24 @@ function trustedBrandProfile(
     usedFallback: true,
     rejectedProfile: assessed
   };
+}
+
+function verifiedSellerSourceDomains(
+  session: Pick<TryMeSession, "brand">
+): string[] {
+  const brand = session.brand;
+  if (
+    !brand?.identity ||
+    brand.identity.confirmationStatus !== "confirmed" ||
+    brand.identity.confidence === "low"
+  ) return [];
+  return [
+    ...new Set([
+      brand.identity.canonicalDomain,
+      brand.canonicalDomain,
+      ...(brand.domainAliases ?? [])
+    ].filter((domain): domain is string => Boolean(domain)))
+  ].sort();
 }
 
 function traceableLogoPath(profile: BrandProfile): string | null {
@@ -951,9 +973,9 @@ async function assembleExperienceArtifact(input: {
   targetBrand?: BrandProfile;
   imageSourceBrand: BrandProfile;
   imageSourceTargetBrand?: BrandProfile;
+  generationSource: "openai" | "deterministic-fallback";
   trustFallbackReason?: string;
 }) {
-  const controlledDraft = draftWithBlockControls(input.draft, input.session.blockControls);
   syncCampaignContracts(input.session);
   const storyStartedAt = Date.parse(input.session.stages.story.startedAt ?? "");
   const productionResult = await compileSessionProductionPage({
@@ -968,9 +990,21 @@ async function assembleExperienceArtifact(input: {
     productionResult.artifact.revision === input.session.revision
       ? productionResult.artifact.value
       : undefined;
-  const productionDraft = productionPage
-    ? applyProductionPageToDraft(controlledDraft, productionPage)
-    : controlledDraft;
+  const familyDraft = productionPage
+    ? applyProductionPageToDraft(input.draft, productionPage)
+    : input.draft;
+  const sourceAwareDraft = input.generationSource === "openai"
+    ? {
+        ...familyDraft,
+        headline: input.draft.headline,
+        subhead: input.draft.subhead,
+        primaryCta: input.draft.primaryCta
+      }
+    : familyDraft;
+  const productionDraft = draftWithBlockControls(
+    sourceAwareDraft,
+    input.session.blockControls
+  );
   const qualityReceipt = qualityReceiptFor(
     input.session,
     input.session.revision + 1,
@@ -1322,10 +1356,17 @@ export async function runBrandStage(
   if (!current || !needsBrandRefresh(current)) return;
   const expectedDomain = current.companyDomain;
   const expectedSourceUrl = current.answers.brandSourceUrl;
+  const expectedSourceDomains = verifiedSellerSourceDomains(current);
   const lease = await acquireSessionLease(id, "seller-brand", 30);
   if (!lease) return;
   try {
-    await runBrandStageUnlocked(id, expectedDomain, expectedSourceUrl, options);
+    await runBrandStageUnlocked(
+      id,
+      expectedDomain,
+      expectedSourceUrl,
+      expectedSourceDomains,
+      options
+    );
   } finally {
     await releaseLeaseSafely(lease, id, "seller_brand");
   }
@@ -1335,6 +1376,7 @@ async function runBrandStageUnlocked(
   id: string,
   expectedDomain: string,
   expectedSourceUrl: string | undefined,
+  expectedSourceDomains: readonly string[],
   options: { resumeStory?: boolean }
 ): Promise<void> {
   const attemptId = opaqueId();
@@ -1380,7 +1422,7 @@ async function runBrandStageUnlocked(
 
   try {
     const harvested = expectedSourceUrl
-      ? await harvestBrand(expectedDomain, expectedSourceUrl)
+      ? await harvestBrand(expectedDomain, expectedSourceUrl, expectedSourceDomains)
       : await harvestBrand(expectedDomain);
     const trusted = trustedBrandProfile(harvested, expectedDomain);
     const profile = brandWithSessionLogoDelivery(id, "seller", trusted.profile);
@@ -1916,15 +1958,19 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const previousSourceFingerprint = sourceFingerprintForAnswers(session.answers);
   if (patch.targetDomain) patch.targetDomain = normalizeDomain(patch.targetDomain);
   if (patch.brandSourceUrl) {
-    const brandSource = new URL(patch.brandSourceUrl);
-    if (normalizeDomain(brandSource.hostname) !== normalizeDomain(session.companyDomain)) {
+    try {
+      patch.brandSourceUrl = normalizeOfficialBrandSourceUrl(
+        session.companyDomain,
+        patch.brandSourceUrl,
+        verifiedSellerSourceDomains(session)
+      );
+    } catch {
       throw new HttpError(
         400,
         "brand_source_domain_mismatch",
         "Use an official page on the seller company domain."
       );
     }
-    patch.brandSourceUrl = brandSource.toString();
   }
   if (patch.sourceUrl) {
     patch.sourceUrl = new URL(patch.sourceUrl).toString();
@@ -3039,7 +3085,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         brand: selectedBrands.brand,
         targetBrand: selectedBrands.targetBrand,
         imageSourceBrand: brand,
-        imageSourceTargetBrand: targetBrand
+        imageSourceTargetBrand: targetBrand,
+        generationSource: "deterministic-fallback"
       });
       const provisionalReadyAt = Date.now();
       const eligibleAt = generationEligibleAt(latest);
@@ -3175,6 +3222,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       targetBrand: selectedBrands.targetBrand,
       imageSourceBrand: brand,
       imageSourceTargetBrand: targetBrand,
+      generationSource: generated.source,
       trustFallbackReason
     });
     const finalBrandHelpRequired =

@@ -20,10 +20,16 @@ import {
   type ObjectiveCtaEvidence,
   type ObjectiveCtaMotion
 } from "@/lib/generation/objective-cta-recommendations";
-import { compileProductionMessageSpine } from "@/lib/generation/production-message-spine";
+import {
+  compileFamilyProductionMessageSpine,
+  compileProductionMessageSpine,
+  type RequiredProductionArgument
+} from "@/lib/generation/production-message-spine";
+import { boundedCtaV2 } from "@/lib/generation/section-copy-types";
 import {
   applyV2SectionPlanToLegacySelection,
   selectThreeFamilyDecision,
+  type CtaIdV2,
   type ExperienceSubtypeV2
 } from "@/lib/generation/three-family-contract";
 import {
@@ -262,6 +268,142 @@ function sectionCountFor(session: TryMeSession, brand: BrandProfile): WireframeS
     return 4;
   }
   return 6;
+}
+
+function targetNameFor(
+  session: TryMeSession,
+  targetBrand?: BrandProfile
+): string | undefined {
+  if (targetBrand?.companyName.trim()) return targetBrand.companyName.trim();
+  const domain = session.answers.targetDomain?.trim();
+  if (!domain) return undefined;
+  const label = domain
+    .replace(/^https?:\/\//i, "")
+    .split(/[./]/)[0]
+    ?.replace(/[-_]+/g, " ")
+    .trim();
+  return label
+    ? label.replace(/\b\w/g, (character) => character.toLocaleUpperCase())
+    : undefined;
+}
+
+function familyCtaId(
+  family: ReturnType<typeof selectThreeFamilyDecision>
+): CtaIdV2 {
+  if (family.family === "align") return "plan_validation";
+  if (family.family === "guide") return "book_working_session";
+  if (family.subtype === "event" || family.subtype === "webinar") {
+    return "register";
+  }
+  return "book_meeting";
+}
+
+function familyArgument(input: {
+  base: RequiredProductionArgument;
+  family: ReturnType<typeof selectThreeFamilyDecision>;
+  sellerName: string;
+  targetName?: string;
+  offer: string;
+  audience: string;
+  objective: string;
+  publicContext?: string;
+  ctaId: CtaIdV2;
+}): RequiredProductionArgument {
+  const {
+    base,
+    family,
+    sellerName,
+    targetName,
+    offer,
+    audience,
+    objective,
+    publicContext,
+    ctaId
+  } = input;
+  const cta = boundedCtaV2(ctaId);
+  const objectiveAction = objective.length
+    ? `${objective[0]!.toLocaleLowerCase()}${objective.slice(1)}`
+    : "validate the next decision";
+  const promise =
+    family.family === "launch"
+      ? `${offer} gives ${audience} a concrete path to ${objectiveAction}.`
+      : family.family === "guide"
+        ? `${audience} can evaluate ${offer} with clearer decision criteria.`
+        : `${targetName ?? "The target team"} and ${sellerName} can ${objectiveAction} together.`;
+  const tension =
+    family.family === "launch"
+      ? publicContext ??
+        `${audience} need a concrete reason to change the current approach.`
+      : family.family === "guide"
+        ? `${objective} requires connected stakes, observable criteria, and supported answers.`
+        : `${targetName ?? "The target team"} needs account-specific evidence before choosing where ${offer} fits.`;
+  const whyNow =
+    family.family === "guide"
+      ? `${offer} changes what ${audience} should examine before making this decision.`
+      : family.family === "align"
+        ? `${targetName ?? "The target team"} has a current priority to ${objective}.`
+        : `${objective} is the next useful buyer action for ${offer}.`;
+
+  return {
+    audience: {
+      directive: audience,
+      evidenceRefs: [...base.audience.evidenceRefs],
+      unknowns: [...base.audience.unknowns]
+    },
+    tension: {
+      directive: tension,
+      evidenceRefs: [
+        ...new Set([
+          ...base.promise.evidenceRefs,
+          ...base.mechanism.evidenceRefs
+        ])
+      ],
+      unknowns: []
+    },
+    promise: {
+      directive: promise,
+      evidenceRefs: [...base.promise.evidenceRefs],
+      unknowns: [...base.promise.unknowns]
+    },
+    mechanism: {
+      directive:
+        family.family === "launch"
+          ? `Show how ${offer} moves from buyer action to capability to observable output.`
+          : family.family === "guide"
+            ? `Map each evaluation criterion to a supported ${sellerName} capability and observable result.`
+            : `Frame practical workstreams that ${targetName ?? "the target team"} and ${sellerName} can validate together.`,
+      evidenceRefs: [...base.mechanism.evidenceRefs],
+      unknowns: [...base.mechanism.unknowns]
+    },
+    proofPlan: {
+      directive:
+        family.family === "align"
+          ? `Use target-relevant evidence or state a concrete validation plan for ${targetName ?? "the target team"}.`
+          : base.proofPlan.directive,
+      evidenceRefs: [...base.proofPlan.evidenceRefs],
+      unknowns: [...base.proofPlan.unknowns]
+    },
+    decisionHelp: {
+      directive:
+        family.family === "launch"
+          ? `Let ${audience} choose among specific jobs, benefits, capabilities, and validation questions.`
+          : family.family === "guide"
+            ? `Give ${audience} observable criteria and supported application scenarios.`
+            : `Give ${targetName ?? "the target team"} priority-specific questions, evidence, and next steps.`,
+      evidenceRefs: [...base.decisionHelp.evidenceRefs],
+      unknowns: [...base.decisionHelp.unknowns]
+    },
+    nextAction: {
+      directive: `${cta.label} to ${objective}.`,
+      evidenceRefs: [...base.nextAction.evidenceRefs],
+      unknowns: []
+    },
+    whyNow: {
+      directive: whyNow,
+      evidenceRefs: [...base.promise.evidenceRefs],
+      unknowns: []
+    }
+  };
 }
 
 export async function compileSessionProductionPage(input: {
@@ -516,6 +658,32 @@ export async function compileSessionProductionPage(input: {
     startedAt,
     completedAt
   });
+  const targetName = targetNameFor(session, input.targetBrand);
+  const ctaId = familyCtaId(familyDecision);
+  const familyMessageSpineArtifact = messageSpineArtifact.value
+    ? compileFamilyProductionMessageSpine({
+        sessionId: session.id,
+        revision,
+        activeRevision: revision,
+        decision: familyDecision,
+        argument: familyArgument({
+          base: messageSpineArtifact.value.argument,
+          family: familyDecision,
+          sellerName: brand.companyName,
+          targetName,
+          offer,
+          audience: audience.label,
+          objective,
+          publicContext: brand.publicContext,
+          ctaId
+        }),
+        sellerName: brand.companyName,
+        targetName,
+        ctaId,
+        startedAt,
+        completedAt
+      })
+    : undefined;
 
   return compileGenericProductionPage({
     sessionId: session.id,
@@ -530,6 +698,7 @@ export async function compileSessionProductionPage(input: {
     evidenceArtifact,
     brandArtifact,
     familyDecisionArtifact,
+    ...(familyMessageSpineArtifact ? { familyMessageSpineArtifact } : {}),
     compositionArtifact,
     messageSpineArtifact,
     allowVisualRepair: true

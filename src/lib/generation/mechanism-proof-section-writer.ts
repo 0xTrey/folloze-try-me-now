@@ -280,14 +280,27 @@ export function writeMechanismProofSections(
     const role = slot.role as "mechanism" | "proof";
     const headline = headlineForSlot(slot, role);
     const claims = currentClaimsForSlot(input, slot);
-    const supported = supportedBody(role, claims, words(headline), slot);
+    const targetPrefix =
+      slot.v2Role === "shared-opportunity" && input.brief.targetName
+        ? `For ${input.brief.targetName}, `
+        : "";
+    const supported = supportedBody(
+      role,
+      claims,
+      words(headline) + words(targetPrefix),
+      slot
+    );
 
     if (supported) {
+      const body =
+        targetPrefix
+          ? `${targetPrefix}${supported.body.charAt(0).toLocaleLowerCase()}${supported.body.slice(1)}`
+          : supported.body;
       candidates.push(
         completeCandidate(
           slot,
           role,
-          supported.body,
+          body,
           supported.claims.map(({ id }) => id)
         )
       );
