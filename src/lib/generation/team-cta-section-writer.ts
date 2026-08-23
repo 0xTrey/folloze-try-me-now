@@ -1,4 +1,5 @@
 import {
+  copyContractMetadata,
   sectionCopyWordCount,
   validateSectionCopyCandidate,
   type SectionCopyCandidate,
@@ -97,6 +98,7 @@ function omittedCandidate(slot: SectionWriterSlot): SectionCopyCandidate {
   return {
     sectionId: slot.id,
     role: slot.role,
+    ...copyContractMetadata(slot),
     status: "omitted",
     evidenceRefs: [],
     wordCount: 0,
@@ -112,6 +114,7 @@ function completeCandidate(
   const candidateWithoutBody: SectionCopyCandidate = {
     sectionId: slot.id,
     role: slot.role,
+    ...copyContractMetadata(slot),
     status: "complete",
     ...draft,
     body: "",
@@ -193,13 +196,25 @@ function nextActionCandidate(
   const body =
     `${CTA_ACTION_COPY[input.cta.type]}: ${objective}. ` +
     "Bring the current evidence and open questions into the next step.";
+  const headline =
+    slot.v2Role === "next-move"
+      ? "Take the next useful step toward this outcome"
+      : slot.v2Role === "evaluation-close"
+        ? "Continue the evaluation with a focused working session"
+        : slot.v2Role === "first-decision"
+          ? "Make the first working decision together"
+          : input.cta.label;
   return completeCandidate(
     slot,
     {
       eyebrow: "Next action",
-      headline: input.cta.label,
+      headline,
       body,
-      cta: { ...input.cta },
+      cta: {
+        type: input.cta.type,
+        label: input.cta.label,
+        ...(input.cta.id ? { id: input.cta.id } : {})
+      },
       evidenceRefs: []
     },
     CTA_PADDING

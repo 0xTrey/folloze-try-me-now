@@ -15,6 +15,16 @@ import type {
   MaterialLiveBriefEvidence,
   ReconciledLiveBriefField
 } from "@/lib/research/evidence-reconciler";
+import {
+  adaptSectionSlotV2,
+  type SectionWriterSlot
+} from "@/lib/generation/section-copy-types";
+import type {
+  SectionRoleV2,
+  SectionSlotV2,
+  WireframeDecisionV2,
+  WireframeFamilyV2
+} from "@/lib/generation/three-family-contract";
 
 export const PRODUCTION_ARGUMENT_ROLES = [
   "audience",
@@ -103,6 +113,108 @@ export interface CompileProductionMessageSpineInput {
   startedAt: string;
   completedAt: string;
 }
+
+export interface FamilyProductionMessageSpineSectionSlot {
+  id: string;
+  order: number;
+  role: SectionRoleV2;
+  navigationLabel: string;
+  claimType: SectionSlotV2["claimType"];
+  argumentRoles: ProductionArgumentRole[];
+  evidenceRefs: string[];
+  unknowns: string[];
+  omissions: OptionalProductionArgumentRole[];
+  sourceSlot: SectionSlotV2;
+}
+
+export interface FamilyProductionMessageSpine {
+  version: 2;
+  revision: number;
+  family: WireframeFamilyV2;
+  subtype: WireframeDecisionV2["subtype"];
+  reasonCode: string;
+  argumentOrder: ProductionArgumentRole[];
+  argument: RequiredProductionArgument;
+  sections: FamilyProductionMessageSpineSectionSlot[];
+  evidenceRefs: string[];
+  unknowns: string[];
+  omissions: OptionalProductionArgumentRole[];
+  visibility: "internal";
+  writerBoundary: {
+    messageSpineRequired: true;
+    familyLocked: true;
+  };
+}
+
+export interface CompileFamilyProductionMessageSpineInput {
+  sessionId: string;
+  revision: number;
+  activeRevision: number;
+  decision: WireframeDecisionV2;
+  argument: RequiredProductionArgument;
+  startedAt: string;
+  completedAt: string;
+}
+
+const FAMILY_ARGUMENT_ORDER: Record<
+  WireframeFamilyV2,
+  readonly ProductionArgumentRole[]
+> = {
+  launch: [
+    "audience",
+    "promise",
+    "tension",
+    "mechanism",
+    "decisionHelp",
+    "proofPlan",
+    "nextAction"
+  ],
+  guide: [
+    "audience",
+    "whyNow",
+    "tension",
+    "decisionHelp",
+    "mechanism",
+    "proofPlan",
+    "nextAction"
+  ],
+  align: [
+    "audience",
+    "promise",
+    "whyNow",
+    "tension",
+    "mechanism",
+    "proofPlan",
+    "decisionHelp",
+    "nextAction"
+  ]
+};
+
+const V2_ROLE_ARGUMENTS: Record<
+  SectionRoleV2,
+  readonly ProductionArgumentRole[]
+> = {
+  "buyer-outcome": ["audience", "promise"],
+  "current-friction": ["tension", "promise"],
+  mechanism: ["mechanism"],
+  "use-cases": ["decisionHelp", "mechanism"],
+  proof: ["proofPlan"],
+  "next-move": ["promise", "nextAction"],
+  "market-change": ["promise", "decisionHelp", "whyNow"],
+  stakes: ["tension", "decisionHelp"],
+  "evaluation-criteria": ["decisionHelp"],
+  "solution-mapping": ["decisionHelp", "mechanism"],
+  applications: ["decisionHelp", "audience"],
+  "evaluation-close": ["proofPlan", "nextAction"],
+  "shared-priority": ["audience", "whyNow", "promise"],
+  "account-relevance": ["audience", "tension", "whyNow"],
+  "shared-opportunity": ["whyNow", "promise", "mechanism"],
+  "priority-paths": ["whyNow", "audience", "decisionHelp"],
+  "validation-plan": ["proofPlan", "mechanism"],
+  "first-decision": ["decisionHelp", "nextAction"],
+  "proof-depth": ["proofPlan"],
+  resource: ["proofPlan", "decisionHelp"]
+};
 
 const usableStatuses = new Set<ProductionArtifact<unknown>["status"]>([
   "complete",
@@ -519,4 +631,230 @@ export function compileProductionMessageSpine(
       ? { fallbackCode: "production_message_spine_no_proof_evidence" }
       : {})
   };
+}
+
+const FAMILY_SECTION_ROLES: Record<
+  WireframeFamilyV2,
+  ReadonlySet<SectionRoleV2>
+> = {
+  launch: new Set([
+    "buyer-outcome",
+    "current-friction",
+    "mechanism",
+    "use-cases",
+    "proof",
+    "next-move",
+    "proof-depth",
+    "resource"
+  ]),
+  guide: new Set([
+    "market-change",
+    "stakes",
+    "evaluation-criteria",
+    "solution-mapping",
+    "applications",
+    "evaluation-close",
+    "proof-depth",
+    "resource"
+  ]),
+  align: new Set([
+    "shared-priority",
+    "account-relevance",
+    "shared-opportunity",
+    "priority-paths",
+    "validation-plan",
+    "first-decision",
+    "proof-depth",
+    "resource"
+  ])
+};
+
+export function argumentOrderForFamilyV2(
+  family: WireframeFamilyV2
+): ProductionArgumentRole[] {
+  return [...FAMILY_ARGUMENT_ORDER[family]];
+}
+
+export function argumentRolesForSectionV2(
+  role: SectionRoleV2
+): ProductionArgumentRole[] {
+  return [...V2_ROLE_ARGUMENTS[role]];
+}
+
+function failedFamilySpineArtifact(
+  input: CompileFamilyProductionMessageSpineInput,
+  status: "failed" | "stale",
+  errorCode: string
+): ProductionArtifact<FamilyProductionMessageSpine> {
+  return {
+    worker: "message-spine-architect",
+    sessionId: input.sessionId,
+    revision: input.revision,
+    status,
+    evidenceRefs: [],
+    confidence: 0,
+    startedAt: input.startedAt,
+    completedAt: input.completedAt,
+    errorCode
+  };
+}
+
+/**
+ * Applies a locked Launch, Guide, or Align decision to the argument before any
+ * section writer can receive a slot. It changes message order and ownership,
+ * while carrying the reviewed slot recipe through unchanged.
+ */
+export function compileFamilyProductionMessageSpine(
+  input: CompileFamilyProductionMessageSpineInput
+): ProductionArtifact<FamilyProductionMessageSpine> {
+  if (
+    !input.sessionId.trim() ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision < 0
+  ) {
+    return failedFamilySpineArtifact(
+      input,
+      "failed",
+      "invalid_family_message_spine_input"
+    );
+  }
+  if (
+    input.revision !== input.activeRevision ||
+    input.decision.revision !== input.revision
+  ) {
+    return failedFamilySpineArtifact(
+      input,
+      "stale",
+      "family_message_spine_stale_revision"
+    );
+  }
+  if (
+    input.decision.sessionId !== input.sessionId ||
+    input.decision.version !== 2 ||
+    input.decision.locked !== true
+  ) {
+    return failedFamilySpineArtifact(
+      input,
+      "failed",
+      "family_message_spine_decision_mismatch"
+    );
+  }
+  if (
+    input.decision.sectionPlan.length < 4 ||
+    input.decision.sectionPlan.length > 8 ||
+    input.decision.sectionPlan.some(
+      (slot) => !FAMILY_SECTION_ROLES[input.decision.family].has(slot.role)
+    )
+  ) {
+    return failedFamilySpineArtifact(
+      input,
+      "failed",
+      "family_message_spine_section_contract_mismatch"
+    );
+  }
+
+  const omissions = (["tension", "whyNow"] as const).filter(
+    (role) => !(role in input.argument)
+  );
+  const sections = input.decision.sectionPlan.map(
+    (slot, index): FamilyProductionMessageSpineSectionSlot => {
+      const requestedRoles = V2_ROLE_ARGUMENTS[slot.role];
+      const argumentRoles = requestedRoles.filter(
+        (role) => role in input.argument
+      ) as ProductionArgumentRole[];
+      const boundedSlots = argumentRoles.map((role) => input.argument[role]!);
+      return {
+        id: slot.id,
+        order: index + 1,
+        role: slot.role,
+        navigationLabel: slot.navigationLabel,
+        claimType: slot.claimType,
+        argumentRoles,
+        evidenceRefs: unique(
+          boundedSlots.flatMap((argumentSlot) => argumentSlot.evidenceRefs)
+        ),
+        unknowns: unique(
+          boundedSlots.flatMap((argumentSlot) => argumentSlot.unknowns)
+        ),
+        omissions: requestedRoles.filter(
+          (role): role is OptionalProductionArgumentRole =>
+            (role === "tension" || role === "whyNow") &&
+            omissions.includes(role)
+        ),
+        sourceSlot: {
+          ...slot,
+          requiredEvidenceKinds: [...slot.requiredEvidenceKinds],
+          wordBudget: {
+            headline: [...slot.wordBudget.headline] as [number, number],
+            body: [...slot.wordBudget.body] as [number, number]
+          },
+          ...(slot.allowedCtas ? { allowedCtas: [...slot.allowedCtas] } : {})
+        }
+      };
+    }
+  );
+  const evidenceRefs = unique(
+    sections.flatMap((section) => section.evidenceRefs)
+  );
+  const hasUnsupportedFact = sections.some(
+    (section) =>
+      section.claimType === "fact" &&
+      section.evidenceRefs.length === 0 &&
+      !section.sourceSlot.optional
+  );
+  const value: FamilyProductionMessageSpine = {
+    version: 2,
+    revision: input.revision,
+    family: input.decision.family,
+    subtype: input.decision.subtype,
+    reasonCode: input.decision.reasonCode,
+    argumentOrder: argumentOrderForFamilyV2(input.decision.family),
+    argument: input.argument,
+    sections,
+    evidenceRefs,
+    unknowns: unique(
+      Object.values(input.argument).flatMap((slot) => slot?.unknowns ?? [])
+    ),
+    omissions,
+    visibility: "internal",
+    writerBoundary: {
+      messageSpineRequired: true,
+      familyLocked: true
+    }
+  };
+
+  return {
+    worker: "message-spine-architect",
+    sessionId: input.sessionId,
+    revision: input.revision,
+    status: hasUnsupportedFact ? "fallback" : "complete",
+    value,
+    evidenceRefs,
+    confidence: hasUnsupportedFact ? 0.55 : 1,
+    startedAt: input.startedAt,
+    completedAt: input.completedAt,
+    ...(hasUnsupportedFact
+      ? { fallbackCode: "family_message_spine_fact_requires_evidence" }
+      : {})
+  };
+}
+
+export function writerSlotsFromFamilyMessageSpine(
+  spine: FamilyProductionMessageSpine
+): SectionWriterSlot[] {
+  if (
+    spine.version !== 2 ||
+    !spine.writerBoundary.messageSpineRequired ||
+    !spine.writerBoundary.familyLocked
+  ) {
+    throw new Error("V2 section writers require a locked message spine");
+  }
+  return spine.sections.map((section) =>
+    adaptSectionSlotV2(
+      spine.family,
+      section.sourceSlot,
+      section.order,
+      section.evidenceRefs
+    )
+  );
 }

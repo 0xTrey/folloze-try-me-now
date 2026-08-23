@@ -1,4 +1,5 @@
 import {
+  copyContractMetadata,
   sectionCopyWordCount,
   validateSectionCopyCandidate,
   type SectionCopyCandidate,
@@ -42,6 +43,19 @@ function truncateWords(value: string, limit: number): string {
     .slice(0, limit)
     .join(" ")
     .replace(/[,;:-]+$/g, "");
+}
+
+function headlineForSlot(value: string, slot: SectionWriterSlot): string {
+  if (!slot.headlineWordBudget) return value;
+  const { min, max } = slot.headlineWordBudget;
+  let result = truncateWords(value, max);
+  const suffix = ["for", "the", "next", "buyer", "decision"];
+  let suffixIndex = 0;
+  while (wordCount(result) < min) {
+    result = `${result} ${suffix[suffixIndex % suffix.length]}`;
+    suffixIndex += 1;
+  }
+  return truncateWords(result, max);
 }
 
 const DECISION_PROMPTS: Record<number, string> = {
@@ -158,16 +172,28 @@ function buildCandidate(
     "Assess the evidence against your priorities, then decide what needs validation next.";
   const ctaLabel = normalizeCopy(input.cta.label);
   const evidenceRefs = unique(safeClaims.map(({ claim }) => claim.id));
+  const ctaAllowed =
+    !slot.allowedCtas ||
+    (input.cta.id !== undefined && slot.allowedCtas.includes(input.cta.id));
 
   return fitCandidateToBudget(
     {
       sectionId: slot.id,
       role: "hero",
+      ...copyContractMetadata(slot),
       status: "complete",
       ...(audience ? { eyebrow: audience } : {}),
-      headline: promise,
+      headline: headlineForSlot(promise, slot),
       body,
-      ...(ctaLabel ? { cta: { type: input.cta.type, label: ctaLabel } } : {}),
+      ...(ctaLabel && ctaAllowed
+        ? {
+            cta: {
+              type: input.cta.type,
+              label: ctaLabel,
+              ...(input.cta.id ? { id: input.cta.id } : {})
+            }
+          }
+        : {}),
       evidenceRefs,
       wordCount: 0
     },
@@ -247,6 +273,7 @@ export function writeOpeningSections(
       candidates.push({
         sectionId: slot.id,
         role: "hero",
+        ...copyContractMetadata(slot),
         status: "omitted",
         evidenceRefs: [],
         wordCount: 0,
@@ -264,6 +291,7 @@ export function writeOpeningSections(
       candidates.push({
         sectionId: slot.id,
         role: "hero",
+        ...copyContractMetadata(slot),
         status: "omitted",
         evidenceRefs: [],
         wordCount: 0,

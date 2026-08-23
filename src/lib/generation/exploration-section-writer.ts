@@ -1,4 +1,5 @@
 import {
+  copyContractMetadata,
   sectionCopyWordCount,
   validateSectionCopyCandidate,
   type SectionCopyCandidate,
@@ -38,6 +39,30 @@ const headlines: Record<
 };
 
 type OwnedRole = keyof typeof headlines;
+
+function headlineForSlot(
+  slot: SectionWriterSlot,
+  input: SectionWriterInput
+): string {
+  if (slot.v2Role === "use-cases") {
+    return "Choose the buyer job that matters most";
+  }
+  if (slot.v2Role === "evaluation-criteria") {
+    return "Evaluate the solution against observable criteria";
+  }
+  if (slot.v2Role === "applications") {
+    return "See where this decision applies in practice";
+  }
+  if (slot.v2Role === "priority-paths") {
+    return "Choose the priority to validate first";
+  }
+  if (slot.v2Role === "resource") {
+    return "Continue with evidence for the next question";
+  }
+  return slot.role === "decision-support" && isTechnical(input)
+    ? "Resolve the technical decision"
+    : headlines[slot.role as OwnedRole];
+}
 
 const sectionBodies: Record<OwnedRole, string> = {
   pathways:
@@ -302,11 +327,9 @@ function candidateForSlot(
     {
       sectionId: slot.id,
       role: slot.role,
+      ...copyContractMetadata(slot),
       status: "complete",
-      headline:
-        slot.role === "decision-support" && isTechnical(input)
-          ? "Resolve the technical decision"
-          : headlines[role],
+      headline: headlineForSlot(slot, input),
       body: sectionBodies[role],
       choices,
       evidenceRefs,

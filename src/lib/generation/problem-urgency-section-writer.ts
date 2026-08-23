@@ -1,4 +1,5 @@
 import {
+  copyContractMetadata,
   sectionCopyWordCount,
   validateSectionCopyCandidate,
   type SectionCopyCandidate,
@@ -85,6 +86,23 @@ function headlineFor(
   return options.find((option) => words(option).length <= maxWords) ?? "Context";
 }
 
+function headlineForSlot(
+  slot: SectionWriterSlot,
+  hasTension: boolean,
+  hasWhyNow: boolean
+): string {
+  if (slot.v2Role === "current-friction") {
+    return "Why the current approach creates avoidable friction";
+  }
+  if (slot.v2Role === "stakes") {
+    return "What is at stake in this decision";
+  }
+  if (slot.v2Role === "account-relevance") {
+    return "Why this priority matters for your team";
+  }
+  return headlineFor(hasTension, hasWhyNow, slot.wordBudget.max - 1);
+}
+
 function bodyFor(seed: string, targetWords: number): string {
   const seedWords = words(seed);
   const fillerWords = words(neutralReviewLanguage);
@@ -108,7 +126,7 @@ function completeCandidate(
 ): SectionCopyCandidate {
   const tension = supportedContext ? plainText(input.brief.tension) : "";
   const whyNow = supportedContext ? plainText(input.brief.whyNow) : "";
-  const headline = headlineFor(Boolean(tension), Boolean(whyNow), slot.wordBudget.max - 1);
+  const headline = headlineForSlot(slot, Boolean(tension), Boolean(whyNow));
   const headlineWords = words(headline).length;
   const bodyCapacity = slot.wordBudget.max - headlineWords;
   const seed = supportedContext
@@ -122,6 +140,7 @@ function completeCandidate(
   const candidate: SectionCopyCandidate = {
     sectionId: slot.id,
     role: "context",
+    ...copyContractMetadata(slot),
     status: "complete",
     headline,
     body: bodyFor(seed || neutralReviewLanguage, bodyWordCount),
@@ -173,6 +192,7 @@ export function writeProblemUrgencySections(
       return {
         sectionId: slot.id,
         role: "context",
+        ...copyContractMetadata(slot),
         status: "omitted",
         evidenceRefs: [],
         wordCount: 0,

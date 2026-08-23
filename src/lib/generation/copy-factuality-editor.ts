@@ -2,6 +2,7 @@ import {
   BUYER_FACING_JARGON_PATTERN
 } from "@/lib/generation/message-spine";
 import {
+  isBoundedCtaV2,
   sectionCopyWordCount,
   type SectionCopyCandidate,
   type SectionCopyChoice,
@@ -10,6 +11,10 @@ import {
   type SectionWriterKind,
   type SectionWriterSlot
 } from "@/lib/generation/section-copy-types";
+import type {
+  CtaIdV2,
+  WireframeFamilyV2
+} from "@/lib/generation/three-family-contract";
 import type { ProductionArtifact } from "@/lib/orchestration/worker-types";
 import type { CtaType } from "@/lib/types";
 
@@ -38,7 +43,9 @@ const CHOICE_ROLES = new Set<SectionWriterSlot["role"]>([
 ]);
 
 const GENERIC_FILLER_PATTERN =
-  /\b(?:make progress with confidence|a better way to move forward|unlock value|drive transformation|synerg(?:y|ies)|best[- ]in[- ]class|next[- ]level|holistic approach|transform your business|seamless)\b/i;
+  /\b(?:make progress with confidence|a better way to move forward|unlock value|drive transformation|synerg(?:y|ies)|best[- ]in[- ]class|next[- ]level|holistic approach|transform your business|seamless|transformative|robust|streamline|leverage)\b/i;
+const BANNED_PROSPECT_COPY_PATTERN =
+  /\b(?:(?:launch|guide|align|wireframe)\s+(?:family|template)|production receipts?|quality grades?|template names?|debug language|business transformation leaders|solution overview)\b/i;
 
 const UNSAFE_MARKUP_OR_CODE_PATTERN =
   /<\/?[a-z][^>]*>|```|javascript:|(?:^|\s)(?:className|const|export|function|import|interface|let|script|var)\s*(?:=|\s)|(?:^|\s)style\s*=|\bclass\s+[a-z_$][\w$]*\s*(?:\{|extends\b)|(?:^|\s)(?:[.#][a-z][\w-]*|@media)\s*\{|(?:^|[;{]\s*)(?:background|color|display|font|margin|padding)\s*:/im;
@@ -69,7 +76,18 @@ const STYLE_REPLACEMENTS: readonly [RegExp, string][] = [
   [/\bnext[- ]level\b/gi, "stronger"],
   [/\bholistic approach\b/gi, "complete review"],
   [/\btransform your business\b/gi, "evaluate the proposed change"],
-  [/\bseamless\b/gi, "coordinated"]
+  [/\bseamless\b/gi, "coordinated"],
+  [/\btransformative\b/gi, "material"],
+  [/\brobust\b/gi, "supported"],
+  [/\bstreamline\b/gi, "reduce steps in"],
+  [/\bleverage\b/gi, "use"],
+  [/\b(?:launch|guide|align|wireframe)\s+(?:family|template)\b/gi, "experience"],
+  [/\bproduction receipts?\b/gi, "status"],
+  [/\bquality grades?\b/gi, "review"],
+  [/\btemplate names?\b/gi, "page"],
+  [/\bdebug language\b/gi, "details"],
+  [/\bbusiness transformation leaders\b/gi, "business leaders"],
+  [/\bsolution overview\b/gi, "solution details"]
 ];
 
 export type CopyFactualityIssueCode =
@@ -88,22 +106,31 @@ export type CopyFactualityIssueCode =
   | "choice_count_invalid"
   | "duplicate_choice"
   | "buyer_facing_jargon"
+  | "banned_prospect_phrase"
   | "generic_filler"
   | "unsafe_markup_or_code"
   | "unsupported_numeric_claim"
   | "unsupported_quote"
   | "unsupported_guarantee"
   | "unsupported_urgency"
+  | "headline_word_budget_violation"
+  | "claim_type_mismatch"
+  | "fact_without_evidence"
+  | "competitor_swap_risk"
+  | "account_swap_risk"
+  | "insufficient_section_novelty"
   | "duplicate_headline"
   | "duplicate_body"
   | "duplicate_headline_body"
   | "cta_missing"
   | "cta_mismatch"
+  | "cta_unbounded"
   | "cta_objective_mismatch";
 
 export type CopyFactualityRepairCode =
   | "normalized_whitespace"
   | "replaced_buyer_facing_jargon"
+  | "replaced_banned_prospect_phrase"
   | "replaced_generic_filler"
   | "recalculated_word_count";
 
@@ -137,6 +164,7 @@ export interface ClaimEvidenceMapping {
     | `choice.${number}.body`
     | "cta.label";
   text: string;
+  claimType?: SectionCopyCandidate["claimType"];
   evidence: ClaimEvidenceReference[];
 }
 
@@ -160,6 +188,13 @@ export interface CopyFactualityEditorInput {
   cta: {
     type: CtaType;
     label: string;
+    id?: CtaIdV2;
+  };
+  familyContext?: {
+    family: WireframeFamilyV2;
+    sellerName: string;
+    targetName?: string;
+    competitorNames?: readonly string[];
   };
   writerArtifacts: readonly SectionWriterArtifact[];
 }
@@ -183,17 +218,25 @@ const ISSUE_ORDER: readonly CopyFactualityIssueCode[] = [
   "choice_count_invalid",
   "duplicate_choice",
   "buyer_facing_jargon",
+  "banned_prospect_phrase",
   "generic_filler",
   "unsafe_markup_or_code",
   "unsupported_numeric_claim",
   "unsupported_quote",
   "unsupported_guarantee",
   "unsupported_urgency",
+  "headline_word_budget_violation",
+  "claim_type_mismatch",
+  "fact_without_evidence",
+  "competitor_swap_risk",
+  "account_swap_risk",
+  "insufficient_section_novelty",
   "duplicate_headline",
   "duplicate_body",
   "duplicate_headline_body",
   "cta_missing",
   "cta_mismatch",
+  "cta_unbounded",
   "cta_objective_mismatch"
 ];
 
@@ -218,6 +261,77 @@ function normalizedKey(value: string | undefined): string {
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+}
+
+const SPECIFICITY_STOP_WORDS = new Set([
+  "about",
+  "after",
+  "against",
+  "available",
+  "before",
+  "between",
+  "business",
+  "compare",
+  "current",
+  "decision",
+  "evidence",
+  "evaluate",
+  "from",
+  "into",
+  "next",
+  "only",
+  "review",
+  "supported",
+  "team",
+  "that",
+  "their",
+  "these",
+  "this",
+  "through",
+  "using",
+  "validate",
+  "what",
+  "with",
+  "your"
+]);
+
+function materialTokens(value: string): Set<string> {
+  return new Set(
+    normalizedKey(value)
+      .split(" ")
+      .filter(
+        (token) =>
+          token.length >= 4 &&
+          !SPECIFICITY_STOP_WORDS.has(token) &&
+          !/^\d+$/.test(token)
+      )
+  );
+}
+
+function candidateText(candidate: SectionCopyCandidate): string {
+  return allCopyFields(candidate)
+    .filter(({ field }) => field !== "cta.label")
+    .map(({ value }) => value)
+    .join(" ");
+}
+
+function hasMaterialOverlap(left: string, right: string): boolean {
+  const leftTokens = materialTokens(left);
+  const rightTokens = materialTokens(right);
+  return [...leftTokens].some((token) => rightTokens.has(token));
+}
+
+function sectionNoveltyIssue(
+  candidate: SectionCopyCandidate,
+  accepted: readonly SectionCopyCandidate[]
+): boolean {
+  const tokens = materialTokens(candidateText(candidate));
+  if (tokens.size === 0 || accepted.length === 0) return false;
+  const priorTokens = new Set(
+    accepted.flatMap((section) => [...materialTokens(candidateText(section))])
+  );
+  const newTokenCount = [...tokens].filter((token) => !priorTokens.has(token)).length;
+  return newTokenCount / tokens.size < 0.2;
 }
 
 function allCopyFields(candidate: SectionCopyCandidate): Array<{
@@ -270,6 +384,9 @@ function repairCandidate(candidate: SectionCopyCandidate): {
     predicate: (value: string) => boolean
   ): string[] => rawFields.filter(({ value }) => predicate(value)).map(({ field }) => field);
   const jargonFields = repairFields((value) => BUYER_FACING_JARGON_PATTERN.test(value));
+  const bannedPhraseFields = repairFields((value) =>
+    BANNED_PROSPECT_COPY_PATTERN.test(value)
+  );
   const fillerFields = repairFields((value) => GENERIC_FILLER_PATTERN.test(value));
   const whitespaceFields = repairFields(
     (value) => value !== value.replace(/\s+/g, " ").replace(/\s+([,.;:!?])/g, "$1").trim()
@@ -293,7 +410,8 @@ function repairCandidate(candidate: SectionCopyCandidate): {
       ? {
           cta: {
             type: candidate.cta.type,
-            label: repairedText(candidate.cta.label)
+            label: repairedText(candidate.cta.label),
+            ...(candidate.cta.id ? { id: candidate.cta.id } : {})
           }
         }
       : {}),
@@ -310,6 +428,12 @@ function repairCandidate(candidate: SectionCopyCandidate): {
     repairs.push({
       code: "replaced_buyer_facing_jargon",
       fields: unique(jargonFields)
+    });
+  }
+  if (bannedPhraseFields.length > 0) {
+    repairs.push({
+      code: "replaced_banned_prospect_phrase",
+      fields: unique(bannedPhraseFields)
     });
   }
   if (fillerFields.length > 0) {
@@ -381,6 +505,51 @@ function factualityIssues(
   return issues;
 }
 
+function swapGateIssues(
+  candidate: SectionCopyCandidate,
+  slot: SectionWriterSlot,
+  evidenceById: ReadonlyMap<string, SectionEvidenceClaim>,
+  familyContext: CopyFactualityEditorInput["familyContext"]
+): CopyFactualityIssueCode[] {
+  if (!slot.family || slot.claimType === "instruction") return [];
+  const text = candidateText(candidate);
+  const assignedClaims = candidate.evidenceRefs.flatMap((ref) => {
+    const claim = evidenceById.get(ref);
+    return claim ? [claim] : [];
+  });
+  const sellerEvidence = assignedClaims
+    .filter(({ sourceRole }) => sourceRole !== "target")
+    .map(({ text: claimText }) => claimText)
+    .join(" ");
+  const sellerNamed =
+    Boolean(familyContext?.sellerName.trim()) &&
+    normalizedKey(text).includes(normalizedKey(familyContext?.sellerName));
+  const competitorNamed = (familyContext?.competitorNames ?? []).some(
+    (name) => name.trim() && normalizedKey(text).includes(normalizedKey(name))
+  );
+  const issues: CopyFactualityIssueCode[] = [];
+  if (
+    competitorNamed ||
+    (!sellerNamed && !hasMaterialOverlap(text, sellerEvidence))
+  ) {
+    issues.push("competitor_swap_risk");
+  }
+
+  if (slot.family === "align") {
+    const targetEvidence = assignedClaims
+      .filter(({ sourceRole }) => sourceRole === "target")
+      .map(({ text: claimText }) => claimText)
+      .join(" ");
+    const targetNamed =
+      Boolean(familyContext?.targetName?.trim()) &&
+      normalizedKey(text).includes(normalizedKey(familyContext?.targetName));
+    if (!targetNamed && !hasMaterialOverlap(text, targetEvidence)) {
+      issues.push("account_swap_risk");
+    }
+  }
+  return issues;
+}
+
 function inferredObjectiveCtaType(objective: string): CtaType | undefined {
   if (/\b(?:register|registration|reserve (?:a )?(?:seat|spot)|attend)\b/i.test(objective)) {
     return "register";
@@ -420,7 +589,8 @@ function candidateIssues(
   slot: SectionWriterSlot | undefined,
   evidenceById: ReadonlyMap<string, SectionEvidenceClaim>,
   selectedCta: CopyFactualityEditorInput["cta"],
-  hasObjectiveCtaMismatch: boolean
+  hasObjectiveCtaMismatch: boolean,
+  familyContext: CopyFactualityEditorInput["familyContext"]
 ): CopyFactualityIssueCode[] {
   const issues: CopyFactualityIssueCode[] = [];
   if (!slot) {
@@ -430,6 +600,15 @@ function candidateIssues(
   if (candidate.sectionId !== slot.id || candidate.role !== slot.role) {
     issues.push("slot_mismatch");
   }
+  if (
+    slot.family &&
+    (candidate.family !== slot.family ||
+      candidate.v2Role !== slot.v2Role ||
+      candidate.claimType !== slot.claimType ||
+      familyContext?.family !== slot.family)
+  ) {
+    issues.push("claim_type_mismatch");
+  }
   if (candidate.status === "omitted") {
     if (slot.required) issues.push("required_section_omitted");
     if (!candidate.omissionReason) issues.push("missing_omission_reason");
@@ -437,6 +616,16 @@ function candidateIssues(
   }
   if (!candidate.headline?.trim() || !candidate.body?.trim()) {
     issues.push("missing_section_copy");
+  }
+  const headlineWordCount = candidate.headline?.trim()
+    ? candidate.headline.trim().split(/\s+/).length
+    : 0;
+  if (
+    slot.headlineWordBudget &&
+    (headlineWordCount < slot.headlineWordBudget.min ||
+      headlineWordCount > slot.headlineWordBudget.max)
+  ) {
+    issues.push("headline_word_budget_violation");
   }
 
   const actualWordCount = sectionCopyWordCount(candidate);
@@ -453,6 +642,9 @@ function candidateIssues(
     evidenceById.has(ref) && assignedRefs.has(ref);
   if (candidate.evidenceRefs.some((ref) => !validRef(ref))) {
     issues.push("invalid_evidence_ref");
+  }
+  if (slot.claimType === "fact" && candidate.evidenceRefs.length === 0) {
+    issues.push("fact_without_evidence");
   }
   const candidateRefs = new Set(candidate.evidenceRefs);
   if (
@@ -489,6 +681,9 @@ function candidateIssues(
   if (fields.some(({ value }) => BUYER_FACING_JARGON_PATTERN.test(value))) {
     issues.push("buyer_facing_jargon");
   }
+  if (fields.some(({ value }) => BANNED_PROSPECT_COPY_PATTERN.test(value))) {
+    issues.push("banned_prospect_phrase");
+  }
   if (fields.some(({ value }) => GENERIC_FILLER_PATTERN.test(value))) {
     issues.push("generic_filler");
   }
@@ -496,6 +691,9 @@ function candidateIssues(
     issues.push("unsafe_markup_or_code");
   }
   issues.push(...factualityIssues(candidate, evidenceById));
+  issues.push(
+    ...swapGateIssues(candidate, slot, evidenceById, familyContext)
+  );
 
   if (
     normalizedKey(candidate.headline) &&
@@ -510,9 +708,19 @@ function candidateIssues(
   if (
     candidate.cta &&
     (candidate.cta.type !== selectedCta.type ||
-      normalizedKey(candidate.cta.label) !== normalizedKey(selectedCta.label))
+      normalizedKey(candidate.cta.label) !== normalizedKey(selectedCta.label) ||
+      (selectedCta.id !== undefined && candidate.cta.id !== selectedCta.id))
   ) {
     issues.push("cta_mismatch");
+  }
+  if (
+    candidate.cta &&
+    slot.allowedCtas &&
+    (!candidate.cta.id ||
+      !slot.allowedCtas.includes(candidate.cta.id) ||
+      !isBoundedCtaV2(candidate.cta))
+  ) {
+    issues.push("cta_unbounded");
   }
   if (candidate.cta && hasObjectiveCtaMismatch) {
     issues.push("cta_objective_mismatch");
@@ -548,6 +756,7 @@ function claimMappings(
     sectionId: candidate.sectionId,
     field: field as ClaimEvidenceMapping["field"],
     text: value,
+    ...(candidate.claimType ? { claimType: candidate.claimType } : {}),
     evidence: unique(evidenceRefs).flatMap((id) => {
       const evidence = evidenceById.get(id);
       return evidence
@@ -622,11 +831,17 @@ export function editCopyForFactuality(
     new Set(slotIds).size !== slotIds.length ||
     new Set(currentEvidenceIds).size !== currentEvidenceIds.length ||
     input.slots.some(
-      ({ wordBudget }) =>
+      ({ wordBudget }, index) =>
         !Number.isSafeInteger(wordBudget.min) ||
         !Number.isSafeInteger(wordBudget.max) ||
         wordBudget.min < 1 ||
-        wordBudget.min > wordBudget.max
+        wordBudget.min > wordBudget.max ||
+        (input.slots[index]?.family !== undefined &&
+          (!Number.isSafeInteger(input.slots[index]?.spineOrder) ||
+            (index > 0 &&
+              (input.slots[index]?.spineOrder ?? 0) <=
+                (input.slots[index - 1]?.spineOrder ?? 0)) ||
+            input.familyContext?.family !== input.slots[index]?.family))
     )
   ) {
     return failedArtifact(
@@ -692,7 +907,8 @@ export function editCopyForFactuality(
         slot,
         evidenceById,
         input.cta,
-        hasObjectiveCtaMismatch
+        hasObjectiveCtaMismatch,
+        input.familyContext
       );
       const rejected = issues.length > 0;
       (rejected ? rejectedSectionIds : omittedSectionIds).push(slot.id);
@@ -711,7 +927,8 @@ export function editCopyForFactuality(
       slot,
       evidenceById,
       input.cta,
-      hasObjectiveCtaMismatch
+      hasObjectiveCtaMismatch,
+      input.familyContext
     );
     const repairedResult = repairCandidate(raw);
     const repaired = repairedResult.candidate;
@@ -720,7 +937,8 @@ export function editCopyForFactuality(
       slot,
       evidenceById,
       input.cta,
-      hasObjectiveCtaMismatch
+      hasObjectiveCtaMismatch,
+      input.familyContext
     );
     const headlineKey = normalizedKey(repaired.headline);
     const bodyKey = normalizedKey(repaired.body);
@@ -729,6 +947,14 @@ export function editCopyForFactuality(
     }
     if (bodyKey && acceptedBodies.has(bodyKey)) {
       after.push("duplicate_body");
+    }
+    if (
+      slot.family &&
+      !after.includes("duplicate_headline") &&
+      !after.includes("duplicate_body") &&
+      sectionNoveltyIssue(repaired, acceptedSections)
+    ) {
+      after.push("insufficient_section_novelty");
     }
     const stableAfter = stableIssues(after);
     if (stableAfter.length > 0) {

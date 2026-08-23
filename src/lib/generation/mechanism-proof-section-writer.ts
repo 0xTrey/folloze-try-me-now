@@ -1,4 +1,5 @@
 import {
+  copyContractMetadata,
   sectionCopyWordCount,
   validateSectionCopyCandidate,
   type SectionCopyCandidate,
@@ -163,11 +164,39 @@ function omittedCandidate(slot: SectionWriterSlot): SectionCopyCandidate {
   return {
     sectionId: slot.id,
     role: slot.role,
+    ...copyContractMetadata(slot),
     status: "omitted",
     evidenceRefs: [],
     wordCount: 0,
     omissionReason: "no_current_evidence"
   };
+}
+
+function headlineForSlot(
+  slot: SectionWriterSlot,
+  role: "mechanism" | "proof"
+): string {
+  if (slot.v2Role === "mechanism") {
+    return "How the supported change works in practice";
+  }
+  if (slot.v2Role === "proof") {
+    return "What the available evidence supports now";
+  }
+  if (slot.v2Role === "solution-mapping") {
+    return "How the solution answers each evaluation criterion";
+  }
+  if (slot.v2Role === "shared-opportunity") {
+    return "Turn the shared priority into practical workstreams";
+  }
+  if (slot.v2Role === "validation-plan") {
+    return "Use relevant proof or a clear validation plan";
+  }
+  if (slot.v2Role === "proof-depth") {
+    return "Review additional evidence for this decision";
+  }
+  return role === "mechanism"
+    ? "How the mechanism works"
+    : "What the evidence supports";
 }
 
 function completeCandidate(
@@ -176,12 +205,13 @@ function completeCandidate(
   body: string,
   evidenceRefs: readonly string[]
 ): SectionCopyCandidate {
+  const headline = headlineForSlot(slot, role);
   const candidate: SectionCopyCandidate = {
     sectionId: slot.id,
     role,
+    ...copyContractMetadata(slot),
     status: "complete",
-    headline:
-      role === "mechanism" ? "How the mechanism works" : "What the evidence supports",
+    headline,
     body,
     evidenceRefs,
     wordCount: 0
@@ -248,8 +278,7 @@ export function writeMechanismProofSections(
 
   for (const slot of slots) {
     const role = slot.role as "mechanism" | "proof";
-    const headline =
-      role === "mechanism" ? "How the mechanism works" : "What the evidence supports";
+    const headline = headlineForSlot(slot, role);
     const claims = currentClaimsForSlot(input, slot);
     const supported = supportedBody(role, claims, words(headline), slot);
 
