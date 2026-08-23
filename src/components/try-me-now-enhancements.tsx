@@ -943,15 +943,17 @@ function analyticsJourneyInsights(signals: AnalyticsSignal[]) {
   const intent = [...signals].reverse().find((signal) => signal.action === "cta_click" || signal.type === "cta");
   const completed = signals.some((signal) => signal.action === "journey_complete");
   const latestTopic = topics.at(-1);
+  const journeyStages = journey.filter((signal) => signal.action !== "preview_viewed");
   return {
     journey,
     topics,
+    topicLabels: topics.map((signal) => signal.context?.lensTitle ?? analyticsSignalTitle(signal)),
     intent,
     completed,
     journeyHeadline: completed
-      ? `Completed ${Math.max(journey.length, 1)} meaningful stage${journey.length === 1 ? "" : "s"}`
-      : journey.length
-        ? `${journey.length} stage${journey.length === 1 ? "" : "s"} explored`
+      ? "Completed the guided journey"
+      : journeyStages.length
+        ? `${journeyStages.length} stage${journeyStages.length === 1 ? "" : "s"} explored`
         : "Journey activity will appear here",
     topicHeadline: latestTopic?.context?.lensTitle
       ?? (topics.length ? analyticsSignalTitle(topics.at(-1)!) : "No topic choice yet"),
@@ -968,11 +970,23 @@ function analyticsJourneyInsights(signals: AnalyticsSignal[]) {
 
 function analyticsSignalSummary(signals: AnalyticsSignal[]): { headline: string; detail: string } {
   if (!signals.length) return { headline: "No live interest yet", detail: "Explore the experience and Folloze will show the sections that earn attention." };
-  const views = signals.filter((signal) => signal.type === "view" || signal.action?.includes("view")).length;
-  const choices = signals.filter((signal) => signal.type === "choice" || signal.action?.includes("choice") || signal.action?.includes("lens")).length;
-  const ctas = signals.filter((signal) => signal.type === "cta" || signal.action?.includes("cta") || signal.action?.includes("click")).length;
-  const latest = analyticsSignalTitle(signals[signals.length - 1]);
-  const parts = [views && `${views} section${views === 1 ? "" : "s"} viewed`, choices && `${choices} topic${choices === 1 ? "" : "s"} explored`, ctas && `${ctas} next-step action${ctas === 1 ? "" : "s"}`].filter(Boolean);
+  const views = uniqueSignals(
+    signals.filter((signal) => ["section_view", "journey_complete"].includes(signal.action ?? "")),
+    (signal) => signal.context?.sectionTitle ?? signal.context?.sectionId ?? signal.label
+  ).length;
+  const choices = uniqueSignals(
+    signals.filter((signal) => ["topic_select", "signature_select", "question_select"].includes(signal.action ?? "")),
+    (signal) => signal.context?.lensTitle ?? signal.context?.lensId ?? signal.label
+  ).length;
+  const ctas = uniqueSignals(
+    signals.filter((signal) => signal.type === "cta" || signal.action === "cta_click"),
+    (signal) => signal.context?.ctaId ?? signal.label
+  ).length;
+  const completion = [...signals].reverse().find((signal) => signal.action === "journey_complete");
+  const latest = completion?.context?.sectionTitle
+    ? `Journey complete: ${completion.context.sectionTitle}`
+    : analyticsSignalTitle(signals[signals.length - 1]);
+  const parts = [views && `${views} journey stage${views === 1 ? "" : "s"}`, choices && `${choices} topic${choices === 1 ? "" : "s"} explored`, ctas && `${ctas} next-step action${ctas === 1 ? "" : "s"}`].filter(Boolean);
   return { headline: latest, detail: parts.length ? parts.join(" · ") : `${signals.length} live signal${signals.length === 1 ? "" : "s"} captured from this preview.` };
 }
 
@@ -1031,6 +1045,11 @@ export function AnalyticsSignalPanel({
           <article>
             <span><Layers3 size={16} />Topic depth</span>
             <strong>{journeyInsights.topicHeadline}</strong>
+            {journeyInsights.topicLabels.length > 0 && (
+              <ul className={styles.signalTopicList} aria-label="Topics explored">
+                {journeyInsights.topicLabels.slice(-3).reverse().map((label) => <li key={label}>{label}</li>)}
+              </ul>
+            )}
             <p>{journeyInsights.topics.length ? `${journeyInsights.topics.length} distinct topic ${journeyInsights.topics.length === 1 ? "signal" : "signals"} captured.` : "Selections reveal which value proposition deserves a deeper conversation."}</p>
           </article>
           <article>

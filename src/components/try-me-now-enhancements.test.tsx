@@ -543,6 +543,24 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.queryByText(/14s|14 seconds|spent 14/i)).not.toBeInTheDocument();
   });
 
+  it("prioritizes the titled completion over a trailing section observer event", () => {
+    render(
+      <AnalyticsSignalPanel
+        open
+        signals={[
+          { id: "0", action: "topic_select", label: "Selected Governance", detail: "Topic", atLabel: "Now", context: { lensId: "lens-1", lensTitle: "Governance" } },
+          { id: "1", action: "journey_complete", label: "Reached Next step", detail: "Complete", atLabel: "Now", context: { sectionId: "next-step", sectionTitle: "Choose the first workflow" } },
+          { id: "2", action: "section_view", label: "Viewed Next step", detail: "Observed", atLabel: "Now", context: { sectionId: "next-step", sectionTitle: "Choose the first workflow" } }
+        ]}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Journey complete: Choose the first workflow" })).toBeInTheDocument();
+    expect(screen.getByText(/^1 journey stage/)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Topics explored" })).toHaveTextContent("Governance");
+  });
+
   it("deduplicates rapid semantic repeats while preserving distinct journey signals", () => {
     const signals = [
       { id: "1700000000000-0", occurredAt: 1_700_000_000_000, action: "section_view", context: { sectionId: "decision-path" }, label: "Viewed Decision paths", detail: "First", atLabel: "1:00" },
