@@ -10,7 +10,7 @@ vi.mock("@/lib/integrations/brand-harvester", async (importOriginal) => {
 });
 
 import { fallbackBrand } from "@/lib/integrations/brand-harvester";
-import { runBrandStage } from "@/lib/orchestrator";
+import { patchSessionAnswers, runBrandStage } from "@/lib/orchestrator";
 import { deleteSession, getSession, putSession } from "@/lib/session-store";
 import type { TryMeSession } from "@/lib/types";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
@@ -389,5 +389,127 @@ describe("verified fallback brand recovery", () => {
     expect(rejection?.meta?.identityRejectionReason).toContain(
       "public company name could not be reconciled"
     );
+  });
+
+  it("accepts a verified canonical brand source and passes its authority to harvesters", async () => {
+    const id = `brand-source-canonical-${Date.now()}`;
+    const session = fallbackSession(id, "datadoghq.com");
+    session.brand = {
+      ...session.brand!,
+      domain: "datadoghq.com",
+      canonicalDomain: "datadog.com",
+      domainAliases: ["datadog.com"],
+      companyName: "Datadog",
+      sourceUrl: "https://datadoghq.com/",
+      source: "fast-extractor",
+      identity: {
+        expectedDomain: "datadoghq.com",
+        canonicalDomain: "datadoghq.com",
+        canonicalName: "Datadog",
+        confidence: "high",
+        confirmationStatus: "confirmed",
+        confirmedBy: "system",
+        reasons: [],
+        provenance: []
+      },
+      diagnostics: {
+        ...session.brand!.diagnostics!,
+        logo: {
+          strategy: "none",
+          imageCandidateCount: 0,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0,
+          resolutionComplete: false
+        }
+      }
+    };
+    ids.add(id);
+    await putSession(session);
+    integrationMocks.harvestBrand.mockResolvedValue({
+      ...session.brand,
+      sourceUrl: "https://www.datadog.com/product/",
+      source: "brand-harvester"
+    });
+
+    await patchSessionAnswers(id, {
+      brandSourceUrl: " https://WWW.Datadog.com/product/#overview "
+    });
+    expect((await getSession(id))?.answers.brandSourceUrl).toBe(
+      "https://www.datadog.com/product/"
+    );
+
+    await runBrandStage(id, { resumeStory: false });
+
+    expect(integrationMocks.harvestBrand).toHaveBeenCalledWith(
+      "datadoghq.com",
+      "https://www.datadog.com/product/",
+      ["datadog.com", "datadoghq.com"]
+    );
+  });
+
+  it("accepts a seller regional host without treating it as a cross-brand alias", async () => {
+    const id = `brand-source-regional-${Date.now()}`;
+    const session = fallbackSession(id, "philips.com");
+    ids.add(id);
+    await putSession(session);
+
+    await patchSessionAnswers(id, {
+      brandSourceUrl: "https://www.usa.philips.com/healthcare/solutions"
+    });
+
+    expect((await getSession(id))?.answers.brandSourceUrl).toBe(
+      "https://www.usa.philips.com/healthcare/solutions"
+    );
+  });
+
+  it("rejects a cross-domain canonical candidate until seller identity verifies it", async () => {
+    const id = `brand-source-unverified-alias-${Date.now()}`;
+    const session = fallbackSession(id, "datadoghq.com");
+    session.brand = {
+      ...session.brand!,
+      canonicalDomain: "datadog.com",
+      domainAliases: ["datadog.com"],
+      identity: {
+        expectedDomain: "datadoghq.com",
+        canonicalDomain: "datadoghq.com",
+        canonicalName: "Datadog",
+        confidence: "low",
+        confirmationStatus: "needs-confirmation",
+        reasons: ["Canonical alias still needs confirmation."],
+        provenance: []
+      }
+    };
+    ids.add(id);
+    await putSession(session);
+
+    await expect(
+      patchSessionAnswers(id, {
+        brandSourceUrl: "https://www.datadog.com/product/"
+      })
+    ).rejects.toMatchObject({
+      status: 400,
+      code: "brand_source_domain_mismatch"
+    });
+  });
+
+  it.each([
+    "https://attacker.example/brand",
+    "http://datadoghq.com/brand",
+    "https://user:password@datadoghq.com/brand",
+    "https://datadoghq.com:8443/brand",
+    "https://127.0.0.1/brand"
+  ])("rejects an unsafe or cross-brand recovery URL: %s", async (brandSourceUrl) => {
+    const id = `brand-source-rejected-${Date.now()}-${ids.size}`;
+    const session = fallbackSession(id, "datadoghq.com");
+    ids.add(id);
+    await putSession(session);
+
+    await expect(
+      patchSessionAnswers(id, { brandSourceUrl })
+    ).rejects.toMatchObject({
+      status: 400,
+      code: "brand_source_domain_mismatch"
+    });
+    expect((await getSession(id))?.answers.brandSourceUrl).toBeUndefined();
   });
 });

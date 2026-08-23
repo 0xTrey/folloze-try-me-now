@@ -97,6 +97,64 @@ const titleCaseDomain = fallbackCompanyName;
 
 const entityKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
+export function normalizeOfficialBrandSourceUrl(
+  domain: string,
+  sourceUrl: string,
+  approvedDomains: readonly string[] = []
+): string {
+  const submittedDomain = normalizeDomain(domain);
+  if (!submittedDomain || !sourceUrl.trim() || sourceUrl.length > 1000) {
+    throw new TypeError("Use a public HTTPS page on the seller company domain.");
+  }
+  let normalized: URL;
+  try {
+    normalized = new URL(sourceUrl.trim());
+  } catch {
+    throw new TypeError("Use a public HTTPS page on the seller company domain.");
+  }
+  const hostname = normalized.hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/^www\./, "")
+    .replace(/\.$/, "");
+  const unsafeHost =
+    !hostname ||
+    isIP(hostname) !== 0 ||
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal");
+  if (
+    normalized.protocol !== "https:" ||
+    normalized.port ||
+    normalized.username ||
+    normalized.password ||
+    unsafeHost
+  ) {
+    throw new TypeError("Use a public HTTPS page on the seller company domain.");
+  }
+  const authorities = [
+    submittedDomain,
+    ...approvedDomains.flatMap((candidate) => {
+      try {
+        return [normalizeDomain(candidate)];
+      } catch {
+        return [];
+      }
+    })
+  ];
+  if (
+    !authorities.some((authority) =>
+      sharesRegistrableCompanyDomain(hostname, authority)
+    )
+  ) {
+    throw new TypeError("Use a public HTTPS page on the seller company domain.");
+  }
+  normalized.hash = "";
+  return normalized.toString();
+}
+
 function canonicalCompanyName(value: string, domain: string): string {
   const cleaned = value.replace(/\.(?:com|net|org)\s*$/i, "").trim();
   const domainKey = entityKey(companyDomainStem(domain));
@@ -3073,9 +3131,16 @@ async function copyOfficialRemoteLogo(
   };
 }
 
-export async function harvestBrand(domain: string, sourceUrl?: string): Promise<BrandProfile> {
+export async function harvestBrand(
+  domain: string,
+  sourceUrl?: string,
+  approvedSourceDomains: readonly string[] = []
+): Promise<BrandProfile> {
   const cached = sourceUrl ? undefined : cachedBrandProfile(domain);
   if (cached) return cached;
+  const normalizedSourceUrl = sourceUrl
+    ? normalizeOfficialBrandSourceUrl(domain, sourceUrl, approvedSourceDomains)
+    : `https://${normalizeDomain(domain)}`;
   // This is the synchronous identity budget, not the overall buyer-experience
   // budget. Optional browser/mobile enrichment can continue separately; the
   // initial brand decision must leave time for a useful preview to render.
@@ -3107,7 +3172,7 @@ export async function harvestBrand(domain: string, sourceUrl?: string): Promise<
   > => {
     try {
       const { text: html, finalUrl, attempts } = await fetchPublicTextWithRetry(
-        new URL(sourceUrl ?? `https://${domain}`),
+        new URL(normalizedSourceUrl),
         budget.signalFor(8_500)
       );
       publicPageAttempts = attempts;
@@ -3142,7 +3207,11 @@ export async function harvestBrand(domain: string, sourceUrl?: string): Promise<
           "Content-Type": "application/json",
           ...(process.env.BRAND_HARVESTER_TOKEN ? { Authorization: `Bearer ${process.env.BRAND_HARVESTER_TOKEN}` } : {})
         },
-        body: JSON.stringify({ domain, sourceUrl: `https://${domain}`, capture: "progressive" }),
+        body: JSON.stringify({
+          domain,
+          sourceUrl: normalizedSourceUrl,
+          capture: "progressive"
+        }),
         // Browser evidence enriches the same first-preview budget as the
         // concurrent public-page and Brandfetch passes. It cannot consume the
         // complete 60-second promise by itself.
