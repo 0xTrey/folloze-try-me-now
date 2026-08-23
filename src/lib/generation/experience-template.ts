@@ -1101,7 +1101,7 @@ export function renderExperienceHtml(input: {
     }
     function textFor(node){return node&&String(node.textContent||'').replace(/\\s+/g,' ').trim().slice(0,160)||undefined}
     function sectionContext(sectionId){
-      var section=sectionId&&document.querySelector('[data-journey-section="'+CSS.escape(sectionId)+'"]');
+      var section=sectionId&&document.getElementById(sectionId);
       var heading=section&&section.querySelector('h1,h2,h3');
       return {sectionTitle:textFor(heading),sectionHeadline:textFor(section&&section.querySelector('p'))};
     }
