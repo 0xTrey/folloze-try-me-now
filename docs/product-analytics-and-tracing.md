@@ -132,6 +132,34 @@ Native exception capture stays enabled for PostHog's error-grouping UI, but a
 The bounded `try_me_browser_error` and `try_me_unhandled_rejection` events remain
 the stable cross-sink reliability vocabulary.
 
+### Behavior-only boundary
+
+PostHog receives behavior, never build mechanics. Each unified event declares an
+allowlist of properties in `UNIFIED_PRODUCT_EVENT_CONTRACTS`, and a property
+outside that list, or one whose key or value looks identifying, throws rather
+than being silently dropped. Prompts, provider responses, rendered copy, HTML,
+evidence text, asset URLs, and domains never reach PostHog.
+
+Section titles and value-proposition labels are the exception that proves the
+rule: the label the reader actually saw is reported so a funnel measures the
+buyer's path, but it passes through `boundedAnalyticsLabel`, which truncates it,
+rejects anything containing an address or URL, and drops internal placeholders
+such as `Decision Lens 2`.
+
+Engagement analytics for a generated experience open only after the visitor
+reaches the final section or opens the panel themselves. The
+`analytics_panel_opened` event records which of the two happened.
+
+### Correlating a funnel with a private build trace
+
+Funnel events that belong to one build carry `correlation_key`, a salted SHA-256
+digest of the server trace ID (`ck_` plus 16 hex characters). The join is
+one-way on purpose. An operator holding a trace ID can derive the key and find
+the matching PostHog sessions; a PostHog reader cannot invert the key to recover
+the trace ID, the session ID, or the support reference. The private BuildTrace
+itself is never sent to PostHog. To read the build behind a funnel, use the
+server-only inspection command with the support reference.
+
 Recommended initial PostHog views:
 
 1. Funnel: page viewed -> use case -> domain -> session created -> preview -> claim.
@@ -177,11 +205,25 @@ For an isolated request or background workflow, continue to use:
 npm run trace:inspect -- --support-ref TMN-XXXXXXXXXXXX
 ```
 
+To reconstruct why a build produced what it did, read the private BuildTrace:
+
+```bash
+npm run build-trace:inspect -- --support-ref TMN-XXXXXXXXXXXX
+npm run build-trace:inspect -- --trace-id <server-trace-id>
+```
+
+It prints the stage timeline, ranked decisions, brand-role selections with their
+reasons, asset allocations, per-section provenance, quality results, and
+fallbacks. Values are digests and enum codes, so the output is safe to paste
+into an internal ticket. This command requires `DATABASE_URL` and is server-only.
+
 ## Retention and privacy
 
 - product events and first-party visitor/session records default to 365 days;
 - browser-session records default to 180 days;
 - operational traces remain 30 days;
+- private build traces remain 30 days and are written only after the session
+  revision the visitor received has committed;
 - generated engagement events retain their existing database policy;
 - the existing daily trace-cleanup job also deletes expired product analytics
   in foreign-key-safe order.

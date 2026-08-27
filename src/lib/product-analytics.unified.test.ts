@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { supportRefForTraceId } from "@/lib/observability";
+import { analyticsCorrelationKey } from "@/lib/product-analytics-contracts";
 import {
   assertUnifiedProductEventProperties,
   clearMemoryProductAnalyticsForTest,
@@ -79,6 +80,7 @@ describe("unified product analytics contracts", () => {
 
   it("accepts the full privacy-safe unified event batch", async () => {
     const supportRef = supportRefForTraceId("trace_failure_rebuild_001");
+    const correlationKey = analyticsCorrelationKey("trace_failure_rebuild_001");
     const payloads = [
         {
           ...baseEvent({
@@ -297,6 +299,130 @@ describe("unified product analytics contracts", () => {
             event: "support_reference_created",
             category: "error",
             properties: { support_ref: supportRef, failure_stage: "story" }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_researchstarted0001",
+            event: "research_started",
+            category: "workflow",
+            properties: {
+              research_scope: "seller_and_target",
+              source_count: 4,
+              correlation_key: correlationKey
+            }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_recommendviewed0001",
+            event: "recommendation_viewed",
+            category: "interaction",
+            properties: {
+              recommendation_kind: "value_prop",
+              option_count: 3,
+              rank: 0,
+              value_prop_label: "Cut unplanned dwell time"
+            }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_recommendpicked0001",
+            event: "recommendation_selected",
+            category: "interaction",
+            properties: {
+              recommendation_kind: "value_prop",
+              rank: 0,
+              value_prop_label: "Cut unplanned dwell time",
+              was_default: true
+            }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_buildstarted00000001",
+            event: "build_started",
+            category: "workflow",
+            properties: {
+              artifact_revision: 3,
+              route_family: "launch",
+              correlation_key: correlationKey
+            }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_sectionviewed00000001",
+            event: "section_viewed",
+            category: "interaction",
+            properties: {
+              section_title: "Where the dwell time goes",
+              section_role: "current-friction",
+              position: 2,
+              dwell_bucket: "lt_10s"
+            }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_assetinteraction0001",
+            event: "asset_interaction",
+            category: "interaction",
+            properties: {
+              interaction_type: "expand",
+              asset_role: "product",
+              section_title: "Where the dwell time goes",
+              area: "preview"
+            }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_analyticspanelopen001",
+            event: "analytics_panel_opened",
+            category: "interaction",
+            properties: {
+              trigger: "final_section_reached",
+              section_title: "Choose the first move"
+            }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_claimstarted00000001",
+            event: "claim_started",
+            category: "conversion",
+            properties: {
+              claim_step: "open",
+              trigger: "preview_engagement",
+              correlation_key: correlationKey
+            }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_claimcompleted000001",
+            event: "claim_completed",
+            category: "conversion",
+            properties: {
+              claim_step: "submit",
+              duration_bucket: "lt_15s",
+              correlation_key: correlationKey
+            }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_recoverablefailure01",
+            event: "recoverable_failure",
+            category: "error",
+            properties: {
+              failure_stage: "story",
+              error_code: "provider_timeout",
+              retryable: true,
+              correlation_key: correlationKey
+            }
           })
         }
     ];

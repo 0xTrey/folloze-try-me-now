@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { sanitizeObservabilityText } from "@/lib/observability-sanitize";
 
 export const PRODUCT_EVENT_NAMES = [
@@ -5,6 +7,7 @@ export const PRODUCT_EVENT_NAMES = [
   "analytics_prompt_shown",
   "api_request_completed",
   "api_request_failed",
+  "asset_interaction",
   "browser_error",
   "brand_help_requested",
   "brand_logo_failed",
@@ -39,11 +42,15 @@ export const PRODUCT_EVENT_NAMES = [
   "preview_interaction",
   "preview_rendered",
   "preview_scrolled",
+  "recommendation_selected",
+  "recommendation_viewed",
+  "recoverable_failure",
   "production_plan_ready",
   "provisional_rendered",
   "research_started",
   "resource_interaction",
   "retry_requested",
+  "section_viewed",
   "session_created",
   "session_status_changed",
   "audience_confirmed",
@@ -70,6 +77,16 @@ export type ProductEventName = (typeof PRODUCT_EVENT_NAMES)[number];
 export const UNIFIED_PRODUCT_EVENT_NAMES = [
   "unified_entry_started",
   "domain_stabilized",
+  "research_started",
+  "recommendation_viewed",
+  "recommendation_selected",
+  "build_started",
+  "section_viewed",
+  "asset_interaction",
+  "analytics_panel_opened",
+  "claim_started",
+  "claim_completed",
+  "recoverable_failure",
   "input_interpreted",
   "brief_field_confirmed",
   "brief_field_edited",
@@ -152,7 +169,47 @@ export const UNIFIED_PRODUCT_EVENT_CONTRACTS: Record<
   },
   domain_stabilized: {
     category: "input",
-    allowedProperties: ["domain_role", "normalization", "has_value"]
+    allowedProperties: ["domain_role", "normalization", "has_value", "correlation_key"]
+  },
+  research_started: {
+    category: "workflow",
+    allowedProperties: ["research_scope", "source_count", "correlation_key"]
+  },
+  recommendation_viewed: {
+    category: "interaction",
+    allowedProperties: ["recommendation_kind", "option_count", "rank", "value_prop_label"]
+  },
+  recommendation_selected: {
+    category: "interaction",
+    allowedProperties: ["recommendation_kind", "rank", "value_prop_label", "was_default"]
+  },
+  build_started: {
+    category: "workflow",
+    allowedProperties: ["artifact_revision", "route_family", "correlation_key"]
+  },
+  section_viewed: {
+    category: "interaction",
+    allowedProperties: ["section_title", "section_role", "position", "dwell_bucket"]
+  },
+  asset_interaction: {
+    category: "interaction",
+    allowedProperties: ["interaction_type", "asset_role", "section_title", "area"]
+  },
+  analytics_panel_opened: {
+    category: "interaction",
+    allowedProperties: ["trigger", "section_title"]
+  },
+  claim_started: {
+    category: "conversion",
+    allowedProperties: ["claim_step", "trigger", "correlation_key"]
+  },
+  claim_completed: {
+    category: "conversion",
+    allowedProperties: ["claim_step", "duration_bucket", "correlation_key"]
+  },
+  recoverable_failure: {
+    category: "error",
+    allowedProperties: ["failure_stage", "error_code", "retryable", "correlation_key"]
   },
   input_interpreted: {
     category: "input",
@@ -244,6 +301,35 @@ export function isPrivateAnalyticsPropertyKey(key: string): boolean {
   return privateAnalyticsPropertyKey.test(key.replace(/[^a-z0-9]/gi, ""));
 }
 
+export const ANALYTICS_CORRELATION_KEY_PATTERN = /^ck_[a-f0-9]{16}$/;
+export const ANALYTICS_CORRELATION_KEY_DOMAIN = "try-me-analytics-correlation-v1";
+
+/**
+ * Derives the key PostHog carries so a behavior funnel can be joined to a
+ * private build trace. The join is deliberately one-way: the key is a salted
+ * digest of the trace ID, so an analytics reader can match a session they
+ * already hold a trace for but cannot recover the trace ID from PostHog.
+ */
+export function analyticsCorrelationKey(traceId: string): string {
+  return `ck_${createHash("sha256")
+    .update(ANALYTICS_CORRELATION_KEY_DOMAIN)
+    .update("\u0000")
+    .update(traceId)
+    .digest("hex")
+    .slice(0, 16)}`;
+}
+
+/** Bounded, buyer-facing label. Empty when nothing safe survives. */
+export function boundedAnalyticsLabel(value: string | undefined, maxChars = 64): string {
+  if (!value) return "";
+  const scrubbed = sanitizeObservabilityText(value.replace(/\s+/g, " ").trim(), maxChars);
+  if (!scrubbed || /\[redacted-/i.test(scrubbed)) return "";
+  if (UNSAFE_ANALYTICS_PROPERTY_VALUE_PATTERN.test(scrubbed)) return "";
+  // Internal placeholders describe the builder, not the reader's experience.
+  if (/^(?:decision lens|section|lens|panel|block)\s*\d+$/i.test(scrubbed)) return "";
+  return scrubbed;
+}
+
 export function productEventCategoryFor(event: ProductEventName): ProductEventCategory {
   if (event in UNIFIED_PRODUCT_EVENT_CONTRACTS) {
     return UNIFIED_PRODUCT_EVENT_CONTRACTS[event as UnifiedProductEventName].category;
@@ -308,6 +394,13 @@ export function assertUnifiedProductEventProperties(
       throw new Error(`Analytics property key ${key} is not permitted.`);
     }
     if (typeof value === "string") {
+      if (key === "correlation_key") {
+        if (!ANALYTICS_CORRELATION_KEY_PATTERN.test(value)) {
+          throw new Error("correlation_key must be a one-way analytics correlation digest.");
+        }
+        next[key] = value;
+        continue;
+      }
       if (event === "support_reference_created" && key === "support_ref") {
         if (!/^TMN-[A-Z0-9]{8,16}$/.test(value)) {
           throw new Error("support_ref must be a public TMN support reference.");

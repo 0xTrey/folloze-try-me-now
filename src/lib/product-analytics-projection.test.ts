@@ -2,10 +2,23 @@ import { describe, expect, it } from "vitest";
 
 import { selectThreeFamilyDecision } from "@/lib/generation/three-family-contract";
 import {
+  projectAnalyticsPanelOpenedBehaviorEvent,
+  projectAssetInteractionBehaviorEvent,
   projectBrandNeedsInputBehaviorEvent,
+  projectBuildStartedBehaviorEvent,
+  projectClaimBehaviorEvent,
   projectProductionPlanBehaviorEvent,
+  projectRecommendationBehaviorEvent,
+  projectRecoverableFailureBehaviorEvent,
+  projectResearchStartedBehaviorEvent,
+  projectSectionViewedBehaviorEvent,
   projectWorkerTimingBehaviorEvent
 } from "@/lib/product-analytics-projection";
+import {
+  analyticsCorrelationKey,
+  assertUnifiedProductEventProperties,
+  boundedAnalyticsLabel
+} from "@/lib/product-analytics-contracts";
 import { parseProductEventBatch } from "@/lib/product-analytics";
 
 const identity = {
@@ -104,5 +117,121 @@ describe("behavior analytics telemetry projection", () => {
     expect(projected.properties).not.toHaveProperty("fallback_code");
     expect(projected.properties).not.toHaveProperty("error_code");
     expect(projected.properties).not.toHaveProperty("evidence_ids");
+  });
+});
+
+describe("behavior-only funnel coverage", () => {
+  const traceId = "trace_behavior_funnel_001";
+
+  it("carries a one-way correlation key that never reveals the trace id", () => {
+    const started = projectResearchStartedBehaviorEvent({
+      traceId,
+      scope: "seller_and_target",
+      sourceCount: 4
+    });
+
+    expect(started.properties.correlation_key).toMatch(/^ck_[a-f0-9]{16}$/);
+    expect(JSON.stringify(started)).not.toContain(traceId);
+    expect(analyticsCorrelationKey(traceId)).toBe(started.properties.correlation_key);
+    expect(analyticsCorrelationKey("trace_behavior_funnel_002")).not.toBe(
+      started.properties.correlation_key
+    );
+  });
+
+  it("joins the build, claim, and failure funnel under one correlation key", () => {
+    const key = analyticsCorrelationKey(traceId);
+    const events = [
+      projectBuildStartedBehaviorEvent({ traceId, revision: 3, routeFamily: "launch" }),
+      projectClaimBehaviorEvent({ action: "started", traceId, step: "open" }),
+      projectClaimBehaviorEvent({
+        action: "completed",
+        traceId,
+        step: "submit",
+        durationMs: 4_000
+      }),
+      projectRecoverableFailureBehaviorEvent({
+        traceId,
+        failureStage: "story",
+        errorCode: "provider_timeout",
+        retryable: true
+      })
+    ];
+
+    expect(events.every(({ properties }) => properties.correlation_key === key)).toBe(true);
+  });
+
+  it("reports the label the reader saw and drops internal placeholders", () => {
+    const real = projectRecommendationBehaviorEvent({
+      action: "selected",
+      kind: "value_prop",
+      rank: 1,
+      valuePropLabel: "Cut unplanned dwell time",
+      wasDefault: false
+    });
+    const placeholder = projectRecommendationBehaviorEvent({
+      action: "selected",
+      kind: "value_prop",
+      rank: 1,
+      valuePropLabel: "Decision Lens 2"
+    });
+
+    expect(real.properties.value_prop_label).toBe("Cut unplanned dwell time");
+    expect(placeholder.properties.value_prop_label).toBeUndefined();
+    expect(boundedAnalyticsLabel("Decision Lens 3")).toBe("");
+  });
+
+  it("keeps a section title bounded and free of identifying content", () => {
+    const safe = projectSectionViewedBehaviorEvent({
+      sectionTitle: "Where the dwell time goes",
+      sectionRole: "current-friction",
+      position: 2,
+      dwellMs: 6_000
+    });
+    const unsafe = projectSectionViewedBehaviorEvent({
+      sectionTitle: "Prepared for ops@northwind-logistics.example",
+      sectionRole: "current-friction",
+      position: 2
+    });
+
+    expect(safe.properties.section_title).toBe("Where the dwell time goes");
+    expect(safe.properties.dwell_bucket).toBe("lt_10s");
+    expect(unsafe.properties.section_title).toBeUndefined();
+  });
+
+  it("records an asset interaction without the asset reference itself", () => {
+    const event = projectAssetInteractionBehaviorEvent({
+      interactionType: "expand",
+      assetRole: "product",
+      sectionTitle: "How the routing works",
+      area: "preview"
+    });
+
+    expect(event.properties).toEqual({
+      interaction_type: "expand",
+      asset_role: "product",
+      section_title: "How the routing works",
+      area: "preview"
+    });
+    expect(JSON.stringify(event)).not.toMatch(/https?:\/\//);
+  });
+
+  it("distinguishes an automatic panel reveal from an explicit open", () => {
+    expect(
+      projectAnalyticsPanelOpenedBehaviorEvent({ trigger: "final_section_reached" }).properties
+        .trigger
+    ).toBe("final_section_reached");
+    expect(
+      projectAnalyticsPanelOpenedBehaviorEvent({ trigger: "explicit_open" }).properties.trigger
+    ).toBe("explicit_open");
+  });
+
+  it("refuses a correlation key that is not a one-way digest", () => {
+    expect(() =>
+      assertUnifiedProductEventProperties("build_started", {
+        artifact_revision: 3,
+        route_family: "launch",
+        correlation_key: traceId
+      })
+    ).toThrow(/one-way analytics correlation digest/);
   });
 });
