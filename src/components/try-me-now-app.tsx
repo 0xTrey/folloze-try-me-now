@@ -3357,6 +3357,7 @@ export function TryMeNowApp() {
 
   useEffect(() => {
     if (!streamingBuildSessionId || !streamingMaterialBriefComplete) return;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     const timer = window.setTimeout(() => {
       setStreamingBuildDwellCompleteFor(streamingBuildSessionId);
     }, STREAMING_BUILD_MINIMUM_DWELL_MS);
