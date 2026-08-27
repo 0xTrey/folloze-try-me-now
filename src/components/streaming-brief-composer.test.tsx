@@ -5,7 +5,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { StreamingBriefComposer } from "./streaming-brief-composer";
+import { StreamingBriefComposer, StreamingBuildStage } from "./streaming-brief-composer";
 
 afterEach(() => {
   cleanup();
@@ -50,17 +50,15 @@ describe("StreamingBriefComposer", () => {
           { key: "offer", label: "Offer", value: "Harmony", editable: true },
           { key: "experience_type", label: "Experience type", value: "Product campaign", editable: false }
         ]}
-        canSkip
         onAnswer={onAnswer}
         onStepChange={onStepChange}
         onSummaryEdit={vi.fn()}
-        onSkip={vi.fn()}
       />
     );
 
     expect(screen.queryByRole("heading", { name: "What are you taking to market?" })).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Who should this reach/i)).toBeInTheDocument();
-    expect(screen.getByText("Next signal · Audience")).toBeInTheDocument();
+    expect(screen.getByText("Question 2 of 3")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Edit Campaign: Harmony for operations leaders/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Live Brief" })).toBeInTheDocument();
     expect(screen.getByText("Product campaign")).toBeInTheDocument();
@@ -76,21 +74,18 @@ describe("StreamingBriefComposer", () => {
     });
   });
 
-  it("keeps skip to preview disabled until the brief is viable", () => {
-    const onSkip = vi.fn();
+  it("does not offer a shortcut around the guided brief", () => {
     render(
       <StreamingBriefComposer
         mode="campaign"
         questions={questions}
         currentQuestionId="intent"
         answers={[]}
-        canSkip={false}
         onAnswer={vi.fn()}
-        onSkip={onSkip}
       />
     );
 
-    expect(screen.getByRole("button", { name: "Skip to preview" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /skip to preview/i })).not.toBeInTheDocument();
   });
 
   it("lets sellers edit compact Live Brief fields from the summary", () => {
@@ -118,60 +113,38 @@ describe("StreamingBriefComposer", () => {
     expect(onSummaryEdit).toHaveBeenCalledWith("offer");
   });
 
-  it("makes active build work unmistakable and exposes it as live status", () => {
+  it("replaces the intake with an audience-specific, full-page build stage", () => {
     render(
-      <StreamingBriefComposer
-        mode="campaign"
-        questions={questions}
-        currentQuestionId="intent"
-        answers={[]}
+      <StreamingBuildStage
+        audience="Clinical laboratory directors"
+        brandName="Thermo Fisher Scientific"
+        brandLogoUrl="/brand/folloze-logo.svg"
+        brandColors={["#ed1c24", "#005daa"]}
         receipts={[{ id: "brand", label: "Brand", detail: "Reading the public site", state: "working" }]}
-        onAnswer={vi.fn()}
       />
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Building your experience now.");
-    expect(screen.getByRole("status")).toHaveTextContent("Research, messaging, and page composition are running in the background.");
+    expect(screen.getByRole("heading", { name: "Building a buyer experience for Clinical laboratory directors." })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Thermo Fisher Scientific's brand, offer, audience, and objective");
+    expect(document.querySelector('[data-build-stage="active"]')).toHaveAttribute("aria-busy", "true");
+    expect(document.querySelector('[data-motion="orbit"]')).toBeInTheDocument();
+    expect(screen.queryByText(/%|seconds remaining/i)).not.toBeInTheDocument();
   });
 
-  it("communicates completion and attention without fake percentage progress", () => {
-    const { rerender } = render(
-      <StreamingBriefComposer
-        mode="campaign"
-        questions={questions}
-        answers={[]}
-        receipts={[{ id: "preview", label: "Build", detail: "Ready", state: "complete" }]}
-        onAnswer={vi.fn()}
-      />
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("Your experience is ready to explore.");
-    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
-
-    rerender(
-      <StreamingBriefComposer
-        mode="campaign"
-        questions={questions}
-        answers={[]}
-        receipts={[{ id: "build", label: "Build", detail: "Retry", state: "attention" }]}
-        onAnswer={vi.fn()}
-      />
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("We need one more signal to continue.");
-  });
-
-  it("does not call a completed brand scan a completed experience", () => {
+  it("keeps real receipt language visible without inventing completion", () => {
     render(
-      <StreamingBriefComposer
-        mode="campaign"
-        questions={questions}
-        currentQuestionId="intent"
-        answers={[]}
-        receipts={[{ id: "brand", label: "Brand", detail: "Brand verified", state: "complete" }]}
-        onAnswer={vi.fn()}
+      <StreamingBuildStage
+        audience="Security operations leaders"
+        brandName="Cisco"
+        receipts={[
+          { id: "brand", label: "Brand verified", detail: "Official public identity captured", state: "complete" },
+          { id: "composition", label: "Composing page structure", detail: "Messaging and imagery are being assembled", state: "working" }
+        ]}
       />
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Waiting for the next signal.");
-    expect(screen.queryByText("Your experience is ready to explore.")).not.toBeInTheDocument();
+    expect(screen.getByText("Brand verified")).toBeInTheDocument();
+    expect(screen.getByText("Composing page structure")).toBeInTheDocument();
+    expect(screen.queryByText(/ready to explore/i)).not.toBeInTheDocument();
   });
 });

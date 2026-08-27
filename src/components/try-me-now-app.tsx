@@ -54,6 +54,7 @@ import {
 import { BrandHelpRecovery } from "@/components/brand-help-recovery";
 import { usePreviewForegroundSeconds } from "@/components/use-preview-foreground-seconds";
 import {
+  StreamingBuildStage,
   StreamingBriefComposer,
   type StreamingAudienceFinding,
   type StreamingBriefAnswer,
@@ -565,7 +566,7 @@ function conciseIntentLabel(value: string, fallback: string): string {
   return firstThought.slice(0, 160);
 }
 
-export const STREAMING_BRIEF_SKIP_THRESHOLD = 3;
+export const STREAMING_BUILD_MINIMUM_DWELL_MS = 6_000;
 
 export function streamingCampaignQuestions(
   mode: CampaignEntryMode,
@@ -600,7 +601,11 @@ export function streamingCampaignQuestions(
       hint: "Choose a company-fit recommendation or describe the buyer group in your own words.",
       choices: audienceSuggestions.slice(0, 3),
       recommendedChoice: recommended.audience,
-      placeholder: mode === "event" ? "Revenue and demand generation leaders" : "Enterprise marketing leaders",
+      placeholder: recommended.audience
+        || audienceSuggestions[0]
+        || (mode === "event"
+          ? "Describe the people most likely to attend this event"
+          : "Describe the buyer role most likely to evaluate this offer"),
       required: true
     },
     {
@@ -641,28 +646,6 @@ export function streamingCampaignPatchForIntent(
     messageBelief: value.trim().slice(0, 240),
     ...(eventIntent ? { eventSource: (publicUrl || promotedOffer).slice(0, 1000), ctaType: "register" } : {}),
     ...(publicUrl ? { offerSourceUrl: publicUrl, offerSourceConfirmed: true } : {})
-  };
-}
-
-export function streamingCampaignSkipPatch(
-  session: Pick<PublicTryMeSession, "useCase" | "answers" | "audienceRecommendations" | "campaignOfferSource">,
-  mode: CampaignEntryMode
-): SessionAnswers {
-  const inferredAudience = session.answers.customAudience
-    || (session.answers.audience && session.answers.audience !== "Other" ? session.answers.audience : undefined)
-    || session.audienceRecommendations?.find(
-      (recommendation) => recommendation.recommendationKind === "evidence-backed"
-    )?.label;
-  const inferredOffer = campaignOfferFor(session);
-  return {
-    ...(session.answers.campaignType ? {} : { campaignType: mode === "event" ? "event" : "product" }),
-    ...(session.answers.promotedOffer || !inferredOffer
-      ? {}
-      : { promotedOffer: inferredOffer, promotedOfferConfirmed: true }),
-    ...(session.answers.audience || !inferredAudience
-      ? {}
-      : { audience: inferredAudience }),
-    ...(session.answers.objective ? {} : { objective: recommendedObjectiveFor(session) })
   };
 }
 
@@ -1570,10 +1553,14 @@ export function liveBriefFilledCount(session: PublicTryMeSession): number {
     .filter((row) => Boolean(row.value)).length;
 }
 
-export function canSkipStreamingCampaign(session: PublicTryMeSession): boolean {
-  if (session.useCase !== "campaign") return false;
-  return liveBriefFilledCount(session) >= STREAMING_BRIEF_SKIP_THRESHOLD
-    && Boolean(campaignOfferFor(session));
+export function shouldShowStreamingBuildStage(
+  session: Pick<PublicTryMeSession, "useCase" | "status" | "experience"> | undefined,
+  briefComplete: boolean,
+  minimumDwellComplete = false
+): boolean {
+  if (!session || session.useCase !== "campaign" || !briefComplete) return false;
+  if (["brand_help_required", "generation_failed", "expired"].includes(session.status)) return false;
+  return !session.experience || !minimumDwellComplete;
 }
 
 export function audienceHubFindingsFor(session: PublicTryMeSession): StreamingAudienceFinding[] {
@@ -3296,7 +3283,6 @@ export function TryMeNowApp() {
   const [campaignEntryMode, setCampaignEntryMode] = useState<CampaignEntryMode>("campaign");
   const [streamingAnswers, setStreamingAnswers] = useState<StreamingBriefAnswer[]>([]);
   const [streamingFocusId, setStreamingFocusId] = useState<string>();
-  const [streamingPreviewRequested, setStreamingPreviewRequested] = useState(false);
   const [domain, setDomain] = useState("");
   const [session, setSession] = useState<PublicTryMeSession>();
   const [answers, setAnswers] = useState<SessionAnswers>({});
@@ -3315,6 +3301,7 @@ export function TryMeNowApp() {
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([]);
   const [revealedAt, setRevealedAt] = useState<number>();
   const [previewClockNow, setPreviewClockNow] = useState(() => Date.now());
+  const [streamingBuildDwellCompleteFor, setStreamingBuildDwellCompleteFor] = useState<string>();
   const [personalizationSelection, setPersonalizationSelection] = useState<{
     key: string;
     variantId: PersonalizationVariantId;
@@ -3349,6 +3336,16 @@ export function TryMeNowApp() {
       }
     )
   ));
+  const streamingMaterialBriefComplete = Boolean(
+    session?.useCase === "campaign"
+    && answers.promotedOffer?.trim()
+    && (answers.customAudience?.trim() || answers.audience?.trim())
+    && answers.objective?.trim()
+  );
+  const streamingBuildSessionId = session?.useCase === "campaign" ? session.id : undefined;
+  const streamingBuildDwellComplete = Boolean(
+    session?.id && streamingBuildDwellCompleteFor === session.id
+  );
 
   useEffect(() => {
     initializeProductAnalytics();
@@ -3357,6 +3354,14 @@ export function TryMeNowApp() {
   useEffect(() => {
     setProductAnalyticsSessionId(session?.id);
   }, [session?.id]);
+
+  useEffect(() => {
+    if (!streamingBuildSessionId || !streamingMaterialBriefComplete) return;
+    const timer = window.setTimeout(() => {
+      setStreamingBuildDwellCompleteFor(streamingBuildSessionId);
+    }, STREAMING_BUILD_MINIMUM_DWELL_MS);
+    return () => window.clearTimeout(timer);
+  }, [streamingBuildSessionId, streamingMaterialBriefComplete]);
 
   useEffect(() => {
     if (!session || lastTrackedStatus.current === session.status) return;
@@ -3383,7 +3388,7 @@ export function TryMeNowApp() {
     setCampaignEntryMode(selectedCampaignMode ?? "campaign");
     setStreamingAnswers([]);
     setStreamingFocusId(undefined);
-    setStreamingPreviewRequested(false);
+    setStreamingBuildDwellCompleteFor(undefined);
     setDomain("");
     setSession(undefined);
     setAnswers({});
@@ -3420,7 +3425,7 @@ export function TryMeNowApp() {
     setCampaignEntryMode("campaign");
     setStreamingAnswers([]);
     setStreamingFocusId(undefined);
-    setStreamingPreviewRequested(false);
+    setStreamingBuildDwellCompleteFor(undefined);
     setDomain("");
     setSession(undefined);
     setAnswers({});
@@ -3576,9 +3581,10 @@ export function TryMeNowApp() {
   useEffect(() => {
     if (!session?.experience || initialPreviewScrolled.current) return;
     if (!canRevealPreview(session)) return;
+    if (session.useCase === "campaign" && !streamingBuildDwellComplete) return;
     initialPreviewScrolled.current = true;
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [session]);
+  }, [session, streamingBuildDwellComplete]);
 
   useEffect(() => {
     if (!session?.experience || !canRevealPreview(session)) return;
@@ -3625,20 +3631,26 @@ export function TryMeNowApp() {
 
   useEffect(() => {
     if (!session || !canRevealPreview(session) || revealTracked.current) return;
+    if (session.useCase === "campaign" && !streamingBuildDwellComplete) return;
     revealTracked.current = true;
-    const revealTime = Date.now();
-    setRevealedAt(revealTime);
-    track("experience_revealed", { useCase: session.useCase });
-    setClientEvents([{
-      action: "preview_viewed",
-      ...describePreviewAnalyticsEvent("preview_viewed", {}),
-      at: revealTime
-    }]);
-    // Preview analytics updates the server-side aggregate, not the rendered artifact.
-    // Keeping that response out of session state prevents analytics-only revisions
-    // from remounting the iframe that emitted the signal.
-    void recordPreviewSignal(session.id, "preview-opened", "experience-preview").catch(() => undefined);
-  }, [session]);
+    const sessionId = session.id;
+    const sessionUseCase = session.useCase;
+    const timer = window.setTimeout(() => {
+      const revealTime = Date.now();
+      setRevealedAt(revealTime);
+      track("experience_revealed", { useCase: sessionUseCase });
+      setClientEvents([{
+        action: "preview_viewed",
+        ...describePreviewAnalyticsEvent("preview_viewed", {}),
+        at: revealTime
+      }]);
+      // Preview analytics updates the server-side aggregate, not the rendered artifact.
+      // Keeping that response out of session state prevents analytics-only revisions
+      // from remounting the iframe that emitted the signal.
+      void recordPreviewSignal(sessionId, "preview-opened", "experience-preview").catch(() => undefined);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [session, streamingBuildDwellComplete]);
 
   const personalizationSourceKey = session?.experienceSpec?.personalizationVariantIds?.length
     ? `${session.id}:${session.experienceSpec.artifactDigest ?? session.revision}`
@@ -4000,7 +4012,7 @@ export function TryMeNowApp() {
       offerChoices,
       {
         offer: evidenceBackedOffers.find(({ recommended }) => recommended)?.label,
-        audience: evidenceBackedAudiences[0]?.label,
+        audience: evidenceBackedAudiences[0]?.label ?? session.audienceSuggestions[0],
         objective: session.objectiveRecommendations?.find(({ recommended }) => recommended)?.label
           ?? recommendedObjective
       }
@@ -4031,6 +4043,10 @@ export function TryMeNowApp() {
   const nextStreamingQuestionId = streamingQuestions.find((question) => (
     !canonicalStreamingAnswers.some((answer) => answer.questionId === question.id)
   ))?.id;
+  const streamingBriefComplete = streamingQuestions.length > 0 && !nextStreamingQuestionId;
+  const streamingBuildAudience = canonicalStreamingAnswers.find(
+    (answer) => answer.questionId === "audience"
+  )?.value || session?.audienceSuggestions[0] || "the selected buyer group";
   const streamingCurrentQuestionId = streamingFocusId && streamingQuestions.some((question) => question.id === streamingFocusId)
     ? streamingFocusId
     : nextStreamingQuestionId;
@@ -4053,22 +4069,19 @@ export function TryMeNowApp() {
             ? "working" as const
             : "attention" as const
     },
-    ...(canonicalStreamingAnswers.some((answer) => answer.questionId === "intent") ? [{
-      id: "story",
-      label: streamingMode === "event" ? "Event direction captured" : "Campaign direction captured",
-      detail: "Folloze is organizing the promise, proof, and next step.",
+    ...(canonicalStreamingAnswers.some((answer) => answer.questionId === "audience") ? [{
+      id: "audience",
+      label: "Audience signal captured",
+      detail: `The page is being written for ${canonicalStreamingAnswers.find((answer) => answer.questionId === "audience")?.value}.`,
       state: "complete" as const
     }] : []),
-    ...(session.experience ? [{
-      id: "preview",
-      label: "Interactive preview ready",
-      detail: session.experience.readiness === "provisional"
-        ? "The first page is ready while enrichment continues from worker receipts."
-        : "The buyer experience is ready to explore.",
-      state: "complete" as const
+    ...(streamingBriefComplete ? [{
+      id: "composition",
+      label: "Composing page structure",
+      detail: "Messaging, imagery, and the guided buyer path are being assembled.",
+      state: "working" as const
     }] : [])
   ].slice(-3) : [];
-  const canSkipStreaming = Boolean(session && canSkipStreamingCampaign(session));
 
   const handleStreamingAnswer = (answer: StreamingBriefAnswer) => {
     if (!session || session.useCase !== "campaign") return;
@@ -4125,21 +4138,6 @@ export function TryMeNowApp() {
     });
     if (patch.campaignType === "event") setCampaignEntryMode("event");
     void patchAnswers(patch);
-  };
-
-  const skipStreamingBrief = () => {
-    if (!session || session.useCase !== "campaign") return;
-    setStreamingPreviewRequested(true);
-    captureUnifiedProductEvent("brief_field_skipped", {
-      sessionId: session.id,
-      properties: { field_key: "objective" }
-    });
-    track("field_interacted", {
-      useCase: session.useCase,
-      entryMode: streamingMode,
-      field: "streaming_skip_preview"
-    });
-    void patchAnswers(streamingCampaignSkipPatch(session, streamingMode));
   };
 
   const claim = async (email: string) => {
@@ -4225,20 +4223,16 @@ export function TryMeNowApp() {
     setShowSavePrompt(true);
   };
 
-  const allStreamingQuestionsAnswered = streamingQuestions.length > 0
-    && streamingQuestions.every((question) => (
-      canonicalStreamingAnswers.some((answer) => answer.questionId === question.id)
-    ));
-  const keepStreamingBriefOpen = Boolean(
-    session?.useCase === "campaign"
-    && !streamingPreviewRequested
-    && !allStreamingQuestionsAnswered
-  );
   const generationEligible = isSessionGenerationEligible(session);
   const isReveal = Boolean(
     session
     && canRevealPreview(session)
-    && !keepStreamingBriefOpen
+    && (session.useCase !== "campaign" || streamingBuildDwellComplete)
+  );
+  const showStreamingBuildStage = shouldShowStreamingBuildStage(
+    session,
+    streamingBriefComplete,
+    streamingBuildDwellComplete
   );
   const engagementSeconds = usePreviewForegroundSeconds(
     isReveal && revealedAt && session ? session.id : undefined
@@ -4278,6 +4272,8 @@ export function TryMeNowApp() {
       ? useCase === "content"
         ? "Content Magic selected"
         : "Buyer experience selected"
+      : showStreamingBuildStage
+        ? "Building your buyer experience now"
       : lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed"
         ? lifecycleCopy.statusLabel
         : lifecyclePhase === "enriching"
@@ -4338,7 +4334,17 @@ export function TryMeNowApp() {
         />
       )}
 
-      {session && !isReveal && buildPanelCopy && (
+      {session && !isReveal && showStreamingBuildStage && (
+        <StreamingBuildStage
+          audience={streamingBuildAudience}
+          brandName={brandNameFor(session)}
+          brandLogoUrl={previewLogoUrl(session)}
+          brandColors={session.brand?.colors}
+          receipts={streamingReceipts}
+        />
+      )}
+
+      {session && !isReveal && buildPanelCopy && !showStreamingBuildStage && (
         <section className={`workbench ${session.useCase === "campaign" ? "streamingWorkbench" : ""}`}>
           <div className="mobileStatus"><button type="button" aria-expanded={showProcess} aria-controls="mobile-process-dialog" onClick={() => setShowProcess(true)}><span className="liveDot" /><strong>{buildPanelCopy.mobileLabel}</strong><span>{buildPanelCopy.mobileStep}</span><ChevronDown size={15} /></button></div>
           <div className="briefPanel">
@@ -4355,7 +4361,6 @@ export function TryMeNowApp() {
                   questions={streamingQuestions}
                   currentQuestionId={streamingCurrentQuestionId}
                   answers={canonicalStreamingAnswers}
-                  receipts={streamingReceipts}
                   summaryFields={[
                     {
                       key: "seller",
@@ -4388,8 +4393,6 @@ export function TryMeNowApp() {
                       editable: false
                     }
                   ] satisfies StreamingBriefSummaryField[]}
-                  canSkip={canSkipStreaming}
-                  skipLabel="Skip to preview"
                   disabled={isSaving}
                   onAnswer={handleStreamingAnswer}
                   onStepChange={(questionId) => {
@@ -4416,7 +4419,6 @@ export function TryMeNowApp() {
                       properties: { field_key: fieldKey, has_value: true }
                     });
                   }}
-                  onSkip={skipStreamingBrief}
                 />
               ) : (
                 <>

@@ -16,7 +16,7 @@ import {
   runSourceIntelligenceStage
 } from "@/lib/orchestrator";
 import { deleteSession, getSession, putSession, toPublicSession } from "@/lib/session-store";
-import type { TryMeSession } from "@/lib/types";
+import type { BrandProfile, TryMeSession } from "@/lib/types";
 
 const ids = new Set<string>();
 
@@ -40,6 +40,25 @@ function campaignSession(id: string): TryMeSession {
     answers: { campaignType: "product" },
     audienceSuggestions: [],
     events: []
+  };
+}
+
+function adpBrand(): BrandProfile {
+  return {
+    domain: "adp.com",
+    canonicalDomain: "adp.com",
+    companyName: "ADP",
+    title: "ADP",
+    description: "Payroll, HR, tax, benefits, and workforce management solutions.",
+    publicContext: "Unlimited AI potential, unlocked by the human experts at ADP.",
+    publicTopics: ["Artificial intelligence", "Payroll", "Human resources"],
+    sourceUrl: "https://www.adp.com/",
+    source: "fast-extractor",
+    colors: ["#D0272D", "#FFFFFF", "#101820"],
+    primaryColor: "#D0272D",
+    accentColor: "#101820",
+    surfaceColor: "#FFFFFF",
+    imageUrls: []
   };
 }
 
@@ -71,6 +90,25 @@ afterEach(async () => {
 });
 
 describe("campaign offer source intelligence", () => {
+  it("refreshes the next audience suggestion from the selected offer in the same patch", async () => {
+    const id = `offer-audience-refresh-${Date.now()}`;
+    ids.add(id);
+    await putSession({
+      ...campaignSession(id),
+      companyDomain: "adp.com",
+      brand: adpBrand(),
+      audienceSuggestions: ["Data and AI platform leaders"]
+    });
+
+    const patched = await patchSessionAnswers(id, {
+      promotedOffer: "Payroll, HR and Tax Services",
+      campaignType: "product"
+    });
+
+    expect(patched.session.audienceSuggestions[0]).toMatch(/people operations/i);
+    expect(patched.session.audienceSuggestions.join(" ")).not.toMatch(/data and ai leaders/i);
+  });
+
   it("reduces SEO page titles to a buyer-friendly offer name", () => {
     expect(
       inferCampaignOfferTitle(

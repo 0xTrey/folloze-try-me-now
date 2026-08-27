@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
 import type { PublicBrandProfile, PublicTryMeSession, StageStatus, UseCase } from "@/lib/types";
 import {
   buildMoments,
   audienceRecommendationCopy,
   campaignIntakeComplete,
-  canSkipStreamingCampaign,
   ctaValueForSession,
   defaultPersonalizationVariantFor,
   describePreviewAnalyticsEvent,
@@ -17,7 +17,6 @@ import {
   getRevealCopy,
   getRevealShellHeadline,
   isCampaignOfferSourceUrl,
-  liveBriefFilledCount,
   objectiveContextPrompt,
   overviewRowsFor,
   PDF_UPLOAD_PROCESSING_DEADLINE_MS,
@@ -27,10 +26,10 @@ import {
   preservePreviewDuringRegeneration,
   previewBoundaryScrollDelta,
   recommendedObjectiveFor,
+  shouldShowStreamingBuildStage,
   shouldAutoConfirmSource,
   streamingCampaignPatchForIntent,
-  streamingCampaignQuestions,
-  streamingCampaignSkipPatch
+  streamingCampaignQuestions
 } from "./try-me-now-app";
 
 describe("Content Magic PDF processing", () => {
@@ -241,6 +240,50 @@ describe("Try Me Now experience copy", () => {
       "Launch or announce"
     ]);
     expect(questions[2]?.choices).toContain("Launch or announce");
+    expect(questions[1]?.placeholder).toBe("Enterprise architects");
+  });
+
+  it("uses a neutral audience prompt when research has not produced a buyer role", () => {
+    const questions = streamingCampaignQuestions("campaign", []);
+    expect(questions[1]?.placeholder).toBe("Describe the buyer role most likely to evaluate this offer");
+    expect(questions[1]?.placeholder).not.toBe("Enterprise marketing leaders");
+  });
+
+  it("lets the selected offer outrank a broad homepage theme when suggesting buyers", () => {
+    const seller = {
+      ...brand("adp.com", "ADP"),
+      sourceUrl: "https://www.adp.com/",
+      title: "ADP",
+      description: "Payroll, HR, tax, benefits, and workforce management solutions.",
+      publicContext: "Unlimited AI potential, unlocked by the human experts at ADP.",
+      publicTopics: ["Artificial intelligence", "Payroll", "Human resources", "Workforce management"],
+      imageUrls: []
+    };
+    const suggestions = audienceSuggestionsFor(seller, undefined, {
+      promotedOffer: "Payroll, HR and Tax Services",
+      campaignType: "product"
+    });
+    expect(suggestions[0]).toMatch(/people operations/i);
+    expect(suggestions.join(" ")).not.toMatch(/data and ai leaders/i);
+  });
+
+  it("shows the dedicated build stage only after the campaign brief is complete", () => {
+    const collecting = session("campaign");
+    expect(shouldShowStreamingBuildStage(collecting, false)).toBe(false);
+    expect(shouldShowStreamingBuildStage(collecting, true)).toBe(true);
+    const ready = session("campaign", {
+      experience: {
+        title: "Ready",
+        headline: "Ready",
+        ready: true,
+        generationSource: "deterministic-fallback",
+        artifactRevision: 1
+      }
+    });
+    expect(shouldShowStreamingBuildStage(ready, true, false)).toBe(true);
+    expect(shouldShowStreamingBuildStage(ready, true, true)).toBe(false);
+    expect(shouldShowStreamingBuildStage(session("campaign", { status: "generation_failed" }), true)).toBe(false);
+    expect(shouldShowStreamingBuildStage(session("abm"), true)).toBe(false);
   });
 
   it("fills inferred Live Brief rows instead of leaving them waiting", () => {
@@ -255,39 +298,6 @@ describe("Try Me Now experience copy", () => {
     expect(rows.find((row) => row.key === "objective")?.provenance).toBe("inferred");
     expect(rows.find((row) => row.key === "experienceType")?.value).toBe("Product campaign");
     expect(rows.some((row) => !row.value && row.key !== "offer")).toBe(false);
-  });
-
-  it("does not turn a fallback audience suggestion into an explicit visitor choice", () => {
-    expect(canSkipStreamingCampaign(session("campaign"))).toBe(false);
-    expect(liveBriefFilledCount(session("campaign"))).toBeGreaterThanOrEqual(2);
-    const readyToSkip = session("campaign", {
-      answers: { campaignType: "product", promotedOffer: "Harmony" },
-      audienceSuggestions: ["Enterprise architects"]
-    });
-    expect(canSkipStreamingCampaign(readyToSkip)).toBe(true);
-    expect(streamingCampaignSkipPatch(readyToSkip, "campaign")).toMatchObject({
-      objective: "Launch or announce"
-    });
-    expect(streamingCampaignSkipPatch(readyToSkip, "campaign")).not.toHaveProperty("audience");
-  });
-
-  it("may carry forward an evidence-backed audience when the brief is skipped", () => {
-    const readyToSkip = session("campaign", {
-      answers: { campaignType: "product", promotedOffer: "Harmony" },
-      audienceRecommendations: [{
-        id: "audience-enterprise-architects",
-        label: "Enterprise architects",
-        rationale: "Supported by seller-owned platform evidence.",
-        evidenceItemIds: ["seller-platform"],
-        confidence: "high",
-        recommendationKind: "evidence-backed",
-        source: "seller-public-evidence"
-      }]
-    });
-    expect(streamingCampaignSkipPatch(readyToSkip, "campaign")).toMatchObject({
-      audience: "Enterprise architects",
-      objective: "Launch or announce"
-    });
   });
 
   it("keeps the campaign intake open until the campaign shape and named offer are available", () => {

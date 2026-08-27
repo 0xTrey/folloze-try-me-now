@@ -68,27 +68,28 @@ describe("company-specific audience intelligence", () => {
     expect(sets[2].join(" ")).toMatch(/network|security|data center/i);
   });
 
-  it("makes campaign audiences specific to the promoted offer without changing the no-context fallback", () => {
-    const ford = brand({
-      domain: "ford.com",
-      companyName: "Ford",
-      description: "Vehicles, commercial fleets, connected services, and electric mobility.",
-      publicTopics: ["Commercial fleets", "Electric vehicles", "Connected services"]
+  it("uses the promoted offer to choose concise buyer roles instead of repeating the offer", () => {
+    const adp = brand({
+      domain: "adp.com",
+      companyName: "ADP",
+      description: "Payroll, HR, tax, benefits, and workforce management solutions.",
+      publicContext: "Unlimited AI potential, unlocked by the human experts at ADP.",
+      publicTopics: ["Artificial intelligence", "Payroll", "Human resources"]
     });
-    const baseline = audienceSuggestionsFor(ford);
-    const contextual = audienceSuggestionsFor(ford, undefined, {
-      promotedOffer: "Ford Pro Intelligence",
+    const baseline = audienceSuggestionsFor(adp);
+    const contextual = audienceSuggestionsFor(adp, undefined, {
+      promotedOffer: "Payroll, HR and Tax Services",
       campaignType: "product",
       objective: "Launch or announce"
     });
 
     expect(contextual).toHaveLength(4);
     expect(contextual).not.toEqual(baseline);
-    expect(contextual.every((audience) => /Ford Pro Intelligence/i.test(audience))).toBe(true);
-    expect(contextual.every((audience) => /evaluating/i.test(audience))).toBe(true);
-    expect(contextual.every((audience) => audience.length <= 120)).toBe(true);
-    expect(audienceOfferContextLabel(ford, { promotedOffer: "Ford Pro Intelligence" })).toBe(
-      "Ford Pro Intelligence"
+    expect(contextual[0]).toMatch(/people operations/i);
+    expect(contextual.join(" ")).not.toMatch(/Payroll, HR and Tax Services/i);
+    expect(contextual.every((audience) => audience.length <= 72)).toBe(true);
+    expect(audienceOfferContextLabel(adp, { promotedOffer: "Payroll, HR and Tax Services" })).toBe(
+      "ADP's Payroll, HR and Tax Services"
     );
   });
 
@@ -121,7 +122,8 @@ describe("company-specific audience intelligence", () => {
 
     expect(audiences).toHaveLength(4);
     expect(audiences[0]).toMatch(/cloud cost|finops/i);
-    expect(audiences.every((audience) => /Cloud Cost Management/i.test(audience))).toBe(true);
+    expect(audiences.every((audience) => audience.length <= 72)).toBe(true);
+    expect(audiences.join(" ")).not.toMatch(/evaluating Cloud Cost Management/i);
     expect(rationale).toBe(
       `Recommended because ${audiences[0]} can help evaluate Cloud Cost Management.`
     );

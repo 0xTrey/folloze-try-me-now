@@ -511,6 +511,17 @@ function syncExperienceFoundation(session: TryMeSession): void {
     session.targetBrand,
     session.evidenceItems
   );
+  if (session.brand) {
+    session.audienceSuggestions = audienceSuggestionsFor(
+      session.brand,
+      session.targetBrand,
+      {
+        promotedOffer: session.answers.promotedOffer,
+        campaignType: session.answers.campaignType,
+        objective: session.answers.objective
+      }
+    );
+  }
   session.audienceRecommendations = audienceRecommendationsFor(
     session.id,
     nextRevision,
@@ -1938,6 +1949,13 @@ export function inferCampaignOfferTitle(
 
 function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const patch = { ...input };
+  const audienceContextWasSupplied = [
+    "promotedOffer",
+    "campaignType",
+    "objective",
+    "offerSourceUrl",
+    "offerSourceTitle"
+  ].some((key) => Object.hasOwn(patch, key));
   const brandSourceUrlWasSupplied = Object.hasOwn(patch, "brandSourceUrl");
   const targetWasSupplied = Object.hasOwn(patch, "targetDomain");
   const targetAllowed = targetWasSupplied && session.useCase === "abm";
@@ -2127,7 +2145,15 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   }
   session.sourceFingerprint = currentSourceFingerprint;
 
-  syncCampaignContracts(session);
+  if (audienceContextWasSupplied && session.brand) {
+    // The selected offer is the strongest buyer-role signal in the guided
+    // campaign flow. Refresh the suggestions in the same mutation so the next
+    // question cannot show a stale role inferred from an unrelated homepage
+    // theme while enrichment continues in the background.
+    syncExperienceFoundation(session);
+  } else {
+    syncCampaignContracts(session);
+  }
 
   const resolvedAudience =
     session.answers.audience === "Other"

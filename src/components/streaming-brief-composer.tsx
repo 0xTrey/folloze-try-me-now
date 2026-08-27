@@ -1,6 +1,7 @@
 "use client";
 
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import Image from "next/image";
+import { type CSSProperties, type FormEvent, useEffect, useId, useRef, useState } from "react";
 
 import styles from "./streaming-brief-composer.module.css";
 
@@ -43,19 +44,16 @@ export type StreamingBriefSummaryField = {
   editable?: boolean;
 };
 
-const modeCopy: Record<StreamingBriefMode, { eyebrow: string; title: string; detail: string }> = {
+const modeCopy: Record<StreamingBriefMode, { title: string; detail: string }> = {
   unified: {
-    eyebrow: "Buyer experience",
     title: "Tell Folloze what to build.",
     detail: "One missing signal at a time. Your answers stay in this transcript, and the Live Brief stays editable."
   },
   campaign: {
-    eyebrow: "Campaign brief",
     title: "Tell Folloze what you want to launch.",
     detail: "One question at a time. The Live Brief stays visible and editable while Folloze interprets your answers."
   },
   event: {
-    eyebrow: "Event brief",
     title: "Tell Folloze what you want to promote.",
     detail: "Describe the webinar or field event. Folloze asks only what is still missing, then keeps the page visible while it builds."
   }
@@ -66,15 +64,11 @@ export type StreamingBriefComposerProps = {
   questions: readonly StreamingBriefQuestion[];
   currentQuestionId?: string;
   answers: readonly StreamingBriefAnswer[];
-  receipts?: readonly StreamingBriefReceipt[];
   brief?: Readonly<Record<string, string | undefined>>;
   summaryFields?: readonly StreamingBriefSummaryField[];
-  canSkip?: boolean;
-  skipLabel?: string;
   disabled?: boolean;
   onAnswer: (answer: StreamingBriefAnswer) => void;
   onStepChange?: (questionId: string) => void;
-  onSkip?: () => void;
   onSummaryEdit?: (fieldKey: StreamingBriefSummaryField["key"]) => void;
 };
 
@@ -83,15 +77,11 @@ export function StreamingBriefComposer({
   questions,
   currentQuestionId,
   answers,
-  receipts = [],
   brief = {},
   summaryFields = [],
-  canSkip = false,
-  skipLabel = "Skip to preview",
   disabled = false,
   onAnswer,
   onStepChange,
-  onSkip,
   onSummaryEdit
 }: StreamingBriefComposerProps) {
   const [draft, setDraft] = useState("");
@@ -120,22 +110,6 @@ export function StreamingBriefComposer({
         value: fieldValue,
         editable: false
       }));
-  const previewReady = receipts.some((receipt) => receipt.id === "preview" && receipt.state === "complete");
-  const workHasStarted = answers.length > 0 || receipts.some((receipt) => receipt.id !== "brand");
-  const progressState = receipts.some((receipt) => receipt.state === "attention")
-    ? "attention"
-    : previewReady
-      ? "complete"
-      : receipts.some((receipt) => receipt.state === "working") || workHasStarted
-        ? "working"
-        : "waiting";
-  const progressCopy = {
-    waiting: { eyebrow: "Ready when you are", title: "Waiting for the next signal.", detail: "Your answers will appear here as Folloze prepares the experience." },
-    working: { eyebrow: "Folloze is working", title: "Building your experience now.", detail: "Research, messaging, and page composition are running in the background." },
-    attention: { eyebrow: "A step needs attention", title: "We need one more signal to continue.", detail: "Your work is safe. Review the highlighted step and we will keep building." },
-    complete: { eyebrow: "Build ready", title: "Your experience is ready to explore.", detail: "The build receipts below show what Folloze completed." }
-  }[progressState];
-
   useEffect(() => {
     if (!activeQuestionId || disabled) return;
     questionInputRef.current?.focus();
@@ -151,7 +125,6 @@ export function StreamingBriefComposer({
   return (
     <section className={styles.composer} aria-labelledby="streaming-brief-title">
       <header className={styles.header}>
-        <span><i aria-hidden="true" />{copy.eyebrow}</span>
         <h2 id="streaming-brief-title">{copy.title}</h2>
         <p id={descriptionId}>{copy.detail}</p>
       </header>
@@ -218,11 +191,13 @@ export function StreamingBriefComposer({
         })}
         {currentQuestion ? (
           <form className={styles.question} onSubmit={submit} aria-describedby={descriptionId}>
-            <span className={styles.step}>Next signal · {currentQuestion.label}</span>
-            <label htmlFor={`streaming-brief-${currentQuestion.id}`}>
-              <strong>{currentQuestion.prompt}</strong>
-              {currentQuestion.hint && <small>{currentQuestion.hint}</small>}
-            </label>
+            <div className={styles.questionHeading}>
+              <label htmlFor={`streaming-brief-${currentQuestion.id}`}>
+                <strong>{currentQuestion.prompt}</strong>
+              </label>
+              <span className={styles.step}>Question {stepIndex} of {questions.length}</span>
+            </div>
+            {currentQuestion.hint && <p className={styles.questionHint}>{currentQuestion.hint}</p>}
             {currentQuestion.choices && currentQuestion.choices.length > 0 && (
               <div className={styles.chips} role="group" aria-label={currentQuestion.label}>
                 {currentQuestion.choices.map((choice) => (
@@ -268,51 +243,82 @@ export function StreamingBriefComposer({
               <button type="submit" disabled={disabled || !value.trim()} aria-label="Send answer">
                 Send <span aria-hidden="true">→</span>
               </button>
-              {onSkip && (
-                <button
-                  type="button"
-                  className={styles.skip}
-                  disabled={disabled || !canSkip}
-                  title={!canSkip ? "Add enough campaign detail to create a useful preview." : undefined}
-                  onClick={onSkip}
-                >
-                  {skipLabel}
-                </button>
-              )}
             </div>
-            <p className={styles.progressHint} aria-hidden="true">
-              Question {stepIndex} of {questions.length}
-            </p>
           </form>
-        ) : (
-          <div className={styles.complete} role="status">
-            <p>Your brief has the inputs needed to build.</p>
-            {onSkip && (
-              <button type="button" className={styles.skip} disabled={disabled} onClick={onSkip}>
-                {skipLabel}
-              </button>
-            )}
-          </div>
-        )}
+        ) : null}
       </div>
+    </section>
+  );
+}
 
-      <section className={styles.progressPanel} data-state={progressState} aria-live="polite" aria-atomic="true" role="status">
-        <span className={styles.progressOrb} aria-hidden="true"><i /></span>
-        <div>
-          <span className={styles.progressEyebrow}>{progressCopy.eyebrow}</span>
-          <strong>{progressCopy.title}</strong>
-          <p>{progressCopy.detail}</p>
+const buildSceneImages = [
+  { src: "/entry/campaign-preview.webp", alt: "A campaign landing page taking shape" },
+  { src: "/entry/abm-preview.webp", alt: "A buyer-focused page layout taking shape" },
+  { src: "/entry/content-preview.webp", alt: "An interactive content layout taking shape" }
+] as const;
+
+export type StreamingBuildStageProps = {
+  audience: string;
+  brandName: string;
+  brandLogoUrl?: string;
+  brandColors?: readonly string[];
+  receipts: readonly StreamingBriefReceipt[];
+};
+
+export function StreamingBuildStage({
+  audience,
+  brandName,
+  brandLogoUrl,
+  brandColors = [],
+  receipts
+}: StreamingBuildStageProps) {
+  const sceneStyle = {
+    "--build-accent": brandColors[0] || "#0077ff",
+    "--build-accent-two": brandColors[1] || "#17b890"
+  } as CSSProperties;
+
+  return (
+    <section
+      className={styles.buildStage}
+      style={sceneStyle}
+      data-build-stage="active"
+      aria-labelledby="streaming-build-title"
+      aria-busy="true"
+    >
+      <div className={styles.buildStageInner}>
+        <div className={styles.buildNarrative} role="status" aria-live="polite" aria-atomic="true">
+          {brandLogoUrl && (
+            <span className={styles.buildBrandMark}>
+              <Image src={brandLogoUrl} alt={`${brandName} logo`} width={156} height={52} unoptimized />
+            </span>
+          )}
+          <h1 id="streaming-build-title">Building a buyer experience for {audience}.</h1>
+          <p>Folloze is combining {brandName}&apos;s brand, offer, audience, and objective into one guided page.</p>
+          <ol className={styles.buildReceipts} aria-label="Live build progress">
+            {receipts.map((receipt) => (
+              <li key={receipt.id} data-state={receipt.state || "working"}>
+                <span aria-hidden="true" />
+                <div>
+                  <strong>{receipt.label}</strong>
+                  <p>{receipt.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
-      </section>
 
-      <section className={styles.receipts} aria-live="polite" aria-atomic="false" aria-label="Live build progress">
-        {receipts.map((receipt) => (
-          <p key={receipt.id} data-state={receipt.state || "working"}>
-            <strong>{receipt.label}</strong>
-            <span>{receipt.detail}</span>
-          </p>
-        ))}
-      </section>
+        <div className={styles.buildVisual} aria-label="Folloze is composing page layouts and buyer paths">
+          <div className={styles.orbitRoad} data-motion="orbit" aria-hidden="true"><i /><i /><i /></div>
+          <div className={styles.orbitCards} aria-hidden="true">
+            {buildSceneImages.map((image, index) => (
+              <figure key={image.src} className={styles.orbitCard} data-position={index + 1}>
+                <Image src={image.src} alt="" width={720} height={380} priority={index === 0} />
+              </figure>
+            ))}
+          </div>
+          <p className={styles.buildVisualCaption}>Brand system, message, and page structure are being assembled together.</p>
+        </div>
+      </div>
     </section>
   );
 }

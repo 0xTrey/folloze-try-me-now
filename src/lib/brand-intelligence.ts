@@ -1007,11 +1007,14 @@ function evidenceText(brand: BrandProfile): string {
     .slice(0, 10_000);
 }
 
-export function identifyBrandCategory(brand: BrandProfile): BrandCategory {
-  const text = evidenceText(brand);
+function identifyBrandCategoryFromText(text: string): BrandCategory | undefined {
   return (Object.entries(profiles) as Array<[BrandCategory, CategoryProfile]>).find(
     ([category, profile]) => category !== "business-software" && profile.signals.test(text)
-  )?.[0] ?? "business-software";
+  )?.[0];
+}
+
+export function identifyBrandCategory(brand: BrandProfile): BrandCategory {
+  return identifyBrandCategoryFromText(evidenceText(brand)) ?? "business-software";
 }
 
 function targetLensesFor(target: BrandProfile): TargetAudienceLens[] {
@@ -1079,38 +1082,9 @@ export function audienceOfferContextLabel(
   return `${possessiveCompanyName(companyName)} ${promotedOffer}`;
 }
 
-function contextualAudienceSuffix(context: AudienceSuggestionContext, offerLabel: string): string {
-  const objective = context.objective?.toLocaleLowerCase() ?? "";
-  if (context.campaignType === "event" || /registr|attend|rsvp/.test(objective)) {
-    return `considering ${offerLabel}`;
-  }
-  if (context.campaignType === "demand" || /demand|educat|awareness/.test(objective)) {
-    return `exploring ${offerLabel}`;
-  }
-  return `evaluating ${offerLabel}`;
-}
-
-function contextualizeAudienceSuggestions(
-  suggestions: string[],
-  brand: BrandProfile,
-  context: AudienceSuggestionContext
-): string[] {
-  const offerLabel = audienceOfferContextLabel(brand, context);
-  if (!offerLabel) return suggestions;
-  const suffix = contextualAudienceSuffix(context, offerLabel);
+function conciseAudienceSuggestions(suggestions: string[]): string[] {
   return suggestions
-    .map((suggestion) => {
-      if (suggestion.toLocaleLowerCase().includes(offerLabel.toLocaleLowerCase())) {
-        return boundedAudience(suggestion);
-      }
-      const maxPrefixLength = Math.max(32, 119 - suffix.length);
-      const normalized = suggestion.replace(/\s+/g, " ").trim();
-      const boundary = normalized.slice(0, maxPrefixLength + 1).lastIndexOf(" ");
-      const prefix = normalized.length <= maxPrefixLength
-        ? normalized
-        : normalized.slice(0, boundary > 24 ? boundary : maxPrefixLength).trim();
-      return boundedAudience(`${prefix} ${suffix}`);
-    })
+    .map(boundedAudience)
     .filter((suggestion, index, values) => values.indexOf(suggestion) === index);
 }
 
@@ -1163,12 +1137,15 @@ export function audienceSuggestionsFor(
   target?: BrandProfile,
   context: AudienceSuggestionContext = {}
 ): string[] {
-  const sellerCategory = identifyBrandCategory(brand);
+  const offerCategory = context.promotedOffer && !unsafeIntelligenceText.test(context.promotedOffer)
+    ? identifyBrandCategoryFromText(context.promotedOffer)
+    : undefined;
+  const sellerCategory = offerCategory ?? identifyBrandCategory(brand);
   if (isCloudCostOffer(context)) {
-    return contextualizeAudienceSuggestions(cloudCostAudienceSuggestions(target), brand, context);
+    return conciseAudienceSuggestions(cloudCostAudienceSuggestions(target));
   }
   if (!target) {
-    return contextualizeAudienceSuggestions([...profiles[sellerCategory].audiences], brand, context);
+    return conciseAudienceSuggestions([...profiles[sellerCategory].audiences]);
   }
   const targetCategory = identifyBrandCategory(target);
   const hasPublicTargetContext = Boolean(
@@ -1177,17 +1154,15 @@ export function audienceSuggestionsFor(
     )
   );
   if (!hasPublicTargetContext && targetCategory === "business-software") {
-    return contextualizeAudienceSuggestions([...profiles[sellerCategory].audiences], brand, context);
+    return conciseAudienceSuggestions([...profiles[sellerCategory].audiences]);
   }
 
   const lenses = targetLensesFor(target);
   const suggestions = targetAwareAudienceRecipes[sellerCategory].map((recipe, index) =>
     boundedAudience(recipe(lenses[index]))
   );
-  return contextualizeAudienceSuggestions(
-    suggestions.filter((suggestion, index) => suggestions.indexOf(suggestion) === index),
-    brand,
-    context
+  return conciseAudienceSuggestions(
+    suggestions.filter((suggestion, index) => suggestions.indexOf(suggestion) === index)
   );
 }
 
