@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyPersonalizationPatch,
   applyPersonalizationVariant,
   assertArgumentNotNameOnly,
   availablePersonalizationVariantIds,
+  compilePersonalizationPatches,
   compilePersonalizationPlan,
+  isBuyerSafeExplanation,
+  personalizationPatchById,
   personalizationRuntimePayload
 } from "@/lib/generation/personalization-preview";
 import { experienceTemplateFor } from "@/lib/generation/experience-renderers";
@@ -319,5 +323,148 @@ describe("personalization preview variants", () => {
     expect(genericHtml.match(/data-flz-block-id="hero.headline"[^>]*>([^<]+)</)?.[1]).not.toContain(
       accountHeadline.slice(0, 20)
     );
+  });
+});
+
+describe("personalization patches", () => {
+  const plan = () =>
+    compilePersonalizationPlan({
+      draft,
+      seller,
+      target,
+      useCase: "abm",
+      answers: {
+        targetDomain: "cisco.com",
+        audience: "Infrastructure platform leaders",
+        objective: "Align the buying group"
+      },
+      evidenceItems,
+      audienceRecommendations: personas
+    });
+
+  const patchesFor = () =>
+    compilePersonalizationPatches({
+      plan: plan(),
+      sellerName: "Jitterbit",
+      targetName: "Cisco"
+    });
+
+  it("carries only the fields that differ from the canonical experience", () => {
+    const patchSet = patchesFor();
+    const account = personalizationPatchById(patchSet, "account");
+
+    expect(patchSet.baseVariantId).toBe("generic");
+    expect(patchSet.patches.map(({ variantId }) => variantId)).not.toContain("generic");
+    expect(account?.baseVariantId).toBe("generic");
+    expect(account!.changedFields.length).toBeGreaterThan(0);
+    for (const patch of account!.changedFields) {
+      expect(account!.omittedFields).not.toContain(patch.field);
+      expect(patch.sourceRefs.length).toBeGreaterThan(0);
+      expect(["approved", "safe_public", "risky_reviewed"]).toContain(patch.classification);
+      expect(patch.reason.length).toBeGreaterThan(8);
+    }
+  });
+
+  it("binds every changed field to at least one source it was drawn from", () => {
+    const patchSet = patchesFor();
+
+    for (const patch of patchSet.patches) {
+      for (const change of patch.changedFields) {
+        expect(change.sourceRefs.every((ref) => ref.trim().length > 0)).toBe(true);
+      }
+    }
+    const accountTension = personalizationPatchById(patchSet, "account")!.changedFields.find(
+      ({ field }) => field === "tension"
+    );
+    expect(accountTension?.sourceRefs).toContain("https://cisco.com/networking");
+  });
+
+  it("rejects a variant whose only difference is the account name", () => {
+    const base = plan();
+    const generic = base.visibleVariants.find(({ variantId }) => variantId === "generic")!;
+    const nameSwapped: typeof base = {
+      ...base,
+      visibleVariants: [
+        generic,
+        {
+          ...generic,
+          variantId: "account",
+          label: "Account",
+          audienceState: "account",
+          fields: Object.fromEntries(
+            Object.entries(generic.fields).map(([key, value]) => [
+              key,
+              value ? { ...value, value: `${value.value} Cisco` } : value
+            ])
+          )
+        }
+      ]
+    };
+
+    const patchSet = compilePersonalizationPatches({
+      plan: nameSwapped,
+      sellerName: "Jitterbit",
+      targetName: "Cisco"
+    });
+
+    expect(patchSet.rejectedVariantIds).toContain("account");
+    expect(personalizationPatchById(patchSet, "account")).toBeUndefined();
+  });
+
+  it("applies a patch onto the canonical draft without regenerating other fields", () => {
+    const patchSet = patchesFor();
+    const account = applyPersonalizationPatch(draft, patchSet, "account");
+    const changed = new Set(
+      personalizationPatchById(patchSet, "account")!.changedFields.map(({ field }) => field)
+    );
+
+    expect(account.sections).toEqual(draft.sections);
+    expect(account.closingHeadline).toBe(draft.closingHeadline);
+    expect(account.narrativeArc).toBe(draft.narrativeArc);
+    expect(changed.has("headline")).toBe(true);
+    expect(account.headline).not.toBe(draft.headline);
+  });
+
+  it("leaves the canonical draft untouched for a variant with no patch", () => {
+    const patchSet = patchesFor();
+
+    expect(applyPersonalizationPatch(draft, patchSet, "generic")).toEqual(draft);
+    expect(applyPersonalizationPatch(draft, patchSet, undefined)).toEqual(draft);
+  });
+
+  it("explains each change in buyer-safe language without internal vocabulary", () => {
+    const patchSet = patchesFor();
+
+    for (const patch of patchSet.patches) {
+      for (const change of patch.changedFields) {
+        expect(change.explanation.length).toBeGreaterThan(12);
+        expect(isBuyerSafeExplanation(change.explanation)).toBe(true);
+        expect(change.explanation).not.toMatch(
+          /framework|archetype|spine|wireframe|compiler|evidence ledger|variant|patch/i
+        );
+      }
+    }
+  });
+
+  it("records an unsupported field as omitted rather than inventing a change", () => {
+    const sparse = compilePersonalizationPlan({
+      draft,
+      seller,
+      target,
+      useCase: "abm",
+      answers: { targetDomain: "cisco.com", audience: "Infrastructure platform leaders" },
+      evidenceItems: [evidenceItems[0]!]
+    });
+    const patchSet = compilePersonalizationPatches({
+      plan: sparse,
+      sellerName: "Jitterbit",
+      targetName: "Cisco"
+    });
+
+    expect(patchSet.patches.every((patch) => patch.changedFields.length > 0)).toBe(true);
+    for (const patch of patchSet.patches) {
+      const fields = new Set(patch.changedFields.map(({ field }) => field));
+      expect(patch.omittedFields.some((field) => fields.has(field))).toBe(false);
+    }
   });
 });

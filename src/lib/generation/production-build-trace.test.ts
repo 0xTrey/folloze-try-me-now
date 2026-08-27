@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   findBuildTracePrivacyViolations,
   parseBuildTrace,
+  validateBuildTraceFragment,
   type BuildTraceV1
 } from "@/lib/build-trace";
 import {
@@ -142,6 +143,95 @@ describe("production build trace population", () => {
     }
   });
 
+  it("records the messaging strategy decision the compiler settled on", async () => {
+    const { buildTrace } = await compile();
+    const messaging = buildTrace.decisions.messaging;
+
+    expect(messaging).toBeDefined();
+    if (!messaging) return;
+
+    expect(messaging.decision).toBe("messaging_strategy");
+    expect(messaging.version).toMatch(/^[a-z0-9][a-z0-9-]{0,39}-v\d+(?:\.\d+){0,2}$/);
+    expect(messaging.selectedCandidateId.length).toBeGreaterThan(0);
+  });
+
+  it("lists every considered strategy by its own digest with exactly one selected", async () => {
+    const { buildTrace } = await compile();
+    const messaging = buildTrace.decisions.messaging;
+
+    expect(messaging).toBeDefined();
+    if (!messaging) return;
+
+    expect(messaging.candidates.length).toBeGreaterThan(1);
+    for (const candidate of messaging.candidates) {
+      expect(candidate.candidateId).toMatch(/^dg_[a-f0-9]{32}$/);
+    }
+    expect(new Set(messaging.candidates.map(({ candidateId }) => candidateId)).size).toBe(
+      messaging.candidates.length
+    );
+    expect(messaging.candidates.filter(({ selected }) => selected)).toHaveLength(1);
+  });
+
+  it("names the selected strategy and maps every digest back to a readable id", async () => {
+    const { buildTrace } = await compile();
+    const messaging = buildTrace.decisions.messaging;
+
+    expect(messaging).toBeDefined();
+    if (!messaging) return;
+
+    expect(messaging.selectedCandidateId).toMatch(
+      /^strategy-(?:tension|upside|mechanism|proof)$/
+    );
+
+    const named: string[] = [];
+    for (const candidate of messaging.candidates) {
+      const ids = candidate.reasonCodes.filter((code) =>
+        /^candidate_strategy-(?:tension|upside|mechanism|proof)$/.test(code)
+      );
+      expect(ids).toHaveLength(1);
+      named.push(ids[0]!);
+    }
+
+    expect(new Set(named).size).toBe(messaging.candidates.length);
+    expect(named).toContain(`candidate_${messaging.selectedCandidateId}`);
+  });
+
+  it("scores messaging candidates in the trace's own score domain", async () => {
+    const { buildTrace } = await compile();
+    const messaging = buildTrace.decisions.messaging;
+
+    expect(messaging).toBeDefined();
+    if (!messaging) return;
+
+    expect(messaging.candidates.length).toBeGreaterThan(0);
+    for (const { score } of messaging.candidates) {
+      expect(Number.isFinite(score)).toBe(true);
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThanOrEqual(1);
+    }
+    expect(Number.isFinite(messaging.confidence)).toBe(true);
+    expect(messaging.confidence).toBeGreaterThanOrEqual(0);
+    expect(messaging.confidence).toBeLessThanOrEqual(1);
+  });
+
+  it("clears the privacy scanner and the ranked-decision contract with messaging present", async () => {
+    const { buildTrace } = await compile();
+
+    expect(buildTrace.decisions.messaging).toBeDefined();
+    expect(findBuildTracePrivacyViolations(buildTrace)).toEqual([]);
+    expect(validateBuildTraceFragment("rankedDecision", buildTrace.decisions.messaging)).toEqual(
+      []
+    );
+  });
+
+  it("re-derives the identical messaging receipt for the same revision", async () => {
+    const first = await compile();
+    const second = await compile();
+
+    expect(first.buildTrace.decisions.messaging).toBeDefined();
+    expect(second.buildTrace.decisions.messaging).toEqual(first.buildTrace.decisions.messaging);
+  });
+
   it("gives every rendered section a provenance receipt", async () => {
     const result = await compile();
     expect(result.outcome).toBe("production-page");
@@ -202,6 +292,32 @@ describe("production build trace population", () => {
     expect(serialized).not.toContain("Northwind");
     expect(serialized).not.toContain("@");
     expect(serialized).not.toContain("<");
+  });
+
+  it("keeps the arguments the messaging compiler weighed out of the trace", async () => {
+    const { buildTrace } = await compile();
+    const messaging = buildTrace.decisions.messaging;
+    const serialized = JSON.stringify(buildTrace);
+    const receipt = JSON.stringify(messaging);
+
+    expect(messaging).toBeDefined();
+    // Every claim the ledger hands the compiler, in the wording it hands it over.
+    for (const claim of [
+      "Promoted offer",
+      "Dwell Time Control",
+      "Buyer audience and owned job",
+      "Regional carrier operations leaders",
+      "Book a dwell-time review",
+      "Freight visibility",
+      "Regional carriers lose margin to unplanned dwell time.",
+      "Northwind Logistics coordinates regional freight visibility.",
+      "northwind-logistics.example"
+    ]) {
+      expect(serialized).not.toContain(claim);
+    }
+    expect(receipt).not.toContain("https://");
+    expect(receipt).not.toContain("@");
+    expect(receipt).not.toContain("<");
   });
 
   it("is idempotent across retries of the same revision", async () => {

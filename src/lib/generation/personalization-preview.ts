@@ -506,7 +506,7 @@ export function availablePersonalizationVariantIds(
 /**
  * Apply a compiled variant onto the canonical draft. Missing/unsupported fields
  * keep the canonical value only when the variant omitted them intentionally
- * without a replacement — visible variant fields always win when present.
+ * without a replacement. Visible variant fields always win when present.
  */
 export function applyPersonalizationVariant(
   draft: ExperienceDraft,
@@ -578,6 +578,222 @@ export function personalizationRuntimePayload(plan: ExperiencePersonalizationPla
   return {
     defaultVariantId: plan.defaultVariantId,
     variants
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Evidence-backed patches                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** Fields a patch may change. Imagery is carried separately; it is not copy. */
+export type PersonalizationPatchField = Exclude<PersonalizationFieldKey, "imageryTreatment">;
+
+export interface PersonalizationFieldPatch {
+  field: PersonalizationPatchField;
+  value: string;
+  sourceRefs: readonly string[];
+  classification: PersonalizationSafetyClassification;
+  /** Why the compiler changed the field. Internal; never rendered. */
+  reason: string;
+  /** What a buyer is told, if anything is shown. Free of internal vocabulary. */
+  explanation: string;
+}
+
+export interface PersonalizationVariantPatch {
+  variantId: PersonalizationVariantId;
+  /** Always the canonical experience. A patch is never based on another patch. */
+  baseVariantId: Extract<PersonalizationVariantId, "generic">;
+  changedFields: PersonalizationFieldPatch[];
+  /** Fields the variant could not support, left at their canonical values. */
+  omittedFields: PersonalizationPatchField[];
+  /** Present only when the treatment actually differs from the canonical one. */
+  imageryTreatment?: BrandImageryTreatment;
+  reasonCodes: string[];
+}
+
+export interface PersonalizationPatchSet {
+  baseVariantId: Extract<PersonalizationVariantId, "generic">;
+  patches: PersonalizationVariantPatch[];
+  /** Variants that were compiled but changed nothing a buyer would notice. */
+  rejectedVariantIds: PersonalizationVariantId[];
+}
+
+/**
+ * Vocabulary that belongs to the build, not to the buyer. An explanation
+ * containing any of it is replaced rather than shown: a visitor reading
+ * "framework" or "evidence ledger" is reading our internals.
+ */
+const INTERNAL_EXPLANATION_TERMS = [
+  "framework",
+  "archetype",
+  "spine",
+  "wireframe",
+  "compiler",
+  "strategy candidate",
+  "evidence ledger",
+  "variant",
+  "patch",
+  "prompt",
+  "token",
+  "artifact",
+  "fallback"
+];
+
+/** What each changed field is told to the buyer as. `{source}` is a publisher. */
+const FIELD_EXPLANATIONS: Record<PersonalizationPatchField, string> = {
+  headline: "This opening reflects what {source} has published about its own priorities.",
+  tension: "This context comes from {source}, not from assumptions about your team.",
+  proofEmphasis: "The evidence shown first is the evidence closest to {source}.",
+  nextAction: "The next step is scoped to what {source} publicly says it is working on.",
+  audienceLabel: "This page is addressed to the role named in {source}.",
+  eyebrow: "The label names both companies so the source of the page is clear."
+};
+
+/** A readable publisher name for a source ref, or a neutral stand-in. */
+function sourceLabel(sourceRefs: readonly string[]): string {
+  for (const ref of sourceRefs) {
+    try {
+      return new URL(ref).hostname.replace(/^www\./, "");
+    } catch {
+      continue;
+    }
+  }
+  return "public sources";
+}
+
+function buyerSafeExplanation(
+  field: PersonalizationPatchField,
+  sourceRefs: readonly string[]
+): string {
+  const explanation = FIELD_EXPLANATIONS[field].replace("{source}", sourceLabel(sourceRefs));
+  const lowered = explanation.toLocaleLowerCase();
+  return INTERNAL_EXPLANATION_TERMS.some((term) => lowered.includes(term))
+    ? `This section reflects what ${sourceLabel(sourceRefs)} publishes publicly.`
+    : explanation;
+}
+
+/** True when the explanation is safe to render to a visitor. */
+export function isBuyerSafeExplanation(explanation: string): boolean {
+  const lowered = explanation.toLocaleLowerCase();
+  return !INTERNAL_EXPLANATION_TERMS.some((term) => lowered.includes(term));
+}
+
+/**
+ * Reduces compiled variants to the minimum set of changes against the canonical
+ * generic experience.
+ *
+ * Two rules do the real work. A field whose value matches the canonical one is
+ * not a change and is dropped. A field that differs only by company names is a
+ * name swap, not personalization, and is dropped as well. This is why a
+ * variant can compile successfully and still be rejected outright.
+ */
+export function compilePersonalizationPatches(input: {
+  plan: ExperiencePersonalizationPlan;
+  sellerName: string;
+  targetName?: string;
+}): PersonalizationPatchSet {
+  const names = [input.sellerName, ...(input.targetName ? [input.targetName] : [])].filter(
+    (name) => name.trim().length > 0
+  );
+  const base = personalizationVariantById(input.plan, "generic");
+  const patches: PersonalizationVariantPatch[] = [];
+  const rejectedVariantIds: PersonalizationVariantId[] = [];
+
+  for (const variant of input.plan.visibleVariants) {
+    if (variant.variantId === "generic") continue;
+
+    const changedFields: PersonalizationFieldPatch[] = [];
+    const omittedFields: PersonalizationPatchField[] = [];
+    const reasonCodes: string[] = [];
+
+    for (const key of PERSONALIZATION_FIELD_KEYS) {
+      if (key === "imageryTreatment") continue;
+      const candidate = variant.fields[key];
+      if (!candidate?.value.trim() || !candidate.sourceRefs.length) {
+        omittedFields.push(key);
+        reasonCodes.push(`omitted_${key}_unsupported`);
+        continue;
+      }
+      const canonical = base?.fields[key]?.value;
+      if (canonical && canonical === candidate.value) {
+        omittedFields.push(key);
+        reasonCodes.push(`unchanged_${key}`);
+        continue;
+      }
+      if (canonical && !assertArgumentNotNameOnly(canonical, candidate.value, names)) {
+        omittedFields.push(key);
+        reasonCodes.push(`name_only_${key}`);
+        continue;
+      }
+      changedFields.push({
+        field: key,
+        value: candidate.value,
+        sourceRefs: [...candidate.sourceRefs],
+        classification: candidate.classification,
+        reason: candidate.reason,
+        explanation: buyerSafeExplanation(key, candidate.sourceRefs)
+      });
+    }
+
+    // A variant whose every field was unchanged, unsupported, or a name swap
+    // has nothing to show. Publishing it would be personalization theatre.
+    if (!changedFields.length) {
+      rejectedVariantIds.push(variant.variantId);
+      continue;
+    }
+
+    const imageryChanged =
+      variant.imageryTreatment !== undefined &&
+      variant.imageryTreatment !== base?.imageryTreatment;
+    patches.push({
+      variantId: variant.variantId,
+      baseVariantId: "generic",
+      changedFields,
+      omittedFields,
+      ...(imageryChanged ? { imageryTreatment: variant.imageryTreatment! } : {}),
+      reasonCodes: [...new Set(reasonCodes)].sort()
+    });
+  }
+
+  return { baseVariantId: "generic", patches, rejectedVariantIds };
+}
+
+export function personalizationPatchById(
+  patchSet: PersonalizationPatchSet,
+  variantId: PersonalizationVariantId | string | undefined
+): PersonalizationVariantPatch | undefined {
+  if (!variantId) return undefined;
+  return patchSet.patches.find((patch) => patch.variantId === variantId);
+}
+
+/**
+ * Applies one patch to the canonical draft. Only the fields the patch carries
+ * move; nothing is re-derived, so a variant can never diverge from the page the
+ * buyer would otherwise have seen in any way the patch does not record.
+ */
+export function applyPersonalizationPatch(
+  draft: ExperienceDraft,
+  patchSet: PersonalizationPatchSet,
+  variantId?: PersonalizationVariantId | string
+): ExperienceDraft {
+  const patch = personalizationPatchById(patchSet, variantId);
+  if (!patch) return draft;
+  const byField = new Map(patch.changedFields.map(({ field, value }) => [field, value]));
+  const headline = byField.get("headline");
+  const tension = byField.get("tension");
+  const proofEmphasis = byField.get("proofEmphasis");
+  const nextAction = byField.get("nextAction");
+  const audienceLabel = byField.get("audienceLabel");
+  const eyebrow = byField.get("eyebrow");
+
+  return {
+    ...draft,
+    ...(headline ? { headline, title: headline } : {}),
+    ...(tension ? { subhead: tension, thesisBody: tension } : {}),
+    ...(proofEmphasis ? { thesisHeadline: proofEmphasis } : {}),
+    ...(nextAction ? { primaryCta: nextAction } : {}),
+    ...(audienceLabel ? { audienceLabel } : {}),
+    ...(eyebrow ? { eyebrow } : {})
   };
 }
 

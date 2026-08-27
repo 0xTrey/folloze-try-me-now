@@ -16,6 +16,14 @@ import {
   type MessageMotion
 } from "@/lib/generation/message-spine";
 import {
+  compileMessagingArtifact,
+  productionArgumentFromStrategy
+} from "@/lib/generation/message-strategy-compiler";
+import {
+  compileEvidenceLedger,
+  type MessagingCompilerReceipt
+} from "@/lib/generation/messaging-compiler-contracts";
+import {
   recommendObjectiveCtas,
   type ObjectiveCtaEvidence,
   type ObjectiveCtaMotion
@@ -672,23 +680,86 @@ export async function compileSessionProductionPage(input: {
   });
   const targetName = targetNameFor(session, input.targetBrand);
   const ctaId = familyCtaId(familyDecision);
-  const familyMessageSpineArtifact = messageSpineArtifact.value
+  const ledger = compileEvidenceLedger({
+    sessionEvidence: session.evidenceItems,
+    liveBriefEvidence: evidence
+  });
+  const baseFamilyArgument = (base: RequiredProductionArgument) =>
+    familyArgument({
+      base,
+      family: familyDecision,
+      sellerName: brand.companyName,
+      targetName,
+      offer,
+      audience: audience.label,
+      objective,
+      publicContext: brand.publicContext,
+      ctaId
+    });
+  const baselineArgument = messageSpineArtifact.value
+    ? baseFamilyArgument(messageSpineArtifact.value.argument)
+    : undefined;
+  const messagingCompiler = compileMessagingArtifact({
+    ranking: framework,
+    family: familyDecision.family,
+    baseline: {
+      promise: baselineArgument?.promise.directive ?? "",
+      mechanism: baselineArgument?.mechanism.directive ?? "",
+      decisionHelp: baselineArgument?.decisionHelp.directive ?? "",
+      nextAction: baselineArgument?.nextAction.directive ?? "",
+      ...(baselineArgument?.tension?.directive
+        ? { tension: baselineArgument.tension.directive }
+        : {})
+    },
+    sectionPlan: familyDecision.sectionPlan,
+    briefRevision: revision,
+    ledger,
+    sellerName: brand.companyName,
+    targetName,
+    offer,
+    audienceLabel: audience.label,
+    audienceJob: audience.buyerJob,
+    objective,
+    ctaLabel: boundedCtaV2(ctaId).label,
+    unknowns: evidence?.unresolvedFields.map(
+      (field) => `No reconciled evidence resolved the ${field} field.`
+    )
+  });
+  const messagingCompilerArtifact = messagingCompiler.artifact
+    ? productionArtifact<MessagingCompilerReceipt>({
+        worker: "message-spine-architect",
+        sessionId: session.id,
+        revision,
+        value: {
+          artifact: messagingCompiler.artifact,
+          evaluations: messagingCompiler.selection.evaluations,
+          reasonCodes: messagingCompiler.selection.reasonCodes,
+          subject: { audienceLabel: audience.label, offerLabel: offer }
+        },
+        evidenceRefs: ledger.map(({ id }) => id),
+        confidence:
+          (messagingCompiler.selection.evaluations.find(
+            ({ candidateId }) => candidateId === messagingCompiler.artifact?.selectedStrategyId
+          )?.total ?? 0) / 100,
+        startedAt,
+        completedAt
+      })
+    : undefined;
+  const familyMessageSpineArtifact = baselineArgument
     ? compileFamilyProductionMessageSpine({
         sessionId: session.id,
         revision,
         activeRevision: revision,
         decision: familyDecision,
-        argument: familyArgument({
-          base: messageSpineArtifact.value.argument,
-          family: familyDecision,
-          sellerName: brand.companyName,
-          targetName,
-          offer,
-          audience: audience.label,
-          objective,
-          publicContext: brand.publicContext,
-          ctaId
-        }),
+        // The compiled strategy owns the directives when one cleared its gates.
+        // Otherwise the deterministic family argument still ships a safe page.
+        argument: messagingCompiler.selection.selected
+            ? productionArgumentFromStrategy({
+                base: baselineArgument,
+                strategy: messagingCompiler.selection.selected,
+                ledger
+              })
+          : baselineArgument,
         sellerName: brand.companyName,
         targetName,
         ctaId,
@@ -711,6 +782,7 @@ export async function compileSessionProductionPage(input: {
     brandArtifact,
     familyDecisionArtifact,
     ...(familyMessageSpineArtifact ? { familyMessageSpineArtifact } : {}),
+    ...(messagingCompilerArtifact ? { messagingCompilerArtifact } : {}),
     compositionArtifact,
     messageSpineArtifact,
     allowVisualRepair: true,

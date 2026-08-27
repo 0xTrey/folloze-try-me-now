@@ -17,6 +17,11 @@ import {
   type CopyFactualityEditorInput
 } from "@/lib/generation/copy-factuality-editor";
 import { writeExplorationSections } from "@/lib/generation/exploration-section-writer";
+import {
+  sectionStrategyBinding,
+  validateMessagingCompilerArtifact,
+  type MessagingCompilerReceipt
+} from "@/lib/generation/messaging-compiler-contracts";
 import { writeMechanismProofSections } from "@/lib/generation/mechanism-proof-section-writer";
 import { writeOpeningSections } from "@/lib/generation/opening-section-writer";
 import { writeProblemUrgencySections } from "@/lib/generation/problem-urgency-section-writer";
@@ -173,6 +178,8 @@ export interface GenericProductionEngineInput {
   brandArtifact: ProductionArtifact<BrandSystemV2>;
   familyDecisionArtifact?: ProductionArtifact<WireframeDecisionV2>;
   familyMessageSpineArtifact?: ProductionArtifact<FamilyProductionMessageSpine>;
+  /** Private strategy decision. Absent when no candidate cleared its gates. */
+  messagingCompilerArtifact?: ProductionArtifact<MessagingCompilerReceipt>;
   compositionArtifact: ProductionArtifact<WireframeSelectionV1>;
   messageSpineArtifact: ProductionArtifact<ProductionMessageSpine>;
   allowVisualRepair?: boolean;
@@ -206,6 +213,13 @@ interface GenericProductionResultBase {
   compileReceipts: readonly GenericProductionCompileReceipt[];
   /** Private provenance for this attempt. Never part of a public payload. */
   buildTrace: BuildTraceV1;
+  /**
+   * The strategy decision this attempt compiled from, or absent when no
+   * candidate cleared its gates and the deterministic argument shipped instead.
+   * Private, like the trace beside it: it carries ledger claim text, so it
+   * belongs to the result object and never to `artifact.value`.
+   */
+  messagingCompiler?: MessagingCompilerReceipt;
   /**
    * The public-safe placements the renderer must follow. Sharing the compiled
    * plan is what keeps the rendered DOM and the private trace describing the
@@ -309,6 +323,7 @@ interface ProductionTraceContext {
   frameworkConfidence?: number;
   frameworkEvidenceIds?: readonly string[];
   familyDecision?: WireframeDecisionV2;
+  messagingCompiler?: MessagingCompilerReceipt;
   sections: ProductionTraceSection[];
   sectionCopy: readonly SectionCopyCandidate[];
 }
@@ -323,6 +338,11 @@ function traceContextFor(input: GenericProductionEngineInput): ProductionTraceCo
       ...(input.trace?.supportRef ? { supportRef: input.trace.supportRef } : {})
     }),
     evidenceIds: [],
+    // Assigned at construction so the receipt survives every fallback exit,
+    // which is exactly when an operator needs to know what was decided.
+    ...(input.messagingCompilerArtifact?.value
+      ? { messagingCompiler: input.messagingCompilerArtifact.value }
+      : {}),
     sections: [],
     sectionCopy: []
   };
@@ -365,6 +385,15 @@ function buildTraceFor(
       ? { frameworkEvidenceIds: context.frameworkEvidenceIds }
       : {}),
     ...(context.familyDecision ? { familyDecision: context.familyDecision } : {}),
+    ...(context.messagingCompiler
+      ? {
+          messagingCompiler: {
+            artifact: context.messagingCompiler.artifact,
+            evaluations: context.messagingCompiler.evaluations,
+            reasonCodes: context.messagingCompiler.reasonCodes
+          }
+        }
+      : {}),
     sections: context.sections,
     sectionCopy: context.sectionCopy,
     ...(fallbackCode ? { fallbackCode } : {})
@@ -408,12 +437,15 @@ function sectionWritingContracts(
 ): Map<string, SectionWritingContract> {
   const decision = input.familyDecisionArtifact?.value;
   if (!decision) return new Map();
+  const receipt = input.messagingCompilerArtifact?.value;
+  const strategy = receipt ? sectionStrategyBinding(receipt) : undefined;
   const contracts = buildSectionWritingContracts({
     sessionId: input.sessionId,
     revision: input.revision,
     decision,
     brief,
-    evidence
+    evidence,
+    ...(strategy ? { strategy } : {})
   });
   return new Map(contracts.map((contract) => [contract.sectionId, contract]));
 }
@@ -712,6 +744,7 @@ function fallback(
     ...(input.brandArtifact.value?.imagery.renderPlan
       ? { assetPlan: input.brandArtifact.value.imagery.renderPlan }
       : {}),
+    ...(context.messagingCompiler ? { messagingCompiler: context.messagingCompiler } : {}),
     buildTrace: buildTraceFor(
       input,
       context,
@@ -752,6 +785,7 @@ function artifactFailure(
     ...(input.familyMessageSpineArtifact
       ? [input.familyMessageSpineArtifact]
       : []),
+    ...(input.messagingCompilerArtifact ? [input.messagingCompilerArtifact] : []),
     input.compositionArtifact,
     input.messageSpineArtifact
   ];
@@ -773,6 +807,8 @@ function artifactFailure(
       input.familyDecisionArtifact.value.revision !== input.revision) ||
     (input.messageSpineArtifact.value !== undefined &&
       input.messageSpineArtifact.value.revision !== input.revision) ||
+    (input.messagingCompilerArtifact?.value !== undefined &&
+      input.messagingCompilerArtifact.value.artifact.briefRevision !== input.revision) ||
     Object.values(input.evidenceArtifact.value?.fields ?? {}).some(
       (field) => field !== undefined && field.revision !== input.revision
     )
@@ -830,6 +866,20 @@ function artifactFailure(
       code: "GPE_CONTRACT_MISMATCH",
       reason:
         "The V2 family message spine does not match the locked family decision.",
+      status: "failed"
+    };
+  }
+  if (
+    input.messagingCompilerArtifact?.value !== undefined &&
+    (input.messagingCompilerArtifact.worker !== INPUT_WORKERS.spine ||
+      validateMessagingCompilerArtifact(input.messagingCompilerArtifact.value.artifact).length > 0 ||
+      (input.familyDecisionArtifact?.value !== undefined &&
+        input.messagingCompilerArtifact.value.artifact.pagePlan.family !==
+          input.familyDecisionArtifact.value.family))
+  ) {
+    return {
+      code: "GPE_CONTRACT_MISMATCH",
+      reason: "The messaging compiler artifact is invalid or targets another family.",
       status: "failed"
     };
   }
@@ -1560,6 +1610,9 @@ export async function compileGenericProductionPage(
     compileReceipts,
     ...(input.brandArtifact.value?.imagery.renderPlan
       ? { assetPlan: input.brandArtifact.value.imagery.renderPlan }
+      : {}),
+    ...(traceContext.messagingCompiler
+      ? { messagingCompiler: traceContext.messagingCompiler }
       : {}),
     buildTrace: buildTraceFor(
       input,

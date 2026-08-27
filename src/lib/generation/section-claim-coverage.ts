@@ -50,7 +50,7 @@ const COMPARATIVE =
  * though they name no figure, so they need third-party or proof evidence.
  */
 const QUALITATIVE =
-  /\b(?:the only|industry[- ]leading|world[- ]class|best[- ]in[- ]class|market[- ]leading|number one|#1|fastest|cheapest|safest|most (?:advanced|complete|trusted|secure)|unmatched|unparalleled)\b/gi;
+  /\b(?:the only|industry[- ]leading|world[- ]class|best[- ]in[- ]class|market[- ]leading|number one|#1|fastest|cheapest|safest|most (?:advanced|complete|trusted|secure|powerful|reliable)|unmatched|unparalleled|guaranteed|proven to|risk[- ]free|zero risk)\b/gi;
 
 /**
  * Kinds a claim could carry when it was recorded without an exact kind. Source

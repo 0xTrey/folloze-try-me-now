@@ -312,6 +312,71 @@ export interface SectionWritingContract {
   allowedCtas: readonly CtaIdV2[];
   candidateCount: number;
   brief: SectionWriterBrief;
+  /**
+   * The one job this section owns in the selected strategy. Distinct per
+   * section, so a section that has nothing left to argue omits rather than
+   * restating a point another section already made.
+   */
+  strategyJobs: readonly string[];
+  /** The strategy slots this role may draw on. Everything else is withheld. */
+  strategySlots: Partial<Record<StrategySlotKey, string>>;
+  /** Present only when a strategy was bound. Gates the review specificity checks. */
+  strategySubject?: { audienceLabel: string; offerLabel: string };
+}
+
+export const STRATEGY_SLOT_KEYS = [
+  "bigIdea",
+  "audienceJob",
+  "tension",
+  "promise",
+  "mechanism",
+  "proofPlan",
+  "objectionPlan",
+  "ctaLogic",
+  "whyNow"
+] as const;
+export type StrategySlotKey = (typeof STRATEGY_SLOT_KEYS)[number];
+
+/**
+ * Which strategy slots each role is permitted to see. A proof section that can
+ * read the CTA logic will drift into closing; withholding the slot is cheaper
+ * than detecting the drift afterwards.
+ */
+const ROLE_STRATEGY_SLOTS: Record<SectionRoleV2, readonly StrategySlotKey[]> = {
+  "buyer-outcome": ["bigIdea", "promise", "audienceJob"],
+  "current-friction": ["tension", "audienceJob"],
+  mechanism: ["mechanism", "promise"],
+  "use-cases": ["audienceJob", "mechanism"],
+  proof: ["proofPlan", "objectionPlan"],
+  "next-move": ["ctaLogic", "promise"],
+  "market-change": ["whyNow", "bigIdea"],
+  stakes: ["tension", "objectionPlan"],
+  "evaluation-criteria": ["objectionPlan", "audienceJob"],
+  "solution-mapping": ["mechanism", "promise"],
+  applications: ["audienceJob", "mechanism"],
+  "evaluation-close": ["ctaLogic", "proofPlan"],
+  "shared-priority": ["audienceJob", "whyNow", "bigIdea"],
+  "account-relevance": ["tension", "whyNow", "audienceJob"],
+  "shared-opportunity": ["bigIdea", "promise", "mechanism"],
+  "priority-paths": ["audienceJob", "objectionPlan"],
+  "validation-plan": ["proofPlan", "mechanism"],
+  "first-decision": ["ctaLogic", "objectionPlan"],
+  "proof-depth": ["proofPlan", "objectionPlan"],
+  resource: ["proofPlan", "objectionPlan"]
+};
+
+function strategySlotsForRole(
+  role: SectionRoleV2,
+  strategy: SectionStrategyBinding | undefined
+): Partial<Record<StrategySlotKey, string>> {
+  if (!strategy) return {};
+  const permitted = ROLE_STRATEGY_SLOTS[role] ?? [];
+  const slots: Partial<Record<StrategySlotKey, string>> = {};
+  for (const key of permitted) {
+    const value = strategy.slots[key]?.trim();
+    if (value) slots[key] = value;
+  }
+  return slots;
 }
 
 /**
@@ -331,12 +396,26 @@ const EVIDENCE_KIND_SOURCE_ROLE: Partial<
   third_party_context: "source"
 };
 
+/**
+ * The selected strategy, projected for section binding. Carried by value so a
+ * contract cannot reach back into the compiler artifact and read the ledger.
+ */
+export interface SectionStrategyBinding {
+  slots: Partial<Record<StrategySlotKey, string>>;
+  /** Section id to the single job that section owns. */
+  jobsBySectionId: Readonly<Record<string, readonly string[]>>;
+  /** Who the page is for and what it is about, for the review gates. */
+  audienceLabel: string;
+  offerLabel: string;
+}
+
 export interface BuildSectionContractsInput {
   sessionId: string;
   revision: number;
   decision: WireframeDecisionV2;
   brief: SectionWriterBrief;
   evidence: readonly SectionEvidenceClaim[];
+  strategy?: SectionStrategyBinding;
 }
 
 /**
@@ -390,7 +469,17 @@ export function buildSectionWritingContracts(
       evidenceRefs: evidence.map(({ id }) => id).sort(),
       allowedCtas: [...(slot.allowedCtas ?? [])],
       candidateCount: SECTION_CANDIDATES_PER_SLOT,
-      brief: input.brief
+      brief: input.brief,
+      strategyJobs: input.strategy?.jobsBySectionId[slot.id] ?? [],
+      strategySlots: strategySlotsForRole(slot.role, input.strategy),
+      ...(input.strategy
+        ? {
+            strategySubject: {
+              audienceLabel: input.strategy.audienceLabel,
+              offerLabel: input.strategy.offerLabel
+            }
+          }
+        : {})
     } satisfies SectionWritingContract;
   });
 }
@@ -413,7 +502,11 @@ export function sectionContractDigestSource(
     allowedCtas: [...contract.allowedCtas].sort(),
     wordBudget: contract.slot.wordBudget,
     headlineWordBudget: contract.slot.headlineWordBudget ?? null,
-    candidateCount: contract.candidateCount
+    candidateCount: contract.candidateCount,
+    // Job names and slot keys are vocabulary, not copy, so they can be
+    // receipted. The slot values behind them stay out of the digest source.
+    strategyJobs: [...contract.strategyJobs].sort(),
+    strategySlotKeys: Object.keys(contract.strategySlots).sort()
   };
 }
 

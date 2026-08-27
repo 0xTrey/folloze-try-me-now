@@ -266,10 +266,11 @@ export const BUILD_TRACE_SPEC: Spec = object(
       {
         framework: RANKED_DECISION,
         wireframe: RANKED_DECISION,
+        messaging: RANKED_DECISION,
         brand: BRAND_DECISION,
         assets: ASSET_ALLOCATION
       },
-      ["framework", "wireframe", "brand", "assets"]
+      ["framework", "wireframe", "messaging", "brand", "assets"]
     ),
     sections: list(SECTION, BUILD_TRACE_MAX_SECTIONS),
     quality: list(QUALITY, BUILD_TRACE_MAX_QUALITY),

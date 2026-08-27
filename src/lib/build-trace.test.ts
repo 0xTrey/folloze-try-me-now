@@ -14,6 +14,7 @@ import {
   findBuildTracePrivacyViolations,
   isPrivateSafeBuildTrace,
   validateBuildTraceFragment,
+  validateBuildTraceShape,
   isUnsafeTraceString,
   normalizeAssetAllocationTrace,
   normalizeBrandDecisionTrace,
@@ -59,6 +60,34 @@ function populated(): BuildTraceBuilder {
       evidenceRefs: [trace.ref("official:company:category")],
       confidence: 0.82,
       reasonCodes: ["decision_complexity_medium"]
+    })
+  );
+  trace.recordDecision(
+    "messaging",
+    normalizeRankedDecisionTrace({
+      decision: "messaging_strategy",
+      version: "messaging-compiler-v1.0.0",
+      selectedCandidateId: "strategy-upside",
+      candidates: [
+        {
+          candidateId: buildTraceDigest({ strategy: "strategy-upside" }),
+          score: 0.94,
+          selected: true,
+          reasonCodes: ["candidate_strategy-upside", "angle_upside"]
+        },
+        {
+          candidateId: buildTraceDigest({ strategy: "strategy-proof" }),
+          score: 0,
+          selected: false,
+          reasonCodes: [
+            "candidate_strategy-proof",
+            "hard_failure_angle_without_supporting_evidence"
+          ]
+        }
+      ],
+      evidenceRefs: [trace.ref("official:company:positioning")],
+      confidence: 0.94,
+      reasonCodes: ["brief_revision_3", "strategies_2"]
     })
   );
   trace.recordBrandDecision(
@@ -156,6 +185,37 @@ describe("build trace schema", () => {
     expect(built.evidenceRefs).toHaveLength(2);
     expect(built.evidenceRefs.every((ref) => /^ev_[a-f0-9]{20}$/.test(ref))).toBe(true);
     expect(built.evidenceRefs.join()).not.toContain("official");
+  });
+
+  it("files a messaging decision beside the framework one and folds in its evidence", () => {
+    const trace = populated().build({ terminalStatus: "completed" });
+    const messaging = trace.decisions.messaging;
+
+    expect(messaging).toBeDefined();
+    if (!messaging) return;
+
+    expect(messaging.decision).toBe("messaging_strategy");
+    expect(messaging.selectedCandidateId).toBe("strategy-upside");
+    expect(trace.decisions.framework?.decision).toBe("framework");
+    expect(messaging.evidenceRefs.length).toBeGreaterThan(0);
+    for (const ref of messaging.evidenceRefs) {
+      expect(trace.evidenceRefs).toContain(ref);
+    }
+    for (const ref of trace.decisions.framework?.evidenceRefs ?? []) {
+      expect(trace.evidenceRefs).toContain(ref);
+    }
+    expect(validateBuildTraceFragment("rankedDecision", messaging)).toEqual([]);
+  });
+
+  it("decodes and privacy-clears a trace carrying a messaging decision", () => {
+    const trace = populated().build({
+      terminalStatus: "completed",
+      completedAt: "2026-08-27T10:00:10.000Z"
+    });
+
+    expect(trace.decisions.messaging).toBeDefined();
+    expect(parseBuildTrace(trace)).toEqual(trace);
+    expect(isPrivateSafeBuildTrace(trace)).toBe(true);
   });
 
   it("bounds the recorded section count", () => {
@@ -422,6 +482,20 @@ describe("recursive schema enforcement", () => {
       );
     }
   );
+
+  it("rejects an unknown key inside the messaging decision", () => {
+    const mutated = mutate(
+      complete(),
+      ["decisions", "messaging", "rawStrategy"],
+      "Lead with the dwell-time cost"
+    );
+
+    expect(validateBuildTraceShape(mutated)).toContainEqual({
+      path: "trace.decisions.messaging.rawStrategy",
+      reason: "unexpected_key"
+    });
+    expect(parseBuildTrace(mutated)).toBeUndefined();
+  });
 
   it("rejects an unknown key even when its value is an innocuous number", () => {
     const mutated = mutate(complete(), ["sections", 0, "tokensUsed"], 42);

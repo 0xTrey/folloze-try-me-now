@@ -14,6 +14,12 @@ import {
 import type { AssetAllocationPlan } from "@/lib/asset-allocation";
 import { evaluateBrandFidelity } from "@/lib/brand-fidelity-evaluator";
 import type { SemanticRoleSelection } from "@/lib/brand-semantics";
+import {
+  messageStrategyDigestSource,
+  messagingCompilerDigestSource,
+  type MessagingCompilerArtifact,
+  type StrategyEvaluation
+} from "@/lib/generation/messaging-compiler-contracts";
 import type { ProductionMessageSpine } from "@/lib/generation/production-message-spine";
 import type {
   SectionCopyCandidate,
@@ -78,6 +84,15 @@ export interface ProductionBuildTraceInput {
   frameworkConfidence?: number;
   frameworkEvidenceIds?: readonly string[];
   familyDecision?: WireframeDecisionV2;
+  /**
+   * The private messaging compiler artifact. Only digests, ids, scores, and
+   * reason codes reach the trace; the ledger and argument text do not.
+   */
+  messagingCompiler?: {
+    artifact: MessagingCompilerArtifact;
+    evaluations: readonly StrategyEvaluation[];
+    reasonCodes: readonly string[];
+  };
   sections?: readonly ProductionTraceSection[];
   /** Final copy the visitor receives. Scored for fidelity, never gated on. */
   sectionCopy?: readonly SectionCopyCandidate[];
@@ -151,6 +166,49 @@ function wireframeDecisionTrace(
       decision.reasonCode,
       `subtype_${decision.subtype}`,
       `sections_${decision.sectionPlan.length}`
+    ]
+  });
+}
+
+/**
+ * Projects the messaging compiler's decision. Candidates appear by digest so a
+ * reviewer can prove which four arguments were considered and that a re-run
+ * produced the same set, while the arguments themselves stay private. Only the
+ * selected strategy is named, and a strategy id is an angle, not copy.
+ */
+function messagingDecisionTrace(
+  builder: BuildTraceBuilder,
+  artifact: MessagingCompilerArtifact,
+  evaluations: readonly StrategyEvaluation[],
+  reasonCodes: readonly string[]
+) {
+  const byId = new Map(evaluations.map((evaluation) => [evaluation.candidateId, evaluation]));
+  const selected = byId.get(artifact.selectedStrategyId);
+  return normalizeRankedDecisionTrace({
+    decision: "messaging_strategy",
+    version: artifact.compilerVersion,
+    selectedCandidateId: artifact.selectedStrategyId,
+    candidates: artifact.strategies.map((strategy) => {
+      const evaluation = byId.get(strategy.id);
+      return {
+        candidateId: buildTraceDigest(messageStrategyDigestSource(strategy)),
+        score: (evaluation?.total ?? 0) / 100,
+        selected: strategy.id === artifact.selectedStrategyId,
+        reasonCodes: [
+          `candidate_${strategy.id}`,
+          `angle_${strategy.angle}`,
+          `framework_${strategy.frameworkId}`,
+          ...(evaluation?.hardFailures ?? []).map((failure) => `hard_failure_${failure}`)
+        ]
+      };
+    }),
+    evidenceRefs: builder.refs(artifact.evidenceLedger.map(({ id }) => id)),
+    confidence: (selected?.total ?? 0) / 100,
+    reasonCodes: [
+      `artifact_${buildTraceDigest(messagingCompilerDigestSource(artifact))}`,
+      `brief_revision_${artifact.briefRevision}`,
+      `strategies_${artifact.strategies.length}`,
+      ...reasonCodes
     ]
   });
 }
@@ -430,6 +488,17 @@ export function compileProductionBuildTrace(
         input.framework,
         input.frameworkConfidence ?? 0,
         input.frameworkEvidenceIds ?? []
+      )
+    );
+  }
+  if (input.messagingCompiler) {
+    builder.recordDecision(
+      "messaging",
+      messagingDecisionTrace(
+        builder,
+        input.messagingCompiler.artifact,
+        input.messagingCompiler.evaluations,
+        input.messagingCompiler.reasonCodes
       )
     );
   }

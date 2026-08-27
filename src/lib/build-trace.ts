@@ -200,6 +200,7 @@ export interface BuildTraceV1 {
   decisions: {
     framework?: RankedDecisionTrace;
     wireframe?: RankedDecisionTrace;
+    messaging?: RankedDecisionTrace;
     brand?: BrandDecisionTrace;
     assets?: AssetAllocationTrace;
   };
@@ -682,7 +683,7 @@ export class BuildTraceBuilder {
   }
 
   recordDecision(
-    kind: "framework" | "wireframe",
+    kind: "framework" | "wireframe" | "messaging",
     decision: RankedDecisionTrace
   ): this {
     this.decisions = { ...this.decisions, [kind]: decision };
