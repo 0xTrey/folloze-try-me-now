@@ -1,4 +1,14 @@
 import type { BrandSystemV2 } from "@/lib/brand-system";
+import type { BuildTraceTerminalStatus, BuildTraceV1 } from "@/lib/build-trace";
+import {
+  compileProductionBuildTrace,
+  productionTraceIdentity,
+  sectionCopyDigestSource,
+  sectionSlotDigestSource,
+  type ProductionTraceIdentity,
+  type ProductionTraceSection,
+  type ProductionTraceStage
+} from "@/lib/generation/production-build-trace";
 import {
   editCopyForFactuality,
   type ClaimEvidenceMapping,
@@ -152,6 +162,8 @@ export interface GenericProductionEngineInput {
   compositionArtifact: ProductionArtifact<WireframeSelectionV1>;
   messageSpineArtifact: ProductionArtifact<ProductionMessageSpine>;
   allowVisualRepair?: boolean;
+  /** Optional session trace identity. Derived deterministically when absent. */
+  trace?: { traceId?: string; attemptId?: string; supportRef?: string };
 }
 
 type Writer = (
@@ -170,6 +182,8 @@ export interface GenericProductionEngineDependencies {
 interface GenericProductionResultBase {
   workerReceipts: readonly WorkerReceipt[];
   compileReceipts: readonly GenericProductionCompileReceipt[];
+  /** Private provenance for this attempt. Never part of a public payload. */
+  buildTrace: BuildTraceV1;
 }
 
 export type GenericProductionEngineResult =
@@ -259,6 +273,154 @@ function workerReceipt(
   };
 }
 
+interface ProductionTraceContext {
+  identity: ProductionTraceIdentity;
+  evidenceIds: string[];
+  brand?: BrandSystemV2;
+  framework?: ProductionMessageSpine["framework"];
+  frameworkConfidence?: number;
+  frameworkEvidenceIds?: readonly string[];
+  familyDecision?: WireframeDecisionV2;
+  sections: ProductionTraceSection[];
+}
+
+function traceContextFor(input: GenericProductionEngineInput): ProductionTraceContext {
+  return {
+    identity: productionTraceIdentity({
+      sessionId: input.sessionId,
+      revision: input.revision,
+      ...(input.trace?.traceId ? { traceId: input.trace.traceId } : {}),
+      ...(input.trace?.attemptId ? { attemptId: input.trace.attemptId } : {}),
+      ...(input.trace?.supportRef ? { supportRef: input.trace.supportRef } : {})
+    }),
+    evidenceIds: [],
+    sections: []
+  };
+}
+
+function traceStages(
+  receipts: readonly GenericProductionCompileReceipt[]
+): ProductionTraceStage[] {
+  return receipts.map((receipt) => ({
+    stage: receipt.stage,
+    status: receipt.status,
+    startedAt: receipt.startedAt,
+    completedAt: receipt.completedAt,
+    detailCode: receipt.detailCode
+  }));
+}
+
+function buildTraceFor(
+  input: GenericProductionEngineInput,
+  context: ProductionTraceContext,
+  compileReceipts: readonly GenericProductionCompileReceipt[],
+  terminalStatus: BuildTraceTerminalStatus,
+  fallbackCode?: string
+): BuildTraceV1 {
+  return compileProductionBuildTrace({
+    identity: context.identity,
+    sessionId: input.sessionId,
+    revision: input.revision,
+    startedAt: input.startedAt,
+    completedAt: input.completedAt,
+    terminalStatus,
+    stages: traceStages(compileReceipts),
+    evidenceIds: context.evidenceIds,
+    ...(context.brand ? { brand: context.brand } : {}),
+    ...(context.framework ? { framework: context.framework } : {}),
+    ...(context.frameworkConfidence !== undefined
+      ? { frameworkConfidence: context.frameworkConfidence }
+      : {}),
+    ...(context.frameworkEvidenceIds
+      ? { frameworkEvidenceIds: context.frameworkEvidenceIds }
+      : {}),
+    ...(context.familyDecision ? { familyDecision: context.familyDecision } : {}),
+    sections: context.sections,
+    ...(fallbackCode ? { fallbackCode } : {})
+  });
+}
+
+function terminalStatusFor(
+  status: GenericProductionCompileReceipt["status"],
+  code: GenericProductionFallbackCode
+): BuildTraceTerminalStatus {
+  if (code === "GPE_BRAND_HELP_REQUIRED") return "needs_input";
+  if (status === "stale") return "stale";
+  if (status === "failed") return "failed";
+  return "fallback";
+}
+
+/**
+ * Maps each planned slot to one section provenance record. Slots that never
+ * produced accepted copy are still recorded so a support reference shows the
+ * gap instead of hiding it.
+ */
+function sectionTraces(input: {
+  slots: readonly SectionWriterSlot[];
+  sections: readonly SectionCopyCandidate[];
+  writerArtifacts: readonly SectionWriterArtifact[];
+  startedAt: string;
+  completedAt: string;
+}): ProductionTraceSection[] {
+  const accepted = new Map(input.sections.map((section) => [section.sectionId, section]));
+  const candidatesBySection = new Map<string, SectionCopyCandidate[]>();
+  for (const artifact of input.writerArtifacts) {
+    for (const candidate of artifact.value ?? []) {
+      const existing = candidatesBySection.get(candidate.sectionId) ?? [];
+      existing.push(candidate);
+      candidatesBySection.set(candidate.sectionId, existing);
+    }
+  }
+  return input.slots.map((slot) => {
+    const section = accepted.get(slot.id);
+    const candidates = candidatesBySection.get(slot.id) ?? [];
+    const selectedIndex = section
+      ? Math.max(
+          0,
+          candidates.findIndex(
+            (candidate) => candidate.wordCount === section.wordCount
+              && candidate.status === section.status
+          )
+        )
+      : 0;
+    return {
+      sectionId: slot.id,
+      role: slot.v2Role ?? slot.role,
+      writerMode: "deterministic" as const,
+      evidenceIds: section?.evidenceRefs ?? slot.evidenceRefs,
+      inputDigestSource: sectionSlotDigestSource(slot, slot.evidenceRefs),
+      candidateDigestSources: candidates.map((candidate) =>
+        sectionCopyDigestSource(candidate)
+      ),
+      selectedCandidate: selectedIndex,
+      selectionReasons: section
+        ? ["factuality_accepted", `status_${section.status}`]
+        : ["not_accepted"],
+      outputDigestSource: section
+        ? sectionCopyDigestSource(section)
+        : { sectionId: slot.id, status: "absent" },
+      quality: {
+        wordcount: section?.wordCount ?? 0,
+        evidencecount: section?.evidenceRefs.length ?? 0,
+        withinwordbudget: Boolean(
+          section
+            && section.wordCount >= slot.wordBudget.min
+            && section.wordCount <= slot.wordBudget.max
+        ),
+        required: slot.required
+      },
+      startedAt: input.startedAt,
+      completedAt: input.completedAt,
+      status: section
+        ? section.status === "complete"
+          ? ("completed" as const)
+          : ("fallback" as const)
+        : ("fallback" as const),
+      ...(section ? {} : { fallbackCode: "section_not_accepted" })
+    };
+  });
+}
+
 function compileReceipt(
   input: GenericProductionEngineInput,
   stage: GenericProductionCompileStage,
@@ -287,7 +449,8 @@ function fallback(
   action: GenericProductionSafeFallbackInstruction["action"],
   status: GenericProductionCompileReceipt["status"],
   workerReceipts: readonly WorkerReceipt[],
-  compileReceipts: readonly GenericProductionCompileReceipt[]
+  compileReceipts: readonly GenericProductionCompileReceipt[],
+  context: ProductionTraceContext
 ): GenericProductionEngineResult {
   const compilerArtifact: ProductionArtifact<never> = {
     worker: "spec-compiler-qa",
@@ -305,6 +468,10 @@ function fallback(
     completedAt: input.completedAt,
     fallbackCode: code
   };
+  const finalReceipts = [
+    ...compileReceipts,
+    compileReceipt(input, "final-reveal", status, code, 0, 0)
+  ];
   return {
     outcome: "safe-deterministic-fallback",
     instruction: {
@@ -325,10 +492,14 @@ function fallback(
         "copy-factuality-editor"
       ])
     ],
-    compileReceipts: [
-      ...compileReceipts,
-      compileReceipt(input, "final-reveal", status, code, 0, 0)
-    ]
+    compileReceipts: finalReceipts,
+    buildTrace: buildTraceFor(
+      input,
+      context,
+      finalReceipts,
+      terminalStatusFor(status, code),
+      code
+    )
   };
 }
 
@@ -644,6 +815,21 @@ export async function compileGenericProductionPage(
     workerReceipt(artifact)
   );
   const compileReceipts: GenericProductionCompileReceipt[] = [];
+  const traceContext = traceContextFor(input);
+  traceContext.evidenceIds = unique(
+    dependencyArtifacts.flatMap((artifact) => artifact.evidenceRefs)
+  );
+  if (input.brandArtifact.value) traceContext.brand = input.brandArtifact.value;
+  if (input.familyDecisionArtifact?.value) {
+    traceContext.familyDecision = input.familyDecisionArtifact.value;
+  }
+  if (input.messageSpineArtifact.value) {
+    traceContext.framework = input.messageSpineArtifact.value.framework;
+    traceContext.frameworkConfidence = boundedConfidence(
+      input.messageSpineArtifact.confidence
+    );
+    traceContext.frameworkEvidenceIds = input.messageSpineArtifact.value.evidenceRefs;
+  }
   const failure = artifactFailure(input);
   if (failure) {
     compileReceipts.push(
@@ -667,7 +853,8 @@ export async function compileGenericProductionPage(
         : "compile_safe_deterministic_experience_spec",
       failure.status,
       workerReceipts,
-      compileReceipts
+      compileReceipts,
+      traceContext
     );
   }
   compileReceipts.push(
@@ -702,7 +889,8 @@ export async function compileGenericProductionPage(
       "reveal_existing_current_revision",
       "timed_out",
       workerReceipts,
-      compileReceipts
+      compileReceipts,
+      traceContext
     );
   }
   compileReceipts.push(
@@ -735,7 +923,8 @@ export async function compileGenericProductionPage(
       "compile_safe_deterministic_experience_spec",
       "failed",
       workerReceipts,
-      compileReceipts
+      compileReceipts,
+      traceContext
     );
   }
 
@@ -815,7 +1004,8 @@ export async function compileGenericProductionPage(
       "discard_stale_result",
       "stale",
       workerReceipts,
-      compileReceipts
+      compileReceipts,
+      traceContext
     );
   }
   if ((dependencies.currentTimeMs?.() ?? now) >= deadlineAt) {
@@ -836,7 +1026,8 @@ export async function compileGenericProductionPage(
       "reveal_existing_current_revision",
       "timed_out",
       workerReceipts,
-      compileReceipts
+      compileReceipts,
+      traceContext
     );
   }
   if (
@@ -861,7 +1052,8 @@ export async function compileGenericProductionPage(
       "compile_safe_deterministic_experience_spec",
       "failed",
       workerReceipts,
-      compileReceipts
+      compileReceipts,
+      traceContext
     );
   }
   compileReceipts.push(
@@ -934,7 +1126,8 @@ export async function compileGenericProductionPage(
       "discard_stale_result",
       "stale",
       workerReceipts,
-      compileReceipts
+      compileReceipts,
+      traceContext
     );
   }
   if (
@@ -959,7 +1152,8 @@ export async function compileGenericProductionPage(
       "compile_safe_deterministic_experience_spec",
       "failed",
       workerReceipts,
-      compileReceipts
+      compileReceipts,
+      traceContext
     );
   }
   compileReceipts.push(
@@ -979,6 +1173,13 @@ export async function compileGenericProductionPage(
       (order.get(left.sectionId) ?? Number.MAX_SAFE_INTEGER) -
       (order.get(right.sectionId) ?? Number.MAX_SAFE_INTEGER)
   );
+  traceContext.sections = sectionTraces({
+    slots,
+    sections,
+    writerArtifacts,
+    startedAt: input.startedAt,
+    completedAt: input.completedAt
+  });
   const roles = new Set(sections.map(({ role }) => role));
   const coherent =
     roles.has("hero") &&
@@ -1003,7 +1204,8 @@ export async function compileGenericProductionPage(
       "compile_safe_deterministic_experience_spec",
       "fallback",
       workerReceipts,
-      compileReceipts
+      compileReceipts,
+      traceContext
     );
   }
 
@@ -1100,10 +1302,21 @@ export async function compileGenericProductionPage(
     )
   );
 
+  traceContext.evidenceIds = unique([
+    ...traceContext.evidenceIds,
+    ...artifact.evidenceRefs
+  ]);
   return {
     outcome: "production-page",
     artifact,
     workerReceipts,
-    compileReceipts
+    compileReceipts,
+    buildTrace: buildTraceFor(
+      input,
+      traceContext,
+      compileReceipts,
+      partial ? "fallback" : "completed",
+      partial ? "generic_production_page_partial_acceptance" : undefined
+    )
   };
 }
