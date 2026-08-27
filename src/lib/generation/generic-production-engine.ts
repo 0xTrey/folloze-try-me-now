@@ -33,6 +33,11 @@ import type {
   SectionWriterKind,
   SectionWriterSlot
 } from "@/lib/generation/section-copy-types";
+import {
+  buildSectionWritingContracts,
+  sectionContractDigestSource,
+  type SectionWritingContract
+} from "@/lib/generation/section-writing-contract";
 import { writeTeamCtaSections } from "@/lib/generation/team-cta-section-writer";
 import type { WireframeSelectionV1 } from "@/lib/generation/wireframe-library";
 import type {
@@ -355,10 +360,40 @@ function terminalStatusFor(
  * produced accepted copy are still recorded so a support reference shows the
  * gap instead of hiding it.
  */
+/**
+ * Resolves the versioned writing contract for every locked section. Sections
+ * only reach the renderer through a slot, so a slot without a contract is a
+ * gap the trace has to show rather than paper over.
+ */
+function sectionWritingContracts(
+  input: GenericProductionEngineInput,
+  evidence: readonly SectionEvidenceClaim[]
+): Map<string, SectionWritingContract> {
+  const decision = input.familyDecisionArtifact?.value;
+  if (!decision) return new Map();
+  const contracts = buildSectionWritingContracts({
+    sessionId: input.sessionId,
+    revision: input.revision,
+    decision,
+    brief: {
+      audience: "",
+      promise: "",
+      mechanism: "",
+      proofPlan: "",
+      decisionHelp: "",
+      nextAction: "",
+      unknowns: []
+    },
+    evidence
+  });
+  return new Map(contracts.map((contract) => [contract.sectionId, contract]));
+}
+
 function sectionTraces(input: {
   slots: readonly SectionWriterSlot[];
   sections: readonly SectionCopyCandidate[];
   writerArtifacts: readonly SectionWriterArtifact[];
+  contracts: ReadonlyMap<string, SectionWritingContract>;
   startedAt: string;
   completedAt: string;
 }): ProductionTraceSection[] {
@@ -383,19 +418,34 @@ function sectionTraces(input: {
           )
         )
       : 0;
+    const contract = input.contracts.get(slot.id);
     return {
       sectionId: slot.id,
       role: slot.v2Role ?? slot.role,
       writerMode: "deterministic" as const,
+      ...(contract
+        ? {
+            promptVersion: contract.prompt.version,
+            templateVersion: `${contract.version}.${contract.registryVersion}`
+          }
+        : {}),
       evidenceIds: section?.evidenceRefs ?? slot.evidenceRefs,
-      inputDigestSource: sectionSlotDigestSource(slot, slot.evidenceRefs),
+      inputDigestSource: contract
+        ? {
+            slot: sectionSlotDigestSource(slot, slot.evidenceRefs),
+            contract: sectionContractDigestSource(contract)
+          }
+        : sectionSlotDigestSource(slot, slot.evidenceRefs),
       candidateDigestSources: candidates.map((candidate) =>
         sectionCopyDigestSource(candidate)
       ),
       selectedCandidate: selectedIndex,
-      selectionReasons: section
-        ? ["factuality_accepted", `status_${section.status}`]
-        : ["not_accepted"],
+      selectionReasons: [
+        ...(section
+          ? ["factuality_accepted", `status_${section.status}`]
+          : ["not_accepted"]),
+        ...(contract ? [`contract_${contract.role}`] : ["contract_absent"])
+      ],
       outputDigestSource: section
         ? sectionCopyDigestSource(section)
         : { sectionId: slot.id, status: "absent" },
@@ -1177,6 +1227,7 @@ export async function compileGenericProductionPage(
     slots,
     sections,
     writerArtifacts,
+    contracts: sectionWritingContracts(input, evidence),
     startedAt: input.startedAt,
     completedAt: input.completedAt
   });

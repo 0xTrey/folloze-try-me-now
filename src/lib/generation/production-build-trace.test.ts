@@ -156,6 +156,33 @@ describe("production build trace population", () => {
     }
   });
 
+  it("maps every rendered section to one versioned writing contract", async () => {
+    const result = await compile();
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+
+    const rendered = result.artifact.value?.sections ?? [];
+    const traced = new Map(
+      result.buildTrace.sections.map((section) => [section.sectionId, section])
+    );
+    const promptVersions = new Set<string>();
+
+    for (const section of rendered) {
+      const provenance = traced.get(section.sectionId);
+      expect(provenance?.selectionReasons.some((reason) => reason.startsWith("contract_"))).toBe(
+        true
+      );
+      if (provenance?.promptVersion) promptVersions.add(provenance.promptVersion);
+    }
+
+    expect(promptVersions.size).toBeGreaterThan(0);
+    expect(
+      result.buildTrace.sections.every(
+        (section) => section.promptVersion && section.templateVersion
+      )
+    ).toBe(true);
+  });
+
   it("keeps every field of a real trace inside the privacy boundary", async () => {
     const { buildTrace } = await compile();
     const serialized = JSON.stringify(buildTrace);
