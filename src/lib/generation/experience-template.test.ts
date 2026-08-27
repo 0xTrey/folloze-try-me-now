@@ -153,6 +153,47 @@ describe("renderExperienceHtml", () => {
     );
   });
 
+  it("places each substantive image at most once and designs the remaining media slots", () => {
+    const manySlots = renderExperienceHtml({
+      draft,
+      brand: {
+        ...brand,
+        imageUrls: [
+          "https://www.jitterbit.com/one.jpg",
+          "https://www.jitterbit.com/two.png",
+          "https://www.jitterbit.com/three.png"
+        ]
+      },
+      useCase: "campaign",
+      answers: {}
+    });
+
+    for (const asset of ["one.jpg", "two.png", "three.png"]) {
+      const placements = manySlots.match(new RegExp(`src="[^"]*${asset}"`, "g")) ?? [];
+      expect(placements.length).toBeLessThanOrEqual(1);
+    }
+    expect(manySlots).toContain("no-asset-treatment");
+  });
+
+  it("preserves the upstream allocation order instead of re-ranking assets by filename", () => {
+    const ordered = renderExperienceHtml({
+      draft,
+      brand: {
+        ...brand,
+        imageUrls: [
+          "https://www.jitterbit.com/Harmony-Marketecture.png",
+          "https://www.jitterbit.com/HarmonyTitle-HeroImage-Ring.jpg"
+        ]
+      },
+      useCase: "campaign",
+      answers: {}
+    });
+
+    expect(ordered.indexOf("Harmony-Marketecture.png")).toBeLessThan(
+      ordered.indexOf("HarmonyTitle-HeroImage-Ring.jpg")
+    );
+  });
+
   it("uses a neutral, explained preview treatment when palette evidence is explicitly low", () => {
     const lowConfidenceHtml = renderExperienceHtml({
       draft,
@@ -218,7 +259,9 @@ describe("renderExperienceHtml", () => {
     const heroIndex = singleAsset.indexOf('HarmonyTitle-HeroImage-Ring.jpg');
     expect(heroIndex).toBeGreaterThan(-1);
     expect(singleAsset.indexOf('HarmonyTitle-HeroImage-Ring.jpg', heroIndex + 1)).toBe(-1);
-    expect(singleAsset).toContain('class="lens-panel no-media"');
+    expect(singleAsset).toMatch(
+      /class="lens-panel"[\s\S]*?<figure class="media lens-media no-asset-treatment/
+    );
   });
 
   it("applies normalized remote design DNA and emits an auditable renderer receipt", () => {

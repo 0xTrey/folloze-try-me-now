@@ -7,6 +7,18 @@ import type {
   TypographyFamilyCue
 } from "@/lib/brand-visual-evidence";
 import { brandHelpRequest } from "@/lib/brand-readiness";
+import {
+  compileBrandSemantics,
+  type BrandSemanticEvidence,
+  type BrandSemanticSystem
+} from "@/lib/brand-semantics";
+import {
+  allocateExperienceAssets,
+  type AssetAllocationPlan,
+  type AssetCandidateInput,
+  type AssetSemanticRole,
+  type AssetSlotRequest
+} from "@/lib/asset-allocation";
 import type {
   EvidenceValue,
   ProductionArtifact
@@ -109,11 +121,22 @@ export interface BrandSystemV2 {
     style: string;
     candidates: AssetEvidence[];
     selected: SelectedAssetRole[];
+    /**
+     * Global consume-once plan. Substantive imagery appears in exactly one
+     * allocation; slots left without an asset carry a designed treatment.
+     */
+    allocation?: AssetAllocationPlan;
   };
   motion: { style: string; durationRangeMs: [number, number] };
   readiness: "verified" | "partial" | "needs_input";
   confidence: number;
   evidenceRefs: string[];
+  /**
+   * Evidence-backed semantic roles with their selection reasons. Present only
+   * when a source supplied observation-level evidence; the scalar fields above
+   * stay the canonical contract for existing consumers.
+   */
+  semantics?: BrandSemanticSystem;
 }
 
 export interface BrandSystemEvidenceSource {
@@ -159,6 +182,11 @@ export interface BrandSystemEvidenceSource {
     style?: EvidenceValue<string>;
     durationRangeMs?: EvidenceValue<readonly [number, number]>;
   };
+  /**
+   * Raw component-level observations. Distribution-based compilation beats the
+   * single-candidate scalars above, so these win when a source provides them.
+   */
+  semanticEvidence?: BrandSemanticEvidence;
 }
 
 export interface CompileBrandSystemInput {
@@ -907,6 +935,98 @@ function selectedOrDefault<T>(
   return selected?.evidence.value ?? fallback;
 }
 
+/**
+ * Canonical media slots every experience can offer. Slots that lose the
+ * allocation race fall back to a designed non-image treatment.
+ */
+const BRAND_ASSET_SLOTS: readonly AssetSlotRequest[] = [
+  {
+    sectionId: "hero",
+    semanticRole: "hero",
+    required: true,
+    rolePriority: ["product", "process", "proof", "people", "supporting"]
+  },
+  { sectionId: "product", semanticRole: "product" },
+  { sectionId: "process", semanticRole: "process" },
+  { sectionId: "proof", semanticRole: "proof" },
+  { sectionId: "supporting", semanticRole: "supporting" }
+];
+
+const ALLOCATION_ROLE_BY_PURPOSE: Record<BrandAssetPurpose, AssetSemanticRole> = {
+  product: "product",
+  diagram: "process",
+  evidence: "proof",
+  context: "supporting",
+  unknown: "supporting"
+};
+
+function allocationRoleFor(
+  purpose: BrandAssetPurpose,
+  kind: BrandAssetKind
+): AssetSemanticRole {
+  if (kind === "diagram") return "process";
+  if (kind === "product-ui") return "product";
+  return ALLOCATION_ROLE_BY_PURPOSE[purpose];
+}
+
+/** Stable, non-reversible reference for an asset URL inside a trace. */
+function assetRefHash(assetRef: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < assetRef.length; index += 1) {
+    hash ^= assetRef.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+/**
+ * Collapses per-source component observations into one distribution so a single
+ * noisy source cannot outvote the rest of the evidence.
+ */
+function mergeSemanticEvidence(
+  sources: readonly BrandSystemEvidenceSource[]
+): BrandSemanticEvidence | undefined {
+  const merged: { -readonly [K in keyof Required<BrandSemanticEvidence>]: NonNullable<
+    BrandSemanticEvidence[K]
+  >[number][] } = {
+    colors: [],
+    radii: [],
+    borders: [],
+    shadows: [],
+    typography: [],
+    density: []
+  };
+  let seen = false;
+  for (const source of sources) {
+    const evidence = source.semanticEvidence;
+    if (!evidence) continue;
+    seen = true;
+    merged.colors.push(...(evidence.colors ?? []));
+    merged.radii.push(...(evidence.radii ?? []));
+    merged.borders.push(...(evidence.borders ?? []));
+    merged.shadows.push(...(evidence.shadows ?? []));
+    merged.typography.push(...(evidence.typography ?? []));
+    merged.density.push(...(evidence.density ?? []));
+  }
+  return seen ? merged : undefined;
+}
+
+const SEMANTIC_SHADOW_CSS: Record<
+  NonNullable<BrandSemanticSystem["geometry"]["shadowCharacter"]["value"]>,
+  string
+> = {
+  none: "none",
+  hairline: "0 1px 2px rgba(15,23,42,0.08)",
+  soft: "0 8px 24px rgba(15,23,42,0.10)",
+  elevated: "0 20px 48px rgba(15,23,42,0.18)"
+};
+
+function shadowCssFor(
+  character: BrandSemanticSystem["geometry"]["shadowCharacter"]["value"] | undefined
+): string | undefined {
+  return character ? SEMANTIC_SHADOW_CSS[character] : undefined;
+}
+
 export function compileBrandSystemV2(
   input: CompileBrandSystemInput
 ): ProductionArtifact<BrandSystemV2> {
@@ -1151,13 +1271,40 @@ export function compileBrandSystemV2(
         selectedOrDefault(imageryStyle, "type-led") === "diagram"
       ? "diagram-led"
       : "type-led";
-  const selectedAssets: SelectedAssetRole[] = assets.slice(0, 2).map((asset, index) => ({
-    role: index === 0 ? "hero" : "supporting",
-    ref: asset.value,
-    kind: asset.kind,
-    purpose: asset.purpose,
-    evidenceRef: asset.source
-  }));
+  const allocation = allocateExperienceAssets({
+    candidates: assets.map(
+      (asset): AssetCandidateInput => ({
+        assetRef: asset.value,
+        evidenceRef: asset.source,
+        purpose: allocationRoleFor(asset.purpose, asset.kind),
+        sourceAuthority: "seller_official",
+        confidence: asset.confidence,
+        renderStatus: "unknown",
+        ...(asset.sourcePage ? { sourcePage: asset.sourcePage } : {}),
+        ...(asset.width !== undefined ? { width: asset.width } : {}),
+        ...(asset.height !== undefined ? { height: asset.height } : {})
+      })
+    ),
+    slots: BRAND_ASSET_SLOTS,
+    hashSourceUrl: assetRefHash
+  });
+  const selectedAssets: SelectedAssetRole[] = allocation.allocations
+    .map((entry) => {
+      const asset = assets.find((candidate) => candidate.value === entry.assetRef);
+      if (!asset) return undefined;
+      return {
+        role: entry.sectionId === "hero" ? ("hero" as const) : ("supporting" as const),
+        ref: asset.value,
+        kind: asset.kind,
+        purpose: asset.purpose,
+        evidenceRef: asset.source
+      };
+    })
+    .filter((entry): entry is SelectedAssetRole => Boolean(entry))
+    .filter(
+      (entry, index, entries) =>
+        entries.findIndex((other) => other.ref === entry.ref) === index
+    );
   const motionStyle = selectCandidate(
     collectCandidates(sources, (source) => source.motion?.style),
     "motion",
@@ -1171,6 +1318,12 @@ export function compileBrandSystemV2(
       value.every((item) => Number.isFinite(item) && item >= 0 && item <= 5000) &&
       value[0] <= value[1]
   );
+
+  const semanticEvidence = mergeSemanticEvidence(sources);
+  const semantics = semanticEvidence ? compileBrandSemantics(semanticEvidence) : undefined;
+  const semanticGeometry = <T>(
+    selection: { applied: boolean; value: T } | undefined
+  ): T | undefined => (selection?.applied ? selection.value : undefined);
 
   const aliases = [
     ...new Set(
@@ -1281,21 +1434,29 @@ export function compileBrandSystemV2(
     },
     typography: { display, body },
     geometry: {
-      controlRadius: selectedOrDefault(controlRadius, 0),
-      cardRadius: selectedOrDefault(cardRadius, 0),
-      borderWidth: selectedOrDefault(borderWidth, 0),
-      shadow: selectedOrDefault(shadow, "none")
+      controlRadius:
+        semanticGeometry(semantics?.geometry.buttonRadius)
+        ?? selectedOrDefault(controlRadius, 0),
+      cardRadius:
+        semanticGeometry(semantics?.geometry.cardRadius) ?? selectedOrDefault(cardRadius, 0),
+      borderWidth:
+        semanticGeometry(semantics?.geometry.borderWidth) ?? selectedOrDefault(borderWidth, 0),
+      shadow:
+        shadowCssFor(semanticGeometry(semantics?.geometry.shadowCharacter))
+        ?? selectedOrDefault(shadow, "none")
     },
     layout: {
       maxWidth: selectedOrDefault(maxWidth, 1200),
-      density: selectedOrDefault(density, "balanced"),
+      density:
+        semanticGeometry(semantics?.geometry.density) ?? selectedOrDefault(density, "balanced"),
       navStyle: selectedOrDefault(navStyle, "minimal"),
       heroStyle: selectedOrDefault(heroStyle, assets.length ? "image-led" : "type-led")
     },
     imagery: {
       style: compiledImageryStyle,
       candidates: assets,
-      selected: selectedAssets
+      selected: selectedAssets,
+      allocation
     },
     motion: {
       style: selectedOrDefault(motionStyle, "none"),
@@ -1309,7 +1470,8 @@ export function compileBrandSystemV2(
         : "verified"
       : "needs_input",
     confidence,
-    evidenceRefs
+    evidenceRefs,
+    ...(semantics ? { semantics } : {})
   };
 
   return {

@@ -34,9 +34,11 @@ function brandProfile(): BrandProfile {
     displayFontFamily: "Inter",
     bodyFontFamily: "Inter",
     designDna: {
+      version: 1,
+      source: "remote-harvester",
       confidence: "high",
       buttons: { primaryBackground: "#E4572E", radiusPx: 6, heightPx: 44 },
-      cards: { radiusPx: 12, shadow: "0 1px 2px rgba(0,0,0,.08)" },
+      cards: { radiusPx: 12, shadow: "soft" },
       spacing: { sectionBlockPx: 96, gridGapPx: 20, contentMaxWidthPx: 1200 },
       typography: { fallback: "sans", headingWeight: 700, bodyWeight: 400 }
     },

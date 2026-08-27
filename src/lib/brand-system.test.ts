@@ -13,6 +13,7 @@ import {
   type CompileBrandSystemInput
 } from "@/lib/brand-system";
 import { BRAND_HELP_PROMPT } from "@/lib/brand-readiness";
+import { substantiveAssetsAreUnique } from "@/lib/asset-allocation";
 import type { EvidenceValue } from "@/lib/orchestration/worker-types";
 import type { BrandProfile } from "@/lib/types";
 
@@ -520,18 +521,26 @@ describe("BrandSystemV2 compiler", () => {
       "diagram",
       "evidence"
     ]);
-    expect(result.value?.imagery.selected).toEqual([
+    expect(result.value?.imagery.selected[0]).toEqual(
       expect.objectContaining({
         role: "hero",
         purpose: "product",
         ref: "https://www.servicetitan.com/images/platform-dashboard-mobile.webp"
-      }),
-      expect.objectContaining({
-        role: "supporting",
-        purpose: "context",
-        ref: "https://www.servicetitan.com/images/field-technician-photo.webp"
       })
-    ]);
+    );
+    expect(result.value?.imagery.selected.slice(1)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "supporting",
+          purpose: "context",
+          ref: "https://www.servicetitan.com/images/field-technician-photo.webp"
+        })
+      ])
+    );
+    expect(result.value?.imagery.selected.every(({ role }, index) =>
+      index === 0 ? role === "hero" : role === "supporting"
+    )).toBe(true);
+    expect(substantiveAssetsAreUnique(result.value!.imagery.allocation!)).toBe(true);
     expect(result.value?.imagery.candidates.map(({ value }) => value).join(" ")).not.toMatch(
       /registration|navigation-icon|tiny-product|broken-product|transparent-product|stock\.example/
     );
@@ -651,11 +660,18 @@ describe("BrandSystemV2 compiler", () => {
     const result = compile([source]);
 
     expect(result.value?.logo).toEqual({ confidence: 0, status: "missing" });
-    expect(result.value?.imagery).toEqual({
+    expect(result.value?.imagery).toMatchObject({
       style: "type-led",
       candidates: [],
       selected: []
     });
+    expect(result.value?.imagery.allocation?.allocations).toEqual([]);
+    expect(
+      result.value?.imagery.allocation?.treatments.every(
+        ({ treatment, reason }) =>
+          treatment === "designed_non_image" && reason === "no_credible_asset_available"
+      )
+    ).toBe(true);
     expect(result).toMatchObject({
       status: "needs_input",
       value: { readiness: "needs_input" },
@@ -893,5 +909,118 @@ describe("BrandSystemV2 compiler", () => {
       evidenceRefs: []
     });
     expect(stale.value).toBeUndefined();
+  });
+});
+
+describe("BrandSystemV2 semantic evidence", () => {
+  function semanticProfileSource(): BrandSystemEvidenceSource {
+    const profile = brandProfile({
+      domain: "fixture.example",
+      companyName: "Fixture",
+      logoUrl: "https://fixture.example/logo.svg",
+      logoSourceUrl: "https://fixture.example/logo.svg",
+      portableLogo: portableLogo("fixture-logo"),
+      displayFontFamily: "Inter",
+      bodyFontFamily: "Inter",
+      designDna: {
+        version: 1,
+        source: "remote-harvester",
+        confidence: "high",
+        typography: { fallback: "sans", headingWeight: 700, bodyWeight: 400 },
+        buttons: { primaryBackground: "#2563EB", radiusPx: 4, borderWidthPx: 1 },
+        cards: { radiusPx: 4, shadow: "none" },
+        spacing: { contentMaxWidthPx: 1200, sectionBlockPx: 80, gridGapPx: 20 }
+      }
+    });
+    const source = brandProfileToBrandSystemEvidence(profile, { revision, observedAt });
+    if (!source) throw new Error("Expected profile fixture evidence.");
+    return source;
+  }
+
+  it("prefers a representative radius distribution over a single scalar observation", () => {
+    const base = semanticProfileSource();
+    const withoutSemantics = compile([base]);
+    expect(withoutSemantics.value?.geometry.cardRadius).toBe(4);
+    expect(withoutSemantics.value?.semantics).toBeUndefined();
+
+    const withSemantics = compile([
+      {
+        ...base,
+        semanticEvidence: {
+          radii: [
+            { componentClass: "card", valuePx: 16, sourceAuthority: "official_dom", evidenceRef: "dom:card-1" },
+            { componentClass: "card", valuePx: 16, sourceAuthority: "official_dom", evidenceRef: "dom:card-2" },
+            { componentClass: "card", valuePx: 16, sourceAuthority: "official_dom", evidenceRef: "dom:card-3" },
+            { componentClass: "card", valuePx: 0, sourceAuthority: "third_party", evidenceRef: "dom:card-4" }
+          ]
+        }
+      }
+    ]);
+
+    expect(withSemantics.value?.geometry.cardRadius).toBe(16);
+    expect(withSemantics.value?.semantics?.geometry.cardRadius.applied).toBe(true);
+    expect(withSemantics.value?.semantics?.geometry.cardRadius.evidenceRefs.length).toBeGreaterThan(1);
+    expect(withSemantics.value?.semantics?.geometry.cardRadius.selectionReasons.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the scalar geometry when observations cannot resolve a role", () => {
+    const base = semanticProfileSource();
+    const compiled = compile([
+      {
+        ...base,
+        semanticEvidence: {
+          radii: [
+            { componentClass: "card", valuePx: 20, sourceAuthority: "official_dom", evidenceRef: "dom:card-1" }
+          ]
+        }
+      }
+    ]);
+
+    expect(compiled.value?.semantics?.geometry.buttonRadius.applied).toBe(false);
+    expect(compiled.value?.geometry.controlRadius).toBe(4);
+    expect(compiled.value?.semantics?.warnings).toContain("button_radius_unresolved");
+  });
+
+  it("does not let a promotional overlay define the brand surface", () => {
+    const base = semanticProfileSource();
+    const compiled = compile([
+      {
+        ...base,
+        semanticEvidence: {
+          colors: [
+            {
+              color: "#FF00AA",
+              componentRole: "surface",
+              surfaceKind: "promotional",
+              areaRatio: 0.9,
+              frequency: 9,
+              sourceAuthority: "official_dom",
+              evidenceRef: "dom:promo-banner"
+            },
+            {
+              color: "#FFFFFF",
+              componentRole: "surface",
+              surfaceKind: "persistent",
+              areaRatio: 0.5,
+              frequency: 12,
+              sourceAuthority: "official_dom",
+              evidenceRef: "dom:page-surface"
+            }
+          ]
+        }
+      }
+    ]);
+
+    expect(compiled.value?.semantics?.colors.surface.value).toBe("#FFFFFF");
+    expect(compiled.value?.semantics?.colors.surface.evidenceRefs).not.toContain("dom:promo-banner");
+  });
+
+  it("still returns a renderable system when semantic evidence is sparse", () => {
+    const base = semanticProfileSource();
+    const compiled = compile([{ ...base, semanticEvidence: { density: [] } }]);
+
+    expect(compiled.status).not.toBe("failed");
+    expect(compiled.value?.colorRoles.ink.value).toMatch(/^#[0-9A-F]{6}$/);
+    expect(compiled.value?.semantics?.warnings.length).toBeGreaterThan(0);
   });
 });

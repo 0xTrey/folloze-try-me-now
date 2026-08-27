@@ -2,6 +2,7 @@ import type { BrandSystemV2 } from "@/lib/brand-system";
 import {
   BuildTraceBuilder,
   buildTraceDigest,
+  normalizeAssetAllocationTrace,
   normalizeBrandDecisionTrace,
   normalizeRankedDecisionTrace,
   normalizeSectionBuildTrace,
@@ -10,6 +11,8 @@ import {
   type BuildTraceV1,
   type BuildTraceWriterMode
 } from "@/lib/build-trace";
+import type { AssetAllocationPlan } from "@/lib/asset-allocation";
+import type { SemanticRoleSelection } from "@/lib/brand-semantics";
 import type { ProductionMessageSpine } from "@/lib/generation/production-message-spine";
 import type {
   SectionCopyCandidate,
@@ -176,38 +179,80 @@ export function brandDecisionTraceFor(
         : /visitor/i.test(source)
           ? "visitor_supplied"
           : "official_dom";
+  // A compiled semantic selection already carries its own authority, candidate
+  // count, and reasons; prefer it over the scalar approximation above.
+  const semanticRole = (
+    name: string,
+    selection: SemanticRoleSelection<unknown> | undefined
+  ) =>
+    selection
+      ? {
+          role: name,
+          valueDigest: buildTraceDigest(selection.value),
+          sourceAuthority: selection.sourceAuthority,
+          candidateCount: selection.candidateCount,
+          confidence: selection.confidence,
+          selectionReasons: [
+            ...selection.selectionReasons,
+            selection.applied ? "evidence_applied" : "evidence_unresolved"
+          ],
+          evidenceRefs: builder.refs(selection.evidenceRefs)
+        }
+      : undefined;
+  const semantics = brand.semantics;
+  const preferSemantic = (
+    name: string,
+    selection: SemanticRoleSelection<unknown> | undefined,
+    scalar: ReturnType<typeof role>
+  ) => semanticRole(name, selection) ?? scalar;
   return normalizeBrandDecisionTrace({
     version: "brand-system-v2.0.0",
     readiness: brand.readiness,
     confidence: brand.confidence,
     roles: [
-      role(
+      preferSemantic(
         "text",
-        brand.colorRoles.ink.value,
-        colorAuthority(brand.colorRoles.ink.source),
-        brand.colorRoles.ink.confidence,
-        ["semantic_role_ink"]
+        semantics?.colors.text,
+        role(
+          "text",
+          brand.colorRoles.ink.value,
+          colorAuthority(brand.colorRoles.ink.source),
+          brand.colorRoles.ink.confidence,
+          ["semantic_role_ink"]
+        )
       ),
-      role(
+      preferSemantic(
         "surface",
-        brand.colorRoles.surface.value,
-        colorAuthority(brand.colorRoles.surface.source),
-        brand.colorRoles.surface.confidence,
-        ["semantic_role_surface"]
+        semantics?.colors.surface,
+        role(
+          "surface",
+          brand.colorRoles.surface.value,
+          colorAuthority(brand.colorRoles.surface.source),
+          brand.colorRoles.surface.confidence,
+          ["semantic_role_surface"]
+        )
       ),
-      role(
+      preferSemantic(
         "accent",
-        brand.colorRoles.accent.value,
-        colorAuthority(brand.colorRoles.accent.source),
-        brand.colorRoles.accent.confidence,
-        ["semantic_role_accent"]
+        semantics?.colors.accent,
+        role(
+          "accent",
+          brand.colorRoles.accent.value,
+          colorAuthority(brand.colorRoles.accent.source),
+          brand.colorRoles.accent.confidence,
+          ["semantic_role_accent"]
+        )
       ),
-      role(
+      preferSemantic(
         "ctabackground",
-        brand.colorRoles.action.value,
-        colorAuthority(brand.colorRoles.action.source),
-        brand.colorRoles.action.confidence,
-        ["semantic_role_action"]
+        semantics?.colors.ctaBackground,
+        role(
+          "ctabackground",
+          brand.colorRoles.action.value,
+          colorAuthority(brand.colorRoles.action.source),
+          brand.colorRoles.action.confidence,
+          ["semantic_role_action"]
+        )
       ),
       role(
         "headingfont",
@@ -223,32 +268,79 @@ export function brandDecisionTraceFor(
         brand.typography.body.confidence,
         brand.typography.body.substitution ? ["font_substituted"] : ["font_portable"]
       ),
-      role(
+      preferSemantic(
         "buttonradius",
-        brand.geometry.controlRadius,
-        "compiled_geometry",
-        brand.confidence,
-        ["representative_control_radius"]
+        semantics?.geometry.buttonRadius,
+        role(
+          "buttonradius",
+          brand.geometry.controlRadius,
+          "compiled_geometry",
+          brand.confidence,
+          ["representative_control_radius"]
+        )
       ),
-      role("cardradius", brand.geometry.cardRadius, "compiled_geometry", brand.confidence, [
-        "representative_card_radius"
-      ]),
-      role("borderwidth", brand.geometry.borderWidth, "compiled_geometry", brand.confidence, [
-        "representative_border_width"
-      ]),
-      role("shadowcharacter", brand.geometry.shadow, "compiled_geometry", brand.confidence, [
-        "representative_shadow"
-      ]),
-      role("density", brand.layout.density, "compiled_layout", brand.confidence, [
-        "representative_density"
-      ])
+      preferSemantic(
+        "cardradius",
+        semantics?.geometry.cardRadius,
+        role("cardradius", brand.geometry.cardRadius, "compiled_geometry", brand.confidence, [
+          "representative_card_radius"
+        ])
+      ),
+      preferSemantic(
+        "borderwidth",
+        semantics?.geometry.borderWidth,
+        role("borderwidth", brand.geometry.borderWidth, "compiled_geometry", brand.confidence, [
+          "representative_border_width"
+        ])
+      ),
+      preferSemantic(
+        "shadowcharacter",
+        semantics?.geometry.shadowCharacter,
+        role("shadowcharacter", brand.geometry.shadow, "compiled_geometry", brand.confidence, [
+          "representative_shadow"
+        ])
+      ),
+      preferSemantic(
+        "density",
+        semantics?.geometry.density,
+        role("density", brand.layout.density, "compiled_layout", brand.confidence, [
+          "representative_density"
+        ])
+      )
     ],
     warnings: [
       ...(brand.logo.status === "missing" ? ["logo_missing"] : []),
       ...(brand.readiness !== "verified" ? [`readiness_${brand.readiness}`] : []),
-      ...(brand.imagery.candidates.length === 0 ? ["imagery_absent"] : [])
+      ...(brand.imagery.candidates.length === 0 ? ["imagery_absent"] : []),
+      ...(semantics?.warnings ?? [])
     ],
     evidenceRefs: roleEvidence
+  });
+}
+
+/**
+ * Projects the global allocation plan. Asset URLs never enter the trace: each
+ * placement is identified by a digest and the allocator's own source hash.
+ */
+export function assetAllocationTraceFor(
+  builder: BuildTraceBuilder,
+  plan: AssetAllocationPlan
+) {
+  return normalizeAssetAllocationTrace({
+    version: plan.version,
+    allocations: plan.allocations.map((allocation) => ({
+      allocationKey: allocation.allocationKey,
+      sectionId: allocation.sectionId,
+      semanticRole: allocation.semanticRole,
+      assetDigest: buildTraceDigest(allocation.assetRef),
+      evidenceRef: builder.refs([allocation.evidenceRef])[0] ?? "",
+      sourceUrlHash: allocation.sourceUrlHash,
+      purpose: allocation.purpose,
+      reusable: allocation.reusable,
+      score: allocation.score
+    })),
+    rejectedCount: plan.rejections.length,
+    rejectionReasons: [...new Set(plan.rejections.map(({ code }) => code))].sort()
   });
 }
 
@@ -337,6 +429,11 @@ export function compileProductionBuildTrace(
   }
   if (input.brand) {
     builder.recordBrandDecision(brandDecisionTraceFor(builder, input.brand));
+    if (input.brand.imagery.allocation) {
+      builder.recordAssetAllocation(
+        assetAllocationTraceFor(builder, input.brand.imagery.allocation)
+      );
+    }
   }
 
   for (const section of input.sections ?? []) {

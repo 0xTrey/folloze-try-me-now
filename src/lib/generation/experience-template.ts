@@ -123,18 +123,9 @@ function experienceImages(values: string[]): string[] {
         new URL(url, "https://first-party.invalid").pathname
       )
   );
-  const selected = evergreen.length ? evergreen : candidates;
-  return selected
-    .map((url, index) => {
-      const pathname = new URL(url, "https://first-party.invalid").pathname.toLowerCase();
-      const score =
-        (/hero/.test(pathname) ? 120 : 0) +
-        (/harmony|platform|product|solution|workflow/.test(pathname) ? 70 : 0) +
-        (/architecture|diagram|marketecture/.test(pathname) ? 45 : 0);
-      return { url, index, score };
-    })
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .map(({ url }) => url);
+  // Order is the upstream allocation plan's decision. The renderer only drops
+  // unsafe and transient assets; it does not re-rank what the compiler ranked.
+  return evergreen.length ? evergreen : candidates;
 }
 
 function colorLuminance(hex: string): number {
@@ -248,45 +239,95 @@ function noAssetFigure(grammar: VisualGrammar, className: string): string {
   </figure>`;
 }
 
+const ASSET_TYPE_PATTERNS: Record<
+  PersuasionFramework["opening"]["imageBrief"]["assetType"],
+  RegExp
+> = {
+  "logo-lockup": /logo|wordmark|brandmark/i,
+  "product-ui": /product|platform|screen|ui|dashboard|solution|hero/i,
+  "workflow-diagram": /workflow|diagram|architecture|flow|marketecture|process/i,
+  "customer-proof": /customer|case|story|result|proof/i,
+  "source-visual": /report|ebook|guide|resource|cover|source/i,
+  "data-visual": /chart|data|metric|benchmark|graph/i,
+  "typographic-treatment": /$a/
+};
+
+/**
+ * Places each substantive image at most once per render. Ranking still decides
+ * which slot gets which asset, but an allocated image leaves the pool so the
+ * same photograph cannot reappear in a later section.
+ */
+interface RenderAssetAllocator {
+  claim(
+    pool: readonly string[],
+    brief: PersuasionFramework["opening"]["imageBrief"]
+  ): string | undefined;
+  consume(url: string | undefined): string | undefined;
+  remaining(): string[];
+}
+
+function createRenderAssetAllocator(images: readonly string[]): RenderAssetAllocator {
+  const available = new Set(images);
+  return {
+    consume(url) {
+      if (!url || !available.has(url)) return undefined;
+      available.delete(url);
+      return url;
+    },
+    remaining() {
+      return images.filter((url) => available.has(url));
+    },
+    claim(pool, brief) {
+      const candidates = pool.filter((url) => available.has(url));
+      if (!candidates.length) return undefined;
+      const purposeTokens = `${brief.purpose} ${brief.caption}`
+        .toLocaleLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 5);
+      const ranked = candidates
+        .map((url, index) => {
+          const pathname = new URL(url, "https://first-party.invalid").pathname
+            .toLocaleLowerCase();
+          const typeScore = ASSET_TYPE_PATTERNS[brief.assetType].test(pathname) ? 100 : 0;
+          const purposeScore = purposeTokens.reduce(
+            (score, token) => score + (pathname.includes(token) ? 12 : 0),
+            0
+          );
+          return { url, index, score: typeScore + purposeScore };
+        })
+        .sort((a, b) => b.score - a.score || a.index - b.index);
+      // A single remaining image means the curator explicitly narrowed the
+      // asset set. Session-scoped delivery URLs intentionally hide the original
+      // file name, so semantic filename scoring cannot recognize that choice.
+      const selected = ranked[0]?.score
+        ? ranked[0].url
+        : candidates.length === 1
+            || (candidates.length > 1 && candidates.every(isImageDeliveryPath))
+          ? candidates[0]
+          : undefined;
+      if (selected) available.delete(selected);
+      return selected;
+    }
+  };
+}
+
 function frameworkImage(
-  images: string[],
+  allocator: RenderAssetAllocator,
+  pool: readonly string[],
   brief: PersuasionFramework["opening"]["imageBrief"],
   className: string,
-  eager = false
+  eager = false,
+  // Slots that wanted an image but lost the allocation race fall back to a
+  // designed treatment rather than repeating an already-placed asset.
+  grammar?: VisualGrammar
 ): string {
-  if (brief.source === "none" || brief.assetType === "typographic-treatment") return "";
-  const assetPatterns: Record<PersuasionFramework["opening"]["imageBrief"]["assetType"], RegExp> = {
-    "logo-lockup": /logo|wordmark|brandmark/i,
-    "product-ui": /product|platform|screen|ui|dashboard|solution|hero/i,
-    "workflow-diagram": /workflow|diagram|architecture|flow|marketecture|process/i,
-    "customer-proof": /customer|case|story|result|proof/i,
-    "source-visual": /report|ebook|guide|resource|cover|source/i,
-    "data-visual": /chart|data|metric|benchmark|graph/i,
-    "typographic-treatment": /$a/
-  };
-  const purposeTokens = `${brief.purpose} ${brief.caption}`
-    .toLocaleLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((token) => token.length >= 5);
-  const ranked = images
-    .map((url, index) => {
-      const pathname = new URL(url, "https://first-party.invalid").pathname.toLocaleLowerCase();
-      const typeScore = assetPatterns[brief.assetType].test(pathname) ? 100 : 0;
-      const purposeScore = purposeTokens.reduce(
-        (score, token) => score + (pathname.includes(token) ? 12 : 0),
-        0
-      );
-      return { url, index, score: typeScore + purposeScore };
-    })
-    .sort((a, b) => b.score - a.score || a.index - b.index);
-  // A single image means the curator explicitly narrowed the available asset
-  // set. Session-scoped delivery URLs intentionally hide the original file
-  // name, so semantic filename scoring cannot recognize that choice.
-  const selected = ranked[0]?.score
-    ? ranked[0].url
-    : images.length === 1 || (images.length > 1 && images.every(isImageDeliveryPath))
-      ? images[0]
-      : undefined;
+  if (brief.source === "none" || brief.assetType === "typographic-treatment") {
+    return grammar && brief.assetType === "typographic-treatment"
+      ? noAssetFigure(grammar, className)
+      : "";
+  }
+  const selected = allocator.claim(pool, brief);
+  if (!selected) return grammar ? noAssetFigure(grammar, className) : "";
   return imageFigure(selected, brief.caption, className, eager, false, brief.assetType);
 }
 
@@ -497,12 +538,13 @@ export function renderExperienceHtml(input: {
   const images = experienceImages(brand.imageUrls);
   const heroImage = images[0];
   const supportingImages = images.filter((image) => image !== heroImage);
+  const assetAllocator = createRenderAssetAllocator(images);
   const vendorUrl = safePublicLinkUrl(`https://${brand.domain}`) ?? "https://www.folloze.com";
   const template = experienceTemplateFor(draft, input.wireframeSelection);
   const visualGrammar = template.visualGrammar;
   const framework = template.family === "content-source" ? undefined : draft.persuasionFramework;
   const frameworkHeroMedia = framework
-    ? frameworkImage(heroImage ? [heroImage] : [], framework.opening.imageBrief, "hero-media", true)
+    ? frameworkImage(assetAllocator, heroImage ? [heroImage] : [], framework.opening.imageBrief, "hero-media", true)
     : undefined;
   const templateFingerprint = framework
     ? template.fingerprint
@@ -636,15 +678,15 @@ export function renderExperienceHtml(input: {
         const body = frameworkChoices ? frameworkChoices[index].outcome : draft.sections[index].body;
         const question = frameworkChoices ? frameworkChoices[index].validationQuestion : undefined;
         const media = frameworkChoices
-          ? frameworkImage(supportingImages, frameworkChoices[index].imageBrief, "lens-media")
+          ? frameworkImage(assetAllocator, supportingImages, frameworkChoices[index].imageBrief, "lens-media", false, visualGrammar)
           : imageFigure(
-              supportingImages[index] ?? supportingImages[0],
+              assetAllocator.consume(supportingImages[index]),
               `${brand.companyName}: ${label}`,
               "lens-media",
               false,
               false,
               "supporting"
-            );
+            ) || noAssetFigure(visualGrammar, "lens-media");
         return `<section class="lens-panel${media ? "" : " no-media"}" id="lens-panel-${index}" role="tabpanel" aria-labelledby="lens-tab-${index}" tabindex="0" ${index === 0 ? "" : "hidden"}>
         <div class="lens-number" aria-hidden="true">0${index + 1}</div>
         <div class="lens-copy"><p class="eyebrow" ${editableBlock(`lens.${index}.eyebrow`, "eyebrow")}>${escapeHtml(label)}</p><h2 ${editableBlock(`lens.${index}.headline`, "headline")}>${escapeHtml(headline)}</h2><p ${editableBlock(`lens.${index}.body`, "body")}>${escapeHtml(body)}</p>${question ? `<p class="validation-question"><strong>Question to answer</strong>${escapeHtml(question)}</p>` : ""}</div>
@@ -747,7 +789,7 @@ export function renderExperienceHtml(input: {
             <div><span>What it means</span><p ${editableBlock("credibility.implication", "body")}>${escapeHtml(framework.credibility.implication)}</p></div>
           </div>
         </div>
-        ${frameworkImage(images, framework.credibility.imageBrief, "framework-media")}
+        ${frameworkImage(assetAllocator, images, framework.credibility.imageBrief, "framework-media", false, visualGrammar)}
       </section>` : ""}
       ${rolePlanned("context") ? `<section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)} aria-labelledby="why-change-now-heading">
         <header class="framework-heading"><p class="eyebrow" ${editableBlock("urgency.eyebrow", "section-label")}>${escapeHtml(framework.urgency.eyebrow)}</p><h2 id="why-change-now-heading" ${editableBlock("urgency.headline", "headline")}>${escapeHtml(framework.urgency.headline)}</h2></header>
@@ -773,7 +815,7 @@ export function renderExperienceHtml(input: {
             )
             .join("")}</div>
         </div>
-        ${frameworkImage(images, framework.mechanism.imageBrief, "framework-media mechanism-media")}
+        ${frameworkImage(assetAllocator, images, framework.mechanism.imageBrief, "framework-media mechanism-media", false, visualGrammar)}
       </section>` : ""}
       ${rolePlanned("seller-validation") ? `<section class="framework-section team-value-section" id="team-value" data-journey-section="team-value" data-template-primitive="team-value" aria-labelledby="team-value-heading">
         <header class="framework-heading"><p class="eyebrow" ${editableBlock("teamValue.eyebrow", "section-label")}>${escapeHtml(framework.teamValue.eyebrow)}</p><h2 id="team-value-heading" ${editableBlock("teamValue.headline", "headline")}>${escapeHtml(framework.teamValue.headline)}</h2><p class="region-intro" ${editableBlock("teamValue.intro", "body")}>${escapeHtml(framework.teamValue.intro)}</p></header>
@@ -801,14 +843,14 @@ export function renderExperienceHtml(input: {
               return `<section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)}><header class="framework-heading"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.urgency.headline)}</h2></header><p class="region-intro">${escapeHtml(framework.urgency.change)}</p></section>`;
             }
             if (section.role === "mechanism") {
-              return `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism"><div class="framework-copy"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.mechanism.headline)}</h2><p class="region-intro">${escapeHtml(framework.mechanism.intro)}</p></div>${frameworkImage(images, framework.mechanism.imageBrief, "framework-media mechanism-media")}</section>`;
+              return `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism"><div class="framework-copy"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.mechanism.headline)}</h2><p class="region-intro">${escapeHtml(framework.mechanism.intro)}</p></div>${frameworkImage(assetAllocator, images, framework.mechanism.imageBrief, "framework-media mechanism-media", false, visualGrammar)}</section>`;
             }
             if (section.role === "proof") {
               const sectionId = anchorForRole(section.role, section.label);
               const headline = sectionId === "additional-evidence"
                 ? "More evidence to carry forward"
                 : framework.credibility.headline;
-              return `<section class="framework-section credibility-anchor" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)}><div class="framework-copy"><p class="eyebrow">${label}</p><h2>${escapeHtml(headline)}</h2><p class="region-intro">${escapeHtml(framework.credibility.fact)}</p></div>${frameworkImage(images, framework.credibility.imageBrief, "framework-media")}</section>`;
+              return `<section class="framework-section credibility-anchor" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)}><div class="framework-copy"><p class="eyebrow">${label}</p><h2>${escapeHtml(headline)}</h2><p class="region-intro">${escapeHtml(framework.credibility.fact)}</p></div>${frameworkImage(assetAllocator, images, framework.credibility.imageBrief, "framework-media", false, visualGrammar)}</section>`;
             }
             if (section.role === "decision-support") {
               const criteria = framework.startingPoints.choices
@@ -941,7 +983,7 @@ export function renderExperienceHtml(input: {
       ${framework
         ? frameworkHeroMedia || noAssetFigure(visualGrammar, "hero-media")
         : heroImage
-          ? imageFigure(heroImage, `${brand.companyName} platform visual`, "hero-media", true, true, visualGrammar.heroMediaRole)
+          ? imageFigure(assetAllocator.consume(heroImage), `${brand.companyName} platform visual`, "hero-media", true, true, visualGrammar.heroMediaRole)
           : noAssetFigure(visualGrammar, "hero-media")}
     </section>
     ${pageFlow}
