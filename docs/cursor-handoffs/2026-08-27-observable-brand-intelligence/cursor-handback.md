@@ -1,56 +1,181 @@
 # Cursor Handback
 
-Status: not started
+Status: complete, ready for independent Codex review
+
+Branch: `codex/unified-microsite-builder`, seven commits ahead of `origin/production`.
+Nothing was pushed, deployed, or published.
 
 ## Commits
 
 | Work order | Commit | Summary |
 | --- | --- | --- |
-| 1 | Pending | BuildTrace and section provenance |
-| 2 | Pending | Semantic brand compiler, geometry, and assets |
-| 3 | Pending | Dedicated per-section writing engine |
-| 4 | Pending | Private trace persistence and inspection |
-| 5 | Pending | PostHog behavior linkage |
-| 6 | Pending | Generalized evaluator, integration, and evidence |
+| 1 | `7a43194` | Private BuildTrace contract, deterministic digests, privacy guard, and population from the production path |
+| 2 | `bab842b` | Semantic brand roles, representative geometry, and global one-use asset allocation |
+| 3 | `548a27e` | Dedicated per-section writing contracts, prompt registry, bounded parallel writers, and candidate review |
+| 4 | `f4a88c8` | Private trace persistence with retention and revision fencing, plus support-reference CLI inspection |
+| 5 | `c84c675` | Behavior-only PostHog funnel coverage joined by a one-way correlation digest |
+| 6 | `9fde596` | Generalized fail-soft brand-fidelity evaluator and archetype fixtures |
+| 6 | `2f2e376` | Server-only correlation module (webpack build fix), e2e assertion updates, and the evidence package |
+
+`2d87eaf` and `2529bd8` were already on the branch when this work started.
 
 ## Files changed
 
-Pending.
+53 files, +11,311 / −100 against `origin/production`.
+
+New production modules:
+
+- `src/lib/build-trace.ts`, `src/lib/build-trace-store.ts`
+- `src/lib/brand-semantics.ts`, `src/lib/asset-allocation.ts`
+- `src/lib/brand-fidelity-evaluator.ts`
+- `src/lib/analytics-correlation.ts`
+- `src/lib/generation/production-build-trace.ts`
+- `src/lib/generation/section-writing-contract.ts`
+- `src/lib/generation/section-candidate-review.ts`
+- `src/lib/generation/section-model-writer.ts`
+- `db/migrations/010_create_try_me_build_traces.sql`
+- `scripts/inspect-build-trace.mjs`, `scripts/lib/build-trace-timeline.mjs`
+
+Modified production modules: `src/lib/brand-system.ts`,
+`src/lib/generation/generic-production-engine.ts`,
+`src/lib/generation/experience-template.ts`, `src/lib/orchestrator.ts`,
+`src/lib/product-analytics-contracts.ts`,
+`src/lib/product-analytics-projection.ts`, `package.json`.
+
+New or updated tests: eleven unit suites, three desktop e2e specs, and
+`tests/fixtures/brand-fidelity/archetypes.ts`.
+
+Documentation: `docs/product-analytics-and-tracing.md` gained a behavior-only
+boundary section, the correlation-key explanation, and the BuildTrace inspection
+command.
 
 ## Acceptance results
 
 | Command | Result | Counts or notes |
 | --- | --- | --- |
-| `npm run lint` | Pending | |
-| `npm run typecheck` | Pending | |
-| `npm test` | Pending | |
-| `npm run benchmark:preview` | Pending | |
-| `npm run qa` | Pending | |
-| `npm run qa:visual:folloze` | Pending | |
-| `npm run test:e2e -- --project=desktop` | Pending | |
-| full-history Gitleaks | Pending | |
+| `npm run lint` | Pass | 0 errors, 3 warnings, all pre-existing in `src/lib/cloudflare-upload-contract.test.ts` |
+| `npm run typecheck` | Pass | Clean |
+| `npm test` | Pass | 123 files, 1,239 tests, 0 failures |
+| `npm run benchmark:preview` | Pass | 5 files, 33 tests |
+| `npm run qa` | Pass | Lint, types, tests, Turbopack build, and webpack build |
+| `npm run qa:visual:folloze` | Pass | 3 desktop specs |
+| `npm run test:e2e -- --project=desktop` | Pass | 34 tests |
+| `gitleaks git . --log-opts='--all' --redact=100 --no-banner` | Pass | 241 commits, ~12.84 MB, no leaks found |
+
+Logs are in `output/observable-brand-intelligence/`: `qa.log`, `unit-tests.log`,
+`benchmark.log`, `visual.log`, `e2e-desktop.log`, `gitleaks.log`.
+
+### Environment note on the e2e runs
+
+A Next dev server the operator started earlier held Next's single-instance lock
+on port 3001, so Playwright's `webServer` could not start its own. Rather than
+kill the operator's process, the desktop runs were served from the production
+build with `npx next start --hostname 127.0.0.1 --port 3000`, which Playwright
+reused. Every desktop test passed against that server. A clean checkout with no
+dev server running needs no such step.
 
 ## Evidence
 
-- BuildTrace fixture: Pending
-- brand decision manifest: Pending
-- asset allocation manifest: Pending
-- PostHog projection fixture: Pending
-- latency receipt: Pending
-- visual evidence: Pending
+All artifacts are produced by the production path, not written by hand.
+Regenerate with `EMIT_BUILD_TRACE_EVIDENCE=1 npx vitest run scripts/emit-build-trace-evidence.test.ts`.
+Without the environment variable the same test runs its assertions without
+writing, so a normal `npm test` keeps the emitter honest.
+
+- Serialized BuildTrace: `output/observable-brand-intelligence/build-trace.json`
+- Support-CLI rendering: `output/observable-brand-intelligence/build-trace-timeline.txt`
+- Support reference: `TMN-6D58DEA9181B`
+- Brand decision and asset allocation manifest, with fidelity scores:
+  `output/observable-brand-intelligence/brand-and-asset-manifest.json`
+- Latency receipt: `output/observable-brand-intelligence/latency.json`
+  (20 samples, p50 2.4 ms, p95 4.4 ms, max 4.6 ms for a fixture compile
+  including trace assembly; the emitter asserts p95 under the 500 ms budget)
+- PostHog projection fixtures: `src/lib/product-analytics-projection.test.ts`
+  and the full-vocabulary batch in `src/lib/product-analytics.unified.test.ts`
+- Privacy-negative results: `src/lib/build-trace.test.ts`,
+  `src/lib/build-trace-store.test.ts`, and the privacy-boundary case in
+  `src/lib/generation/production-build-trace.test.ts`
+- Visual evidence: desktop screenshots regenerated by
+  `tests/e2e/product-owner-remediation-visuals.spec.ts` under
+  `output/product-owner-remediation/`
+- Archetype matrix: `output/observable-brand-intelligence/README.md`
+
+The emitted trace carries 6 sections, 9 fidelity dimensions, and 2 fallbacks.
+Grepping it for company names, URLs, or `@` returns nothing.
 
 ## Privacy declaration
 
-Pending. Confirm that no credentials were accessed, no raw private material entered PostHog, no trace endpoint became public, and no private trace payload appeared in a public response.
+- No credential was read or written. No `.env`, keychain entry, or token was
+  accessed. The trace store and CLI read `DATABASE_URL` from the environment
+  and were never run against a live database.
+- No raw private material can reach PostHog. Each unified event declares an
+  allowlist of properties, and an unlisted or identifying property throws rather
+  than being silently dropped. Section titles and value-proposition labels pass
+  through `boundedAnalyticsLabel`, which truncates, rejects addresses and URLs,
+  and drops internal placeholders.
+- The funnel-to-trace join is one-way. `correlation_key` is a salted SHA-256
+  digest of the server trace ID, so an analytics reader cannot recover the trace
+  ID, session ID, or support reference from it.
+- No trace endpoint was added. The BuildTrace has no route, no public payload
+  field, and no client import; `src/lib/analytics-correlation.ts` was split out
+  precisely so the browser bundle never pulls trace machinery in.
+- `findBuildTracePrivacyViolations` runs before every persistence write and
+  before the evidence emitter writes a file. A violation is a normal rejection
+  return, never an exception that could interrupt a build.
 
 ## Unrelated work preserved
 
-Pending. Confirm the two pre-existing modified PNGs were not staged, reverted, or overwritten.
+The two pre-existing modified PNGs were not staged, reverted, or overwritten:
+
+- `output/product-owner-remediation/evidence-backed-recommendations.png`
+- `output/product-owner-remediation/no-evidence-free-form.png`
+
+A third file in that directory,
+`output/product-owner-remediation/partial-unavailable-brand-fallback.png`, is
+now also modified. It is regenerated by
+`tests/e2e/product-owner-remediation-visuals.spec.ts`, which the required
+`npm run test:e2e -- --project=desktop` command runs. All three remain unstaged
+and uncommitted, exactly as they were found.
 
 ## Known risks and skipped checks
 
-Pending.
+1. **Stage timings are coarse.** Every stage in the emitted trace reports the
+   full compile window rather than its own slice, because the compile receipts
+   carry the session window. The timeline is therefore useful for ordering and
+   status but not for attributing latency to a stage. Pre-existing receipt
+   shape; not changed here to avoid touching session semantics.
+2. **The persistence path is untested against a real database.** The store runs
+   in memory under test and Neon Postgres in production. Migration 010 has not
+   been applied anywhere. Someone must run `npm run db:migrate:leads` against
+   the target database and confirm the table before traces will persist.
+3. **The model-backed section writer has no configured provider.** The bounded
+   parallel writer, evaluator, and duplication review are exercised against a
+   fake client. The deterministic fallback path is what production uses today,
+   so provider-specific failure modes are unproven in a live run.
+4. **Fidelity dimensions are unweighted.** The report averages nine dimensions
+   equally, so a serious accessibility failure and a minor typography gap move
+   the headline score the same amount. The per-dimension scores and
+   `repairDimensions` are the reliable signal; the aggregate is indicative.
+5. **The latency receipt is a fixture measurement.** It reflects deterministic
+   compilation with no provider calls or network, so it validates the trace
+   assembly budget and nothing about real end-to-end generation time.
+6. **The 15-second provisional and 55-second final targets (P3-06) were not
+   measured.** Both require a live provider run, which is outside the no-external-
+   systems boundary. `npm run benchmark:preview` passes, but it does not produce
+   those two figures.
+7. **Mobile Playwright was not run.** The desktop project passes. Per the
+   acceptance matrix, mobile runs only for changed shared surfaces; these
+   changes are backend and template-level, and the desktop shell is unchanged.
+8. **Three e2e assertions were updated, not weakened.** They previously asserted
+   a fixed count of rendered images, which the fixtures could only satisfy by
+   repeating one image across slots. They now assert the stronger invariant:
+   each substantive image appears at most once per document, and slots the
+   allocator cannot fill honestly carry a designed non-image treatment. Both the
+   old and new forms fail if imagery breaks; only the new one fails if imagery
+   repeats.
 
 ## External actions
 
-Pending. The expected declaration is: no push, deploy, publish, GitHub mutation, Vercel mutation, PostHog mutation, or production-data mutation occurred.
+No push, deploy, publish, GitHub mutation, Vercel mutation, PostHog mutation, or
+production-data mutation occurred. No external system was contacted. The only
+process started was a local `next start` on `127.0.0.1:3000` to serve the e2e
+suite; it can be stopped freely.
