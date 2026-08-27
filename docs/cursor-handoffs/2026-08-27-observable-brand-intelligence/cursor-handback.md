@@ -1,9 +1,73 @@
 # Cursor Handback
 
-Status: complete, ready for independent Codex review
+Status: correction pass complete, ready for independent Codex review
 
-Branch: `codex/unified-microsite-builder`, seven commits ahead of `origin/production`.
+Branch: `codex/unified-microsite-builder`, thirteen commits ahead of `origin/production`.
 Nothing was pushed, deployed, or published.
+
+## Correction pass (`codex-correction-pass-1.md`)
+
+Commit: `c70353b` — "Close the Codex correction pass on observable brand intelligence".
+48 files changed, +4,445 / −698. One logical pass, committed once.
+
+### P1 corrections
+
+| Item | Change | Regression evidence |
+| --- | --- | --- |
+| P1-1 recursive trace schema | `src/lib/build-trace-schema.ts` holds one recursive schema for every nested shape; `src/lib/build-trace.ts` decodes and privacy-scans through it, so an unknown key at any depth is rejected rather than carried | `src/lib/build-trace.test.ts` (unknown key at `sections.0.quality.note`, nested unknown keys, fragment validation) |
+| P1-2 authoritative asset plan | Allocation happens once in `src/lib/asset-allocation.ts`; the full plan stays private behind `privateAssetAllocationFor` in `src/lib/brand-system.ts`, and the renderer consumes only the public `AssetRenderPlan` threaded from the engine through `src/lib/orchestrator.ts`. Required placements (hero) can no longer be consumed by a spare claim, and URL safety now covers reserved IPv4/IPv6 forms | `src/lib/asset-allocation.test.ts`, `src/lib/generation/experience-template.test.ts`, `src/lib/image-delivery.test.ts`, `tests/e2e/brand-archetype-fidelity.spec.ts` |
+| P1-3 section writers in production | `applyDedicatedSectionWriters` runs inside `generic-production-engine.ts` as a `section-writers` stage; model copy passes hard character/candidate bounds, markup rejection, a CTA allowlist, and a wall-clock deadline that a provider ignoring its abort signal cannot outlast. Claim detection widened from numbers to a full taxonomy in `src/lib/generation/section-claim-coverage.ts` | `src/lib/generation/section-model-writer.test.ts` (20 tests), `src/lib/generation/section-claim-coverage.test.ts`, `src/lib/generation/session-production-engine.test.ts` (model copy proven in rendered HTML and in the private receipt) |
+| P1-4 commit-fenced persistence | `saveBuildTrace` left the in-flight assembly path; `src/lib/build-trace-retention.ts` persists only after the session commit wins its compare-and-set for that revision and attempt. Expired traces are purged by the existing maintenance route. `build-trace:inspect --json` now emits an allowlisted projection instead of the stored object | `src/lib/build-trace-retention.test.ts`, `src/app/api/maintenance/trace-cleanup/route.test.ts`, `src/lib/build-trace-store.test.ts` (projection drops source text, markup, hostnames, credentials) |
+| P1-5 behavior-only PostHog | Value-proposition labels and section titles left the projections and contracts; `src/lib/posthog-payload.ts` filters every capture to allowlisted keys and token-shaped values; native exception capture is off | `src/lib/posthog-boundary.test.ts` (13 tests), `src/lib/product-analytics-projection.test.ts`, `src/lib/product-analytics.unified.test.ts`, `src/lib/posthog-config.test.ts` |
+| P1-6 archetype-by-family DOM fidelity | `archetypeRuntimeFixture` in `tests/e2e/three-family-runtime-fixture.ts` compiles each brand archetype into a real session and profile; the new spec measures computed DOM styles rather than scoring intent | `tests/e2e/brand-archetype-fidelity.spec.ts` — 18 desktop tests (6 archetypes × 3 families) asserting button and card radius, border width, shadow, font families, heading weight, action and ink colour, unique substantive imagery, and designed treatments for unfilled slots |
+
+### P2 hardening
+
+All five code items are complete; the sixth is a test-run item and both Playwright projects were run.
+
+- **Receipt outcomes and collection bounds.** `model_partial` was declared but never emitted, so a thinned candidate field read as a clean model win. The writer now distinguishes the two, the engine accepts both, and tests assert the whole vocabulary plus one receipt per contract regardless of provider behaviour.
+- **Multi-brand deterministic hashes.** Four brand variants (baseline, recoloured, regeometried, retyped) each compile twice: identical digests within a brand, distinct role digests across brands.
+- **Exact section timing.** Section receipts previously copied the whole-session window, which made every section look as slow as the entire build. `sectionWindows` now uses the writer's own per-section duration, falling back to the producing worker's window. The test proves the slow section's span exceeds the deliberate delay while the others stay under it.
+- **Trace ID and support reference resolve together.** The build trace was filed under an id derived from the session id, while the support reference quoted to a visitor derives from `traceIdForSession`. The session's operational trace id is now threaded into the compile, and the test saves a compiled trace then resolves it by both keys.
+- **Claim-state identification boundary.** A test walks preview → attempt → failure → retry → success and asserts no identification before the claim completes, no email or domain in any capture or identify argument, and only `identity_source` on the identify call.
+
+### Correction-pass acceptance results
+
+| Command | Result | Counts or notes |
+| --- | --- | --- |
+| `npm run lint` | Pass | 0 errors, 3 warnings, all pre-existing in `src/lib/cloudflare-upload-contract.test.ts` |
+| `npm run typecheck` | Pass | Clean |
+| `npm test` | Pass | 126 files, 1,394 tests, 0 failures |
+| `npm run benchmark:preview` | Pass | 5 files, 33 tests |
+| `npm run qa` | Pass | Lint, types, tests, Turbopack build, webpack build |
+| `npm run qa:visual:folloze` | Pass | 3 desktop specs |
+| `npm run test:e2e -- --project=desktop` | Pass | 52 tests (was 34; the 18 new archetype tests) |
+| `npm run test:e2e -- --project=mobile` | Pass | 34 passed, 18 skipped (desktop-only specs) |
+| `gitleaks git . --log-opts='--all' --redact=100 --no-banner` | Pass | 244 commits, ~12.91 MB, no leaks found |
+
+Playwright ran against a local production build (`npx next start` on `127.0.0.1:3000`), reused by the config, because an operator dev server holds Next's single-instance lock on 3001.
+
+### Public-contract changes in this pass
+
+- `BrandSystemV2` no longer exposes the asset allocation plan. Callers that need it use `privateAssetAllocationFor(brand)`; the renderer takes an `AssetRenderPlan`.
+- `recommendation_viewed` and `recommendation_selected` no longer carry `value_prop_label`; `section_viewed`, `asset_interaction`, and `analytics_panel_opened` no longer carry `section_title`. Any dashboard reading those properties must move to the semantic tokens.
+- `compileSessionProductionPage` accepts optional `traceId`, `attemptId`, `sectionModelClient`, and `sectionWriterDeadlineMs`. All are optional and the deterministic path is unchanged without them.
+- `build-trace:inspect --json` emits a projection, not the stored trace.
+
+### Residual risks from this pass
+
+1. **`model_partial` depends on schema-level rejection, not quality review.** A candidate dropped by the factuality or duplication reviewer still reports as `model`, because selection runs after the attempt outcome is fixed. The selection reasons carry that detail instead.
+2. **The archetype spec measures the compiled fixture, not a live session.** It renders a real compiled page in a real browser, but the session and brand profile are constructed in-process, so upstream extraction behaviour is still only covered by unit tests.
+3. **Section timing resolution is millisecond ISO strings.** Sub-millisecond deterministic sections collapse to a zero-length window, which reads correctly as "no measurable work" but cannot rank fast sections against each other.
+4. **The trace-id threading is only wired through the orchestrator's compile path.** A caller that invokes `compileSessionProductionPage` directly without `traceId` still gets a session-derived id, which will not match a quoted support reference.
+
+### Boundaries observed in this pass
+
+No push, deploy, publish, external-system mutation, production-data access, or secret inspection occurred. The three modified PNGs under `output/product-owner-remediation/` were never staged, reverted, or regenerated by this pass and remain unstaged.
+
+---
+
+## Original build (work orders 1–6)
 
 ## Commits
 
@@ -109,9 +173,9 @@ Grepping it for company names, URLs, or `@` returns nothing.
   and were never run against a live database.
 - No raw private material can reach PostHog. Each unified event declares an
   allowlist of properties, and an unlisted or identifying property throws rather
-  than being silently dropped. Section titles and value-proposition labels pass
-  through `boundedAnalyticsLabel`, which truncates, rejects addresses and URLs,
-  and drops internal placeholders.
+  than being silently dropped. Section titles and value-proposition labels were
+  removed entirely in the correction pass; `src/lib/posthog-payload.ts` now
+  filters every capture down to allowlisted, token-shaped values.
 - The funnel-to-trace join is one-way. `correlation_key` is a salted SHA-256
   digest of the server trace ID, so an analytics reader cannot recover the trace
   ID, session ID, or support reference from it.
@@ -138,11 +202,9 @@ and uncommitted, exactly as they were found.
 
 ## Known risks and skipped checks
 
-1. **Stage timings are coarse.** Every stage in the emitted trace reports the
-   full compile window rather than its own slice, because the compile receipts
-   carry the session window. The timeline is therefore useful for ordering and
-   status but not for attributing latency to a stage. Pre-existing receipt
-   shape; not changed here to avoid touching session semantics.
+1. ~~**Stage timings are coarse.**~~ Closed by the correction pass for section
+   receipts, which now carry each section's own window. Stage-level timings
+   still report the compile window they were measured over.
 2. **The persistence path is untested against a real database.** The store runs
    in memory under test and Neon Postgres in production. Migration 010 has not
    been applied anywhere. Someone must run `npm run db:migrate:leads` against
@@ -162,9 +224,8 @@ and uncommitted, exactly as they were found.
    measured.** Both require a live provider run, which is outside the no-external-
    systems boundary. `npm run benchmark:preview` passes, but it does not produce
    those two figures.
-7. **Mobile Playwright was not run.** The desktop project passes. Per the
-   acceptance matrix, mobile runs only for changed shared surfaces; these
-   changes are backend and template-level, and the desktop shell is unchanged.
+7. ~~**Mobile Playwright was not run.**~~ Run in the correction pass: 34 passed,
+   18 skipped (desktop-only specs).
 8. **Three e2e assertions were updated, not weakened.** They previously asserted
    a fixed count of rendered images, which the fixtures could only satisfy by
    repeating one image across slots. They now assert the stronger invariant:
