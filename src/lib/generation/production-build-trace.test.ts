@@ -5,6 +5,14 @@ import {
   parseBuildTrace,
   type BuildTraceV1
 } from "@/lib/build-trace";
+import {
+  clearMemoryBuildTracesForTest,
+  readBuildTracesBySupportRef,
+  readBuildTracesByTraceId,
+  saveBuildTrace
+} from "@/lib/build-trace-store";
+import { supportRefForTraceId } from "@/lib/observability";
+import { traceIdForSession } from "@/lib/trace-store";
 import { compileSessionProductionPage } from "@/lib/generation/session-production-engine";
 import { productionTraceIdentity } from "@/lib/generation/production-build-trace";
 import type { BrandProfile, TryMeSession } from "@/lib/types";
@@ -211,6 +219,102 @@ describe("production build trace population", () => {
 
     expect(second.buildTrace.attemptId).not.toBe(first.buildTrace.attemptId);
     expect(second.buildTrace.revision).toBe(5);
+  });
+
+  it("files the trace under the id the visitor's support reference resolves to", async () => {
+    clearMemoryBuildTracesForTest();
+    const subject = session({ traceId: "kR8vQm2xLp4TzN6yWc9bHd3F" } as Partial<TryMeSession>);
+    const result = await compileSessionProductionPage({
+      session: subject,
+      brand: brandProfile(),
+      providerStartedAtMs: 0,
+      currentTimeMs: 5_000,
+      traceId: traceIdForSession(subject)
+    });
+    const saved = await saveBuildTrace({
+      trace: result.buildTrace,
+      committedRevision: subject.revision
+    });
+
+    expect(result.buildTrace.traceId).toBe(traceIdForSession(subject));
+    expect(saved.outcome).toBe("saved");
+    expect(saved.supportRef).toBe(supportRefForTraceId(traceIdForSession(subject)));
+
+    const byTrace = await readBuildTracesByTraceId(traceIdForSession(subject));
+    const bySupport = await readBuildTracesBySupportRef(saved.supportRef!);
+
+    expect(byTrace).toHaveLength(1);
+    expect(bySupport.map(({ attemptId }) => attemptId)).toEqual(
+      byTrace.map(({ attemptId }) => attemptId)
+    );
+    clearMemoryBuildTracesForTest();
+  });
+
+  it("hashes each brand to its own stable digests", async () => {
+    const variants: Array<{ id: string; brand: BrandProfile }> = [
+      { id: "baseline", brand: brandProfile() },
+      {
+        id: "recoloured",
+        brand: {
+          ...brandProfile(),
+          colors: ["#123A5F", "#F2A900", "#FFFFFF"],
+          primaryColor: "#123A5F",
+          accentColor: "#F2A900"
+        } as BrandProfile
+      },
+      {
+        id: "regeometried",
+        brand: {
+          ...brandProfile(),
+          designDna: {
+            ...brandProfile().designDna!,
+            buttons: { primaryBackground: "#E4572E", radiusPx: 999, heightPx: 44 },
+            cards: { radiusPx: 0, shadow: "none" }
+          }
+        } as BrandProfile
+      },
+      {
+        id: "retyped",
+        brand: {
+          ...brandProfile(),
+          displayFontFamily: "Playfair Display",
+          bodyFontFamily: "Playfair Display",
+          designDna: {
+            ...brandProfile().designDna!,
+            typography: { fallback: "serif", headingWeight: 600, bodyWeight: 400 }
+          }
+        } as BrandProfile
+      }
+    ];
+
+    const digests = new Map<string, string>();
+    for (const variant of variants) {
+      const first = await compileSessionProductionPage({
+        session: session(),
+        brand: variant.brand,
+        providerStartedAtMs: 0,
+        currentTimeMs: 5_000
+      });
+      const second = await compileSessionProductionPage({
+        session: session(),
+        brand: variant.brand,
+        providerStartedAtMs: 0,
+        currentTimeMs: 5_000
+      });
+
+      expect(second.buildTrace.decisions.brand).toEqual(first.buildTrace.decisions.brand);
+      expect(second.buildTrace.sections.map(({ outputDigest }) => outputDigest)).toEqual(
+        first.buildTrace.sections.map(({ outputDigest }) => outputDigest)
+      );
+      const roles = first.buildTrace.decisions.brand?.roles ?? [];
+      expect(roles.length).toBeGreaterThan(0);
+      digests.set(
+        variant.id,
+        roles.map(({ role, valueDigest }) => `${role}:${valueDigest}`).join("|")
+      );
+    }
+
+    expect(new Set(digests.values()).size).toBe(variants.length);
   });
 
   it("scores brand fidelity on the delivered experience without gating it", async () => {

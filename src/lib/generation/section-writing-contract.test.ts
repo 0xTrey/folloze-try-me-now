@@ -152,6 +152,54 @@ describe("section writing contracts", () => {
     expect(contracts.flatMap(({ evidenceRefs }) => evidenceRefs)).not.toContain("ev-stale-1");
   });
 
+  it("separates proof from third-party context that shares the same source role", () => {
+    const kinded: SectionEvidenceClaim[] = [
+      {
+        id: "ev-proof-1",
+        text: "An audited reliability benchmark published with the study method.",
+        confidence: 0.9,
+        revision,
+        sourceRole: "source",
+        kind: "proof"
+      },
+      {
+        id: "ev-context-1",
+        text: "A trade article describing how the category is generally discussed.",
+        confidence: 0.9,
+        revision,
+        sourceRole: "source",
+        kind: "third_party_context"
+      }
+    ];
+    const contracts = buildSectionWritingContracts({
+      sessionId: "contract-fixture",
+      revision,
+      decision: decision([
+        slot("proof", "proof", { requiredEvidenceKinds: ["proof"] }),
+        slot("context", "buyer-outcome", {
+          requiredEvidenceKinds: ["third_party_context"]
+        })
+      ]),
+      brief,
+      evidence: kinded
+    });
+
+    expect(contracts[0]!.evidenceRefs).toEqual(["ev-proof-1"]);
+    expect(contracts[1]!.evidenceRefs).toEqual(["ev-context-1"]);
+  });
+
+  it("admits an unlabelled claim by source role so older evidence still scopes", () => {
+    const contracts = buildSectionWritingContracts({
+      sessionId: "contract-fixture",
+      revision,
+      decision: decision([slot("proof", "proof", { requiredEvidenceKinds: ["proof"] })]),
+      brief,
+      evidence: evidence()
+    });
+
+    expect(contracts[0]!.evidenceRefs).toEqual(["ev-source-1"]);
+  });
+
   it("produces no contracts for a stale wireframe decision", () => {
     const contracts = buildSectionWritingContracts({
       sessionId: "contract-fixture",

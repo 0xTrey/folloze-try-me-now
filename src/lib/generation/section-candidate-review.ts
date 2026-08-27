@@ -3,6 +3,7 @@ import {
   validateSectionCopyCandidate,
   type SectionCopyCandidate
 } from "@/lib/generation/section-copy-types";
+import { unsupportedCopyClaims } from "@/lib/generation/section-claim-coverage";
 import {
   containsBannedInternalPhrase,
   type SectionWritingContract
@@ -66,32 +67,6 @@ export function copySimilarity(left: string, right: string): number {
 }
 
 /**
- * Numeric or proper-noun assertions a reader would treat as verifiable fact.
- * Anything matched here must trace to cited evidence.
- */
-function verifiableAssertions(value: string): string[] {
-  return [
-    ...(value.match(
-      /\b\d[\d,.]*\s?(?:%|\b(?:percent|x|hours?|days?|weeks?|months?|years?)\b)/gi
-    ) ?? []),
-    ...(value.match(/\$\s?\d[\d,.]*(?:\s?[kmb])?\b/gi) ?? [])
-  ].map((match) => match.trim());
-}
-
-function evidenceSupports(
-  contract: SectionWritingContract,
-  candidate: SectionCopyCandidate,
-  assertion: string
-): boolean {
-  const cited = new Set(candidate.evidenceRefs);
-  return contract.evidence.some(
-    (claim) =>
-      cited.has(claim.id)
-      && claim.text.toLocaleLowerCase().includes(assertion.toLocaleLowerCase())
-  );
-}
-
-/**
  * Scores one candidate against its contract. Scoring is deterministic so two
  * runs over the same candidates always pick the same copy.
  */
@@ -122,12 +97,16 @@ export function evaluateCandidate(
     rejections.push("banned_internal_phrase");
   }
 
-  const unsupported = verifiableAssertions(text).filter(
-    (assertion) => !evidenceSupports(contract, candidate, assertion)
-  );
+  const unsupported = unsupportedCopyClaims({
+    text,
+    citedRefs: candidate.evidenceRefs,
+    evidence: contract.evidence
+  });
   if (unsupported.length) {
     rejections.push("unsupported_claim");
-    reasons.push(`unsupported_assertions_${unsupported.length}`);
+    reasons.push(
+      ...[...new Set(unsupported.map((claim) => `unsupported_${claim.kind}_claim`))].sort()
+    );
   }
 
   if (candidate.choices) {

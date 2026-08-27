@@ -15,6 +15,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
+import { privateAssetAllocationFor } from "@/lib/brand-system";
 import { findBuildTracePrivacyViolations } from "@/lib/build-trace";
 import { renderBuildTraceTimeline } from "./lib/build-trace-timeline.mjs";
 import { compileSessionProductionPage } from "@/lib/generation/session-production-engine";
@@ -129,7 +130,7 @@ it("emits a privacy-clean evidence package from a real fixture compile", async (
     outcome: result.outcome,
     brandDecision: trace.decisions.brand,
     assetAllocation: trace.decisions.assets,
-    allocationPlan: brand?.imagery.allocation,
+    allocationPlan: privateAssetAllocationFor(brand),
     quality: trace.quality
   };
   expect(manifest.assetAllocation?.allocations.length).toBeGreaterThan(0);

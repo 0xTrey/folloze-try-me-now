@@ -1,4 +1,5 @@
 import type { BrandSystemV2 } from "@/lib/brand-system";
+import type { AssetRenderPlan } from "@/lib/asset-allocation";
 import type { BuildTraceTerminalStatus, BuildTraceV1 } from "@/lib/build-trace";
 import {
   compileProductionBuildTrace,
@@ -29,10 +30,16 @@ import type {
   SectionCopyCandidate,
   SectionEvidenceClaim,
   SectionWriterArtifact,
+  SectionWriterBrief,
   SectionWriterInput,
   SectionWriterKind,
   SectionWriterSlot
 } from "@/lib/generation/section-copy-types";
+import {
+  runSectionWriters,
+  type SectionModelClient,
+  type SectionWriterRunResult
+} from "@/lib/generation/section-model-writer";
 import {
   buildSectionWritingContracts,
   sectionContractDigestSource,
@@ -95,6 +102,7 @@ export type GenericProductionCompileStage =
   | "artifact-validation"
   | "provider-deadline"
   | "writer-wave"
+  | "section-writers"
   | "factuality"
   | "section-compile"
   | "final-reveal";
@@ -177,6 +185,14 @@ type Writer = (
 
 export interface GenericProductionEngineDependencies {
   writers?: Partial<Record<SectionWriterKind, Writer>>;
+  /**
+   * Provider for the dedicated per-section writers. Absent in environments
+   * with no provider configured, which falls the stage back to the bounded
+   * deterministic copy from the writer wave.
+   */
+  sectionModelClient?: SectionModelClient;
+  /** Wall-clock budget for the dedicated section-writing stage. */
+  sectionWriterDeadlineMs?: number;
   factualityEditor?: (
     input: CopyFactualityEditorInput
   ) => CopyFactualityEditorArtifact | Promise<CopyFactualityEditorArtifact>;
@@ -189,6 +205,12 @@ interface GenericProductionResultBase {
   compileReceipts: readonly GenericProductionCompileReceipt[];
   /** Private provenance for this attempt. Never part of a public payload. */
   buildTrace: BuildTraceV1;
+  /**
+   * The public-safe placements the renderer must follow. Sharing the compiled
+   * plan is what keeps the rendered DOM and the private trace describing the
+   * same page instead of two independently ranked ones.
+   */
+  assetPlan?: AssetRenderPlan;
 }
 
 export type GenericProductionEngineResult =
@@ -368,9 +390,20 @@ function terminalStatusFor(
  * only reach the renderer through a slot, so a slot without a contract is a
  * gap the trace has to show rather than paper over.
  */
+const EMPTY_SECTION_BRIEF: SectionWriterBrief = {
+  audience: "",
+  promise: "",
+  mechanism: "",
+  proofPlan: "",
+  decisionHelp: "",
+  nextAction: "",
+  unknowns: []
+};
+
 function sectionWritingContracts(
   input: GenericProductionEngineInput,
-  evidence: readonly SectionEvidenceClaim[]
+  evidence: readonly SectionEvidenceClaim[],
+  brief: SectionWriterBrief = EMPTY_SECTION_BRIEF
 ): Map<string, SectionWritingContract> {
   const decision = input.familyDecisionArtifact?.value;
   if (!decision) return new Map();
@@ -378,18 +411,122 @@ function sectionWritingContracts(
     sessionId: input.sessionId,
     revision: input.revision,
     decision,
-    brief: {
-      audience: "",
-      promise: "",
-      mechanism: "",
-      proofPlan: "",
-      decisionHelp: "",
-      nextAction: "",
-      unknowns: []
-    },
+    brief,
     evidence
   });
   return new Map(contracts.map((contract) => [contract.sectionId, contract]));
+}
+
+/** Wall-clock budget for the dedicated section-writing stage. */
+export const SECTION_WRITER_DEADLINE_MS = 9_000;
+
+/**
+ * Runs the dedicated per-section writers and merges what they produce into the
+ * copy the page will actually render.
+ *
+ * The writer wave already produced deterministic copy for every section. This
+ * stage tries to do better one section at a time, under its own prompt and its
+ * own evidence scope, and keeps the deterministic version wherever the model is
+ * late, malformed, or rejected. Accepted copy is merged before the factuality
+ * editor runs, so model output still has to survive the same factuality gate as
+ * everything else.
+ */
+async function applyDedicatedSectionWriters(input: {
+  engineInput: GenericProductionEngineInput;
+  dependencies: GenericProductionEngineDependencies;
+  evidence: readonly SectionEvidenceClaim[];
+  brief: SectionWriterBrief;
+  writerArtifacts: readonly SectionWriterArtifact[];
+}): Promise<{
+  writerArtifacts: readonly SectionWriterArtifact[];
+  run?: SectionWriterRunResult;
+}> {
+  const contracts = [
+    ...sectionWritingContracts(input.engineInput, input.evidence, input.brief).values()
+  ];
+  if (!contracts.length) return { writerArtifacts: input.writerArtifacts };
+
+  const deterministic = new Map<string, SectionCopyCandidate>();
+  for (const artifact of input.writerArtifacts) {
+    for (const candidate of artifact.value ?? []) deterministic.set(candidate.sectionId, candidate);
+  }
+  // Only sections the wave already covered are eligible. A contract with no
+  // deterministic counterpart has nothing to fall back to, so a provider
+  // failure there would leave a hole in the page.
+  const eligible = contracts.filter((contract) => deterministic.has(contract.sectionId));
+  if (!eligible.length) return { writerArtifacts: input.writerArtifacts };
+
+  const run = await runSectionWriters({
+    contracts: eligible,
+    ...(input.dependencies.sectionModelClient
+      ? { client: input.dependencies.sectionModelClient }
+      : {}),
+    fallback: (contract) => deterministic.get(contract.sectionId)!,
+    deadlineMs:
+      input.dependencies.sectionWriterDeadlineMs ?? SECTION_WRITER_DEADLINE_MS,
+    ...(input.dependencies.currentTimeMs ? { now: input.dependencies.currentTimeMs } : {})
+  });
+
+  const accepted = new Map(
+    run.results
+      .filter(
+        (result) => result.outcome === "model" || result.outcome === "model_partial"
+      )
+      .map((result) => [result.sectionId, result.candidate])
+  );
+  if (!accepted.size) return { writerArtifacts: input.writerArtifacts, run };
+
+  return {
+    writerArtifacts: input.writerArtifacts.map(
+      (artifact): SectionWriterArtifact =>
+        artifact.value
+          ? {
+              ...artifact,
+              value: artifact.value.map(
+                (candidate) => accepted.get(candidate.sectionId) ?? candidate
+              )
+            }
+          : artifact
+    ),
+    run
+  };
+}
+
+/**
+ * When each section's copy was actually produced.
+ *
+ * Stamping every section with the whole-session window makes each one look as
+ * slow as the entire build, which hides the section that was actually slow.
+ * The dedicated writer reports a real per-section duration; without it, the
+ * window of the worker that wrote the section is still narrower than the
+ * session, so that is used instead.
+ */
+function sectionWindows(input: {
+  writerArtifacts: readonly SectionWriterArtifact[];
+  run: SectionWriterRunResult | undefined;
+  startedAt: string;
+  completedAt: string;
+}): Map<string, { startedAt: string; completedAt: string }> {
+  const windows = new Map<string, { startedAt: string; completedAt: string }>();
+  for (const artifact of input.writerArtifacts) {
+    for (const candidate of artifact.value ?? []) {
+      windows.set(candidate.sectionId, {
+        startedAt: artifact.startedAt,
+        completedAt: artifact.completedAt
+      });
+    }
+  }
+  for (const result of input.run?.results ?? []) {
+    const base = windows.get(result.sectionId);
+    const completedAt = base?.completedAt ?? input.completedAt;
+    const completedMs = Date.parse(completedAt);
+    if (!Number.isFinite(completedMs)) continue;
+    windows.set(result.sectionId, {
+      startedAt: new Date(completedMs - Math.max(0, Math.round(result.durationMs))).toISOString(),
+      completedAt
+    });
+  }
+  return windows;
 }
 
 function sectionTraces(input: {
@@ -397,9 +534,16 @@ function sectionTraces(input: {
   sections: readonly SectionCopyCandidate[];
   writerArtifacts: readonly SectionWriterArtifact[];
   contracts: ReadonlyMap<string, SectionWritingContract>;
+  run?: SectionWriterRunResult;
   startedAt: string;
   completedAt: string;
 }): ProductionTraceSection[] {
+  const windows = sectionWindows({
+    writerArtifacts: input.writerArtifacts,
+    run: input.run,
+    startedAt: input.startedAt,
+    completedAt: input.completedAt
+  });
   const accepted = new Map(input.sections.map((section) => [section.sectionId, section]));
   const candidatesBySection = new Map<string, SectionCopyCandidate[]>();
   for (const artifact of input.writerArtifacts) {
@@ -462,8 +606,8 @@ function sectionTraces(input: {
         ),
         required: slot.required
       },
-      startedAt: input.startedAt,
-      completedAt: input.completedAt,
+      startedAt: windows.get(slot.id)?.startedAt ?? input.startedAt,
+      completedAt: windows.get(slot.id)?.completedAt ?? input.completedAt,
       status: section
         ? section.status === "complete"
           ? ("completed" as const)
@@ -546,6 +690,9 @@ function fallback(
       ])
     ],
     compileReceipts: finalReceipts,
+    ...(input.brandArtifact.value?.imagery.renderPlan
+      ? { assetPlan: input.brandArtifact.value.imagery.renderPlan }
+      : {}),
     buildTrace: buildTraceFor(
       input,
       context,
@@ -1124,6 +1271,31 @@ export async function compileGenericProductionPage(
     )
   );
 
+  const sectionWriting = await applyDedicatedSectionWriters({
+    engineInput: input,
+    dependencies,
+    evidence,
+    brief: baseWriterInput.brief,
+    writerArtifacts
+  });
+  const composedWriterArtifacts = sectionWriting.writerArtifacts;
+  if (sectionWriting.run) {
+    compileReceipts.push(
+      compileReceipt(
+        input,
+        "section-writers",
+        sectionWriting.run.fallbackSectionCount ? "fallback" : "completed",
+        sectionWriting.run.deadlineExceeded
+          ? "section_writers_deadline_exceeded"
+          : sectionWriting.run.fallbackSectionCount
+            ? "section_writers_partial"
+            : "section_writers_complete",
+        sectionWriting.run.results.length,
+        evidence.length
+      )
+    );
+  }
+
   const factualityEditor = dependencies.factualityEditor ?? editCopyForFactuality;
   const editorArtifact = await Promise.resolve(
     factualityEditor({
@@ -1149,7 +1321,7 @@ export async function compileGenericProductionPage(
             }
           }
         : {}),
-      writerArtifacts
+      writerArtifacts: composedWriterArtifacts
     })
   );
   workerReceipts.push(
@@ -1230,8 +1402,9 @@ export async function compileGenericProductionPage(
   traceContext.sections = sectionTraces({
     slots,
     sections,
-    writerArtifacts,
+    writerArtifacts: composedWriterArtifacts,
     contracts: sectionWritingContracts(input, evidence),
+    ...(sectionWriting.run ? { run: sectionWriting.run } : {}),
     startedAt: input.startedAt,
     completedAt: input.completedAt
   });
@@ -1366,6 +1539,9 @@ export async function compileGenericProductionPage(
     artifact,
     workerReceipts,
     compileReceipts,
+    ...(input.brandArtifact.value?.imagery.renderPlan
+      ? { assetPlan: input.brandArtifact.value.imagery.renderPlan }
+      : {}),
     buildTrace: buildTraceFor(
       input,
       traceContext,

@@ -8,6 +8,7 @@ import {
   type AssetCandidate,
   brandProfileToBrandSystemEvidence,
   compileBrandSystemV2,
+  privateAssetAllocationFor,
   screenshotArtifactToBrandSystemEvidence,
   type BrandSystemEvidenceSource,
   type CompileBrandSystemInput
@@ -540,7 +541,7 @@ describe("BrandSystemV2 compiler", () => {
     expect(result.value?.imagery.selected.every(({ role }, index) =>
       index === 0 ? role === "hero" : role === "supporting"
     )).toBe(true);
-    expect(substantiveAssetsAreUnique(result.value!.imagery.allocation!)).toBe(true);
+    expect(substantiveAssetsAreUnique(privateAssetAllocationFor(result.value)!)).toBe(true);
     expect(result.value?.imagery.candidates.map(({ value }) => value).join(" ")).not.toMatch(
       /registration|navigation-icon|tiny-product|broken-product|transparent-product|stock\.example/
     );
@@ -665,9 +666,9 @@ describe("BrandSystemV2 compiler", () => {
       candidates: [],
       selected: []
     });
-    expect(result.value?.imagery.allocation?.allocations).toEqual([]);
+    expect(privateAssetAllocationFor(result.value)?.allocations).toEqual([]);
     expect(
-      result.value?.imagery.allocation?.treatments.every(
+      privateAssetAllocationFor(result.value)?.treatments.every(
         ({ treatment, reason }) =>
           treatment === "designed_non_image" && reason === "no_credible_asset_available"
       )

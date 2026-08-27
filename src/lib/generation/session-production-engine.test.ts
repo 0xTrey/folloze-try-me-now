@@ -4,6 +4,12 @@ import { buildExperienceSpec } from "@/lib/experience-contract";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import { applyProductionPageToDraft } from "@/lib/generation/production-draft-adapter";
 import { deterministicDraft } from "@/lib/integrations/openai";
+import type { SectionModelClient } from "@/lib/generation/section-model-writer";
+import type { SectionWritingContract } from "@/lib/generation/section-writing-contract";
+import {
+  copySimilarity,
+  NEAR_DUPLICATE_THRESHOLD
+} from "@/lib/generation/section-candidate-review";
 import type { BrandProfile, TryMeSession } from "@/lib/types";
 
 import { compileSessionProductionPage } from "./session-production-engine";
@@ -388,5 +394,260 @@ describe("compileSessionProductionPage", () => {
         allowProviderWork: false
       }
     });
+  });
+});
+
+describe("dedicated section writers reach the rendered page", () => {
+  const MODEL_HEADLINE = "Approvals close before the shift handover";
+  /** Long enough to separate one section's work from the rest of the build. */
+  const SLOW_SECTION_MS = 40;
+  const MODEL_BODY =
+    "Every approval step routes to the named owner, so the queue clears before the next shift begins.";
+
+  /** Copy sized to the slot the contract asks for, so review judges the content. */
+  function sizedBody(contract: SectionWritingContract): string {
+    const filler = "Owners confirm each step in the shared queue.";
+    const words = (value: string) => value.trim().split(/\s+/).length;
+    const target = contract.slot.wordBudget.min - words(MODEL_HEADLINE);
+    let body = MODEL_BODY;
+    while (words(body) < target) body = `${body} ${filler}`;
+    return body;
+  }
+
+  /** Answers only the first planned section, leaving the rest deterministic. */
+  function singleSectionClient(overrides: {
+    delayMs?: number;
+    candidate?: Record<string, unknown>;
+  } = {}): { client: SectionModelClient; answered: string[] } {
+    const answered: string[] = [];
+    const client: SectionModelClient = {
+      async writeSection(contract) {
+        if (answered.length) return { sectionId: contract.sectionId, candidates: [] };
+        answered.push(contract.sectionId);
+        if (overrides.delayMs) {
+          await new Promise((resolve) => {
+            setTimeout(resolve, overrides.delayMs).unref?.();
+          });
+        }
+        return {
+          sectionId: contract.sectionId,
+          candidates: [
+            overrides.candidate ?? {
+              headline: MODEL_HEADLINE,
+              body: sizedBody(contract),
+              evidenceRefs: contract.evidenceRefs.slice(0, 1)
+            }
+          ]
+        };
+      }
+    };
+    return { client, answered };
+  }
+
+  /**
+   * Compiles once deterministically, then answers for the first section with
+   * the same copy under a distinctive headline. Only the headline differs, so
+   * an accepted candidate is observable without the rest of the section moving.
+   */
+  async function modelAssistedCompile(profile: BrandProfile, delayMs = 0) {
+    const baseline = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000
+    });
+    if (baseline.outcome !== "production-page") throw new Error("baseline_not_compiled");
+    const target = baseline.artifact.value!.sections[0]!;
+    const client: SectionModelClient = {
+      async writeSection(contract) {
+        if (contract.sectionId !== target.sectionId) {
+          return { sectionId: contract.sectionId, candidates: [] };
+        }
+        if (delayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+        return {
+          sectionId: contract.sectionId,
+          candidates: [
+            {
+              headline: MODEL_HEADLINE,
+              body: target.body,
+              evidenceRefs: [...target.evidenceRefs]
+            }
+          ]
+        };
+      }
+    };
+    return {
+      target,
+      result: await compileSessionProductionPage({
+        session: session(profile),
+        brand: profile,
+        providerStartedAtMs: 0,
+        currentTimeMs: 10_000,
+        sectionModelClient: client
+      })
+    };
+  }
+
+  it("renders accepted model copy and records it in the private section receipt", async () => {
+    const profile = brand();
+    const { target, result } = await modelAssistedCompile(profile);
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const page = result.artifact.value!;
+    const written = page.sections.find(
+      ({ sectionId }) => sectionId === target.sectionId
+    );
+
+    expect(written?.headline).toBe(MODEL_HEADLINE);
+    expect(renderPage(session(profile), profile, page)).toContain(MODEL_HEADLINE);
+    expect(
+      result.compileReceipts.find(({ stage }) => stage === "section-writers")
+    ).toMatchObject({ sessionId: session(profile).id, revision: 7 });
+  });
+
+  it("keeps deterministic copy when the provider answers after the deadline", async () => {
+    const profile = brand();
+    const { client, answered } = singleSectionClient({ delayMs: 30_000 });
+    const result = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000,
+      sectionModelClient: client,
+      sectionWriterDeadlineMs: 25
+    });
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const page = result.artifact.value!;
+    const html = renderPage(session(profile), profile, page);
+
+    expect(answered).toHaveLength(1);
+    expect(html).not.toContain(MODEL_HEADLINE);
+    expect(page.sections.every(({ headline }) => (headline ?? "").trim().length > 0)).toBe(
+      true
+    );
+    expect(
+      result.compileReceipts.find(({ stage }) => stage === "section-writers")?.detailCode
+    ).toBe("section_writers_deadline_exceeded");
+  });
+
+  it("keeps deterministic copy when the provider returns copy the contract rejects", async () => {
+    const profile = brand();
+    const { client } = singleSectionClient({
+      candidate: {
+        headline: "Cut operating costs by 94 percent in week one",
+        body:
+          "An unsourced figure no evidence claim supports, offered to the buyer as settled fact "
+          + "about savings the seller has never measured on any comparable deployment anywhere.",
+        evidenceRefs: []
+      }
+    });
+    const result = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000,
+      sectionModelClient: client
+    });
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const html = renderPage(session(profile), profile, result.artifact.value!);
+
+    expect(html).not.toContain("94 percent");
+    expect(html).not.toContain("Cut operating costs");
+  });
+
+  it("times each section receipt to its own work, not the whole session", async () => {
+    const profile = brand();
+    const { target, result } = await modelAssistedCompile(profile, SLOW_SECTION_MS);
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const trace = result.buildTrace;
+    const sessionSpanMs = Date.parse(trace.completedAt ?? "") - Date.parse(trace.startedAt);
+    const receipts = trace.sections;
+
+    expect(sessionSpanMs).toBeGreaterThan(SLOW_SECTION_MS);
+    expect(receipts.length).toBeGreaterThan(0);
+    const spans = new Map(
+      receipts.map((receipt) => [
+        receipt.sectionId,
+        Date.parse(receipt.completedAt) - Date.parse(receipt.startedAt)
+      ])
+    );
+    for (const [, spanMs] of spans) {
+      expect(spanMs).toBeGreaterThanOrEqual(0);
+      expect(spanMs).toBeLessThan(sessionSpanMs);
+    }
+    expect(spans.get(target.sectionId)).toBeGreaterThanOrEqual(SLOW_SECTION_MS);
+    const untouched = receipts.filter(({ sectionId }) => sectionId !== target.sectionId);
+    expect(untouched.length).toBeGreaterThan(0);
+    for (const receipt of untouched) {
+      expect(spans.get(receipt.sectionId)).toBeLessThan(SLOW_SECTION_MS);
+    }
+  });
+
+  it("keeps the rendered page inside the copy constitution with a model in the loop", async () => {
+    const profile = brand();
+    const { result } = await modelAssistedCompile(profile);
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const currentSession = session(profile);
+    const page = result.artifact.value!;
+    const html = renderPage(currentSession, profile, page);
+
+    expect(html).not.toMatch(/Decision Lens\s*\d/i);
+    expect(html).not.toMatch(/\bSection\s+\d\b/);
+    expect(html).not.toMatch(/lorem ipsum|\bTBD\b|coming soon|\{\{|\[insert/i);
+    expect(html).toContain(currentSession.answers.audience!);
+    expect(html).toMatch(/>Book a meeting</);
+    expect(html).not.toMatch(
+      /<p class="eyebrow">[\s\S]{0,200}?<h2>[\s\S]{0,200}?<p class="dek">/
+    );
+
+    const headlines = page.sections.map(({ headline }) => (headline ?? "").trim());
+    expect(new Set(headlines).size).toBe(headlines.length);
+    const bodies = page.sections.map(({ body }) => (body ?? "").trim());
+    expect(new Set(bodies).size).toBe(bodies.length);
+    for (const [index, body] of bodies.entries()) {
+      for (const other of bodies.slice(index + 1)) {
+        expect(copySimilarity(body, other)).toBeLessThan(NEAR_DUPLICATE_THRESHOLD);
+      }
+    }
+  });
+
+  it("compiles identically to the deterministic path when no provider is configured", async () => {
+    const profile = brand();
+    const withoutClient = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000
+    });
+    const withSilentClient = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000,
+      sectionModelClient: {
+        async writeSection(contract) {
+          return { sectionId: contract.sectionId, candidates: [] };
+        }
+      }
+    });
+
+    expect(withoutClient.outcome).toBe("production-page");
+    expect(withSilentClient.outcome).toBe("production-page");
+    if (withoutClient.outcome !== "production-page") return;
+    if (withSilentClient.outcome !== "production-page") return;
+    expect(
+      withSilentClient.artifact.value?.sections.map(({ headline }) => headline)
+    ).toEqual(withoutClient.artifact.value?.sections.map(({ headline }) => headline));
   });
 });

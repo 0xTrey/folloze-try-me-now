@@ -77,7 +77,9 @@ export function postHogBrowserConfig(options: {
     autocapture: false,
     capture_pageview: false,
     capture_pageleave: false,
-    capture_exceptions: true,
+    // Native capture would send arbitrary error text and stack frames. Errors
+    // reach analytics as bounded typed codes through the product event path.
+    capture_exceptions: false,
     respect_dnt: true,
     before_send: sanitizePostHogCapture,
     disable_session_recording: !options.replayEnabled,

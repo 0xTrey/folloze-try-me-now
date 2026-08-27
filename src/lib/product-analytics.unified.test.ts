@@ -321,8 +321,7 @@ describe("unified product analytics contracts", () => {
             properties: {
               recommendation_kind: "value_prop",
               option_count: 3,
-              rank: 0,
-              value_prop_label: "Cut unplanned dwell time"
+              rank: 0
             }
           })
         },
@@ -334,7 +333,6 @@ describe("unified product analytics contracts", () => {
             properties: {
               recommendation_kind: "value_prop",
               rank: 0,
-              value_prop_label: "Cut unplanned dwell time",
               was_default: true
             }
           })
@@ -357,7 +355,6 @@ describe("unified product analytics contracts", () => {
             event: "section_viewed",
             category: "interaction",
             properties: {
-              section_title: "Where the dwell time goes",
               section_role: "current-friction",
               position: 2,
               dwell_bucket: "lt_10s"
@@ -372,7 +369,6 @@ describe("unified product analytics contracts", () => {
             properties: {
               interaction_type: "expand",
               asset_role: "product",
-              section_title: "Where the dwell time goes",
               area: "preview"
             }
           })
@@ -383,8 +379,7 @@ describe("unified product analytics contracts", () => {
             event: "analytics_panel_opened",
             category: "interaction",
             properties: {
-              trigger: "final_section_reached",
-              section_title: "Choose the first move"
+              trigger: "final_section_reached"
             }
           })
         },

@@ -13,7 +13,7 @@ if (args.includes("--help") || (!supportRef && !traceId)) {
   process.stdout.write(
     "Usage: npm run build-trace:inspect -- --support-ref TMN-XXXXXXXXXXXX\n" +
       "   or: npm run build-trace:inspect -- --trace-id <server-trace-id>\n" +
-      "Options: --json  print the raw retained trace instead of a timeline\n"
+      "Options: --json  print the projected, privacy-safe trace instead of a timeline\n"
   );
   process.exit(args.includes("--help") ? 0 : 1);
 }
@@ -30,7 +30,9 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is required for operator build-trace inspection.");
 }
 
-const { renderBuildTraceReport } = await import("./lib/build-trace-timeline.mjs");
+const { renderBuildTraceReport, projectBuildTraceForInspection } = await import(
+  "./lib/build-trace-timeline.mjs"
+);
 
 const sql = neon(process.env.DATABASE_URL);
 const rows = supportRef
@@ -52,7 +54,11 @@ const traces = rows
   .filter((trace) => trace && typeof trace === "object");
 
 if (asJson) {
-  process.stdout.write(`${JSON.stringify(traces, null, 2)}\n`);
+  // Never the stored object. The projection is the operator-visible contract.
+  const projected = traces
+    .map((trace) => projectBuildTraceForInspection(trace))
+    .filter((trace) => trace !== undefined);
+  process.stdout.write(`${JSON.stringify(projected, null, 2)}\n`);
 } else {
   process.stdout.write(`${renderBuildTraceReport(supportRef ?? traceId, traces)}\n`);
 }

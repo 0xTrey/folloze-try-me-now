@@ -3,6 +3,7 @@ import {
   ctaIdsV2,
   type ClaimTypeV2,
   type CtaIdV2,
+  type EvidenceKindV2,
   type SectionRoleV2,
   type SectionSlotV2,
   type WireframeFamilyV2
@@ -25,6 +26,12 @@ export interface SectionEvidenceClaim {
   confidence: number;
   revision: number;
   sourceRole: "visitor" | "seller" | "target" | "offer" | "source";
+  /**
+   * The exact evidence kind. Source role is coarser: `proof` and
+   * `third_party_context` both read as "source", so scoping a proof section by
+   * role alone lets unrelated third-party context in as if it were proof.
+   */
+  kind?: EvidenceKindV2;
 }
 
 export interface SectionWriterSlot {

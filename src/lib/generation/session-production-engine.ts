@@ -26,6 +26,7 @@ import {
   type RequiredProductionArgument
 } from "@/lib/generation/production-message-spine";
 import { boundedCtaV2 } from "@/lib/generation/section-copy-types";
+import type { SectionModelClient } from "@/lib/generation/section-model-writer";
 import {
   applyV2SectionPlanToLegacySelection,
   selectThreeFamilyDecision,
@@ -412,6 +413,17 @@ export async function compileSessionProductionPage(input: {
   targetBrand?: BrandProfile;
   providerStartedAtMs: number;
   currentTimeMs?: number;
+  /** Provider for the dedicated per-section writers. Deterministic when absent. */
+  sectionModelClient?: SectionModelClient;
+  sectionWriterDeadlineMs?: number;
+  /** Story attempt this compile belongs to. Fences the private trace. */
+  attemptId?: string;
+  /**
+   * The session's operational trace id. Passing it keeps the support reference
+   * a visitor is given resolvable to this private trace; without it the trace
+   * would be filed under a different id than the one support quotes.
+   */
+  traceId?: string;
 }): Promise<GenericProductionEngineResult> {
   const { session, brand } = input;
   const revision = session.revision;
@@ -701,8 +713,20 @@ export async function compileSessionProductionPage(input: {
     ...(familyMessageSpineArtifact ? { familyMessageSpineArtifact } : {}),
     compositionArtifact,
     messageSpineArtifact,
-    allowVisualRepair: true
+    allowVisualRepair: true,
+    ...(input.attemptId || input.traceId
+      ? {
+          trace: {
+            ...(input.attemptId ? { attemptId: input.attemptId } : {}),
+            ...(input.traceId ? { traceId: input.traceId } : {})
+          }
+        }
+      : {})
   }, {
-    currentRevision: () => session.revision
+    currentRevision: () => session.revision,
+    ...(input.sectionModelClient ? { sectionModelClient: input.sectionModelClient } : {}),
+    ...(input.sectionWriterDeadlineMs !== undefined
+      ? { sectionWriterDeadlineMs: input.sectionWriterDeadlineMs }
+      : {})
   });
 }

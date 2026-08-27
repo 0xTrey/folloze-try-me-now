@@ -7,6 +7,7 @@ import type {
   ProductEventName,
   UnifiedProductEventName
 } from "@/lib/product-analytics-contracts";
+import { postHogEventPayload } from "@/lib/posthog-payload";
 import {
   assertUnifiedProductEventProperties,
   isPrivateAnalyticsPropertyKey,
@@ -196,17 +197,17 @@ export function captureProductEvent(
   });
   if (posthogEnabled) {
     try {
-      posthog.capture(`try_me_${event}`, {
-        ...(properties ?? {}),
-        $insert_id: eventId,
-        try_me_event_id: eventId,
-        try_me_visitor_id: identity.visitorId,
-        try_me_browser_session_id: identity.browserSessionId,
-        try_me_session_id: options.sessionId ?? activeSessionId,
-        event_category: options.category ?? productEventCategoryFor(event),
-        event_outcome: options.outcome,
-        duration_ms: options.durationMs
-      });
+      // Behavior only. The first-party queue above keeps the identified,
+      // content-bearing record; PostHog receives neither.
+      posthog.capture(
+        `try_me_${event}`,
+        postHogEventPayload(properties, {
+          insertId: eventId,
+          category: options.category ?? productEventCategoryFor(event),
+          ...(options.outcome ? { outcome: options.outcome } : {}),
+          ...(options.durationMs !== undefined ? { durationMs: options.durationMs } : {})
+        })
+      );
     } catch {
       // The first-party queue remains authoritative when PostHog is unavailable.
     }

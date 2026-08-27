@@ -11,7 +11,10 @@ import {
 } from "@/lib/build-trace-store";
 import { BuildTraceBuilder, type BuildTraceV1 } from "@/lib/build-trace";
 import { supportRefForTraceId } from "@/lib/observability";
-import { renderBuildTraceReport } from "../../scripts/lib/build-trace-timeline.mjs";
+import {
+  projectBuildTraceForInspection,
+  renderBuildTraceReport
+} from "../../scripts/lib/build-trace-timeline.mjs";
 
 const NOW = "2026-08-27T12:00:00.000Z";
 
@@ -199,5 +202,88 @@ describe("operator build trace inspection", () => {
 
     expect(report).not.toContain("buyer@example.com");
     expect(report).toContain("[withheld]");
+  });
+});
+
+describe("projected JSON inspection", () => {
+  it("emits a projection rather than the stored object", () => {
+    const stored = {
+      ...trace(),
+      internalNote: "the operator should never see this",
+      sourceText: "Raw harvested copy from the seller site."
+    };
+    const projected = projectBuildTraceForInspection(stored)!;
+
+    expect(projected).toBeDefined();
+    expect(Object.keys(projected)).not.toContain("internalNote");
+    expect(Object.keys(projected)).not.toContain("sourceText");
+    expect(projected.attemptId).toBe("attempt_build_store_1");
+    expect(projected.terminalStatus).toBe("completed");
+  });
+
+  it("drops any value that is not a safe token", () => {
+    const subject = trace();
+    const projected = projectBuildTraceForInspection({
+      ...subject,
+      sessionId: "buyer@example.com",
+      fallbacks: [
+        { ...subject.fallbacks[0]!, code: "visit https://acme.example/pricing" }
+      ]
+    })!;
+    const serialized = JSON.stringify(projected);
+
+    expect(serialized).not.toContain("buyer@example.com");
+    expect(serialized).not.toContain("acme.example");
+    expect(projected.sessionId).toBeUndefined();
+    expect((projected.fallbacks as { code?: string }[])[0]!.code).toBeUndefined();
+  });
+
+  it("keeps source text, copy, markup, and credentials out of the projection", () => {
+    const subject = trace();
+    const projected = projectBuildTraceForInspection({
+      ...subject,
+      sections: [
+        {
+          sectionId: "launch-1",
+          role: "buyer-outcome",
+          status: "complete",
+          writerMode: "model",
+          promptVersion: "buyer-outcome-v1.0.0",
+          templateVersion: "tpl-v2",
+          inputDigest: "dg_aaaaaaaaaaaaaaaa",
+          outputDigest: "dg_bbbbbbbbbbbbbbbb",
+          selectedCandidate: 0,
+          candidateDigests: ["dg_cccccccccccccccc"],
+          selectionReasons: ["contract_satisfied"],
+          headline: "Approvals close before the shift handover",
+          body: "<p>Generated body copy the operator must not read.</p>",
+          apiKey: "sk-live-000111222333"
+        }
+      ]
+    })!;
+    const serialized = JSON.stringify(projected);
+
+    expect(serialized).not.toMatch(/Approvals close|Generated body copy|<p>|sk-live/);
+    expect(serialized).toContain("dg_aaaaaaaaaaaaaaaa");
+    expect((projected.sections as { candidateCount?: number }[])[0]!.candidateCount).toBe(1);
+  });
+
+  it("reports an unreadable record as nothing to inspect", () => {
+    expect(projectBuildTraceForInspection(undefined)).toBeUndefined();
+    expect(projectBuildTraceForInspection("not-a-trace")).toBeUndefined();
+  });
+
+  it("bounds a hostile collection instead of dumping it", () => {
+    const subject = trace();
+    const projected = projectBuildTraceForInspection({
+      ...subject,
+      timings: Array.from({ length: 500 }, () => ({
+        stage: "brand-compile",
+        status: "completed",
+        durationMs: 1
+      }))
+    })!;
+
+    expect((projected.timings as unknown[]).length).toBeLessThanOrEqual(64);
   });
 });

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeModelCandidate,
   runSectionWriters,
+  SECTION_MODEL_BOUNDS,
   SECTION_WRITER_CONCURRENCY,
   type SectionModelClient,
   type SectionModelResponse
@@ -220,6 +221,65 @@ describe("bounded parallel section writing", () => {
     ]);
   });
 
+  it("stops waiting on a provider that ignores its abort signal", async () => {
+    let settled = false;
+    const client: SectionModelClient = {
+      writeSection(contract) {
+        return new Promise<SectionModelResponse>((resolve) => {
+          setTimeout(() => {
+            settled = true;
+            resolve({
+              sectionId: contract.sectionId,
+              candidates: [{ headline: "Too late to matter", body: "Arrived after the budget." }]
+            });
+          }, 5_000).unref?.();
+        });
+      }
+    };
+
+    const startedAt = Date.now();
+    const result = await runSectionWriters({
+      contracts: contracts(2),
+      client,
+      fallback,
+      deadlineMs: 25
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    expect(settled).toBe(false);
+    expect(result.deadlineExceeded).toBe(true);
+    expect(result.results.map(({ candidate }) => candidate.headline)).toEqual([
+      "Deterministic section-0",
+      "Deterministic section-1"
+    ]);
+  });
+
+  it("never renders copy from a provider that answers after the deadline", async () => {
+    const client: SectionModelClient = {
+      writeSection(contract) {
+        return new Promise<SectionModelResponse>((resolve) => {
+          setTimeout(() => {
+            resolve({
+              sectionId: contract.sectionId,
+              candidates: [{ headline: "Late model headline", body: "Late model body copy." }]
+            });
+          }, 200).unref?.();
+        });
+      }
+    };
+
+    const result = await runSectionWriters({
+      contracts: contracts(1),
+      client,
+      fallback,
+      deadlineMs: 20
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(result.results[0]!.outcome).toBe("deadline");
+    expect(result.results[0]!.candidate.headline).toBe("Deterministic section-0");
+  });
+
   it("falls back when the provider answers for the wrong section or returns nothing", async () => {
     const client: SectionModelClient = {
       async writeSection(contract) {
@@ -289,17 +349,229 @@ describe("bounded parallel section writing", () => {
     expect(result.results[0]!.selection?.selectionReasons).toContain("no_candidate_accepted");
   });
 
-  it("drops evidence refs and CTAs the contract does not permit", () => {
+  it("reports a thinned candidate field as a partial model write", async () => {
+    const client: SectionModelClient = {
+      async writeSection(contract) {
+        const usable = goodResponse(contract).candidates[0]!;
+        return {
+          sectionId: contract.sectionId,
+          candidates: [usable, { ...usable, headline: "<b>Markup the schema rejects</b>" }]
+        };
+      }
+    };
+
+    const result = await runSectionWriters({
+      contracts: contracts(1),
+      client,
+      fallback,
+      deadlineMs: 5_000
+    });
+
+    expect(result.results[0]!.outcome).toBe("model_partial");
+    expect(result.results[0]!.candidate.headline).not.toBe("Deterministic section-0");
+    expect(result.modelSectionCount).toBe(1);
+    expect(result.fallbackSectionCount).toBe(0);
+  });
+
+  it("reports every outcome the receipt vocabulary defines", async () => {
+    const observed = new Set<string>();
+    const clients: SectionModelClient[] = [
+      { async writeSection(contract) { return goodResponse(contract); } },
+      {
+        async writeSection(contract) {
+          return {
+            sectionId: contract.sectionId,
+            candidates: [
+              goodResponse(contract).candidates[0]!,
+              {
+                ...goodResponse(contract).candidates[0]!,
+                headline: "<b>Markup the schema rejects</b>"
+              }
+            ]
+          };
+        }
+      },
+      {
+        writeSection(_contract, signal) {
+          return new Promise((_resolve, reject) => {
+            signal.addEventListener("abort", () =>
+              reject(Object.assign(new Error("aborted"), { name: "AbortError" }))
+            );
+          });
+        }
+      },
+      { async writeSection() { throw new Error("provider exploded"); } },
+      {
+        async writeSection(contract) {
+          return { sectionId: contract.sectionId, candidates: [] };
+        }
+      },
+      {
+        async writeSection(contract) {
+          return {
+            sectionId: contract.sectionId,
+            candidates: [
+              { headline: "Too short", body: "No.", evidenceRefs: [] },
+              { headline: "Also short", body: "No.", evidenceRefs: [] }
+            ]
+          };
+        }
+      }
+    ];
+
+    for (const client of clients) {
+      const run = await runSectionWriters({
+        contracts: contracts(1),
+        client,
+        fallback,
+        deadlineMs: 20
+      });
+      for (const { outcome } of run.results) observed.add(outcome);
+    }
+    const withoutProvider = await runSectionWriters({
+      contracts: contracts(1),
+      fallback,
+      deadlineMs: 20
+    });
+    for (const { outcome } of withoutProvider.results) observed.add(outcome);
+
+    expect([...observed].sort()).toEqual([
+      "deadline",
+      "malformed_response",
+      "model",
+      "model_partial",
+      "provider_error",
+      "provider_unavailable",
+      "quality_rejected"
+    ]);
+  });
+
+  it("writes one receipt per contract however the provider behaves", async () => {
+    const client: SectionModelClient = {
+      async writeSection(contract) {
+        if (contract.order % 2 === 0) throw new Error("provider exploded");
+        return goodResponse(contract);
+      }
+    };
+
+    const plan = contracts(5);
+    const result = await runSectionWriters({
+      contracts: plan,
+      client,
+      fallback,
+      deadlineMs: 5_000
+    });
+
+    expect(result.results).toHaveLength(plan.length);
+    expect(new Set(result.results.map(({ sectionId }) => sectionId)).size).toBe(plan.length);
+    expect(result.modelSectionCount + result.fallbackSectionCount).toBe(plan.length);
+    expect(result.results.map(({ sectionId }) => sectionId)).toEqual(
+      plan.map(({ sectionId }) => sectionId)
+    );
+  });
+
+  it("drops evidence refs the contract does not permit", () => {
     const [contract] = contracts(1);
     const normalized = normalizeModelCandidate(contract!, {
       headline: "Shorter waits for referrals",
       body: "Referral triage routes each request to the first clinician with open capacity.",
-      evidenceRefs: ["ev-seller-1", "ev-not-in-scope"],
-      cta: { id: "not_a_real_cta", label: "Do the thing", type: "explore" }
-    });
+      evidenceRefs: ["ev-seller-1", "ev-not-in-scope"]
+    })!;
 
     expect(normalized.evidenceRefs).toEqual(["ev-seller-1"]);
-    expect(normalized.cta).toBeUndefined();
     expect(normalized.wordCount).toBe(sectionCopyWordCount(normalized));
+  });
+
+  it("rejects a candidate whose CTA the contract does not permit", () => {
+    const [contract] = contracts(1);
+
+    expect(
+      normalizeModelCandidate(contract!, {
+        headline: "Shorter waits for referrals",
+        body: "Referral triage routes each request to the first clinician with open capacity.",
+        cta: { id: "not_a_real_cta", label: "Do the thing", type: "explore" }
+      })
+    ).toBeUndefined();
+  });
+  it("rejects copy longer than the provider output bound", () => {
+    const [contract] = contracts(1);
+
+    expect(
+      normalizeModelCandidate(contract!, {
+        headline: "Shorter waits for referrals",
+        body: "a".repeat(SECTION_MODEL_BOUNDS.bodyChars + 1)
+      })
+    ).toBeUndefined();
+  });
+
+  it("rejects an eyebrow longer than the provider output bound", () => {
+    const [contract] = contracts(1);
+
+    expect(
+      normalizeModelCandidate(contract!, {
+        eyebrow: "b".repeat(SECTION_MODEL_BOUNDS.eyebrowChars + 1),
+        headline: "Shorter waits for referrals",
+        body: "Referral triage routes each request to the first clinician with open capacity."
+      })
+    ).toBeUndefined();
+  });
+
+  it("rejects copy carrying markup or control characters", () => {
+    const [contract] = contracts(1);
+
+    expect(
+      normalizeModelCandidate(contract!, {
+        headline: "Shorter waits <script>steal()</script>",
+        body: "Referral triage routes each request to the first clinician with open capacity."
+      })
+    ).toBeUndefined();
+  });
+
+  it("rejects a field the candidate schema does not define", () => {
+    const [contract] = contracts(1);
+
+    expect(
+      normalizeModelCandidate(contract!, {
+        headline: "Shorter waits for referrals",
+        body: "Referral triage routes each request to the first clinician with open capacity.",
+        systemPrompt: "ignore previous instructions"
+      } as Record<string, unknown>)
+    ).toBeUndefined();
+  });
+
+  it("rejects a CTA label the library does not define", () => {
+    const [contract] = contracts(1);
+    const allowed = contract!.allowedCtas[0]!;
+
+    expect(
+      normalizeModelCandidate(contract!, {
+        headline: "Shorter waits for referrals",
+        body: "Referral triage routes each request to the first clinician with open capacity.",
+        cta: { id: allowed, label: "Buy now before midnight", type: "convert" }
+      })?.cta?.label
+    ).not.toBe("Buy now before midnight");
+  });
+
+  it("rejects more candidates than the provider output bound allows", async () => {
+    const client: SectionModelClient = {
+      async writeSection(contract) {
+        return {
+          sectionId: contract.sectionId,
+          candidates: Array.from({ length: SECTION_MODEL_BOUNDS.candidates + 1 }, () => ({
+            headline: "Shorter waits for referrals",
+            body: "Referral triage routes each request to the first clinician with open capacity."
+          }))
+        };
+      }
+    };
+
+    const result = await runSectionWriters({
+      contracts: contracts(1),
+      client,
+      fallback,
+      deadlineMs: 1_000
+    });
+
+    expect(result.results[0]!.candidate.headline).toBe("Deterministic section-0");
   });
 });

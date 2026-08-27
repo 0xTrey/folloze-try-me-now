@@ -80,6 +80,8 @@ export interface AssetAllocation {
   sourceUrlHash: string;
   purpose: string;
   reusable: boolean;
+  /** Mandatory slot. Its asset may not be reassigned to fill a lesser slot. */
+  required: boolean;
   score: number;
 }
 
@@ -138,6 +140,89 @@ function descriptor(candidate: AssetCandidateInput): string {
     .join(" ");
 }
 
+/** Reserved IPv4 space, in `[firstOctet, secondOctetLow, secondOctetHigh]` form. */
+const RESERVED_IPV4: readonly (readonly [number, number, number])[] = [
+  [0, 0, 255],
+  [10, 0, 255],
+  [100, 64, 127],
+  [127, 0, 255],
+  [169, 254, 254],
+  [172, 16, 31],
+  [192, 168, 168],
+  [198, 18, 19]
+];
+
+function reservedIpv4(host: string): boolean {
+  const octets = host.split(".");
+  if (octets.length !== 4) return false;
+  const parsed = octets.map((octet) => Number(octet));
+  if (parsed.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return false;
+  }
+  const [first, second] = parsed as [number, number, number, number];
+  return RESERVED_IPV4.some(
+    ([target, low, high]) => first === target && second >= low && second <= high
+  );
+}
+
+function reservedIpv6(host: string): boolean {
+  const address = host.replace(/^\[|\]$/g, "").toLowerCase();
+  if (!address.includes(":")) return false;
+  if (address === "::" || address === "::1") return true;
+  // Unique-local (fc00::/7) and link-local (fe80::/10).
+  if (/^f[cd][0-9a-f]{0,2}:/.test(address)) return true;
+  if (/^fe[89ab][0-9a-f]?:/.test(address)) return true;
+  // IPv4-mapped forms tunnel a v4 address through v6. The URL parser rewrites
+  // `::ffff:127.0.0.1` to `::ffff:7f00:1`, so both spellings need decoding.
+  const dotted = address.match(/((?:\d{1,3}\.){3}\d{1,3})$/);
+  if (dotted && reservedIpv4(dotted[1]!)) return true;
+  const hex = address.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (hex) {
+    const packed = (Number.parseInt(hex[1]!, 16) << 16) | Number.parseInt(hex[2]!, 16);
+    const octets = [24, 16, 8, 0].map((shift) => (packed >>> shift) & 0xff);
+    return reservedIpv4(octets.join("."));
+  }
+  return false;
+}
+
+/**
+ * True for any host an image must never be fetched from. A URL that resolves
+ * inside our own network is a request-forgery vector, not an asset, and a bare
+ * IP literal is never a legitimate brand CDN.
+ */
+export function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  if (!host) return true;
+  if (
+    host === "localhost"
+    || host.endsWith(".localhost")
+    || host.endsWith(".local")
+    || host.endsWith(".internal")
+    || host.endsWith(".home.arpa")
+    || host.endsWith(".onion")
+  ) {
+    return true;
+  }
+  if (host.startsWith("[") || host.includes(":")) return reservedIpv6(host);
+  if (reservedIpv4(host)) return true;
+  // A hostname with no dot cannot be a public FQDN, so it resolves internally.
+  return !host.includes(".");
+}
+
+/**
+ * Intrinsic strength, independent of any slot. Used to pick which crop of a
+ * duplicated image survives, where slot fit cannot break the tie because every
+ * crop of one image fits every slot identically.
+ */
+function candidateStrength(candidate: AssetCandidateInput): number {
+  return (
+    qualityScore(candidate) * 0.5
+    + AUTHORITY_SCORE[candidate.sourceAuthority] * 0.2
+    + Math.min(1, Math.max(0, candidate.confidence ?? 0.5)) * 0.2
+    + (candidate.altText?.trim() ? 0.1 : 0)
+  );
+}
+
 /** Rejects anything that cannot be delivered safely or read as real imagery. */
 export function rejectAssetCandidate(
   candidate: AssetCandidateInput
@@ -147,27 +232,19 @@ export function rejectAssetCandidate(
   if (/^data:/i.test(ref)) return "data_uri";
   if (/^javascript:/i.test(ref)) return "javascript_url";
 
-  let url: URL;
-  try {
-    url = new URL(ref);
-  } catch {
-    return "unsafe_url";
-  }
-  if (url.protocol !== "https:") return "not_https";
-  const host = url.hostname.toLowerCase();
-  if (
-    host === "localhost"
-    || host.endsWith(".localhost")
-    || host.endsWith(".local")
-    || host.endsWith(".internal")
-    || /^(?:10|127)\./.test(host)
-    || /^192\.168\./.test(host)
-    || /^172\.(?:1[6-9]|2\d|3[01])\./.test(host)
-    || url.username
-    || url.password
-    || url.port
-  ) {
-    return "private_host";
+  // A rooted path is served by this application, so there is no host to vet.
+  // Protocol-relative refs are not: they inherit an origin we do not control.
+  const firstParty = ref.startsWith("/") && !ref.startsWith("//");
+  if (!firstParty) {
+    let url: URL;
+    try {
+      url = new URL(ref);
+    } catch {
+      return "unsafe_url";
+    }
+    if (url.protocol !== "https:") return "not_https";
+    if (url.username || url.password || url.port) return "private_host";
+    if (isPrivateHost(url.hostname)) return "private_host";
   }
 
   if (candidate.sourceAuthority === "third_party") return "role_mismatch";
@@ -194,24 +271,26 @@ export function rejectAssetCandidate(
   return undefined;
 }
 
+/** Origin and path with query and casing normalized away. */
+function assetSourcePath(assetRef: string): string {
+  try {
+    const url = new URL(assetRef);
+    return `${url.origin.toLowerCase()}${url.pathname.toLowerCase()}`;
+  } catch {
+    return assetRef.trim().toLowerCase();
+  }
+}
+
 /**
  * Collapses responsive crops of the same source image onto one key so a
  * thumbnail and its full-size twin cannot both be allocated.
  */
 export function assetDuplicateKey(candidate: AssetCandidateInput): string {
   if (candidate.duplicateKey?.trim()) return candidate.duplicateKey.trim().toLowerCase();
-  try {
-    const url = new URL(candidate.assetRef);
-    const path = url.pathname
-      .toLowerCase()
-      .replace(
-        /[-_](?:\d+x\d+|\d+[wh]|small|medium|large|thumb(?:nail)?|desktop|mobile|retina|crop|@\dx)(?=[-_.]|$)/g,
-        ""
-      );
-    return `${url.origin.toLowerCase()}${path}`;
-  } catch {
-    return candidate.assetRef.trim().toLowerCase();
-  }
+  return assetSourcePath(candidate.assetRef).replace(
+    /[-_](?:\d+x\d+|\d+[wh]|small|medium|large|thumb(?:nail)?|desktop|mobile|retina|crop|@\dx)(?=[-_.]|$)/g,
+    ""
+  );
 }
 
 function aspectFit(candidate: AssetCandidateInput, preferred?: number): number {
@@ -281,8 +360,7 @@ export function allocateExperienceAssets(
   input: AllocateAssetsInput
 ): AssetAllocationPlan {
   const rejections: AssetRejection[] = [];
-  const eligible: AssetCandidateInput[] = [];
-  const seenDuplicateKeys = new Set<string>();
+  const groups = new Map<string, AssetCandidateInput[]>();
 
   for (const candidate of input.candidates) {
     const rejection = rejectAssetCandidate(candidate);
@@ -291,13 +369,33 @@ export function allocateExperienceAssets(
       continue;
     }
     const key = assetDuplicateKey(candidate);
-    if (seenDuplicateKeys.has(key)) {
-      rejections.push({ assetRef: candidate.assetRef, code: "duplicate_crop" });
-      continue;
-    }
-    seenDuplicateKeys.add(key);
-    eligible.push(candidate);
+    const group = groups.get(key);
+    if (group) group.push(candidate);
+    else groups.set(key, [candidate]);
   }
+
+  // Rank inside each duplicate group before choosing a survivor. Deduplicating
+  // on arrival would keep whichever crop happened to be listed first, so a
+  // thumbnail could evict the full-size original purely by input order.
+  const eligible: AssetCandidateInput[] = [];
+  for (const [key, group] of groups) {
+    // Equal strength means every measurable signal matched, which happens when
+    // dimensions are unknown. The duplicate key is the URL with size suffixes
+    // stripped, so a candidate equal to it is the original rather than a crop.
+    const canonical = (candidate: AssetCandidateInput) =>
+      assetSourcePath(candidate.assetRef) === key ? 0 : 1;
+    const [best, ...discarded] = [...group].sort(
+      (left, right) =>
+        candidateStrength(right) - candidateStrength(left)
+        || canonical(left) - canonical(right)
+        || left.assetRef.localeCompare(right.assetRef)
+    );
+    eligible.push(best);
+    for (const candidate of discarded) {
+      rejections.push({ assetRef: candidate.assetRef, code: "duplicate_crop" });
+    }
+  }
+  eligible.sort((left, right) => left.assetRef.localeCompare(right.assetRef));
 
   const pairingsFor = (slots: readonly AssetSlotRequest[]) =>
     slots
@@ -344,6 +442,7 @@ export function allocateExperienceAssets(
       sourceUrlHash: input.hashSourceUrl(candidate.assetRef),
       purpose: candidate.purpose,
       reusable,
+      required: slot.required === true,
       score: Math.round(Math.min(1, Math.max(0, score)) * 10_000) / 10_000
     });
   }
@@ -367,6 +466,42 @@ export function allocateExperienceAssets(
     rejections,
     substantiveCount: allocations.filter(({ reusable }) => !reusable).length,
     reusableCount: allocations.filter(({ reusable }) => reusable).length
+  };
+}
+
+/**
+ * What the renderer is allowed to know: which image goes in which slot. The
+ * evidence reference, source hash, and score that justified the choice stay in
+ * the private trace, so a brand object that reaches a public response cannot
+ * carry the reasoning behind its own imagery.
+ */
+export interface AssetRenderPlacement {
+  sectionId: string;
+  semanticRole: AssetSemanticRole;
+  assetRef: string;
+  reusable: boolean;
+  required: boolean;
+}
+
+export interface AssetRenderPlan {
+  version: "asset-render-plan-v1";
+  placements: AssetRenderPlacement[];
+  treatments: AssetSlotTreatment[];
+}
+
+export function toAssetRenderPlan(plan: AssetAllocationPlan): AssetRenderPlan {
+  return {
+    version: "asset-render-plan-v1",
+    placements: plan.allocations.map(
+      ({ sectionId, semanticRole, assetRef, reusable, required }) => ({
+        sectionId,
+        semanticRole,
+        assetRef,
+        reusable,
+        required
+      })
+    ),
+    treatments: plan.treatments.map((treatment) => ({ ...treatment }))
   };
 }
 

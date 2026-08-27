@@ -1,3 +1,4 @@
+import type { AssetRenderPlan } from "@/lib/asset-allocation";
 import type { BrandProfile, ExperienceAsset, TryMeSession } from "@/lib/types";
 import { isBrandfetchHostedLogoUrl } from "@/lib/brandfetch-logo";
 
@@ -180,6 +181,31 @@ function slotForSourceUrl(
     return `target-image-${targetIndex}` as ImageSlot;
   }
   return undefined;
+}
+
+/**
+ * Rewrites a compiled asset plan onto session-scoped delivery paths.
+ *
+ * The plan is compiled from harvested evidence, so its sources are the
+ * original third-party URLs. The renderer must never emit those. A placement
+ * whose source has no approved slot is dropped rather than rewritten, which
+ * leaves the section to its designed no-asset treatment.
+ */
+export function renderPlanWithFirstPartyImages(
+  sessionId: string,
+  plan: AssetRenderPlan,
+  sources: ImageDeliverySources,
+  version?: number
+): AssetRenderPlan {
+  return {
+    ...plan,
+    placements: plan.placements.flatMap((placement) => {
+      const slot = slotForSourceUrl(placement.assetRef, sources);
+      if (!slot) return [];
+      const assetRef = imageDeliveryPath(sessionId, slot, version);
+      return assetRef ? [{ ...placement, assetRef }] : [];
+    })
+  };
 }
 
 /**

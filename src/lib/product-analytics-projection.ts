@@ -2,7 +2,6 @@ import { analyticsCorrelationKey } from "@/lib/analytics-correlation";
 import type { WireframeDecisionV2 } from "@/lib/generation/three-family-contract";
 import {
   assertUnifiedProductEventProperties,
-  boundedAnalyticsLabel,
   type UnifiedProductEventName
 } from "@/lib/product-analytics-contracts";
 
@@ -93,45 +92,42 @@ export function projectBuildStartedBehaviorEvent(input: {
 }
 
 /**
- * Carries the label the reader actually saw. An internal placeholder such as
- * `Decision Lens 2` is dropped rather than reported, because a funnel built on
- * placeholder labels measures the builder instead of the buyer.
+ * Reports which option a reader took, never what it said.
+ *
+ * A value-proposition label is generated copy: reporting it would put the
+ * seller's message text in a third-party sink, and a funnel keyed on copy
+ * breaks the moment the copy changes. Kind and rank identify the option
+ * durably and carry no content.
  */
 export function projectRecommendationBehaviorEvent(input: {
   action: "viewed" | "selected";
   kind: "audience" | "objective" | "composition" | "value_prop";
   rank: number;
   optionCount?: number;
-  valuePropLabel?: string;
   wasDefault?: boolean;
 }): BehaviorAnalyticsProjection {
-  const label = boundedAnalyticsLabel(input.valuePropLabel);
   const rank = Math.max(0, Math.min(20, Math.round(input.rank)));
   if (input.action === "viewed") {
     return projection("recommendation_viewed", {
       recommendation_kind: input.kind,
       option_count: Math.max(0, Math.min(20, Math.round(input.optionCount ?? 0))),
-      rank,
-      ...(label ? { value_prop_label: label } : {})
+      rank
     });
   }
   return projection("recommendation_selected", {
     recommendation_kind: input.kind,
     rank,
-    ...(label ? { value_prop_label: label } : {}),
     was_default: input.wasDefault === true
   });
 }
 
+/** Semantic role and position locate the section; the title is its copy. */
 export function projectSectionViewedBehaviorEvent(input: {
-  sectionTitle: string;
   sectionRole: string;
   position: number;
   dwellMs?: number;
 }): BehaviorAnalyticsProjection {
-  const title = boundedAnalyticsLabel(input.sectionTitle);
   return projection("section_viewed", {
-    ...(title ? { section_title: title } : {}),
     section_role: input.sectionRole,
     position: Math.max(0, Math.min(32, Math.round(input.position))),
     dwell_bucket: analyticsDwellBucket(input.dwellMs)
@@ -141,27 +137,19 @@ export function projectSectionViewedBehaviorEvent(input: {
 export function projectAssetInteractionBehaviorEvent(input: {
   interactionType: string;
   assetRole: string;
-  sectionTitle?: string;
   area?: string;
 }): BehaviorAnalyticsProjection {
-  const title = boundedAnalyticsLabel(input.sectionTitle);
   return projection("asset_interaction", {
     interaction_type: input.interactionType,
     asset_role: input.assetRole,
-    ...(title ? { section_title: title } : {}),
     ...(input.area ? { area: input.area } : {})
   });
 }
 
 export function projectAnalyticsPanelOpenedBehaviorEvent(input: {
   trigger: "final_section_reached" | "explicit_open";
-  sectionTitle?: string;
 }): BehaviorAnalyticsProjection {
-  const title = boundedAnalyticsLabel(input.sectionTitle);
-  return projection("analytics_panel_opened", {
-    trigger: input.trigger,
-    ...(title ? { section_title: title } : {})
-  });
+  return projection("analytics_panel_opened", { trigger: input.trigger });
 }
 
 export function projectClaimBehaviorEvent(input: {

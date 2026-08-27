@@ -4,10 +4,17 @@ import {
   BRAND_FIDELITY_REPAIR_THRESHOLD,
   contrastRatio,
   evaluateBrandFidelity,
-  type BrandFidelityDimension
+  type BrandFidelityDimension,
+  type BrandFidelityInput,
+  type BrandFidelityReport
 } from "@/lib/brand-fidelity-evaluator";
 import { compileBrandSemantics } from "@/lib/brand-semantics";
 import type { BrandSystemV2 } from "@/lib/brand-system";
+import type {
+  AssetAllocation,
+  AssetAllocationPlan,
+  AssetSemanticRole
+} from "@/lib/asset-allocation";
 import type { SectionCopyCandidate } from "@/lib/generation/section-copy-types";
 import {
   BRAND_ARCHETYPE_FIXTURES,
@@ -40,48 +47,50 @@ function brandSystem(overrides: Partial<BrandSystemV2> = {}): BrandSystemV2 {
     },
     geometry: { controlRadius: 8, cardRadius: 12, borderWidth: 1, shadow: "0 1px 2px rgba(0,0,0,.08)" },
     layout: { maxWidth: 1200, density: "balanced", navStyle: "minimal", heroStyle: "split" },
-    imagery: {
-      style: "photographic",
-      candidates: [],
-      selected: [],
-      allocation: {
-        version: "asset-allocator-v1",
-        allocations: [
-          {
-            allocationKey: "sec_hero:hero",
-            sectionId: "sec_hero",
-            semanticRole: "hero",
-            assetRef: "asset_hero_01",
-            evidenceRef: "ev_asset_hero",
-            sourceUrlHash: "a1b2c3d4",
-            purpose: "hero",
-            reusable: false,
-            score: 0.82
-          },
-          {
-            allocationKey: "sec_proof:proof",
-            sectionId: "sec_proof",
-            semanticRole: "proof",
-            assetRef: "asset_proof_01",
-            evidenceRef: "ev_asset_proof",
-            sourceUrlHash: "e5f6a7b8",
-            purpose: "proof",
-            reusable: false,
-            score: 0.71
-          }
-        ],
-        treatments: [],
-        rejections: [],
-        substantiveCount: 2,
-        reusableCount: 0
-      }
-    },
+    imagery: { style: "photographic", candidates: [], selected: [] },
     motion: { style: "subtle", durationRangeMs: [150, 320] },
     readiness: "verified",
     confidence: 0.88,
     evidenceRefs: ["ev_ink", "ev_surface", "ev_accent"],
     ...overrides
   };
+}
+
+function allocation(
+  sectionId: string,
+  semanticRole: AssetSemanticRole,
+  assetRef: string
+): AssetAllocation {
+  return {
+    allocationKey: `${sectionId}:${semanticRole}`,
+    sectionId,
+    semanticRole,
+    assetRef,
+    evidenceRef: `ev_asset_${semanticRole}`,
+    sourceUrlHash: `sh_${semanticRole}`,
+    purpose: semanticRole,
+    reusable: false,
+    required: semanticRole === "hero",
+    score: 0.8
+  };
+}
+
+/** A healthy two-image plan, used wherever imagery is not the subject. */
+const HEALTHY_PLAN: AssetAllocationPlan = {
+  version: "asset-allocator-v1",
+  allocations: [
+    allocation("sec_hero", "hero", "asset_hero_01"),
+    allocation("sec_proof", "proof", "asset_proof_01")
+  ],
+  treatments: [],
+  rejections: [],
+  substantiveCount: 2,
+  reusableCount: 0
+};
+
+/** Cases that are not about imagery evaluate against a healthy plan. */
+function evaluate(input: BrandFidelityInput): BrandFidelityReport {
+  return evaluateBrandFidelity({ assetAllocation: HEALTHY_PLAN, ...input });
 }
 
 function section(
@@ -131,8 +140,8 @@ describe("brand fidelity evaluator", () => {
   const sections = [section("sec_hero"), section("sec_proof", { role: "proof" })];
 
   it("never blocks a render, whatever the evidence looks like", () => {
-    const healthy = evaluateBrandFidelity({ brand: brandSystem(), sections });
-    const broken = evaluateBrandFidelity({
+    const healthy = evaluate({ brand: brandSystem(), sections });
+    const broken = evaluate({
       brand: brandSystem({
         logo: { confidence: 0, status: "missing" },
         colorRoles: {
@@ -155,7 +164,7 @@ describe("brand fidelity evaluator", () => {
   });
 
   it("names the weakest dimensions as repair targets, worst first", () => {
-    const report = evaluateBrandFidelity({
+    const report = evaluate({
       brand: brandSystem({
         logo: { confidence: 0, status: "missing" },
         colorRoles: {
@@ -184,7 +193,7 @@ describe("brand fidelity evaluator", () => {
     expect(contrastRatio("#101828", "#FFFFFF")).toBeGreaterThan(7);
     expect(contrastRatio("#BFBFBF", "#FFFFFF")).toBeLessThan(4.5);
 
-    const failing = evaluateBrandFidelity({
+    const failing = evaluate({
       brand: brandSystem({
         colorRoles: {
           ink: role("#BFBFBF", "ev_ink"),
@@ -198,76 +207,44 @@ describe("brand fidelity evaluator", () => {
     });
 
     expect(violationsFor(failing, "accessibility")).toContain("body_text_below_wcag_aa");
-    expect(violationsFor(evaluateBrandFidelity({ brand: brandSystem(), sections }), "accessibility")).toEqual(
+    expect(violationsFor(evaluate({ brand: brandSystem(), sections }), "accessibility")).toEqual(
       []
     );
   });
 
   it("treats a repeated substantive image as a violation and a designed treatment as honest", () => {
-    const repeated = evaluateBrandFidelity({
-      brand: brandSystem({
-        imagery: {
-          style: "photographic",
-          candidates: [],
-          selected: [],
-          allocation: {
-            version: "asset-allocator-v1",
-            allocations: [
-              {
-                allocationKey: "sec_hero:hero",
-                sectionId: "sec_hero",
-                semanticRole: "hero",
-                assetRef: "asset_hero_01",
-                evidenceRef: "ev_asset_hero",
-                sourceUrlHash: "a1b2c3d4",
-                purpose: "hero",
-                reusable: false,
-                score: 0.8
-              },
-              {
-                allocationKey: "sec_proof:proof",
-                sectionId: "sec_proof",
-                semanticRole: "proof",
-                assetRef: "asset_hero_01",
-                evidenceRef: "ev_asset_hero",
-                sourceUrlHash: "a1b2c3d4",
-                purpose: "hero",
-                reusable: false,
-                score: 0.8
-              }
-            ],
-            treatments: [],
-            rejections: [],
-            substantiveCount: 2,
-            reusableCount: 0
-          }
-        }
-      }),
+    const repeated = evaluate({
+      brand: brandSystem(),
+      assetAllocation: {
+        version: "asset-allocator-v1",
+        allocations: [
+          allocation("sec_hero", "hero", "asset_hero_01"),
+          allocation("sec_proof", "proof", "asset_hero_01")
+        ],
+        treatments: [],
+        rejections: [],
+        substantiveCount: 2,
+        reusableCount: 0
+      },
       sections
     });
-    const designed = evaluateBrandFidelity({
-      brand: brandSystem({
-        imagery: {
-          style: "type-led",
-          candidates: [],
-          selected: [],
-          allocation: {
-            version: "asset-allocator-v1",
-            allocations: [],
-            treatments: [
-              {
-                sectionId: "sec_hero",
-                semanticRole: "hero",
-                treatment: "designed_non_image",
-                reason: "no_credible_asset_available"
-              }
-            ],
-            rejections: [],
-            substantiveCount: 0,
-            reusableCount: 0
+    const designed = evaluate({
+      brand: brandSystem({ imagery: { style: "type-led", candidates: [], selected: [] } }),
+      assetAllocation: {
+        version: "asset-allocator-v1",
+        allocations: [],
+        treatments: [
+          {
+            sectionId: "sec_hero",
+            semanticRole: "hero",
+            treatment: "designed_non_image",
+            reason: "no_credible_asset_available"
           }
-        }
-      }),
+        ],
+        rejections: [],
+        substantiveCount: 0,
+        reusableCount: 0
+      },
       sections
     });
 
@@ -277,7 +254,7 @@ describe("brand fidelity evaluator", () => {
   });
 
   it("separates generic vendor language from copy that names a specific situation", () => {
-    const generic = evaluateBrandFidelity({
+    const generic = evaluate({
       brand: brandSystem(),
       sections: [
         section("sec_hero", {
@@ -290,7 +267,7 @@ describe("brand fidelity evaluator", () => {
         })
       ]
     });
-    const specific = evaluateBrandFidelity({ brand: brandSystem(), sections });
+    const specific = evaluate({ brand: brandSystem(), sections });
 
     expect(warningsFor(generic, "copy_specificity")).toContain("generic_vendor_language");
     expect(scoreFor(specific, "copy_specificity")).toBeGreaterThan(
@@ -299,12 +276,12 @@ describe("brand fidelity evaluator", () => {
   });
 
   it("flags a citation the build was never given evidence for", () => {
-    const invented = evaluateBrandFidelity({
+    const invented = evaluate({
       brand: brandSystem(),
       sections: [section("sec_hero", { evidenceRefs: ["ev_not_supplied"] })],
       availableEvidenceRefs: ["ev_claim_01", "ev_claim_02"]
     });
-    const honest = evaluateBrandFidelity({
+    const honest = evaluate({
       brand: brandSystem(),
       sections: [section("sec_hero", { evidenceRefs: ["ev_claim_01"] })],
       availableEvidenceRefs: ["ev_claim_01", "ev_claim_02"]
@@ -315,7 +292,7 @@ describe("brand fidelity evaluator", () => {
     );
     expect(violationsFor(honest, "evidence_linkage")).toEqual([]);
     expect(warningsFor(
-      evaluateBrandFidelity({
+      evaluate({
         brand: brandSystem(),
         sections: [section("sec_hero", { evidenceRefs: [] })]
       }),
@@ -324,7 +301,7 @@ describe("brand fidelity evaluator", () => {
   });
 
   it("scores an omitted section without counting it as missing copy", () => {
-    const report = evaluateBrandFidelity({
+    const report = evaluate({
       brand: brandSystem(),
       sections: [
         section("sec_hero"),
@@ -361,11 +338,11 @@ describe("brand fidelity across archetypes", () => {
   });
 
   it("scores a well-evidenced archetype above one with sparse evidence", () => {
-    const strong = evaluateBrandFidelity({
+    const strong = evaluate({
       brand: brandSystem({ semantics: semanticsFor("conservative-enterprise") }),
       sections
     });
-    const sparse = evaluateBrandFidelity({
+    const sparse = evaluate({
       brand: brandSystem({
         semantics: semanticsFor("sparse-logo-only"),
         readiness: "partial",
@@ -401,8 +378,8 @@ describe("brand fidelity across archetypes", () => {
 
   it("reports the same result twice for the same evidence", () => {
     const brand = brandSystem({ semantics: semanticsFor("editorial-serif") });
-    const first = evaluateBrandFidelity({ brand, sections });
-    const second = evaluateBrandFidelity({ brand, sections });
+    const first = evaluate({ brand, sections });
+    const second = evaluate({ brand, sections });
 
     expect(second).toEqual(first);
   });

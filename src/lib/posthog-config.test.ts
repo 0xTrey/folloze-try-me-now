@@ -20,7 +20,7 @@ describe("PostHog browser privacy", () => {
       autocapture: false,
       capture_pageview: false,
       capture_pageleave: false,
-      capture_exceptions: true,
+      capture_exceptions: false,
       respect_dnt: true,
       disable_session_recording: true,
       session_recording: {

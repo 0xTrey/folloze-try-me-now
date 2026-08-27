@@ -1,6 +1,38 @@
 import { createHash } from "node:crypto";
 
-import { sanitizeObservabilityText } from "@/lib/observability-sanitize";
+import {
+  ASSET_ROLES as ASSET_ROLE_VALUES,
+  BUILD_TRACE_CODE_MAX_LENGTH,
+  BUILD_TRACE_MAX_ALLOCATIONS,
+  BUILD_TRACE_MAX_CANDIDATES,
+  BUILD_TRACE_MAX_EVIDENCE_REFS,
+  BUILD_TRACE_MAX_FALLBACKS,
+  BUILD_TRACE_MAX_QUALITY,
+  BUILD_TRACE_MAX_REASONS,
+  BUILD_TRACE_MAX_ROLES,
+  BUILD_TRACE_MAX_SECTIONS,
+  BUILD_TRACE_MAX_SERIALIZED_BYTES,
+  BUILD_TRACE_MAX_TIMINGS,
+  BUILD_TRACE_PIPELINE_VERSION,
+  BUILD_TRACE_SCHEMA_VERSION,
+  CODE_PATTERN,
+  CONTRACT_VERSION_PATTERN,
+  DIGEST_PATTERN,
+  EVIDENCE_REF_PATTERN,
+  FALLBACK_SCOPES as FALLBACK_SCOPE_VALUES,
+  isUnsafeTraceString,
+  PIPELINE_VERSION_PATTERN,
+  SECTION_QUALITY_KEYS,
+  SECTION_STATUSES as SECTION_STATUS_VALUES,
+  SOURCE_HASH_PATTERN,
+  TERMINAL_STATUSES as TERMINAL_STATUS_VALUES,
+  TRACE_ID_PATTERN,
+  validateBuildTraceFragment,
+  validateBuildTraceShape,
+  WRITER_MODES as WRITER_MODE_VALUES,
+  type BuildTraceFragmentKind,
+  type BuildTracePrivacyViolation
+} from "@/lib/build-trace-schema";
 
 /**
  * Private, first-party build provenance. A BuildTrace lets an operator
@@ -8,57 +40,48 @@ import { sanitizeObservabilityText } from "@/lib/observability-sanitize";
  * assets, and section copy. It never leaves the first-party store, and it
  * never carries raw source material: only codes, digests, opaque references,
  * scores, and timings.
+ *
+ * The exact contract lives in `build-trace-schema.ts`. This module builds and
+ * normalizes traces; that one decides what a valid trace may contain.
  */
-export const BUILD_TRACE_SCHEMA_VERSION = 1;
-export const BUILD_TRACE_PIPELINE_VERSION = "try-me-build-v1.1.0";
-export const BUILD_TRACE_MAX_SECTIONS = 12;
-export const BUILD_TRACE_MAX_EVIDENCE_REFS = 200;
-export const BUILD_TRACE_MAX_CANDIDATES = 24;
-export const BUILD_TRACE_MAX_REASONS = 12;
-export const BUILD_TRACE_MAX_QUALITY = 32;
-export const BUILD_TRACE_MAX_FALLBACKS = 48;
-export const BUILD_TRACE_MAX_TIMINGS = 48;
-export const BUILD_TRACE_MAX_ALLOCATIONS = 24;
-export const BUILD_TRACE_MAX_ROLES = 32;
-export const BUILD_TRACE_CODE_MAX_LENGTH = 120;
-export const BUILD_TRACE_MAX_SERIALIZED_BYTES = 131_072;
+export {
+  BUILD_TRACE_CODE_MAX_LENGTH,
+  BUILD_TRACE_MAX_ALLOCATIONS,
+  BUILD_TRACE_MAX_CANDIDATES,
+  BUILD_TRACE_MAX_EVIDENCE_REFS,
+  BUILD_TRACE_MAX_FALLBACKS,
+  BUILD_TRACE_MAX_QUALITY,
+  BUILD_TRACE_MAX_REASONS,
+  BUILD_TRACE_MAX_ROLES,
+  BUILD_TRACE_MAX_SECTIONS,
+  BUILD_TRACE_MAX_SERIALIZED_BYTES,
+  BUILD_TRACE_MAX_TIMINGS,
+  BUILD_TRACE_PIPELINE_VERSION,
+  BUILD_TRACE_SCHEMA_VERSION,
+  isUnsafeTraceString,
+  SECTION_QUALITY_KEYS,
+  validateBuildTraceFragment,
+  validateBuildTraceShape,
+  type BuildTraceFragmentKind,
+  type BuildTracePrivacyViolation
+};
 
-const CODE_PATTERN = /^[a-z0-9][a-z0-9_.:-]{0,119}$/i;
-const DIGEST_PATTERN = /^dg_[a-f0-9]{32}$/;
-const EVIDENCE_REF_PATTERN = /^ev_[a-f0-9]{20}$/;
-const SOURCE_HASH_PATTERN = /^sh_[a-f0-9]{20}$/;
-const SUPPORT_REF_HASH_PATTERN = /^sr_[a-f0-9]{20}$/;
-const TRACE_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{7,63}$/i;
-const PIPELINE_VERSION_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}-v\d+(?:\.\d+){0,2}$/;
-const CONTRACT_VERSION_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}-v\d+(?:\.\d+){0,2}$/;
-const ISO_INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
-/** A dotted label ending in letters reads as a hostname, not a code. */
-const HOSTNAME_SHAPED = /(?:^|[^0-9a-z])[a-z0-9-]{2,}\.[a-z]{2,24}(?![a-z0-9])/i;
-const KNOWN_SECRET_PREFIX =
-  /\b(?:sk-|sk_|pk_live|pk_test|ghp_|github_pat_|xox[baprs]-|re_|AKIA|ASIA|AIza|vercel_blob_|Bearer\s|Basic\s)/;
+export type SectionQualityKey = (typeof SECTION_QUALITY_KEYS)[number];
 
-export type BuildTraceTerminalStatus =
-  | "completed"
-  | "fallback"
-  | "needs_input"
-  | "failed"
-  | "stale";
+/** Per-section metrics. Keys outside the vocabulary are dropped, not stored. */
+export type SectionQualityMetrics = Partial<
+  Record<SectionQualityKey, number | boolean | string>
+>;
 
-export type BuildTraceSectionStatus = "completed" | "fallback" | "failed" | "stale";
+export type BuildTraceTerminalStatus = (typeof TERMINAL_STATUS_VALUES)[number];
 
-export type BuildTraceWriterMode = "model" | "deterministic" | "repair";
+export type BuildTraceSectionStatus = (typeof SECTION_STATUS_VALUES)[number];
 
-export type BuildTraceAssetRole =
-  | "hero"
-  | "product"
-  | "proof"
-  | "process"
-  | "people"
-  | "supporting"
-  | "logo"
-  | "decorative";
+export type BuildTraceWriterMode = (typeof WRITER_MODE_VALUES)[number];
 
-export type BuildTraceFallbackScope = "experience" | "stage" | "section";
+export type BuildTraceAssetRole = (typeof ASSET_ROLE_VALUES)[number];
+
+export type BuildTraceFallbackScope = (typeof FALLBACK_SCOPE_VALUES)[number];
 
 export interface RankedCandidateTrace {
   candidateId: string;
@@ -130,7 +153,7 @@ export interface SectionBuildTrace {
   selectedCandidate: number;
   selectionReasons: string[];
   outputDigest: string;
-  quality: Record<string, number | boolean | string>;
+  quality: SectionQualityMetrics;
   startedAt: string;
   completedAt: string;
   status: BuildTraceSectionStatus;
@@ -186,35 +209,11 @@ export interface BuildTraceV1 {
   timings: StageTimingTrace[];
 }
 
-const TERMINAL_STATUSES = new Set<BuildTraceTerminalStatus>([
-  "completed",
-  "fallback",
-  "needs_input",
-  "failed",
-  "stale"
-]);
-const SECTION_STATUSES = new Set<BuildTraceSectionStatus>([
-  "completed",
-  "fallback",
-  "failed",
-  "stale"
-]);
-const WRITER_MODES = new Set<BuildTraceWriterMode>(["model", "deterministic", "repair"]);
-const ASSET_ROLES = new Set<BuildTraceAssetRole>([
-  "hero",
-  "product",
-  "proof",
-  "process",
-  "people",
-  "supporting",
-  "logo",
-  "decorative"
-]);
-const FALLBACK_SCOPES = new Set<BuildTraceFallbackScope>([
-  "experience",
-  "stage",
-  "section"
-]);
+const TERMINAL_STATUSES = new Set<BuildTraceTerminalStatus>(TERMINAL_STATUS_VALUES);
+const SECTION_STATUSES = new Set<BuildTraceSectionStatus>(SECTION_STATUS_VALUES);
+const WRITER_MODES = new Set<BuildTraceWriterMode>(WRITER_MODE_VALUES);
+const ASSET_ROLES = new Set<BuildTraceAssetRole>(ASSET_ROLE_VALUES);
+const FALLBACK_SCOPES = new Set<BuildTraceFallbackScope>(FALLBACK_SCOPE_VALUES);
 /** Substantive imagery may be placed once. Only these roles may repeat. */
 export const REUSABLE_ASSET_ROLES = new Set<BuildTraceAssetRole>(["logo", "decorative"]);
 
@@ -354,109 +353,22 @@ function instant(value: unknown, fallback: string): string {
   return new Date(parsed).toISOString();
 }
 
-/**
- * True when a string carries material that must never reach a trace: an
- * email, URL, hostname, token, markup, or free prose.
- */
-export function isUnsafeTraceString(value: string): boolean {
-  if (value.length > BUILD_TRACE_CODE_MAX_LENGTH) return true;
-  if (/[<>]/.test(value)) return true;
-  if (/[@]/.test(value)) return true;
-  if (/\s/.test(value)) return true;
-  if (KNOWN_SECRET_PREFIX.test(value)) return true;
-  if (HOSTNAME_SHAPED.test(value)) return true;
-  return sanitizeObservabilityText(value, BUILD_TRACE_CODE_MAX_LENGTH) !== value;
-}
-
 /* -------------------------------------------------------------------------- */
 /* Privacy scanner                                                             */
 /* -------------------------------------------------------------------------- */
 
-export interface BuildTracePrivacyViolation {
-  path: string;
-  reason:
-    | "unsafe_string"
-    | "oversized_payload"
-    | "unexpected_key"
-    | "unsupported_value";
-}
-
-const EXEMPT_INSTANT_KEYS = new Set(["startedAt", "completedAt", "at"]);
-const EXEMPT_PATTERN_KEYS = new Map<string, RegExp>([
-  ["traceId", TRACE_ID_PATTERN],
-  ["sessionId", TRACE_ID_PATTERN],
-  ["attemptId", TRACE_ID_PATTERN],
-  ["pipelineVersion", PIPELINE_VERSION_PATTERN],
-  ["supportRefHash", SUPPORT_REF_HASH_PATTERN],
-  ["version", CONTRACT_VERSION_PATTERN],
-  ["promptVersion", CONTRACT_VERSION_PATTERN],
-  ["templateVersion", CONTRACT_VERSION_PATTERN],
-  ["inputDigest", DIGEST_PATTERN],
-  ["outputDigest", DIGEST_PATTERN],
-  ["valueDigest", DIGEST_PATTERN],
-  ["assetDigest", DIGEST_PATTERN],
-  ["evidenceRef", EVIDENCE_REF_PATTERN],
-  ["sourceUrlHash", SOURCE_HASH_PATTERN]
-]);
-
-function scanValue(
-  value: unknown,
-  path: string,
-  key: string,
-  violations: BuildTracePrivacyViolation[]
-): void {
-  if (value === null || value === undefined) return;
-  if (typeof value === "number" || typeof value === "boolean") return;
-  if (typeof value === "string") {
-    if (EXEMPT_INSTANT_KEYS.has(key)) {
-      if (!ISO_INSTANT_PATTERN.test(value)) {
-        violations.push({ path, reason: "unsafe_string" });
-      }
-      return;
-    }
-    const pattern = EXEMPT_PATTERN_KEYS.get(key);
-    if (pattern) {
-      if (!pattern.test(value)) violations.push({ path, reason: "unsafe_string" });
-      return;
-    }
-    if (
-      DIGEST_PATTERN.test(value)
-      || EVIDENCE_REF_PATTERN.test(value)
-      || SOURCE_HASH_PATTERN.test(value)
-    ) {
-      return;
-    }
-    if (isUnsafeTraceString(value)) {
-      violations.push({ path, reason: "unsafe_string" });
-    }
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => scanValue(item, `${path}[${index}]`, key, violations));
-    return;
-  }
-  if (typeof value === "object") {
-    for (const [childKey, childValue] of Object.entries(value)) {
-      if (isUnsafeTraceString(childKey)) {
-        violations.push({ path: `${path}.${childKey}`, reason: "unexpected_key" });
-        continue;
-      }
-      scanValue(childValue, `${path}.${childKey}`, childKey, violations);
-    }
-    return;
-  }
-  violations.push({ path, reason: "unsupported_value" });
-}
-
 /**
- * Walks a serialized trace and reports anything that must never be persisted.
+ * Reports anything that must never be persisted. Structure is checked first,
+ * because a field the contract does not name is a leak regardless of how
+ * innocent its value looks, and a nested key the old heuristic never visited
+ * is exactly where hostile output would hide.
+ *
  * Used as a runtime guard before every write and as a test oracle.
  */
 export function findBuildTracePrivacyViolations(
   trace: unknown
 ): BuildTracePrivacyViolation[] {
-  const violations: BuildTracePrivacyViolation[] = [];
-  scanValue(trace, "trace", "trace", violations);
+  const violations = validateBuildTraceShape(trace);
   const serialized = canonicalJson(trace);
   if (Buffer.byteLength(serialized, "utf8") > BUILD_TRACE_MAX_SERIALIZED_BYTES) {
     violations.push({ path: "trace", reason: "oversized_payload" });
@@ -616,7 +528,7 @@ export function normalizeSectionBuildTrace(input: {
   selectedCandidate: number;
   selectionReasons?: readonly string[];
   outputDigest: string;
-  quality?: Record<string, number | boolean | string>;
+  quality?: SectionQualityMetrics;
   startedAt: string;
   completedAt: string;
   status: string;
@@ -656,15 +568,15 @@ export function normalizeSectionBuildTrace(input: {
 }
 
 function normalizeQualityMap(
-  quality: Record<string, number | boolean | string> | undefined
-): Record<string, number | boolean | string> {
+  quality: SectionQualityMetrics | undefined
+): SectionQualityMetrics {
   const entries: Array<[string, number | boolean | string]> = [];
   for (const [key, value] of Object.entries(quality ?? {}).slice(
     0,
     BUILD_TRACE_MAX_QUALITY
   )) {
     const safeKey = buildTraceCode(key, "");
-    if (!safeKey) continue;
+    if (!safeKey || !SECTION_QUALITY_KEYS.includes(safeKey as SectionQualityKey)) continue;
     if (typeof value === "number") {
       if (Number.isFinite(value)) entries.push([safeKey, Math.round(value * 10_000) / 10_000]);
       continue;
@@ -883,87 +795,20 @@ export class BuildTraceBuilder {
 /* Decoder                                                                     */
 /* -------------------------------------------------------------------------- */
 
-const TRACE_KEYS = new Set([
-  "schemaVersion",
-  "traceId",
-  "sessionId",
-  "attemptId",
-  "revision",
-  "pipelineVersion",
-  "supportRefHash",
-  "startedAt",
-  "completedAt",
-  "terminalStatus",
-  "evidenceRefs",
-  "decisions",
-  "sections",
-  "quality",
-  "fallbacks",
-  "timings"
-]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 /**
- * Strict decoder for stored traces. Unknown keys, wrong versions, malformed
- * references, or anything that fails the privacy scan decode to `undefined`
- * rather than flowing into an inspection surface.
+ * Strict decoder for stored traces. A trace decodes only if it matches the
+ * contract exactly at every depth; anything else becomes `undefined` rather
+ * than flowing into an inspection surface. Section identity and clock order are
+ * checked here rather than in the schema because they are properties of the
+ * whole trace, not of any one field.
  */
 export function parseBuildTrace(value: unknown): BuildTraceV1 | undefined {
-  if (!isRecord(value)) return undefined;
-  if (Object.keys(value).some((key) => !TRACE_KEYS.has(key))) return undefined;
-  if (value.schemaVersion !== BUILD_TRACE_SCHEMA_VERSION) return undefined;
-  if (
-    typeof value.traceId !== "string"
-    || !TRACE_ID_PATTERN.test(value.traceId)
-    || typeof value.sessionId !== "string"
-    || !TRACE_ID_PATTERN.test(value.sessionId)
-    || typeof value.attemptId !== "string"
-    || !TRACE_ID_PATTERN.test(value.attemptId)
-    || !Number.isSafeInteger(value.revision)
-    || (value.revision as number) < 0
-    || typeof value.pipelineVersion !== "string"
-    || !PIPELINE_VERSION_PATTERN.test(value.pipelineVersion)
-    || typeof value.startedAt !== "string"
-    || !ISO_INSTANT_PATTERN.test(value.startedAt)
-    || typeof value.terminalStatus !== "string"
-    || !TERMINAL_STATUSES.has(value.terminalStatus as BuildTraceTerminalStatus)
-    || !Array.isArray(value.evidenceRefs)
-    || !value.evidenceRefs.every(
-      (ref) => typeof ref === "string" && EVIDENCE_REF_PATTERN.test(ref)
-    )
-    || value.evidenceRefs.length > BUILD_TRACE_MAX_EVIDENCE_REFS
-    || !isRecord(value.decisions)
-    || !Array.isArray(value.sections)
-    || value.sections.length > BUILD_TRACE_MAX_SECTIONS
-    || !Array.isArray(value.quality)
-    || !Array.isArray(value.fallbacks)
-    || !Array.isArray(value.timings)
-  ) {
-    return undefined;
-  }
-  if (
-    value.supportRefHash !== undefined
-    && (typeof value.supportRefHash !== "string"
-      || !SUPPORT_REF_HASH_PATTERN.test(value.supportRefHash))
-  ) {
-    return undefined;
-  }
-  if (
-    value.completedAt !== undefined
-    && (typeof value.completedAt !== "string" || !ISO_INSTANT_PATTERN.test(value.completedAt))
-  ) {
-    return undefined;
-  }
-  if (
-    Object.keys(value.decisions).some(
-      (key) => !["framework", "wireframe", "brand", "assets"].includes(key)
-    )
-  ) {
-    return undefined;
-  }
   if (findBuildTracePrivacyViolations(value).length > 0) return undefined;
-  return structuredClone(value) as unknown as BuildTraceV1;
+  const trace = value as BuildTraceV1;
+  const sectionIds = trace.sections.map((section) => section.sectionId);
+  if (new Set(sectionIds).size !== sectionIds.length) return undefined;
+  if (trace.completedAt && Date.parse(trace.completedAt) < Date.parse(trace.startedAt)) {
+    return undefined;
+  }
+  return structuredClone(trace);
 }

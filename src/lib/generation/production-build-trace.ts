@@ -1,4 +1,4 @@
-import type { BrandSystemV2 } from "@/lib/brand-system";
+import { privateAssetAllocationFor, type BrandSystemV2 } from "@/lib/brand-system";
 import {
   BuildTraceBuilder,
   buildTraceDigest,
@@ -68,6 +68,12 @@ export interface ProductionBuildTraceInput {
   stages: readonly ProductionTraceStage[];
   evidenceIds?: readonly string[];
   brand?: BrandSystemV2;
+  /**
+   * The private allocation plan. Defaults to the one compiled alongside the
+   * brand system; passed explicitly when a caller reconstructs a trace from a
+   * brand object it did not compile.
+   */
+  assetAllocation?: AssetAllocationPlan;
   framework?: ProductionMessageSpine["framework"];
   frameworkConfidence?: number;
   frameworkEvidenceIds?: readonly string[];
@@ -432,10 +438,10 @@ export function compileProductionBuildTrace(
   }
   if (input.brand) {
     builder.recordBrandDecision(brandDecisionTraceFor(builder, input.brand));
-    if (input.brand.imagery.allocation) {
-      builder.recordAssetAllocation(
-        assetAllocationTraceFor(builder, input.brand.imagery.allocation)
-      );
+    const allocation =
+      input.assetAllocation ?? privateAssetAllocationFor(input.brand);
+    if (allocation) {
+      builder.recordAssetAllocation(assetAllocationTraceFor(builder, allocation));
     }
   }
 

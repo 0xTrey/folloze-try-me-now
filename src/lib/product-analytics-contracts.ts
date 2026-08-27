@@ -175,11 +175,11 @@ export const UNIFIED_PRODUCT_EVENT_CONTRACTS: Record<
   },
   recommendation_viewed: {
     category: "interaction",
-    allowedProperties: ["recommendation_kind", "option_count", "rank", "value_prop_label"]
+    allowedProperties: ["recommendation_kind", "option_count", "rank"]
   },
   recommendation_selected: {
     category: "interaction",
-    allowedProperties: ["recommendation_kind", "rank", "value_prop_label", "was_default"]
+    allowedProperties: ["recommendation_kind", "rank", "was_default"]
   },
   build_started: {
     category: "workflow",
@@ -187,15 +187,15 @@ export const UNIFIED_PRODUCT_EVENT_CONTRACTS: Record<
   },
   section_viewed: {
     category: "interaction",
-    allowedProperties: ["section_title", "section_role", "position", "dwell_bucket"]
+    allowedProperties: ["section_role", "position", "dwell_bucket"]
   },
   asset_interaction: {
     category: "interaction",
-    allowedProperties: ["interaction_type", "asset_role", "section_title", "area"]
+    allowedProperties: ["interaction_type", "asset_role", "area"]
   },
   analytics_panel_opened: {
     category: "interaction",
-    allowedProperties: ["trigger", "section_title"]
+    allowedProperties: ["trigger"]
   },
   claim_started: {
     category: "conversion",

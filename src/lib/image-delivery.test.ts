@@ -7,8 +7,10 @@ import {
   imageDeliveryPath,
   isImageDeliveryPath,
   parseImageSlot,
+  renderPlanWithFirstPartyImages,
   sourceImageUrlForSlot
 } from "@/lib/image-delivery";
+import type { AssetRenderPlan } from "@/lib/asset-allocation";
 import type { BrandProfile } from "@/lib/types";
 
 function profile(domain: string, role: "seller" | "target"): BrandProfile {
@@ -133,5 +135,66 @@ describe("session-bound image delivery slots", () => {
     expect(parseImageSlot("seller-image-6")).toBeUndefined();
     expect(imageDeliveryPath("../escape", "seller-logo")).toBeUndefined();
     expect(imageDeliveryPath("session_123", "seller-logo", -1)).toBeUndefined();
+  });
+});
+
+describe("compiled asset plans deliver through first-party routes", () => {
+  const seller = profile("seller.example", "seller");
+
+  function plan(...assetRefs: string[]): AssetRenderPlan {
+    return {
+      version: "asset-render-plan-v1",
+      placements: assetRefs.map((assetRef, index) => ({
+        sectionId: `section-${index}`,
+        semanticRole: index === 0 ? "hero" : "supporting",
+        assetRef,
+        reusable: false,
+        required: index === 0
+      })),
+      treatments: []
+    };
+  }
+
+  it("rewrites every planned source onto its session slot", () => {
+    const sources = imageDeliverySources({ answers: {}, brand: seller });
+    const delivered = renderPlanWithFirstPartyImages(
+      "session_plan_delivery",
+      plan("https://cdn.example/seller/hero.jpg", "https://cdn.example/seller/platform.png"),
+      sources,
+      4
+    );
+
+    expect(delivered.placements.map(({ assetRef }) => assetRef)).toEqual([
+      "/api/sessions/session_plan_delivery/image/seller-image-0?v=4",
+      "/api/sessions/session_plan_delivery/image/seller-image-1?v=4"
+    ]);
+    expect(JSON.stringify(delivered)).not.toContain("cdn.example");
+  });
+
+  it("drops a planned source the session never approved", () => {
+    const sources = imageDeliverySources({ answers: {}, brand: seller });
+    const delivered = renderPlanWithFirstPartyImages(
+      "session_plan_delivery",
+      plan("https://unapproved.example/scraped.jpg"),
+      sources
+    );
+
+    expect(delivered.placements).toEqual([]);
+  });
+
+  it("keeps section, role, and required flags intact through the rewrite", () => {
+    const sources = imageDeliverySources({ answers: {}, brand: seller });
+    const delivered = renderPlanWithFirstPartyImages(
+      "session_plan_delivery",
+      plan("https://cdn.example/seller/hero.jpg"),
+      sources
+    );
+
+    expect(delivered.placements[0]).toMatchObject({
+      sectionId: "section-0",
+      semanticRole: "hero",
+      required: true,
+      reusable: false
+    });
   });
 });

@@ -12,6 +12,12 @@ import type {
   SessionEvidenceItem,
   TryMeSession
 } from "../../src/lib/types";
+import {
+  compileBrandSemantics,
+  type BrandDensityCharacter,
+  type BrandSemanticSystem
+} from "../../src/lib/brand-semantics";
+import type { BrandArchetypeFixture } from "../fixtures/brand-fidelity/archetypes";
 import { experienceDraft } from "./generated-experience-fixture";
 
 export const runtimeAssetOrigin = "https://runtime-first-party.test";
@@ -160,6 +166,13 @@ type BrandFixtureInput = {
   density: number;
   motif?: "none" | "soft-gradient" | "radial-glow" | "technical-grid";
   logo?: boolean;
+  cardRadius?: number;
+  cardBorderWidth?: number;
+  shadow?: "none" | "soft" | "strong";
+  displayFont?: string;
+  bodyFont?: string;
+  headingWeight?: number;
+  images?: number;
 };
 
 function brandFixture(input: BrandFixtureInput): BrandProfile {
@@ -178,16 +191,15 @@ function brandFixture(input: BrandFixtureInput): BrandProfile {
     ...(logoUrl ? { logoUrl, logoSourceUrl: logoUrl } : {}),
     imageUrls: input.logo === false
       ? []
-      : [
-          `${runtimeAssetOrigin}/${input.id}-product-ui.svg`,
-          `${runtimeAssetOrigin}/${input.id}-workflow.svg`
-        ],
+      : ["product-ui", "workflow", "outcome"]
+          .slice(0, input.images ?? 2)
+          .map((name) => `${runtimeAssetOrigin}/${input.id}-${name}.svg`),
     colors: [input.primaryColor, input.accentColor, "#FFFFFF", input.buttonColor],
     primaryColor: input.primaryColor,
     accentColor: input.accentColor,
     surfaceColor: "#FFFFFF",
-    displayFontFamily: "Inter",
-    bodyFontFamily: "Inter",
+    displayFontFamily: input.displayFont ?? "Inter",
+    bodyFontFamily: input.bodyFont ?? "Inter",
     sourceUrl: `https://${input.domain}/`,
     source: input.logo === false ? "fast-extractor" : "brand-harvester",
     identity: {
@@ -207,7 +219,7 @@ function brandFixture(input: BrandFixtureInput): BrandProfile {
       theme: { hero: "light", motif: input.motif ?? "none" },
       typography: {
         fallback: "sans",
-        headingWeight: 700,
+        headingWeight: input.headingWeight ?? 700,
         bodyWeight: 400,
         headingLetterSpacingEm: -0.02
       },
@@ -218,9 +230,9 @@ function brandFixture(input: BrandFixtureInput): BrandProfile {
         borderWidthPx: 0
       },
       cards: {
-        radiusPx: input.radius,
-        borderWidthPx: 1,
-        shadow: input.radius > 4 ? "soft" : "none"
+        radiusPx: input.cardRadius ?? input.radius,
+        borderWidthPx: input.cardBorderWidth ?? 1,
+        shadow: input.shadow ?? (input.radius > 4 ? "soft" : "none")
       },
       spacing: {
         contentMaxWidthPx: 1180,
@@ -302,7 +314,7 @@ function sessionFixture(input: {
 }
 
 export type RuntimeVisualFixture = {
-  id: "adp-launch" | "apple-guide" | "servicetitan-align";
+  id: string;
   expectedFamily: WireframeFamilyV2;
   expectedSubtype: "product" | "solution" | "account";
   expectedPersona: string;
@@ -496,6 +508,157 @@ export const runtimeVisualFixtures: RuntimeVisualFixture[] = [
   }
 ];
 
+/** Section spacing implied by a compiled density character. */
+const DENSITY_BLOCK_PX: Record<BrandDensityCharacter, number> = {
+  open: 120,
+  balanced: 88,
+  dense: 64
+};
+
+const ARCHETYPE_MOTIONS: Record<
+  WireframeFamilyV2,
+  { useCase: TryMeSession["useCase"]; persona: string; offer: string; objective: string }
+> = {
+  launch: {
+    useCase: "campaign",
+    persona: "Operations leaders",
+    offer: "the evaluated platform",
+    objective: "Evaluate a unified operating model"
+  },
+  guide: {
+    useCase: "campaign",
+    persona: "Enterprise architects",
+    offer: "the deployment guide",
+    objective: "Evaluate enrollment, identity, and distribution"
+  },
+  align: {
+    useCase: "abm",
+    persona: "Field operations leaders",
+    offer: "dispatch consistency",
+    objective: "Validate the account priority and next step"
+  }
+};
+
+/**
+ * Builds a runtime fixture whose visual identity is the compiled output of a
+ * brand archetype rather than a named company.
+ *
+ * The rendered page can then be measured against `semantics`, which is what
+ * the compiler actually decided, so a DOM assertion is comparing the page to
+ * the decision that produced it instead of to a hardcoded expectation.
+ */
+export function archetypeRuntimeFixture(
+  archetype: BrandArchetypeFixture,
+  family: WireframeFamilyV2
+): RuntimeVisualFixture & { semantics: BrandSemanticSystem } {
+  const semantics = compileBrandSemantics(archetype.evidence);
+  const motion = ARCHETYPE_MOTIONS[family];
+  const id = `${archetype.id}-${family}`;
+  const domain = `${archetype.id}.example`;
+  // A logo-only brand still has a verified logo; what it lacks is supporting
+  // imagery, geometry, and type. Removing the logo would test brand-help
+  // instead of the sparse-evidence render this fixture exists for.
+  const hasImagery = archetype.id !== "sparse-logo-only";
+  const brand = brandFixture({
+    id,
+    domain,
+    companyName: "Archetype Company",
+    title: `Archetype Company ${family} experience`,
+    description: "Archetype Company operates a governed workflow platform.",
+    publicContext: `${motion.persona} coordinate governed workflow operations across teams.`,
+    publicTopics: ["Workflow operations", "Governed automation"],
+    primaryColor: semantics.colors.text.value,
+    accentColor: semantics.colors.accent.value,
+    buttonColor: semantics.colors.ctaBackground.value,
+    radius: semantics.geometry.buttonRadius.value,
+    cardRadius: semantics.geometry.cardRadius.value,
+    cardBorderWidth: semantics.geometry.borderWidth.value,
+    shadow:
+      semantics.geometry.shadowCharacter.value === "elevated"
+        ? "strong"
+        : semantics.geometry.shadowCharacter.value === "none"
+          ? "none"
+          : "soft",
+    density: DENSITY_BLOCK_PX[semantics.geometry.density.value],
+    displayFont: semantics.typography.headingFont.value,
+    bodyFont: semantics.typography.bodyFont.value,
+    headingWeight: semantics.typography.weightCharacter.value === "bold" ? 700 : 500,
+    images: hasImagery ? 3 : 0
+  });
+  const targetBrand = family === "align"
+    ? brandFixture({
+        id: `${id}-target`,
+        domain: `${archetype.id}-target.example`,
+        companyName: "Target Company",
+        title: "Target Company Operations",
+        description: "Target Company coordinates distributed service operations.",
+        publicContext: "Target Company is evaluating dispatch consistency across territories.",
+        publicTopics: ["Dispatch consistency", "Territory operations"],
+        primaryColor: semantics.colors.text.value,
+        accentColor: semantics.colors.accent.value,
+        buttonColor: semantics.colors.ctaBackground.value,
+        radius: semantics.geometry.buttonRadius.value,
+        density: DENSITY_BLOCK_PX[semantics.geometry.density.value],
+        images: 0
+      })
+    : undefined;
+
+  return {
+    id,
+    expectedFamily: family,
+    expectedSubtype: family === "launch" ? "product" : family === "guide" ? "solution" : "account",
+    expectedPersona: motion.persona,
+    expectedOfferOrPriority: motion.offer,
+    brand,
+    ...(targetBrand ? { targetBrand } : {}),
+    semantics,
+    session: sessionFixture({
+      id: `runtime-${id}`,
+      useCase: motion.useCase,
+      brand,
+      ...(targetBrand ? { targetBrand } : {}),
+      answers: {
+        ...(family === "align"
+          ? { targetDomain: targetBrand!.domain, targetConfirmed: true }
+          : {}),
+        ...(family === "launch" ? { campaignType: "product" as const } : {}),
+        ...(family === "guide"
+          ? {
+              sourceUrl: `https://${domain}/guide`,
+              sourceTitle: "Deployment guide",
+              sourceConfirmed: true
+            }
+          : {}),
+        promotedOffer: motion.offer,
+        promotedOfferConfirmed: true,
+        audience: motion.persona,
+        objective: motion.objective,
+        ...(family === "align"
+          ? { messageBelief: "Choose the workflow to validate first" }
+          : {}),
+        ctaType: family === "guide" ? "download" : family === "launch" ? "contact-sales" : "book-meeting",
+        ctaStyle: "solid"
+      },
+      evidenceItems: [
+        evidence(
+          `${id}-capability`,
+          "seller",
+          "Governed workflow steps route approvals to the accountable owner.",
+          `https://${domain}/platform`,
+          ["Workflow operations", "Approval routing"]
+        ),
+        evidence(
+          `${id}-context`,
+          family === "align" ? "target" : "seller",
+          "Distributed teams coordinate the same operating steps across regions.",
+          `https://${domain}/operations`,
+          ["Distributed operations", "Coordination"]
+        )
+      ]
+    })
+  };
+}
+
 export async function compileRuntimeVisualFixture(fixture: RuntimeVisualFixture): Promise<{
   page: GenericProductionPage;
   html: string;
@@ -521,7 +684,7 @@ export async function compileRuntimeVisualFixture(fixture: RuntimeVisualFixture)
       fixture.session.answers.ctaType === "download"
         ? "Read the deployment guide"
         : fixture.session.answers.ctaType === "contact-sales"
-          ? "See ADP Workforce Now"
+          ? `See ${fixture.expectedOfferOrPriority}`
           : "Plan a working session"
   };
   const adapted = applyProductionPageToDraft(draft, page);

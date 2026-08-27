@@ -7,6 +7,7 @@ import {
   noStoreHeaders,
   startServerOperation
 } from "@/lib/http";
+import { buildTraceStoreMode, purgeExpiredBuildTraces } from "@/lib/build-trace-store";
 import { purgeExpiredTraceEvents, traceStoreMode } from "@/lib/trace-store";
 import {
   productAnalyticsStoreMode,
@@ -34,13 +35,19 @@ export async function GET(request: NextRequest) {
     const analytics = productAnalyticsStoreMode === "neon-postgres"
       ? await purgeExpiredProductAnalytics()
       : { eventsDeleted: 0, sessionsDeleted: 0, browserSessionsDeleted: 0, visitorsDeleted: 0 };
+    // Expired build traces are purged on the same schedule. A failure here is
+    // reported as a count of zero rather than failing the whole sweep.
+    const buildTracesDeleted = buildTraceStoreMode === "neon-postgres"
+      ? await purgeExpiredBuildTraces().catch(() => 0)
+      : 0;
     const totalDeleted = deleted
+      + buildTracesDeleted
       + analytics.eventsDeleted
       + analytics.sessionsDeleted
       + analytics.browserSessionsDeleted
       + analytics.visitorsDeleted;
     return NextResponse.json(
-      { ok: true, deleted },
+      { ok: true, deleted, buildTracesDeleted },
       { headers: { ...noStoreHeaders, ...trace.complete(200, { deleted: totalDeleted }) } }
     );
   } catch (error) {

@@ -4,6 +4,7 @@ import {
   CANONICAL_EXPERIENCE_STRUCTURE,
   compileCampaignContext
 } from "@/lib/generation/campaign-context";
+import type { AssetRenderPlan } from "@/lib/asset-allocation";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import { normalizeRemoteBrandProfile } from "@/lib/integrations/brand-harvester";
@@ -1072,5 +1073,140 @@ describe("renderExperienceHtml", () => {
     expect(html).not.toContain("window.location=");
     expect(html).not.toContain("showSignal(");
     expect(html).toContain("data-action-event=\"cta_click\"");
+  });
+});
+
+describe("compiled asset plan authority", () => {
+  const plan: AssetRenderPlan = {
+    version: "asset-render-plan-v1",
+    placements: [
+      {
+        sectionId: "hero",
+        semanticRole: "hero",
+        assetRef: "https://www.jitterbit.com/planned-hero.png",
+        reusable: false,
+        required: true
+      },
+      {
+        sectionId: "proof",
+        semanticRole: "proof",
+        assetRef: "https://www.jitterbit.com/planned-proof.png",
+        reusable: false,
+        required: false
+      }
+    ],
+    treatments: [
+      {
+        sectionId: "process",
+        semanticRole: "process",
+        treatment: "designed_non_image",
+        reason: "assets_exhausted"
+      }
+    ]
+  };
+
+  function renderedImages(html: string): string[] {
+    return [...html.matchAll(/<figure class="media[^"]*"[^>]*>[\s\S]{0,900}?<\/figure>/g)]
+      .map((figure) => figure[0].match(/<img src="([^"]+)"/)?.[1])
+      .filter((source): source is string => Boolean(source));
+  }
+
+  it("renders exactly the planned assets and ignores brand images outside the plan", () => {
+    const html = renderExperienceHtml({
+      draft,
+      brand: {
+        ...brand,
+        imageUrls: [
+          "https://www.jitterbit.com/not-in-the-plan.png",
+          "https://www.jitterbit.com/also-absent.png"
+        ]
+      },
+      useCase: "campaign",
+      answers: {},
+      assetPlan: plan
+    });
+    const rendered = renderedImages(html);
+
+    expect(new Set(rendered)).toEqual(
+      new Set(plan.placements.map(({ assetRef }) => assetRef))
+    );
+    expect(html).not.toContain("not-in-the-plan.png");
+    expect(html).not.toContain("also-absent.png");
+  });
+
+  it("gives the required hero placement to the hero and never to a lesser slot", () => {
+    const html = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: {},
+      assetPlan: plan
+    });
+    const heroStart = html.indexOf('<section class="hero"');
+    const hero = html.slice(heroStart, html.indexOf("</section>", heroStart));
+
+    expect(hero).toContain("planned-hero.png");
+  });
+
+  it("uses every substantive asset at most once across the whole document", () => {
+    const html = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: {},
+      assetPlan: plan
+    });
+    const rendered = renderedImages(html);
+
+    expect(new Set(rendered).size).toBe(rendered.length);
+  });
+
+  it("renders a designed treatment rather than an eyebrow stack when no asset is planned", () => {
+    const html = renderExperienceHtml({
+      draft,
+      brand: { ...brand, imageUrls: [] },
+      useCase: "campaign",
+      answers: {},
+      assetPlan: { version: "asset-render-plan-v1", placements: [], treatments: [] }
+    });
+
+    expect(renderedImages(html)).toEqual([]);
+    expect(html).toContain("no-asset-treatment");
+    expect(html).toMatch(/<figure class="media[^"]*no-asset-treatment/);
+    // A designed treatment is a composed figure, not a third stacked text block.
+    expect(html).not.toMatch(/<p class="eyebrow">[\s\S]{0,200}?<h2>[\s\S]{0,200}?<p class="dek">/);
+  });
+
+  it("drops an unsafe or transient planned source instead of rendering it", () => {
+    const html = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: {},
+      assetPlan: {
+        version: "asset-render-plan-v1",
+        placements: [
+          {
+            sectionId: "hero",
+            semanticRole: "hero",
+            assetRef: "http://169.254.169.254/latest/meta-data/",
+            reusable: false,
+            required: true
+          },
+          {
+            sectionId: "proof",
+            semanticRole: "proof",
+            assetRef: "https://www.jitterbit.com/2026-summit-promo.png",
+            reusable: false,
+            required: false
+          }
+        ],
+        treatments: []
+      }
+    });
+
+    expect(html).not.toContain("169.254.169.254");
+    expect(html).not.toContain("summit-promo.png");
+    expect(html).toContain("no-asset-treatment");
   });
 });

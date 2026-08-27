@@ -5,6 +5,7 @@ import {
   assetDuplicateKey,
   rejectAssetCandidate,
   substantiveAssetsAreUnique,
+  toAssetRenderPlan,
   type AssetCandidateInput,
   type AssetSlotRequest
 } from "@/lib/asset-allocation";
@@ -299,5 +300,136 @@ describe("global allocation", () => {
     };
 
     expect(allocateExperienceAssets(input)).toEqual(allocateExperienceAssets(input));
+  });
+});
+
+describe("duplicate-group ranking", () => {
+  const crops = [
+    candidate({
+      assetRef: "https://cdn.example.com/media/console-thumb.png",
+      purpose: "product",
+      width: 640,
+      height: 420,
+      confidence: 0.4
+    }),
+    candidate({
+      assetRef: "https://cdn.example.com/media/console.png",
+      purpose: "product",
+      width: 2400,
+      height: 1600,
+      altText: "The scheduling console during a shift handover",
+      confidence: 0.9
+    })
+  ];
+
+  it.each([
+    ["strongest first", crops],
+    ["strongest last", [...crops].reverse()]
+  ])("keeps the same representative when candidates arrive %s", (_label, candidates) => {
+    const plan = allocateExperienceAssets({
+      candidates,
+      slots: [slot("s1", "product")],
+      hashSourceUrl
+    });
+
+    expect(plan.allocations).toHaveLength(1);
+    expect(plan.allocations[0]?.assetRef).toBe("https://cdn.example.com/media/console.png");
+    expect(plan.rejections).toContainEqual({
+      assetRef: "https://cdn.example.com/media/console-thumb.png",
+      code: "duplicate_crop"
+    });
+  });
+
+  it("produces an identical plan whatever order the whole candidate set arrives in", () => {
+    const candidates = [
+      candidate({ assetRef: "https://cdn.example.com/a-console.png", purpose: "product" }),
+      candidate({ assetRef: "https://cdn.example.com/b-workflow.png", purpose: "process" }),
+      candidate({ assetRef: "https://cdn.example.com/c-customer.png", purpose: "proof" })
+    ];
+    const slots = [slot("s1", "product"), slot("s2", "process"), slot("s3", "proof")];
+
+    const forward = allocateExperienceAssets({ candidates, slots, hashSourceUrl });
+    const reversed = allocateExperienceAssets({
+      candidates: [...candidates].reverse(),
+      slots,
+      hashSourceUrl
+    });
+
+    expect(reversed.allocations).toEqual(forward.allocations);
+  });
+});
+
+describe("unsafe source matrix", () => {
+  it.each([
+    ["loopback ipv4", "https://127.0.0.1/logo.png"],
+    ["any-address ipv4", "https://0.0.0.0/logo.png"],
+    ["private class a", "https://10.1.2.3/logo.png"],
+    ["private class b", "https://172.20.0.5/logo.png"],
+    ["private class c", "https://192.168.1.9/logo.png"],
+    ["link-local ipv4", "https://169.254.169.254/latest/meta-data/"],
+    ["carrier-grade nat", "https://100.72.4.1/logo.png"],
+    ["benchmark range", "https://198.19.0.1/logo.png"],
+    ["ipv6 loopback", "https://[::1]/logo.png"],
+    ["ipv6 unspecified", "https://[::]/logo.png"],
+    ["ipv6 unique-local", "https://[fd00::1]/logo.png"],
+    ["ipv6 link-local", "https://[fe80::1]/logo.png"],
+    ["ipv4-mapped ipv6", "https://[::ffff:127.0.0.1]/logo.png"],
+    ["bare hostname", "https://intranet/logo.png"],
+    ["mdns host", "https://printer.local/logo.png"],
+    ["internal suffix", "https://assets.internal/logo.png"],
+    ["home arpa", "https://nas.home.arpa/logo.png"],
+    ["onion service", "https://abcd1234.onion/logo.png"],
+    ["credentials in url", "https://user:secret@cdn.example.com/logo.png"],
+    ["explicit port", "https://cdn.example.com:8443/logo.png"]
+  ])("rejects %s", (_label, assetRef) => {
+    expect(rejectAssetCandidate(candidate({ assetRef, purpose: "product" }))).toBeDefined();
+  });
+
+  it.each([
+    ["ftp", "ftp://cdn.example.com/logo.png", "not_https"],
+    ["file", "file:///etc/passwd", "not_https"],
+    ["protocol-relative", "//cdn.example.com/logo.png", "unsafe_url"],
+    ["blob", "blob:https://cdn.example.com/abc", "not_https"]
+  ])("rejects a %s source", (_label, assetRef, code) => {
+    expect(rejectAssetCandidate(candidate({ assetRef, purpose: "product" }))).toBe(code);
+  });
+
+  it("accepts a public https source and a first-party delivery path", () => {
+    expect(
+      rejectAssetCandidate(
+        candidate({ assetRef: "https://cdn.example.com/console.png", purpose: "product" })
+      )
+    ).toBeUndefined();
+    expect(
+      rejectAssetCandidate(
+        candidate({ assetRef: "/api/sessions/abc/image/1", purpose: "product" })
+      )
+    ).toBeUndefined();
+  });
+});
+
+describe("public render projection", () => {
+  it("carries placements without the evidence or scores behind them", () => {
+    const plan = allocateExperienceAssets({
+      candidates: [
+        candidate({ assetRef: "https://cdn.example.com/console.png", purpose: "product" })
+      ],
+      slots: [{ sectionId: "hero", semanticRole: "hero", required: true }],
+      hashSourceUrl
+    });
+    const renderPlan = toAssetRenderPlan(plan);
+    const serialized = JSON.stringify(renderPlan);
+
+    expect(renderPlan.placements[0]).toEqual({
+      sectionId: "hero",
+      semanticRole: "hero",
+      assetRef: "https://cdn.example.com/console.png",
+      reusable: false,
+      required: true
+    });
+    for (const field of ["evidenceRef", "sourceUrlHash", "score", "allocationKey", "purpose"]) {
+      expect(serialized).not.toContain(field);
+    }
+    expect(serialized).not.toContain("evidence:");
   });
 });

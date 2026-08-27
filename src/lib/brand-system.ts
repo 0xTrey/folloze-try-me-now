@@ -14,8 +14,10 @@ import {
 } from "@/lib/brand-semantics";
 import {
   allocateExperienceAssets,
+  toAssetRenderPlan,
   type AssetAllocationPlan,
   type AssetCandidateInput,
+  type AssetRenderPlan,
   type AssetSemanticRole,
   type AssetSlotRequest
 } from "@/lib/asset-allocation";
@@ -122,10 +124,12 @@ export interface BrandSystemV2 {
     candidates: AssetEvidence[];
     selected: SelectedAssetRole[];
     /**
-     * Global consume-once plan. Substantive imagery appears in exactly one
-     * allocation; slots left without an asset carry a designed treatment.
+     * Global consume-once plan the renderer follows. Substantive imagery
+     * appears in exactly one placement; slots left without an asset carry a
+     * designed treatment. Public-safe by construction: the evidence and scores
+     * behind these placements live in the private trace, not here.
      */
-    allocation?: AssetAllocationPlan;
+    renderPlan?: AssetRenderPlan;
   };
   motion: { style: string; durationRangeMs: [number, number] };
   readiness: "verified" | "partial" | "needs_input";
@@ -969,6 +973,21 @@ function allocationRoleFor(
   return ALLOCATION_ROLE_BY_PURPOSE[purpose];
 }
 
+/**
+ * The full allocation plan for a compiled brand system: evidence references,
+ * source hashes, scores, and rejection codes. Held beside the brand object
+ * rather than inside it, so no serialization of a brand system can carry the
+ * private reasoning behind its imagery, however the object is spread, cloned,
+ * or returned.
+ */
+const PRIVATE_ASSET_PLANS = new WeakMap<BrandSystemV2, AssetAllocationPlan>();
+
+export function privateAssetAllocationFor(
+  system: BrandSystemV2 | undefined
+): AssetAllocationPlan | undefined {
+  return system ? PRIVATE_ASSET_PLANS.get(system) : undefined;
+}
+
 /** Stable, non-reversible reference for an asset URL inside a trace. */
 function assetRefHash(assetRef: string): string {
   let hash = 0x811c9dc5;
@@ -1456,7 +1475,7 @@ export function compileBrandSystemV2(
       style: compiledImageryStyle,
       candidates: assets,
       selected: selectedAssets,
-      allocation
+      renderPlan: toAssetRenderPlan(allocation)
     },
     motion: {
       style: selectedOrDefault(motionStyle, "none"),
@@ -1473,6 +1492,7 @@ export function compileBrandSystemV2(
     evidenceRefs,
     ...(semantics ? { semantics } : {})
   };
+  PRIVATE_ASSET_PLANS.set(system, allocation);
 
   return {
     ...base,

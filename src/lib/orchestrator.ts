@@ -37,13 +37,14 @@ import {
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import type { GenericProductionEngineResult } from "@/lib/generation/generic-production-engine";
 import { applyProductionPageToDraft } from "@/lib/generation/production-draft-adapter";
-import { saveBuildTrace } from "@/lib/build-trace-store";
+import { retainCommittedBuildTrace } from "@/lib/build-trace-retention";
 import { compileSessionProductionPage } from "@/lib/generation/session-production-engine";
 import { HttpError, logServerError } from "@/lib/http";
 import {
   brandWithFirstPartyImages,
   brandWithSessionLogoDelivery,
-  imageDeliverySources
+  imageDeliverySources,
+  renderPlanWithFirstPartyImages
 } from "@/lib/image-delivery";
 import {
   harvestBrand,
@@ -990,6 +991,8 @@ async function assembleExperienceArtifact(input: {
   imageSourceTargetBrand?: BrandProfile;
   generationSource: "openai" | "deterministic-fallback";
   trustFallbackReason?: string;
+  /** Story attempt this artifact belongs to, so its trace can be fenced. */
+  attemptId?: string;
 }) {
   syncCampaignContracts(input.session);
   const storyStartedAt = Date.parse(input.session.stages.story.startedAt ?? "");
@@ -998,19 +1001,15 @@ async function assembleExperienceArtifact(input: {
     brand: input.brand,
     targetBrand: input.targetBrand,
     providerStartedAtMs: Number.isFinite(storyStartedAt) ? storyStartedAt : Date.now(),
-    currentTimeMs: Date.now()
+    currentTimeMs: Date.now(),
+    traceId: traceIdForSession(input.session),
+    ...(input.attemptId ? { attemptId: input.attemptId } : {})
   });
   const productionPage =
     productionResult.outcome === "production-page" &&
     productionResult.artifact.revision === input.session.revision
       ? productionResult.artifact.value
       : undefined;
-  // Retained only for the revision the visitor actually gets. A failed save is
-  // an operator-visibility loss, never a build failure.
-  void saveBuildTrace({
-    trace: productionResult.buildTrace,
-    committedRevision: input.session.revision
-  }).catch(() => undefined);
   const familyDraft = productionPage
     ? applyProductionPageToDraft(input.draft, productionPage)
     : input.draft;
@@ -1072,6 +1071,16 @@ async function assembleExperienceArtifact(input: {
     actions: experienceSpec.actions,
     wireframeSelection: experienceSpec.wireframeSelection,
     productionSections: experienceSpec.production?.sections,
+    ...(productionResult.assetPlan
+      ? {
+          assetPlan: renderPlanWithFirstPartyImages(
+            input.id,
+            productionResult.assetPlan,
+            imageSources,
+            qualityReceipt.artifactRevision
+          )
+        }
+      : {}),
     ...(experienceSpec.personalization
       ? { personalization: experienceSpec.personalization }
       : {})
@@ -3140,7 +3149,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         targetBrand: selectedBrands.targetBrand,
         imageSourceBrand: brand,
         imageSourceTargetBrand: targetBrand,
-        generationSource: "deterministic-fallback"
+        generationSource: "deterministic-fallback",
+        attemptId
       });
       const provisionalReadyAt = Date.now();
       const eligibleAt = generationEligibleAt(latest);
@@ -3277,7 +3287,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       imageSourceBrand: brand,
       imageSourceTargetBrand: targetBrand,
       generationSource: generated.source,
-      trustFallbackReason
+      trustFallbackReason,
+      attemptId
     });
     // A complete design-DNA pass is valuable enrichment, but it must not
     // erase a usable page after the seller's identity, official logo, source
@@ -3318,7 +3329,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       .reverse()
       .find((event) => event.name === "preview_provisional_ready");
     const provisionalReadyTimestamp = Date.parse(provisionalReadyEvent?.at ?? "");
-    await updateSession(
+    const committed = await updateSession(
       id,
       (session) => {
         if (
@@ -3427,6 +3438,13 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       },
       { ttlSeconds: config.sessionTtlSeconds }
     );
+    if (!staleGeneration) {
+      await retainCommittedBuildTrace({
+        committed,
+        trace: finalArtifact.productionResult.buildTrace,
+        attemptId
+      });
+    }
   } catch (error) {
     const errorCode = error instanceof SourceFetchError ? "source_fetch_failed" : "generation_failed";
     const failedSession = await getSession(id);

@@ -187,3 +187,75 @@ describe("anonymous session lifecycle", () => {
     });
   });
 });
+
+describe("private provenance never reaches a public session", () => {
+  /**
+   * Everything a session may hold that belongs to the private trace. The
+   * projection is an allowlist, so this proves the allowlist has not quietly
+   * grown a hole rather than proving any one field was remembered.
+   */
+  function sessionWithPrivateProvenance(): TryMeSession {
+    return anonymousPreview({
+      traceId: "trace_0123456789abcdef",
+      brand: {
+        domain: "example.com",
+        companyName: "Example",
+        publicTopics: [],
+        imageUrls: ["https://cdn.example.com/console.png"],
+        colors: ["#202124"],
+        primaryColor: "#202124",
+        accentColor: "#5F6368",
+        surfaceColor: "#FFFFFF",
+        sourceUrl: "https://example.com",
+        source: "fallback",
+        diagnostics: {
+          logo: {
+            strategy: "favicon",
+            imageCandidateCount: 3,
+            rejectedImageCount: 1,
+            inlineSvgCandidateCount: 0
+          }
+        }
+      }
+    });
+  }
+
+  it("omits the trace id, prompt versions, evidence refs, digests, and allocation data", () => {
+    const projected = toPublicSession(sessionWithPrivateProvenance());
+    const serialized = JSON.stringify(projected);
+
+    expect("traceId" in projected).toBe(false);
+    for (const field of [
+      "traceId",
+      "buildTrace",
+      "promptVersion",
+      "templateVersion",
+      "evidenceRef",
+      "evidenceRefs",
+      "outputDigest",
+      "inputDigest",
+      "candidateDigests",
+      "allocationKey",
+      "sourceUrlHash",
+      "assetDigest",
+      "allocation",
+      "rejections",
+      "correlationKey",
+      "supportRefHash"
+    ]) {
+      expect(serialized).not.toContain(field);
+    }
+    for (const pattern of [/dg_[a-f0-9]{32}/, /ev_[a-f0-9]{20}/, /sh_[a-f0-9]{20}/, /sr_[a-f0-9]{20}/]) {
+      expect(serialized).not.toMatch(pattern);
+    }
+  });
+
+  it("exposes a support reference without exposing the trace it resolves to", () => {
+    const session = sessionWithPrivateProvenance();
+    const projected = toPublicSession(session);
+
+    expect(projected.supportRef).toBeTruthy();
+    expect(projected.supportRef).not.toContain(session.traceId!);
+    expect(JSON.stringify(projected)).not.toContain(session.traceId!);
+  });
+});

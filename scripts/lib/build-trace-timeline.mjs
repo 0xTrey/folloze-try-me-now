@@ -161,3 +161,199 @@ export function renderBuildTraceReport(reference, traces) {
     ...traces.map((trace) => renderBuildTraceTimeline(trace))
   ].join("\n");
 }
+
+/** Bounds on a projection, so a malformed row cannot produce an unbounded dump. */
+const PROJECTION_LIMITS = {
+  timings: 64,
+  candidates: 12,
+  roles: 32,
+  allocations: 32,
+  sections: 24,
+  candidateDigests: 8,
+  reasons: 12,
+  quality: 24,
+  fallbacks: 64
+};
+
+/**
+ * Codes and enums only. Stricter than the timeline renderer: `@` is excluded
+ * so an address can never pass, and a value whose last segment reads as a
+ * hostname is dropped even though the character set would allow it.
+ */
+const PROJECTION_TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:+-]{0,127}$/;
+const HOSTNAME_LIKE = /\.[A-Za-z]{2,}(?::\d+)?$/;
+
+/** A safe string, or nothing at all. Absent beats `[withheld]` in JSON. */
+function token(value) {
+  if (typeof value !== "string") return undefined;
+  if (!PROJECTION_TOKEN.test(value)) return undefined;
+  return HOSTNAME_LIKE.test(value) ? undefined : value;
+}
+
+function tokens(values, limit) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .slice(0, limit)
+    .map((value) => token(value))
+    .filter((value) => value !== undefined);
+}
+
+function count(value) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function number(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function boolean(value) {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+/** Drops absent fields so the output is an allowlist, not a shape with holes. */
+function compact(record) {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== undefined)
+  );
+}
+
+function projectDecision(decision) {
+  if (!decision || typeof decision !== "object") return undefined;
+  return compact({
+    decision: token(decision.decision),
+    selectedCandidateId: token(decision.selectedCandidateId),
+    confidence: token(decision.confidence) ?? number(decision.confidence),
+    reasonCodes: tokens(decision.reasonCodes, PROJECTION_LIMITS.reasons),
+    candidates: (Array.isArray(decision.candidates) ? decision.candidates : [])
+      .slice(0, PROJECTION_LIMITS.candidates)
+      .map((candidate) =>
+        compact({
+          candidateId: token(candidate?.candidateId),
+          score: number(candidate?.score),
+          reasonCodes: tokens(candidate?.reasonCodes, PROJECTION_LIMITS.reasons)
+        })
+      )
+  });
+}
+
+/**
+ * Projects a stored trace into the operator-visible JSON view.
+ *
+ * This is an allowlist, not a redaction pass. Every field is named here and
+ * every value is a code, enum, digest, count, or timestamp, so a future field
+ * added upstream cannot reach an operator's terminal until someone adds it
+ * deliberately. Anything that fails the safe-token test is dropped entirely.
+ */
+export function projectBuildTraceForInspection(trace) {
+  if (!trace || typeof trace !== "object") return undefined;
+  const decisions = trace.decisions ?? {};
+  const brand = decisions.brand;
+  const assets = decisions.assets;
+  return compact({
+    schemaVersion: token(trace.schemaVersion) ?? number(trace.schemaVersion),
+    pipelineVersion: token(trace.pipelineVersion),
+    attemptId: token(trace.attemptId),
+    traceId: token(trace.traceId),
+    sessionId: token(trace.sessionId),
+    revision: number(trace.revision),
+    terminalStatus: token(trace.terminalStatus),
+    startedAt: token(trace.startedAt),
+    completedAt: token(trace.completedAt),
+    // Count only. Evidence identifiers carry source hostnames upstream.
+    evidenceRefCount: count(trace.evidenceRefs),
+    timings: (Array.isArray(trace.timings) ? trace.timings : [])
+      .slice(0, PROJECTION_LIMITS.timings)
+      .map((timing) =>
+        compact({
+          stage: token(timing?.stage),
+          status: token(timing?.status),
+          durationMs: number(timing?.durationMs)
+        })
+      ),
+    decisions: compact({
+      framework: projectDecision(decisions.framework),
+      wireframe: projectDecision(decisions.wireframe),
+      brand: brand
+        ? compact({
+            readiness: token(brand.readiness),
+            confidence: token(brand.confidence) ?? number(brand.confidence),
+            warnings: tokens(brand.warnings, PROJECTION_LIMITS.reasons),
+            roles: (Array.isArray(brand.roles) ? brand.roles : [])
+              .slice(0, PROJECTION_LIMITS.roles)
+              .map((role) =>
+                compact({
+                  role: token(role?.role),
+                  valueDigest: token(role?.valueDigest),
+                  sourceAuthority: token(role?.sourceAuthority),
+                  confidence: number(role?.confidence),
+                  selectionReasons: tokens(role?.selectionReasons, PROJECTION_LIMITS.reasons)
+                })
+              )
+          })
+        : undefined,
+      assets: assets
+        ? compact({
+            substantiveCount: number(assets.substantiveCount),
+            reusableCount: number(assets.reusableCount),
+            rejectedCount: number(assets.rejectedCount),
+            rejectionReasons: tokens(assets.rejectionReasons, PROJECTION_LIMITS.reasons),
+            allocations: (Array.isArray(assets.allocations) ? assets.allocations : [])
+              .slice(0, PROJECTION_LIMITS.allocations)
+              .map((allocation) =>
+                compact({
+                  sectionId: token(allocation?.sectionId),
+                  semanticRole: token(allocation?.semanticRole),
+                  assetDigest: token(allocation?.assetDigest),
+                  score: number(allocation?.score),
+                  reusable: boolean(allocation?.reusable)
+                })
+              )
+          })
+        : undefined
+    }),
+    sections: (Array.isArray(trace.sections) ? trace.sections : [])
+      .slice(0, PROJECTION_LIMITS.sections)
+      .map((section) =>
+        compact({
+          sectionId: token(section?.sectionId),
+          role: token(section?.role),
+          status: token(section?.status),
+          writerMode: token(section?.writerMode),
+          promptVersion: token(section?.promptVersion),
+          templateVersion: token(section?.templateVersion),
+          inputDigest: token(section?.inputDigest),
+          outputDigest: token(section?.outputDigest),
+          selectedCandidate: token(section?.selectedCandidate)
+            ?? number(section?.selectedCandidate),
+          candidateCount: count(section?.candidateDigests),
+          candidateDigests: tokens(
+            section?.candidateDigests,
+            PROJECTION_LIMITS.candidateDigests
+          ),
+          selectionReasons: tokens(section?.selectionReasons, PROJECTION_LIMITS.reasons),
+          fallbackCode: token(section?.fallbackCode)
+        })
+      ),
+    quality: (Array.isArray(trace.quality) ? trace.quality : [])
+      .slice(0, PROJECTION_LIMITS.quality)
+      .map((result) =>
+        compact({
+          dimension: token(result?.dimension),
+          score: number(result?.score),
+          blocking: false,
+          warnings: tokens(result?.warnings, PROJECTION_LIMITS.reasons),
+          violations: tokens(result?.violations, PROJECTION_LIMITS.reasons)
+        })
+      ),
+    fallbacks: (Array.isArray(trace.fallbacks) ? trace.fallbacks : [])
+      .slice(0, PROJECTION_LIMITS.fallbacks)
+      .map((fallback) =>
+        compact({
+          at: token(fallback?.at),
+          stage: token(fallback?.stage),
+          scope: token(fallback?.scope),
+          code: token(fallback?.code)
+        })
+      )
+  });
+}

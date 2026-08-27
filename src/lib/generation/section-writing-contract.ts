@@ -314,6 +314,11 @@ export interface SectionWritingContract {
   brief: SectionWriterBrief;
 }
 
+/**
+ * The role a claim of each kind comes from. Used only to place legacy claims
+ * that predate the explicit `kind` field; a claim that declares its kind is
+ * matched on that kind exactly.
+ */
 const EVIDENCE_KIND_SOURCE_ROLE: Partial<
   Record<EvidenceKindV2, SectionEvidenceClaim["sourceRole"]>
 > = {
@@ -349,6 +354,7 @@ export function buildSectionWritingContracts(
 
   return input.decision.sectionPlan.map((slot, order) => {
     const promptSpec = SECTION_PROMPT_REGISTRY[slot.role];
+    const allowedKinds = new Set(slot.requiredEvidenceKinds);
     const allowedRoles = new Set(
       slot.requiredEvidenceKinds
         .map((kind) => EVIDENCE_KIND_SOURCE_ROLE[kind])
@@ -356,8 +362,10 @@ export function buildSectionWritingContracts(
     );
     // A section may only cite evidence of the kinds its slot declares. With no
     // declared kind the section writes without asserting anything verifiable.
-    const evidence = allowedRoles.size
-      ? currentEvidence.filter((claim) => allowedRoles.has(claim.sourceRole))
+    const evidence = allowedKinds.size
+      ? currentEvidence.filter((claim) =>
+          claim.kind ? allowedKinds.has(claim.kind) : allowedRoles.has(claim.sourceRole)
+        )
       : [];
     const writerSlot = adaptSectionSlotV2(
       input.decision.family,

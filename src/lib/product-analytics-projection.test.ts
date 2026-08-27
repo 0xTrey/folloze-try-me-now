@@ -16,8 +16,7 @@ import {
 } from "@/lib/product-analytics-projection";
 import { analyticsCorrelationKey } from "@/lib/analytics-correlation";
 import {
-  assertUnifiedProductEventProperties,
-  boundedAnalyticsLabel
+  assertUnifiedProductEventProperties
 } from "@/lib/product-analytics-contracts";
 import { parseProductEventBatch } from "@/lib/product-analytics";
 
@@ -160,56 +159,46 @@ describe("behavior-only funnel coverage", () => {
     expect(events.every(({ properties }) => properties.correlation_key === key)).toBe(true);
   });
 
-  it("reports the label the reader saw and drops internal placeholders", () => {
-    const real = projectRecommendationBehaviorEvent({
+  it("reports which option was taken without its copy", () => {
+    const selected = projectRecommendationBehaviorEvent({
       action: "selected",
       kind: "value_prop",
       rank: 1,
-      valuePropLabel: "Cut unplanned dwell time",
       wasDefault: false
     });
-    const placeholder = projectRecommendationBehaviorEvent({
-      action: "selected",
-      kind: "value_prop",
-      rank: 1,
-      valuePropLabel: "Decision Lens 2"
-    });
 
-    expect(real.properties.value_prop_label).toBe("Cut unplanned dwell time");
-    expect(placeholder.properties.value_prop_label).toBeUndefined();
-    expect(boundedAnalyticsLabel("Decision Lens 3")).toBe("");
+    expect(selected.properties).toEqual({
+      recommendation_kind: "value_prop",
+      rank: 1,
+      was_default: false
+    });
+    expect(JSON.stringify(selected)).not.toMatch(/label|title/i);
   });
 
-  it("keeps a section title bounded and free of identifying content", () => {
-    const safe = projectSectionViewedBehaviorEvent({
-      sectionTitle: "Where the dwell time goes",
+  it("locates a viewed section by role and position rather than by title", () => {
+    const viewed = projectSectionViewedBehaviorEvent({
       sectionRole: "current-friction",
       position: 2,
       dwellMs: 6_000
     });
-    const unsafe = projectSectionViewedBehaviorEvent({
-      sectionTitle: "Prepared for ops@northwind-logistics.example",
-      sectionRole: "current-friction",
-      position: 2
-    });
 
-    expect(safe.properties.section_title).toBe("Where the dwell time goes");
-    expect(safe.properties.dwell_bucket).toBe("lt_10s");
-    expect(unsafe.properties.section_title).toBeUndefined();
+    expect(viewed.properties).toEqual({
+      section_role: "current-friction",
+      position: 2,
+      dwell_bucket: "lt_10s"
+    });
   });
 
   it("records an asset interaction without the asset reference itself", () => {
     const event = projectAssetInteractionBehaviorEvent({
       interactionType: "expand",
       assetRole: "product",
-      sectionTitle: "How the routing works",
       area: "preview"
     });
 
     expect(event.properties).toEqual({
       interaction_type: "expand",
       asset_role: "product",
-      section_title: "How the routing works",
       area: "preview"
     });
     expect(JSON.stringify(event)).not.toMatch(/https?:\/\//);

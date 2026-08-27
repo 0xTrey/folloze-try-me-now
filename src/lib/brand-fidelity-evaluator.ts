@@ -12,7 +12,7 @@
 
 import type { AssetAllocationPlan } from "@/lib/asset-allocation";
 import type { BrandSemanticSystem } from "@/lib/brand-semantics";
-import type { BrandSystemV2 } from "@/lib/brand-system";
+import { privateAssetAllocationFor, type BrandSystemV2 } from "@/lib/brand-system";
 import type { QualityTrace } from "@/lib/build-trace";
 import type { SectionCopyCandidate } from "@/lib/generation/section-copy-types";
 
@@ -34,6 +34,11 @@ export type BrandFidelityDimension =
 
 export interface BrandFidelityInput {
   brand: BrandSystemV2;
+  /**
+   * The private allocation plan. Defaults to the one compiled with the brand
+   * system; imagery scores 0.5 with a warning when neither is available.
+   */
+  assetAllocation?: AssetAllocationPlan;
   sections: readonly SectionCopyCandidate[];
   /** Evidence ids the build was allowed to cite. */
   availableEvidenceRefs?: readonly string[];
@@ -299,11 +304,10 @@ function scoreDensity(brand: BrandSystemV2, semantics?: BrandSemanticSystem): Di
   return dimension("density_and_rhythm", score, warnings, violations);
 }
 
-function scoreImagery(brand: BrandSystemV2): DimensionResult {
+function scoreImagery(plan: AssetAllocationPlan | undefined): DimensionResult {
   const warnings: string[] = [];
   const violations: string[] = [];
   let score = 1;
-  const plan: AssetAllocationPlan | undefined = brand.imagery.allocation;
 
   if (!plan) {
     warnings.push("no_allocation_plan");
@@ -496,7 +500,7 @@ export function evaluateBrandFidelity(input: BrandFidelityInput): BrandFidelityR
     scoreTypography(brand, semantics),
     scoreGeometry(brand, semantics),
     scoreDensity(brand, semantics),
-    scoreImagery(brand),
+    scoreImagery(input.assetAllocation ?? privateAssetAllocationFor(brand)),
     scoreCopySpecificity(input.sections),
     scoreEvidenceLinkage(input),
     scoreAccessibility(brand)
