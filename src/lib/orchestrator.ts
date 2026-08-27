@@ -37,6 +37,7 @@ import {
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import type { GenericProductionEngineResult } from "@/lib/generation/generic-production-engine";
 import { applyProductionPageToDraft } from "@/lib/generation/production-draft-adapter";
+import { saveBuildTrace } from "@/lib/build-trace-store";
 import { compileSessionProductionPage } from "@/lib/generation/session-production-engine";
 import { HttpError, logServerError } from "@/lib/http";
 import {
@@ -1004,6 +1005,12 @@ async function assembleExperienceArtifact(input: {
     productionResult.artifact.revision === input.session.revision
       ? productionResult.artifact.value
       : undefined;
+  // Retained only for the revision the visitor actually gets. A failed save is
+  // an operator-visibility loss, never a build failure.
+  void saveBuildTrace({
+    trace: productionResult.buildTrace,
+    committedRevision: input.session.revision
+  }).catch(() => undefined);
   const familyDraft = productionPage
     ? applyProductionPageToDraft(input.draft, productionPage)
     : input.draft;
