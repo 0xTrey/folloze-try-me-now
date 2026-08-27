@@ -287,6 +287,7 @@ interface ProductionTraceContext {
   frameworkEvidenceIds?: readonly string[];
   familyDecision?: WireframeDecisionV2;
   sections: ProductionTraceSection[];
+  sectionCopy: readonly SectionCopyCandidate[];
 }
 
 function traceContextFor(input: GenericProductionEngineInput): ProductionTraceContext {
@@ -299,7 +300,8 @@ function traceContextFor(input: GenericProductionEngineInput): ProductionTraceCo
       ...(input.trace?.supportRef ? { supportRef: input.trace.supportRef } : {})
     }),
     evidenceIds: [],
-    sections: []
+    sections: [],
+    sectionCopy: []
   };
 }
 
@@ -341,6 +343,7 @@ function buildTraceFor(
       : {}),
     ...(context.familyDecision ? { familyDecision: context.familyDecision } : {}),
     sections: context.sections,
+    sectionCopy: context.sectionCopy,
     ...(fallbackCode ? { fallbackCode } : {})
   });
 }
@@ -1223,6 +1226,7 @@ export async function compileGenericProductionPage(
       (order.get(left.sectionId) ?? Number.MAX_SAFE_INTEGER) -
       (order.get(right.sectionId) ?? Number.MAX_SAFE_INTEGER)
   );
+  traceContext.sectionCopy = sections;
   traceContext.sections = sectionTraces({
     slots,
     sections,

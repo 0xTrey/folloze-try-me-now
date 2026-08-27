@@ -975,6 +975,10 @@ describe("renderExperienceHtml", () => {
     expect(new Set(outputs.map((output) => output.match(/<style>([\s\S]*?)<\/style>/)?.[1])).size).toBe(1);
     for (const [index, output] of outputs.entries()) {
       const fingerprint = fingerprints[index];
+      // Consume-once holds per rendered document, not only in the allocator.
+      const placed = [...output.matchAll(/<img[^>]+src="([^"]+)"/g)].map((match) => match[1]!);
+      const substantive = placed.filter((src) => !/logo|wordmark|favicon|icon/i.test(src));
+      expect(new Set(substantive).size).toBe(substantive.length);
       expect(output).not.toContain("body.register-");
       expect(output).not.toContain('class="secondary"');
       expect(fingerprint.layout).toBe("standard");

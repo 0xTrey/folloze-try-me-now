@@ -12,6 +12,7 @@ import {
   type BuildTraceWriterMode
 } from "@/lib/build-trace";
 import type { AssetAllocationPlan } from "@/lib/asset-allocation";
+import { evaluateBrandFidelity } from "@/lib/brand-fidelity-evaluator";
 import type { SemanticRoleSelection } from "@/lib/brand-semantics";
 import type { ProductionMessageSpine } from "@/lib/generation/production-message-spine";
 import type {
@@ -72,6 +73,8 @@ export interface ProductionBuildTraceInput {
   frameworkEvidenceIds?: readonly string[];
   familyDecision?: WireframeDecisionV2;
   sections?: readonly ProductionTraceSection[];
+  /** Final copy the visitor receives. Scored for fidelity, never gated on. */
+  sectionCopy?: readonly SectionCopyCandidate[];
   fallbackCode?: string;
 }
 
@@ -468,6 +471,21 @@ export function compileProductionBuildTrace(
         scope: "section",
         at: section.completedAt,
         sectionId: section.sectionId
+      });
+    }
+  }
+
+  // Fidelity is scored last so it sees the brand and copy the visitor will
+  // actually get. It records what the build was worth, and gates nothing.
+  if (input.brand && input.sectionCopy) {
+    for (const result of evaluateBrandFidelity({
+      brand: input.brand,
+      sections: input.sectionCopy,
+      availableEvidenceRefs: input.evidenceIds ?? []
+    }).dimensions) {
+      builder.recordQuality({
+        ...result,
+        evidenceRefs: builder.refs(result.evidenceRefs)
       });
     }
   }

@@ -213,6 +213,31 @@ describe("production build trace population", () => {
     expect(second.buildTrace.revision).toBe(5);
   });
 
+  it("scores brand fidelity on the delivered experience without gating it", async () => {
+    const result = await compile();
+    const { buildTrace } = result;
+    const scored = new Set(buildTrace.quality.map(({ dimension }) => dimension));
+
+    expect(result.outcome).toBe("production-page");
+    expect(buildTrace.quality.length).toBeGreaterThan(0);
+    expect(buildTrace.quality.every(({ blocking }) => blocking === false)).toBe(true);
+    for (const dimension of [
+      "identity_and_logo",
+      "semantic_palette",
+      "representative_geometry",
+      "imagery_quality",
+      "copy_specificity",
+      "evidence_linkage",
+      "accessibility"
+    ]) {
+      expect(scored).toContain(dimension);
+    }
+    for (const entry of buildTrace.quality) {
+      expect(entry.score).toBeGreaterThanOrEqual(0);
+      expect(entry.score).toBeLessThanOrEqual(1);
+    }
+  });
+
   it("still emits a terminal trace when the attempt falls back", async () => {
     const result = await compileSessionProductionPage({
       session: session(),
