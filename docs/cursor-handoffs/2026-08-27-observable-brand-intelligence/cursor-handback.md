@@ -2,7 +2,8 @@
 
 Status: correction pass 3 complete, ready for independent Codex review
 
-Branch: `codex/unified-microsite-builder`, sixteen commits ahead of `origin/production`.
+Branch: `codex/unified-microsite-builder`, seventeen commits ahead of
+`origin/production`, of which two are the Codex correction briefs.
 Nothing was pushed, deployed, or published.
 
 ## Correction pass 3 (`codex-correction-pass-3.md`)
