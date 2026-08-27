@@ -1,9 +1,46 @@
 # Cursor Handback
 
-Status: correction pass 2 complete, ready for independent Codex review
+Status: correction pass 3 complete, ready for independent Codex review
 
-Branch: `codex/unified-microsite-builder`, fifteen commits ahead of `origin/production`.
+Branch: `codex/unified-microsite-builder`, sixteen commits ahead of `origin/production`.
 Nothing was pushed, deployed, or published.
+
+## Correction pass 3 (`codex-correction-pass-3.md`)
+
+Commit: branch tip, "Allow the two synthetic redaction fixtures in the history scan".
+
+The release gate left open by correction pass 2 is closed. A repository-root
+`.gitleaks.toml` extends the complete default rule set and adds two allowlist
+entries, each requiring an `AND` match on the exact commit
+`c70353b8a00c85431afa347f9d7c6ec5f8e4e8f0`, the exact test path, and the exact
+detector rule:
+
+- `stripe-access-token` and `generic-api-key` in `src/lib/build-trace.test.ts`
+- `generic-api-key` in `src/lib/posthog-boundary.test.ts`
+
+No default rule was weakened, disabled, or replaced, and nothing is allowed in
+any other path, commit, or in current file content. Both entries cover the same
+single unpushed commit, whose fixtures are synthetic secret-shaped strings that
+exist to prove redaction works; neither is a credential and neither is read by
+any code path.
+
+Narrowness was checked rather than assumed: scanning a scratch directory with
+this configuration and the same fake key, once at
+`src/lib/build-trace.test.ts` and once at an unrelated path, still reports both,
+because neither carries the allowlisted commit.
+
+### Correction pass 3 acceptance results
+
+| Command | Result | Counts or notes |
+| --- | --- | --- |
+| `gitleaks git . --log-opts='--all' --redact=100 --no-banner` | Pass, exit 0 | 249 commits, ~13.12 MB, no leaks found |
+| `npm run lint` | Pass | 0 errors, 3 warnings, all pre-existing in `src/lib/cloudflare-upload-contract.test.ts` |
+| `npm run typecheck` | Pass | Clean |
+| `npm test` | Pass | 126 files, 1,404 tests, 0 failures |
+| `git status --short` | Expected | Only the three unstaged `output/product-owner-remediation/` PNGs, unchanged by this pass |
+
+This pass changed no product code and no test. Nothing was pushed, deployed, or
+published, and no Git history was rewritten.
 
 ## Correction pass 2 (`codex-correction-pass-2.md`)
 
@@ -40,7 +77,7 @@ stated in the DOM.
 | `npm run qa:visual:folloze` | Pass | 3 desktop specs |
 | `npm run test:e2e -- --project=desktop` | Pass | 70 tests (was 52; the archetype matrix doubled to 36) |
 | `npm run test:e2e -- --project=mobile` | Pass | 52 passed, 18 skipped (desktop-only specs) |
-| `gitleaks git . --log-opts='--all' --redact=100 --no-banner` | 2 findings, both synthetic | See below |
+| `gitleaks git . --log-opts='--all' --redact=100 --no-banner` | 2 findings, both synthetic | Closed by correction pass 3; see below |
 
 Logs: `output/observable-brand-intelligence/pass2-*.log` (untracked; `*.log` is
 gitignored).
@@ -52,7 +89,8 @@ that prove redaction works: a fake Stripe-shaped key in
 by any code path. Both lines now carry `gitleaks:allow`, which keeps future
 scans of those lines clean; the historical blobs in `c70353b` still match, and
 clearing them would need a history rewrite, which this pass is not permitted to
-do.
+do. Correction pass 3 closed this with a commit-scoped allowlist instead of a
+rewrite, so the exact release command now exits 0.
 
 ### Residual risks from correction pass 2
 

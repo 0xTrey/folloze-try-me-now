@@ -1,0 +1,18 @@
+title = "Folloze Try Me Now gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic secret-shaped redaction fixture in one unpushed BuildTrace test commit"
+targetRules = ["stripe-access-token", "generic-api-key"]
+commits = ["c70353b8a00c85431afa347f9d7c6ec5f8e4e8f0"]
+paths = ["^src/lib/build-trace\\.test\\.ts$"]
+condition = "AND"
+
+[[allowlists]]
+description = "Synthetic generic-key redaction fixture in one unpushed PostHog test commit"
+targetRules = ["generic-api-key"]
+commits = ["c70353b8a00c85431afa347f9d7c6ec5f8e4e8f0"]
+paths = ["^src/lib/posthog-boundary\\.test\\.ts$"]
+condition = "AND"
