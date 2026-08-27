@@ -1111,6 +1111,62 @@ describe("compiled asset plan authority", () => {
       .filter((source): source is string => Boolean(source));
   }
 
+  /** Which compiled section each rendered image landed in, read from the DOM. */
+  function placedSections(html: string): Map<string, string> {
+    const placed = new Map<string, string>();
+    for (const [figure] of html.matchAll(
+      /<figure class="media[^"]*"[^>]*>[\s\S]{0,900}?<\/figure>/g
+    )) {
+      const sectionId = figure.match(/data-asset-section="([a-z0-9-]+)"/)?.[1];
+      const source = figure.match(/<img src="([^"]+)"/)?.[1];
+      if (sectionId && source) placed.set(sectionId, source);
+    }
+    return placed;
+  }
+
+  it("places each asset in the section the plan compiled it for", () => {
+    // Deliberately reversed against the renderer's own call order: an exact
+    // claim must not depend on who asks first.
+    const reversed: AssetRenderPlan = {
+      ...plan,
+      placements: [...plan.placements].reverse()
+    };
+    const html = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: {},
+      assetPlan: reversed
+    });
+    const placed = placedSections(html);
+
+    for (const placement of reversed.placements) {
+      expect(placed.get(placement.sectionId)).toBe(placement.assetRef);
+    }
+    expect(placed.size).toBe(reversed.placements.length);
+  });
+
+  it("leaves a section without its own placement empty rather than borrowing one", () => {
+    const heroOnly: AssetRenderPlan = {
+      version: "asset-render-plan-v1",
+      placements: [plan.placements[0]!],
+      treatments: []
+    };
+    const html = renderExperienceHtml({
+      draft,
+      brand,
+      useCase: "campaign",
+      answers: {},
+      assetPlan: heroOnly
+    });
+    const placed = placedSections(html);
+
+    expect(placed.get("hero")).toBe(plan.placements[0]!.assetRef);
+    expect([...placed.keys()]).toEqual(["hero"]);
+    expect(renderedImages(html)).toEqual([plan.placements[0]!.assetRef]);
+    expect(html).toContain("no-asset-treatment");
+  });
+
   it("renders exactly the planned assets and ignores brand images outside the plan", () => {
     const html = renderExperienceHtml({
       draft,

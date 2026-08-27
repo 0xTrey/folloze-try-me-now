@@ -1,11 +1,66 @@
 # Cursor Handback
 
-Status: correction pass complete, ready for independent Codex review
+Status: correction pass 2 complete, ready for independent Codex review
 
-Branch: `codex/unified-microsite-builder`, thirteen commits ahead of `origin/production`.
+Branch: `codex/unified-microsite-builder`, fifteen commits ahead of `origin/production`.
 Nothing was pushed, deployed, or published.
 
-## Correction pass (`codex-correction-pass-1.md`)
+## Correction pass 2 (`codex-correction-pass-2.md`)
+
+Commit: branch tip, "Make asset placement, identification, and section provenance exact".
+One logical pass, committed once.
+
+### Corrections
+
+| Item | Change | Regression evidence |
+| --- | --- | --- |
+| 1 exact asset placement | `createPlanAssetAllocator` in `src/lib/generation/experience-template.ts` is now a lookup, not a queue: a media location claims one compiled `sectionId` plus semantic role, and a location without its own placement renders the designed treatment instead of a spare. Every rendered figure carries `data-asset-section`, so the DOM states which compiled section it is showing. The flow branches and region markup are built lazily, because eagerly building the branch that is thrown away used to consume placements the rendered branch then had to do without | `src/lib/generation/experience-template.test.ts` (placements supplied in reverse renderer order still land section-for-section; a section without a placement takes no other section's image; every substantive image appears once), `src/lib/session-store.test.ts` (public projection still excludes `buildTrace`, `assetPlan`, `placements`, `semanticRole`, `treatments`) |
+| 2 email-free identification | `sanitizePostHogCapture` in `src/lib/posthog-config.ts` no longer preserves `$set.email`. Emails, links, hosts, and support references are redacted in every payload including `$identify`, and `$set`/`$set_once` are reduced to the single allowed `identity_source` property | `src/lib/posthog-config.test.ts` (hostile identify payload; hosts, links, and support references), `src/lib/posthog-boundary.test.ts` (the real claim identify call carries an opaque `tmv_` id and `identity_source` only, and survives `before_send` unchanged; a failed and retried claim produces no identify until success) |
+| 3 truthful section provenance | The build trace records `model` for a section a provider actually wrote and kept, with `model_candidates_thinned` in the selection reasons when part of its field was discarded; a run where nothing survived normalization is a `malformed_response` and stays deterministic. `normalizeModelCandidate` rejects a candidate citing any evidence reference outside its contract instead of filtering it, including references on choices, and validates `omissionReason` against its declared values | `src/lib/generation/section-model-writer.test.ts` (in-contract accept, out-of-contract reject at both levels, unknown omission reason reject), `src/lib/generation/session-production-engine.test.ts` (writer mode per section, thinned-field receipt, out-of-contract candidate leaves the section deterministic with the reference absent from page and trace, unknown omission reason absent from page and trace) |
+| 4 two-width DOM matrix | `tests/e2e/brand-archetype-fidelity.spec.ts` runs every archetype and family at 1280 and 1440 pixels, keeps the computed geometry, typography, colour, imagery, and warning checks, adds a horizontal-overflow assertion, and asserts each rendered image sits in the compiled section it is labelled with | `tests/e2e/brand-archetype-fidelity.spec.ts` — 36 desktop tests (6 archetypes × 3 families × 2 widths) |
+
+### Behaviour note on starting-point panels
+
+Under exact claiming, a panel showing an empty slot while a later panel holds
+the only illustrated one would hide the page's imagery behind a closed tab. The
+renderer therefore orders its starting-point panels so slots the plan filled are
+shown first, in compiled slot order. Which asset a slot holds is never
+reconsidered: the binding of asset to section stays exactly as compiled and is
+stated in the DOM.
+
+### Correction pass 2 acceptance results
+
+| Command | Result | Counts or notes |
+| --- | --- | --- |
+| `npm run lint` | Pass | 0 errors, 3 warnings, all pre-existing in `src/lib/cloudflare-upload-contract.test.ts` |
+| `npm run typecheck` | Pass | Clean |
+| `npm test` | Pass | 126 files, 1,404 tests, 0 failures |
+| `npm run benchmark:preview` | Pass | 5 files, 33 tests |
+| `npm run qa` | Pass | Lint, types, tests, Turbopack build, webpack build |
+| `npm run qa:visual:folloze` | Pass | 3 desktop specs |
+| `npm run test:e2e -- --project=desktop` | Pass | 70 tests (was 52; the archetype matrix doubled to 36) |
+| `npm run test:e2e -- --project=mobile` | Pass | 52 passed, 18 skipped (desktop-only specs) |
+| `gitleaks git . --log-opts='--all' --redact=100 --no-banner` | 2 findings, both synthetic | See below |
+
+Logs: `output/observable-brand-intelligence/pass2-*.log` (untracked; `*.log` is
+gitignored).
+
+The two gitleaks findings are the hostile-input fixtures committed in `c70353b`
+that prove redaction works: a fake Stripe-shaped key in
+`src/lib/build-trace.test.ts` and a fake correlation key in
+`src/lib/posthog-boundary.test.ts`. Neither is a credential and neither is read
+by any code path. Both lines now carry `gitleaks:allow`, which keeps future
+scans of those lines clean; the historical blobs in `c70353b` still match, and
+clearing them would need a history rewrite, which this pass is not permitted to
+do.
+
+### Residual risks from correction pass 2
+
+1. **A section reported as `model` can still have been reshaped downstream.** The receipt compares the delivered copy against the provider candidate, so a section the factuality editor rewrote reports as deterministic; a section it accepted unchanged reports as model. A partial rewrite is not distinguishable in the receipt.
+2. **Panel ordering depends on the plan, not on the copy.** Two plans that fill different slots put the same starting-point copy in a different panel position. The copy itself is unchanged and the section binding is exact, but a screenshot diff across two brands will show panels in different orders.
+3. **The overflow assertion ignores anything inside a scrollable ancestor.** A tab strip is allowed to scroll sideways, so a genuine layout break confined to a scrolling container would not fail the matrix.
+
+## Correction pass 1 (`codex-correction-pass-1.md`)
 
 Commit: `c70353b` — "Close the Codex correction pass on observable brand intelligence".
 48 files changed, +4,445 / −698. One logical pass, committed once.
@@ -187,6 +242,10 @@ Grepping it for company names, URLs, or `@` returns nothing.
   return, never an exception that could interrupt a build.
 
 ## Unrelated work preserved
+
+Correction pass 2 did not stage, revert, or overwrite any of the three PNGs
+under `output/product-owner-remediation/`. They remain modified and unstaged,
+exactly as found.
 
 The two pre-existing modified PNGs were not staged, reverted, or overwritten:
 

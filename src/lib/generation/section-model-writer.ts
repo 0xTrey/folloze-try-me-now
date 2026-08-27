@@ -122,6 +122,25 @@ export interface SectionWriterRunResult {
   deadlineExceeded: boolean;
 }
 
+/** The only reasons a section may declare for leaving itself out. */
+const OMISSION_REASONS = new Set<NonNullable<SectionCopyCandidate["omissionReason"]>>([
+  "unsupported_optional_slot",
+  "no_current_evidence"
+]);
+
+/**
+ * Every evidence reference a candidate cites, including the ones on its
+ * choices. A provider that reaches outside its contract for any of them has
+ * crossed the evidence boundary, and repairing that quietly would turn a
+ * reportable violation into an accepted section.
+ */
+function citedRefs(candidate: SectionModelCandidate): string[] {
+  return [
+    ...(candidate.evidenceRefs ?? []),
+    ...(candidate.choices ?? []).flatMap((choice) => choice?.evidenceRefs ?? [])
+  ];
+}
+
 function normalizeChoices(
   candidate: SectionModelCandidate,
   allowedRefs: ReadonlySet<string>
@@ -133,13 +152,9 @@ function normalizeChoices(
     const label = boundedCopy(choice?.label, SECTION_MODEL_BOUNDS.choiceLabelChars);
     const body = boundedCopy(choice?.body, SECTION_MODEL_BOUNDS.choiceBodyChars);
     if (!label || !body) return undefined;
-    return {
-      label,
-      body,
-      evidenceRefs: [...new Set(choice.evidenceRefs ?? [])]
-        .filter((ref) => allowedRefs.has(ref))
-        .slice(0, SECTION_MODEL_BOUNDS.evidenceRefs)
-    };
+    const refs = [...new Set(choice.evidenceRefs ?? [])].filter((ref) => allowedRefs.has(ref));
+    if (refs.length > SECTION_MODEL_BOUNDS.evidenceRefs) return undefined;
+    return { label, body, evidenceRefs: refs };
   });
   if (bounded.some((choice) => !choice)) return "invalid";
   return [bounded[0]!, bounded[1]!, bounded[2]!];
@@ -163,21 +178,26 @@ export function normalizeModelCandidate(
   }
 
   const allowedRefs = new Set(contract.evidenceRefs);
+  // One reference outside the contract rejects the whole candidate. Filtering
+  // it away would hand back an accepted section built on evidence the section
+  // was never scoped to read.
+  if (citedRefs(candidate).some((ref) => !allowedRefs.has(ref))) return undefined;
+  const evidenceRefs = [...new Set(candidate.evidenceRefs ?? [])].sort();
+  if (evidenceRefs.length > SECTION_MODEL_BOUNDS.evidenceRefs) return undefined;
   const base = {
     sectionId: contract.sectionId,
     role: contract.slot.role,
     ...copyContractMetadata(contract.slot),
-    evidenceRefs: [...new Set(candidate.evidenceRefs ?? [])]
-      .filter((ref) => allowedRefs.has(ref))
-      .sort()
-      .slice(0, SECTION_MODEL_BOUNDS.evidenceRefs)
+    evidenceRefs
   };
 
   if (candidate.omit) {
+    const omissionReason = candidate.omissionReason ?? "unsupported_optional_slot";
+    if (!OMISSION_REASONS.has(omissionReason)) return undefined;
     return {
       ...base,
       status: "omitted",
-      omissionReason: candidate.omissionReason ?? "unsupported_optional_slot",
+      omissionReason,
       wordCount: 0
     };
   }
@@ -372,8 +392,14 @@ export async function runSectionWriters(
             // A provider whose candidates were partly discarded still wrote the
             // section, but the choice was made from a narrower field. Saying so
             // keeps a thin selection distinguishable from a full one in the
-            // receipt instead of both reading as a clean model win.
-            outcome: candidates.length < requested.length ? "model_partial" : "model",
+            // receipt instead of both reading as a clean model win. When
+            // nothing survives, the provider wrote nothing usable and the
+            // receipt must not credit it with the section at all.
+            outcome: !candidates.length
+              ? "malformed_response"
+              : candidates.length < requested.length
+                ? "model_partial"
+                : "model",
             durationMs
           };
         } catch (error) {

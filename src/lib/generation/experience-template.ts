@@ -146,6 +146,38 @@ const RENDER_ASSET_SLOTS: readonly {
 ];
 
 /**
+ * Which compiled slot each media location in the document stands for.
+ *
+ * Every location names exactly one slot and no slot is named by two locations
+ * that can appear in the same document, so a claim is a lookup rather than a
+ * competition. A location with no compiled slot renders its designed
+ * treatment; it never borrows the image compiled for somewhere else.
+ */
+const HERO_MEDIA_SLOT = { sectionId: "hero", semanticRole: "hero" } as const;
+const MECHANISM_MEDIA_SLOT = { sectionId: "process", semanticRole: "process" } as const;
+const PROOF_MEDIA_SLOT = { sectionId: "proof", semanticRole: "proof" } as const;
+/**
+ * Starting-point panels take the slots their own family leaves free. The
+ * persuasion families illustrate proof and mechanism in dedicated sections, so
+ * their panels may not also claim those slots; the plain experience layout has
+ * no such sections, so its panels carry them instead.
+ *
+ * A panel is a place to show a section, not a ranking of it. The slots the plan
+ * actually filled are shown in the panels a reader sees first, in the compiled
+ * slot order; the asset a slot holds is never reconsidered.
+ */
+const FRAMEWORK_STARTING_POINT_SLOTS: readonly RenderAssetSlot[] = [
+  { sectionId: "supporting", semanticRole: "supporting" },
+  { sectionId: "product", semanticRole: "product" }
+];
+const EXPERIENCE_LENS_SLOTS: readonly RenderAssetSlot[] = [
+  { sectionId: "supporting", semanticRole: "supporting" },
+  { sectionId: "product", semanticRole: "product" },
+  { sectionId: "proof", semanticRole: "proof" },
+  { sectionId: "process", semanticRole: "process" }
+];
+
+/**
  * The plan implied by an already-ranked image list, used when a caller renders
  * without a compiled plan.
  *
@@ -245,20 +277,28 @@ function wordmark(profile: BrandProfile, className: string, darkSurface = false)
   </span>`;
 }
 
+/** Names the compiled slot a figure was rendered for, so the DOM is checkable. */
+function slotAttribute(slot: RenderAssetSlot | undefined): string {
+  return slot && /^[a-z0-9-]{1,48}$/.test(slot.sectionId)
+    ? ` data-asset-section="${slot.sectionId}"`
+    : "";
+}
+
 function imageFigure(
   url: string | undefined,
   alt: string,
   className: string,
   eager = false,
   allowFallback = true,
-  assetRole?: string
+  assetRole?: string,
+  slot?: RenderAssetSlot
 ): string {
   const safeUrl = safeAssetUrl(url);
   if (!safeUrl && !allowFallback) return "";
   const showFallback = allowFallback || Boolean(safeUrl);
   const roleClass = safeUrl && /diagram|architecture|marketecture|workflow|chart/i.test(safeUrl) ? " is-diagram" : "";
   const safeAssetRole = assetRole && /^[a-z-]{1,48}$/.test(assetRole) ? ` data-asset-role="${assetRole}"` : "";
-  return `<figure class="media ${className}${roleClass}"${showFallback ? "" : ' data-no-fallback="true"'}${safeAssetRole}>
+  return `<figure class="media ${className}${roleClass}"${showFallback ? "" : ' data-no-fallback="true"'}${safeAssetRole}${slotAttribute(slot)}>
     ${showFallback ? `<div class="media-fallback"${allowFallback ? ' data-fallback-kind="experience-blueprint"' : ""} aria-hidden="true">
       <span class="media-fallback-kicker">Experience blueprint</span>
       <strong>Context.<br>Proof.<br>Next step.</strong>
@@ -268,7 +308,11 @@ function imageFigure(
   </figure>`;
 }
 
-function noAssetFigure(grammar: VisualGrammar, className: string): string {
+function noAssetFigure(
+  grammar: VisualGrammar,
+  className: string,
+  slot?: RenderAssetSlot
+): string {
   const copy: Record<VisualGrammar["noAssetTreatment"], { label: string; headline: string; steps: readonly string[] }> = {
     "editorial-evidence": { label: "A considered point of view", headline: "The signal is clear.\nThe next move\nshould be too.", steps: ["Signal", "Meaning", "Action"] },
     "proof-receipt": { label: "Evidence is being carried forward", headline: "A supported case.\nA decision worth\nmaking.", steps: ["Fact", "Context", "Decision"] },
@@ -278,7 +322,7 @@ function noAssetFigure(grammar: VisualGrammar, className: string): string {
     "chapter-index": { label: "The guided source", headline: "Start with the\nmoment that\nmatters most.", steps: ["Watch", "Learn", "Continue"] }
   };
   const treatment = copy[grammar.noAssetTreatment];
-  return `<figure class="media ${className} no-asset-treatment no-asset-${grammar.noAssetTreatment}" data-fallback-kind="${grammar.noAssetTreatment}" data-asset-role="${grammar.heroMediaRole}">
+  return `<figure class="media ${className} no-asset-treatment no-asset-${grammar.noAssetTreatment}" data-fallback-kind="${grammar.noAssetTreatment}" data-asset-role="${grammar.heroMediaRole}"${slotAttribute(slot)}>
     <div class="media-fallback" aria-hidden="true">
       <span class="media-fallback-kicker">${escapeHtml(treatment.label)}</span>
       <strong>${escapeHtml(treatment.headline).replace(/\n/g, "<br>")}</strong>
@@ -292,68 +336,80 @@ function noAssetFigure(grammar: VisualGrammar, className: string): string {
  *
  * The renderer no longer decides which image belongs where. Ranking happened
  * once, upstream, and is recorded in the private trace; a second heuristic here
- * would let the trace describe one page while the DOM showed another. All this
- * does is hand out each placement once and report what is left.
+ * would let the trace describe one page while the DOM showed another. A slot
+ * gets the placement compiled for that exact slot or it gets nothing: there is
+ * no substitution and no spare, because taking a spare is precisely how a
+ * receipt for one section ends up illustrating another.
  */
+interface RenderAssetSlot {
+  sectionId: string;
+  semanticRole: AssetSemanticRole;
+}
+
 interface RenderAssetAllocator {
-  claim(role: AssetSemanticRole): string | undefined;
+  claim(slot: RenderAssetSlot): string | undefined;
+  /** Whether a slot still has an unclaimed placement of its own. */
+  has(slot: RenderAssetSlot): boolean;
   remaining(): string[];
 }
 
-function findLastIndex<T>(items: readonly T[], match: (item: T) => boolean): number {
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    if (match(items[index]!)) return index;
-  }
-  return -1;
+function slotKey(slot: RenderAssetSlot): string {
+  return `${slot.sectionId}\u0000${slot.semanticRole}`;
 }
 
 function createPlanAssetAllocator(plan: AssetRenderPlan): RenderAssetAllocator {
   // Transient and unsafe sources are still dropped here: the plan is about
   // which asset goes where, not about what a browser may be asked to load.
-  const placements = plan.placements
-    .map((placement) => ({ ...placement, assetRef: safeAssetUrl(placement.assetRef) }))
-    .filter(
-      (placement): placement is typeof placement & { assetRef: string } =>
-        Boolean(placement.assetRef) && isEvergreenAsset(placement.assetRef!)
-    );
-  const consumed = new Set<string>();
-  const take = (index: number): string => {
-    const placement = placements[index]!;
-    if (!placement.reusable) consumed.add(placement.assetRef);
-    placements.splice(index, 1);
-    return placement.assetRef;
-  };
+  const placements = new Map<string, string>();
+  for (const placement of plan.placements) {
+    const assetRef = safeAssetUrl(placement.assetRef);
+    if (!assetRef || !isEvergreenAsset(assetRef)) continue;
+    placements.set(slotKey(placement), assetRef);
+  }
+  // One document may render a slot's location only once. A second request for
+  // the same slot is a repeated section, not a second asset, so it takes the
+  // designed treatment rather than duplicating the image.
+  const claimed = new Set<string>();
   return {
     remaining() {
-      return placements.map(({ assetRef }) => assetRef);
+      return [...placements]
+        .filter(([key]) => !claimed.has(key))
+        .map(([, assetRef]) => assetRef);
     },
-    claim(role) {
-      const exact = placements.findIndex(
-        (placement) =>
-          placement.semanticRole === role && !consumed.has(placement.assetRef)
-      );
-      if (exact >= 0) return take(exact);
-      // A slot with no asset of its own role may still draw from the pool, so a
-      // sparse asset set fills the page it can rather than going blank. It
-      // draws from the weakest end and never from a required slot: the
-      // renderer asks for slots in document order, not plan order, so an
-      // unguarded spare would let a mid-page section consume the hero's asset
-      // before the hero is assembled.
-      const spare = findLastIndex(
-        placements,
-        (placement) =>
-          !placement.reusable
-          && !placement.required
-          && !consumed.has(placement.assetRef)
-      );
-      return spare >= 0 ? take(spare) : undefined;
+    has(slot) {
+      const key = slotKey(slot);
+      return placements.has(key) && !claimed.has(key);
+    },
+    claim(slot) {
+      const key = slotKey(slot);
+      if (claimed.has(key)) return undefined;
+      const assetRef = placements.get(key);
+      if (!assetRef) return undefined;
+      claimed.add(key);
+      return assetRef;
     }
   };
 }
 
+/**
+ * The panel order for a family's starting points: filled slots first, in
+ * compiled slot order, then the rest. Which asset a slot holds is the
+ * compiler's decision and is untouched here; this only decides which panel
+ * shows which slot, so an illustrated section is not hidden behind an empty one.
+ */
+function orderedPanelSlots(
+  allocator: RenderAssetAllocator,
+  slots: readonly RenderAssetSlot[]
+): readonly RenderAssetSlot[] {
+  return [
+    ...slots.filter((slot) => allocator.has(slot)),
+    ...slots.filter((slot) => !allocator.has(slot))
+  ];
+}
+
 function frameworkImage(
   allocator: RenderAssetAllocator,
-  role: AssetSemanticRole,
+  slot: RenderAssetSlot,
   brief: PersuasionFramework["opening"]["imageBrief"],
   className: string,
   eager = false,
@@ -363,12 +419,12 @@ function frameworkImage(
 ): string {
   if (brief.source === "none" || brief.assetType === "typographic-treatment") {
     return grammar && brief.assetType === "typographic-treatment"
-      ? noAssetFigure(grammar, className)
+      ? noAssetFigure(grammar, className, slot)
       : "";
   }
-  const selected = allocator.claim(role);
-  if (!selected) return grammar ? noAssetFigure(grammar, className) : "";
-  return imageFigure(selected, brief.caption, className, eager, false, brief.assetType);
+  const selected = allocator.claim(slot);
+  if (!selected) return grammar ? noAssetFigure(grammar, className, slot) : "";
+  return imageFigure(selected, brief.caption, className, eager, false, brief.assetType, slot);
 }
 
 type RenderStyleVariant = "standard" | "brand-led" | "editorial" | "technical" | "minimal";
@@ -585,7 +641,7 @@ export function renderExperienceHtml(input: {
   const visualGrammar = template.visualGrammar;
   const framework = template.family === "content-source" ? undefined : draft.persuasionFramework;
   const frameworkHeroMedia = framework
-    ? frameworkImage(assetAllocator, "hero", framework.opening.imageBrief, "hero-media", true)
+    ? frameworkImage(assetAllocator, HERO_MEDIA_SLOT, framework.opening.imageBrief, "hero-media", true)
     : undefined;
   const templateFingerprint = framework
     ? template.fingerprint
@@ -711,23 +767,40 @@ export function renderExperienceHtml(input: {
     )
     .join("");
 
-  const lensPanels = (frameworkChoices ?? draft.sections)
+  const panelSlots = orderedPanelSlots(
+    assetAllocator,
+    frameworkChoices ? FRAMEWORK_STARTING_POINT_SLOTS : EXPERIENCE_LENS_SLOTS
+  );
+  const buildLensPanels = () => (frameworkChoices ?? draft.sections)
     .map(
       (section, index) => {
         const label = frameworkChoices ? frameworkChoices[index].label : draft.sections[index].eyebrow;
         const headline = frameworkChoices ? frameworkChoices[index].buyerJob : draft.sections[index].headline;
         const body = frameworkChoices ? frameworkChoices[index].outcome : draft.sections[index].body;
         const question = frameworkChoices ? frameworkChoices[index].validationQuestion : undefined;
+        const mediaSlot = panelSlots[index];
         const media = frameworkChoices
-          ? frameworkImage(assetAllocator, "supporting", frameworkChoices[index].imageBrief, "lens-media", false, visualGrammar)
-          : imageFigure(
-              assetAllocator.claim("supporting"),
-              `${brand.companyName}: ${label}`,
-              "lens-media",
-              false,
-              false,
-              "supporting"
-            ) || noAssetFigure(visualGrammar, "lens-media");
+          ? mediaSlot
+            ? frameworkImage(
+                assetAllocator,
+                mediaSlot,
+                frameworkChoices[index].imageBrief,
+                "lens-media",
+                false,
+                visualGrammar
+              )
+            : noAssetFigure(visualGrammar, "lens-media")
+          : (mediaSlot
+              ? imageFigure(
+                  assetAllocator.claim(mediaSlot),
+                  `${brand.companyName}: ${label}`,
+                  "lens-media",
+                  false,
+                  false,
+                  mediaSlot.semanticRole,
+                  mediaSlot
+                )
+              : "") || noAssetFigure(visualGrammar, "lens-media", mediaSlot);
         return `<section class="lens-panel${media ? "" : " no-media"}" id="lens-panel-${index}" role="tabpanel" aria-labelledby="lens-tab-${index}" tabindex="0" ${index === 0 ? "" : "hidden"}>
         <div class="lens-number" aria-hidden="true">0${index + 1}</div>
         <div class="lens-copy"><p class="eyebrow" ${editableBlock(`lens.${index}.eyebrow`, "eyebrow")}>${escapeHtml(label)}</p><h2 ${editableBlock(`lens.${index}.headline`, "headline")}>${escapeHtml(headline)}</h2><p ${editableBlock(`lens.${index}.body`, "body")}>${escapeHtml(body)}</p>${question ? `<p class="validation-question"><strong>Question to answer</strong>${escapeHtml(question)}</p>` : ""}</div>
@@ -784,23 +857,23 @@ export function renderExperienceHtml(input: {
     })
     .join("");
 
-  const regions: Record<ExperiencePrimitive, string> = {
-    thesis: `<section class="thesis experience-region" id="experience-thesis" data-journey-section="experience-thesis" data-template-primitive="thesis" aria-labelledby="experience-thesis-heading">
+  const regions: Record<ExperiencePrimitive, () => string> = {
+    thesis: () => `<section class="thesis experience-region" id="experience-thesis" data-journey-section="experience-thesis" data-template-primitive="thesis" aria-labelledby="experience-thesis-heading">
       <p class="eyebrow" ${editableBlock("thesis.label", "section-label")}>${escapeHtml(draft.sectionLabels.thesis)}</p>
       <h2 id="experience-thesis-heading" ${editableBlock("thesis.headline", "headline")}>${escapeHtml(draft.thesisHeadline)}</h2>
       <p ${editableBlock("thesis.body", "body")}>${escapeHtml(draft.thesisBody)}</p>
     </section>`,
-    lenses: `<section class="lens-lab experience-region" id="decision-path" data-journey-section="decision-path" data-template-primitive="lenses" aria-labelledby="decision-path-heading">
+    lenses: () => `<section class="lens-lab experience-region" id="decision-path" data-journey-section="decision-path" data-template-primitive="lenses" aria-labelledby="decision-path-heading">
       <header class="region-heading"><h2 id="decision-path-heading" ${editableBlock("lenses.heading", "section-heading")}>${escapeHtml(draft.sectionLabels.lenses)}</h2></header>
       <div class="lens-tabs" role="tablist" aria-orientation="horizontal" aria-label="${escapeHtml(draft.sectionLabels.lenses)}">${lensButtons}</div>
-      ${lensPanels}
+      ${buildLensPanels()}
     </section>`,
-    resources: `<section class="journey experience-region" id="supporting-resources" data-journey-section="supporting-resources" data-template-primitive="resources" aria-labelledby="supporting-resources-heading">
+    resources: () => `<section class="journey experience-region" id="supporting-resources" data-journey-section="supporting-resources" data-template-primitive="resources" aria-labelledby="supporting-resources-heading">
       <header class="journey-header"><p class="eyebrow">${escapeHtml(template.resourcesEyebrow)}</p><h2 id="supporting-resources-heading" ${editableBlock("resources.heading", "section-heading")}>${escapeHtml(resourcesHeading)}</h2><p class="source-basis">Built from ${escapeHtml(sourceReference)}.</p></header>
       <div class="journey-grid">${resourceCards}</div>
     </section>`
   };
-  const experienceFlow = template.regionOrder.map((region) => regions[region]).join("");
+  const experienceFlow = () => template.regionOrder.map((region) => regions[region]()).join("");
   const signatureButtons = draft.sections
     .map(
       (section, index) => `<button type="button" data-signature-lens-index="${index}" data-flz-cta-id="signature-${index}">
@@ -820,7 +893,10 @@ export function renderExperienceHtml(input: {
     `data-evidence-ids="${escapeHtml(ids.join(","))}"`;
   const rolePlanned = (...roles: WireframeSectionRole[]) =>
     !plannedRoles || roles.some((role) => plannedRoles.has(role));
-  const frameworkFlow = framework
+  // Only the flow that reaches the document may claim assets. Building both and
+  // discarding one would let the unused branch consume a slot and leave the
+  // rendered section with a treatment it did not earn.
+  const buildFrameworkFlow = () => framework
     ? `${rolePlanned("proof") ? `<section class="framework-section credibility-anchor" id="credibility-anchor" data-journey-section="credibility-anchor" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)} aria-labelledby="credibility-anchor-heading">
         <div class="framework-copy">
           <p class="eyebrow" ${editableBlock("credibility.eyebrow", "section-label")}>${escapeHtml(framework.credibility.eyebrow)}</p>
@@ -830,7 +906,7 @@ export function renderExperienceHtml(input: {
             <div><span>What it means</span><p ${editableBlock("credibility.implication", "body")}>${escapeHtml(framework.credibility.implication)}</p></div>
           </div>
         </div>
-        ${frameworkImage(assetAllocator, "proof", framework.credibility.imageBrief, "framework-media", false, visualGrammar)}
+        ${frameworkImage(assetAllocator, PROOF_MEDIA_SLOT, framework.credibility.imageBrief, "framework-media", false, visualGrammar)}
       </section>` : ""}
       ${rolePlanned("context") ? `<section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)} aria-labelledby="why-change-now-heading">
         <header class="framework-heading"><p class="eyebrow" ${editableBlock("urgency.eyebrow", "section-label")}>${escapeHtml(framework.urgency.eyebrow)}</p><h2 id="why-change-now-heading" ${editableBlock("urgency.headline", "headline")}>${escapeHtml(framework.urgency.headline)}</h2></header>
@@ -843,7 +919,7 @@ export function renderExperienceHtml(input: {
       ${rolePlanned("pathways", "agenda", "chapter-navigation", "decision-support") ? `<section class="lens-lab framework-starting-points" id="starting-points" data-journey-section="starting-points" data-template-primitive="starting-points" aria-labelledby="starting-points-heading">
         <header class="region-heading"><p class="eyebrow" ${editableBlock("startingPoints.eyebrow", "section-label")}>${escapeHtml(framework.startingPoints.eyebrow)}</p><h2 id="starting-points-heading" ${editableBlock("startingPoints.headline", "headline")}>${escapeHtml(framework.startingPoints.headline)}</h2><p class="region-intro" ${editableBlock("startingPoints.intro", "body")}>${escapeHtml(framework.startingPoints.intro)}</p></header>
         <div class="lens-tabs" role="tablist" aria-orientation="horizontal" aria-label="${escapeHtml(framework.startingPoints.headline)}">${lensButtons}</div>
-        ${lensPanels}
+        ${buildLensPanels()}
       </section>` : ""}
       ${rolePlanned("mechanism") ? `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism" aria-labelledby="outcome-mechanism-heading">
         <div class="framework-copy">
@@ -856,7 +932,7 @@ export function renderExperienceHtml(input: {
             )
             .join("")}</div>
         </div>
-        ${frameworkImage(assetAllocator, "process", framework.mechanism.imageBrief, "framework-media mechanism-media", false, visualGrammar)}
+        ${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media", false, visualGrammar)}
       </section>` : ""}
       ${rolePlanned("seller-validation") ? `<section class="framework-section team-value-section" id="team-value" data-journey-section="team-value" data-template-primitive="team-value" aria-labelledby="team-value-heading">
         <header class="framework-heading"><p class="eyebrow" ${editableBlock("teamValue.eyebrow", "section-label")}>${escapeHtml(framework.teamValue.eyebrow)}</p><h2 id="team-value-heading" ${editableBlock("teamValue.headline", "headline")}>${escapeHtml(framework.teamValue.headline)}</h2><p class="region-intro" ${editableBlock("teamValue.intro", "body")}>${escapeHtml(framework.teamValue.intro)}</p></header>
@@ -865,12 +941,12 @@ export function renderExperienceHtml(input: {
             (role, index) => `<article ${evidenceAttribute(role.evidenceIds)}><span class="role-index">0${index + 1}</span><h3 ${editableBlock(`teamValue.${index}.role`, "role")}>${escapeHtml(role.role)}</h3><dl><div><dt>Decision</dt><dd ${editableBlock(`teamValue.${index}.decision`, "body")}>${escapeHtml(role.decision)}</dd></div><div><dt>Risk</dt><dd ${editableBlock(`teamValue.${index}.risk`, "body")}>${escapeHtml(role.risk)}</dd></div><div><dt>Value</dt><dd ${editableBlock(`teamValue.${index}.benefit`, "body")}>${escapeHtml(role.benefit)}</dd></div><div><dt>Evidence needed</dt><dd ${editableBlock(`teamValue.${index}.evidence`, "evidence")}>${escapeHtml(role.evidenceNeeded)}</dd></div></dl></article>`
           )
           .join("")}</div>
-      </section>` : ""}${rolePlanned("resources") ? regions.resources : ""}`
+      </section>` : ""}${rolePlanned("resources") ? regions.resources() : ""}`
     : "";
   const familyProduction = input.productionSections?.some(({ id }) =>
     /^(?:launch|guide|align)-\d+$/.test(id)
   );
-  const familyFrameworkFlow =
+  const buildFamilyFrameworkFlow = () =>
     framework && familyProduction && plannedSections
       ? plannedSections
           .filter(
@@ -884,14 +960,14 @@ export function renderExperienceHtml(input: {
               return `<section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)}><header class="framework-heading"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.urgency.headline)}</h2></header><p class="region-intro">${escapeHtml(framework.urgency.change)}</p></section>`;
             }
             if (section.role === "mechanism") {
-              return `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism"><div class="framework-copy"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.mechanism.headline)}</h2><p class="region-intro">${escapeHtml(framework.mechanism.intro)}</p></div>${frameworkImage(assetAllocator, "process", framework.mechanism.imageBrief, "framework-media mechanism-media", false, visualGrammar)}</section>`;
+              return `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism"><div class="framework-copy"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.mechanism.headline)}</h2><p class="region-intro">${escapeHtml(framework.mechanism.intro)}</p></div>${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media", false, visualGrammar)}</section>`;
             }
             if (section.role === "proof") {
               const sectionId = anchorForRole(section.role, section.label);
               const headline = sectionId === "additional-evidence"
                 ? "More evidence to carry forward"
                 : framework.credibility.headline;
-              return `<section class="framework-section credibility-anchor" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)}><div class="framework-copy"><p class="eyebrow">${label}</p><h2>${escapeHtml(headline)}</h2><p class="region-intro">${escapeHtml(framework.credibility.fact)}</p></div>${frameworkImage(assetAllocator, "proof", framework.credibility.imageBrief, "framework-media", false, visualGrammar)}</section>`;
+              return `<section class="framework-section credibility-anchor" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)}><div class="framework-copy"><p class="eyebrow">${label}</p><h2>${escapeHtml(headline)}</h2><p class="region-intro">${escapeHtml(framework.credibility.fact)}</p></div>${frameworkImage(assetAllocator, PROOF_MEDIA_SLOT, framework.credibility.imageBrief, "framework-media", false, visualGrammar)}</section>`;
             }
             if (section.role === "decision-support") {
               const criteria = framework.startingPoints.choices
@@ -914,14 +990,14 @@ export function renderExperienceHtml(input: {
             if (section.role === "seller-validation") {
               return `<section class="framework-section team-value-section" id="team-value" data-journey-section="team-value"><p class="eyebrow">${label}</p><h2>${escapeHtml(framework.teamValue.headline)}</h2><p class="region-intro">${escapeHtml(framework.teamValue.intro)}</p></section>`;
             }
-            if (section.role === "resources") return regions.resources;
+            if (section.role === "resources") return regions.resources();
             return "";
           })
           .join("")
       : undefined;
   const pageFlow = framework
-    ? familyFrameworkFlow ?? frameworkFlow
-    : `${signatureMoment}${experienceFlow}`;
+    ? buildFamilyFrameworkFlow() ?? buildFrameworkFlow()
+    : `${signatureMoment}${experienceFlow()}`;
   const closeMarkup = framework
     ? `<section class="close framework-close" id="next-step" data-journey-section="next-step" ${evidenceAttribute(framework.nextStep.evidenceIds)} aria-labelledby="next-step-heading">
         <div><p class="eyebrow" ${editableBlock("nextStep.eyebrow", "section-label")}>${escapeHtml(framework.nextStep.eyebrow)}</p><h2 id="next-step-heading" ${editableBlock("nextStep.headline", "headline")}>${escapeHtml(framework.nextStep.headline)}</h2><p ${editableBlock("nextStep.body", "body")}>${escapeHtml(framework.nextStep.body)}</p></div>
@@ -1022,9 +1098,9 @@ export function renderExperienceHtml(input: {
         <span class="context-note" ${editableBlock("hero.audience", "audience")}>For ${escapeHtml(draft.audienceLabel)}</span>
       </div>
       ${framework
-        ? frameworkHeroMedia || noAssetFigure(visualGrammar, "hero-media")
-        : imageFigure(assetAllocator.claim("hero"), `${brand.companyName} platform visual`, "hero-media", true, true, visualGrammar.heroMediaRole)
-          || noAssetFigure(visualGrammar, "hero-media")}
+        ? frameworkHeroMedia || noAssetFigure(visualGrammar, "hero-media", HERO_MEDIA_SLOT)
+        : imageFigure(assetAllocator.claim(HERO_MEDIA_SLOT), `${brand.companyName} platform visual`, "hero-media", true, true, visualGrammar.heroMediaRole, HERO_MEDIA_SLOT)
+          || noAssetFigure(visualGrammar, "hero-media", HERO_MEDIA_SLOT)}
     </section>
     ${pageFlow}
     ${closeMarkup}

@@ -38,6 +38,7 @@ import type {
 import {
   runSectionWriters,
   type SectionModelClient,
+  type SectionWriterOutcome,
   type SectionWriterRunResult
 } from "@/lib/generation/section-model-writer";
 import {
@@ -544,6 +545,22 @@ function sectionTraces(input: {
     startedAt: input.startedAt,
     completedAt: input.completedAt
   });
+  // Which sections a provider actually wrote, and whether its candidate is the
+  // copy that survived review. A receipt that says "deterministic" over model
+  // copy is worse than no receipt: it points an investigation at the wrong
+  // writer.
+  const modelWritten = new Map<string, SectionWriterOutcome>();
+  for (const result of input.run?.results ?? []) {
+    if (result.outcome !== "model" && result.outcome !== "model_partial") continue;
+    const delivered = input.sections.find(
+      ({ sectionId }) => sectionId === result.sectionId
+    );
+    if (!delivered) continue;
+    const sameCopy =
+      JSON.stringify(sectionCopyDigestSource(delivered))
+      === JSON.stringify(sectionCopyDigestSource(result.candidate));
+    if (sameCopy) modelWritten.set(result.sectionId, result.outcome);
+  }
   const accepted = new Map(input.sections.map((section) => [section.sectionId, section]));
   const candidatesBySection = new Map<string, SectionCopyCandidate[]>();
   for (const artifact of input.writerArtifacts) {
@@ -566,10 +583,11 @@ function sectionTraces(input: {
         )
       : 0;
     const contract = input.contracts.get(slot.id);
+    const modelOutcome = modelWritten.get(slot.id);
     return {
       sectionId: slot.id,
       role: slot.v2Role ?? slot.role,
-      writerMode: "deterministic" as const,
+      writerMode: modelOutcome ? ("model" as const) : ("deterministic" as const),
       ...(contract
         ? {
             promptVersion: contract.prompt.version,
@@ -591,6 +609,7 @@ function sectionTraces(input: {
         ...(section
           ? ["factuality_accepted", `status_${section.status}`]
           : ["not_accepted"]),
+        ...(modelOutcome === "model_partial" ? ["model_candidates_thinned"] : []),
         ...(contract ? [`contract_${contract.role}`] : ["contract_absent"])
       ],
       outputDigestSource: section

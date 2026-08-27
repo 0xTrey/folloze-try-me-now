@@ -1,5 +1,7 @@
 import type { Page } from "@playwright/test";
 
+import type { AssetRenderPlan } from "../../src/lib/asset-allocation";
+
 import { renderExperienceHtml } from "../../src/lib/generation/experience-template";
 import type { PersuasionFramework } from "../../src/lib/generation/experience-schema";
 import type { GenericProductionPage } from "../../src/lib/generation/generic-production-engine";
@@ -662,6 +664,7 @@ export function archetypeRuntimeFixture(
 export async function compileRuntimeVisualFixture(fixture: RuntimeVisualFixture): Promise<{
   page: GenericProductionPage;
   html: string;
+  assetPlan?: AssetRenderPlan;
 }> {
   const result = await compileSessionProductionPage({
     session: fixture.session,
@@ -695,6 +698,7 @@ export async function compileRuntimeVisualFixture(fixture: RuntimeVisualFixture)
     useCase: fixture.session.useCase,
     answers: fixture.session.answers,
     wireframeSelection: page.composition,
+    ...(result.assetPlan ? { assetPlan: result.assetPlan } : {}),
     productionSections: page.sections.map((section) => ({
       id: section.sectionId,
       role: section.role,
@@ -707,7 +711,7 @@ export async function compileRuntimeVisualFixture(fixture: RuntimeVisualFixture)
       evidenceRefs: [...section.evidenceRefs]
     }))
   });
-  return { page, html };
+  return { page, html, ...(result.assetPlan ? { assetPlan: result.assetPlan } : {}) };
 }
 
 export const noLogoBrand = brandFixture({

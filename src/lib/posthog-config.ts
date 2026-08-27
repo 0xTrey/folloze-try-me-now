@@ -4,66 +4,72 @@ const emailPattern = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const bearerPattern = /\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi;
 const privateKeyPattern = /\b(?:phx_|sk-)[A-Za-z0-9_-]{16,}\b/g;
 const absoluteUrlPattern = /https?:\/\/[^\s"'<>]+/gi;
+const hostnamePattern = /\b[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})*\.[a-z]{2,24}\b/gi;
+const supportRefPattern = /\bTMN-[A-Z0-9]{6,24}\b/gi;
 const maxPostHogStringLength = 8_000;
 
-function stripUrlDetails(value: string): string {
-  return value.replace(absoluteUrlPattern, (candidate) => {
-    try {
-      const parsed = new URL(candidate);
-      parsed.username = "";
-      parsed.password = "";
-      parsed.search = "";
-      parsed.hash = "";
-      return parsed.toString();
-    } catch {
-      return "[url]";
-    }
-  });
-}
+/**
+ * What a person profile may carry. Identification exists to join a claimed
+ * visitor to their own funnel, which the opaque distinct ID already does; a
+ * profile property is only allowed to say how that identification happened.
+ */
+const IDENTITY_PROPERTY_KEYS = new Set(["identity_source"]);
 
-function sanitizeString(value: string, preserveClaimEmail: boolean): string {
-  const withoutCredentials = stripUrlDetails(value)
+/**
+ * The last line of defence before anything leaves the browser.
+ *
+ * Product events are already projected to allowlisted, token-shaped values.
+ * This exists for everything else PostHog attaches on its own, and it redacts
+ * rather than trusts: an address, a host, a link, or a support reference is
+ * removed wherever it appears, including on an identify call. There is no
+ * property that may keep a raw email, because a claim is recorded server-side
+ * and the analytics side only needs to know that one happened.
+ */
+function sanitizeString(value: string): string {
+  return value
+    .replace(absoluteUrlPattern, "[url]")
     .replace(bearerPattern, "Bearer [redacted]")
-    .replace(privateKeyPattern, "[redacted-key]");
-  const sanitized = preserveClaimEmail
-    ? withoutCredentials
-    : withoutCredentials.replace(emailPattern, "[email]");
-  return sanitized.slice(0, maxPostHogStringLength);
+    .replace(privateKeyPattern, "[redacted-key]")
+    .replace(emailPattern, "[email]")
+    .replace(supportRefPattern, "[support-ref]")
+    .replace(hostnamePattern, "[domain]")
+    .slice(0, maxPostHogStringLength);
 }
 
-function sanitizeValue(
-  value: unknown,
-  path: string[],
-  identifyEvent: boolean,
-  depth = 0
-): unknown {
+function sanitizeValue(value: unknown, depth = 0): unknown {
   if (depth > 8) return "[truncated]";
-  if (typeof value === "string") {
-    const preserveClaimEmail = identifyEvent
-      && path.length === 2
-      && path[0] === "$set"
-      && path[1] === "email";
-    return sanitizeString(value, preserveClaimEmail);
-  }
+  if (typeof value === "string") return sanitizeString(value);
   if (Array.isArray(value)) {
-    return value.slice(0, 100).map((entry, index) =>
-      sanitizeValue(entry, [...path, String(index)], identifyEvent, depth + 1));
+    return value.slice(0, 100).map((entry) => sanitizeValue(entry, depth + 1));
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).slice(0, 160).map(([key, entry]) => [
-        key,
-        sanitizeValue(entry, [...path, key], identifyEvent, depth + 1)
-      ])
+      Object.entries(value)
+        .slice(0, 160)
+        .map(([key, entry]) => [key, sanitizeValue(entry, depth + 1)])
     );
   }
   return value;
 }
 
+function boundedIdentityProperties(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => IDENTITY_PROPERTY_KEYS.has(key))
+      .map(([key, entry]) => [key, sanitizeValue(entry)])
+  );
+}
+
 export function sanitizePostHogCapture(capture: CaptureResult | null): CaptureResult | null {
   if (!capture) return null;
-  const identifyEvent = capture.event === "$identify";
-  return sanitizeValue(capture, [], identifyEvent) as CaptureResult;
+  const sanitized = sanitizeValue(capture) as CaptureResult;
+  const properties = sanitized.properties as Record<string, unknown> | undefined;
+  if (!properties) return sanitized;
+  for (const key of ["$set", "$set_once"]) {
+    if (key in properties) properties[key] = boundedIdentityProperties(properties[key]);
+  }
+  return sanitized;
 }
 
 export function postHogBrowserConfig(options: {

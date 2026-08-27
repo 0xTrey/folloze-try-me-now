@@ -239,6 +239,10 @@ describe("private provenance never reaches a public session", () => {
       "sourceUrlHash",
       "assetDigest",
       "allocation",
+      "assetPlan",
+      "placements",
+      "semanticRole",
+      "treatments",
       "rejections",
       "correlationKey",
       "supportRefHash"

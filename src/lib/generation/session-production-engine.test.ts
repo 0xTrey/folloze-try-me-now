@@ -401,6 +401,8 @@ describe("dedicated section writers reach the rendered page", () => {
   const MODEL_HEADLINE = "Approvals close before the shift handover";
   /** Long enough to separate one section's work from the rest of the build. */
   const SLOW_SECTION_MS = 40;
+  /** A setTimeout may fire a hair early, and durations are rounded to the ms. */
+  const TIMER_TOLERANCE_MS = 3;
   const MODEL_BODY =
     "Every approval step routes to the named owner, so the queue clears before the next shift begins.";
 
@@ -562,6 +564,138 @@ describe("dedicated section writers reach the rendered page", () => {
     expect(html).not.toContain("Cut operating costs");
   });
 
+  it("names the writer that actually produced each section", async () => {
+    const profile = brand();
+    const { target, result } = await modelAssistedCompile(profile);
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const receipts = new Map(
+      result.buildTrace.sections.map((section) => [section.sectionId, section])
+    );
+
+    expect(receipts.get(target.sectionId)?.writerMode).toBe("model");
+    const deterministic = [...receipts.values()].filter(
+      ({ sectionId }) => sectionId !== target.sectionId
+    );
+    expect(deterministic.length).toBeGreaterThan(0);
+    for (const receipt of deterministic) {
+      expect(receipt.writerMode).toBe("deterministic");
+    }
+  });
+
+  it("marks a thinned model field as model copy and says the field was thinned", async () => {
+    const profile = brand();
+    const baseline = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000
+    });
+    if (baseline.outcome !== "production-page") throw new Error("baseline_not_compiled");
+    const target = baseline.artifact.value!.sections[0]!;
+    const client: SectionModelClient = {
+      async writeSection(contract) {
+        if (contract.sectionId !== target.sectionId) {
+          return { sectionId: contract.sectionId, candidates: [] };
+        }
+        const usable = {
+          headline: MODEL_HEADLINE,
+          body: target.body,
+          evidenceRefs: [...target.evidenceRefs]
+        };
+        return {
+          sectionId: contract.sectionId,
+          // The second candidate leaves the evidence contract, so the field the
+          // selector chooses from is thinner than the provider offered.
+          candidates: [usable, { ...usable, evidenceRefs: ["ev-outside-the-contract"] }]
+        };
+      }
+    };
+    const result = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000,
+      sectionModelClient: client
+    });
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const receipt = result.buildTrace.sections.find(
+      ({ sectionId }) => sectionId === target.sectionId
+    );
+    const serialized = JSON.stringify(result.buildTrace);
+    const html = renderPage(session(profile), profile, result.artifact.value!);
+
+    expect(receipt?.writerMode).toBe("model");
+    expect(receipt?.selectionReasons).toContain("model_candidates_thinned");
+    expect(serialized).not.toContain("ev-outside-the-contract");
+    expect(html).not.toContain("ev-outside-the-contract");
+  });
+
+  it("keeps a section whose only candidate leaves its evidence contract deterministic", async () => {
+    const profile = brand();
+    const baseline = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000
+    });
+    if (baseline.outcome !== "production-page") throw new Error("baseline_not_compiled");
+    const target = baseline.artifact.value!.sections[0]!;
+    const { client } = singleSectionClient({
+      candidate: {
+        headline: MODEL_HEADLINE,
+        body: target.body,
+        evidenceRefs: [...target.evidenceRefs, "ev-outside-the-contract"]
+      }
+    });
+    const result = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000,
+      sectionModelClient: client
+    });
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const html = renderPage(session(profile), profile, result.artifact.value!);
+    const receipt = result.buildTrace.sections.find(
+      ({ sectionId }) => sectionId === target.sectionId
+    );
+
+    expect(html).not.toContain(MODEL_HEADLINE);
+    expect(html).not.toContain("ev-outside-the-contract");
+    expect(receipt?.writerMode).toBe("deterministic");
+    expect(JSON.stringify(result.buildTrace)).not.toContain("ev-outside-the-contract");
+  });
+
+  it("keeps an unknown omission reason out of the page and the private trace", async () => {
+    const profile = brand();
+    const { client } = singleSectionClient({
+      candidate: { omit: true, omissionReason: "provider_felt_like_it" }
+    });
+    const result = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000,
+      sectionModelClient: client
+    });
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const html = renderPage(session(profile), profile, result.artifact.value!);
+
+    expect(html).not.toContain("provider_felt_like_it");
+    expect(JSON.stringify(result.buildTrace)).not.toContain("provider_felt_like_it");
+    expect(
+      result.buildTrace.sections.every(({ writerMode }) => writerMode === "deterministic")
+    ).toBe(true);
+  });
+
   it("times each section receipt to its own work, not the whole session", async () => {
     const profile = brand();
     const { target, result } = await modelAssistedCompile(profile, SLOW_SECTION_MS);
@@ -584,11 +718,14 @@ describe("dedicated section writers reach the rendered page", () => {
       expect(spanMs).toBeGreaterThanOrEqual(0);
       expect(spanMs).toBeLessThan(sessionSpanMs);
     }
-    expect(spans.get(target.sectionId)).toBeGreaterThanOrEqual(SLOW_SECTION_MS);
+    // Timer granularity can shave a millisecond off a deliberate delay, so the
+    // claim is that the slow section is clearly slower, not exact to the tick.
+    const slowSpanMs = spans.get(target.sectionId)!;
+    expect(slowSpanMs).toBeGreaterThanOrEqual(SLOW_SECTION_MS - TIMER_TOLERANCE_MS);
     const untouched = receipts.filter(({ sectionId }) => sectionId !== target.sectionId);
     expect(untouched.length).toBeGreaterThan(0);
     for (const receipt of untouched) {
-      expect(spans.get(receipt.sectionId)).toBeLessThan(SLOW_SECTION_MS);
+      expect(spans.get(receipt.sectionId)).toBeLessThan(slowSpanMs);
     }
   });
 

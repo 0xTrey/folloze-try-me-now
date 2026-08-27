@@ -470,16 +470,58 @@ describe("bounded parallel section writing", () => {
     );
   });
 
-  it("drops evidence refs the contract does not permit", () => {
+  it("accepts a candidate that stays inside its evidence contract", () => {
     const [contract] = contracts(1);
     const normalized = normalizeModelCandidate(contract!, {
       headline: "Shorter waits for referrals",
       body: "Referral triage routes each request to the first clinician with open capacity.",
-      evidenceRefs: ["ev-seller-1", "ev-not-in-scope"]
+      evidenceRefs: ["ev-seller-1"]
     })!;
 
     expect(normalized.evidenceRefs).toEqual(["ev-seller-1"]);
     expect(normalized.wordCount).toBe(sectionCopyWordCount(normalized));
+  });
+
+  it("rejects a candidate citing one reference outside its contract", () => {
+    const [contract] = contracts(1);
+
+    expect(
+      normalizeModelCandidate(contract!, {
+        headline: "Shorter waits for referrals",
+        body: "Referral triage routes each request to the first clinician with open capacity.",
+        evidenceRefs: ["ev-seller-1", "ev-not-in-scope"]
+      })
+    ).toBeUndefined();
+  });
+
+  it("rejects a candidate whose choice reaches outside the evidence contract", () => {
+    const [contract] = contracts(1);
+
+    expect(
+      normalizeModelCandidate(contract!, {
+        headline: "Shorter waits for referrals",
+        body: "Referral triage routes each request to the first clinician with open capacity.",
+        choices: [
+          { label: "Explore", body: "Start where the queue is longest.", evidenceRefs: ["ev-seller-1"] },
+          { label: "Compare", body: "Measure against today's wait.", evidenceRefs: ["ev-not-in-scope"] },
+          { label: "Act", body: "Route one department first.", evidenceRefs: [] }
+        ]
+      })
+    ).toBeUndefined();
+  });
+
+  it("rejects an omission reason the contract does not define", () => {
+    const [contract] = contracts(1);
+
+    expect(
+      normalizeModelCandidate(contract!, {
+        omit: true,
+        omissionReason: "provider_felt_like_it" as never
+      })
+    ).toBeUndefined();
+    expect(
+      normalizeModelCandidate(contract!, { omit: true, omissionReason: "no_current_evidence" })
+    ).toMatchObject({ status: "omitted", omissionReason: "no_current_evidence" });
   });
 
   it("rejects a candidate whose CTA the contract does not permit", () => {

@@ -8,7 +8,7 @@ vi.mock("posthog-js", () => ({
 
 import posthog from "posthog-js";
 
-import { postHogBrowserConfig } from "@/lib/posthog-config";
+import { postHogBrowserConfig, sanitizePostHogCapture } from "@/lib/posthog-config";
 import { postHogEventPayload, postHogSafeProperties } from "@/lib/posthog-payload";
 
 type Client = typeof import("@/lib/product-analytics-client");
@@ -156,7 +156,7 @@ describe("PostHog carries behavior and nothing else", () => {
   it("keeps the approved one-way correlation key", () => {
     client.captureProductEvent("page_viewed", {
       category: "navigation",
-      properties: { correlation_key: "ck_0123456789abcdef" }
+      properties: { correlation_key: "ck_0123456789abcdef" } // gitleaks:allow
     });
 
     expect(captures()[0]!.payload.correlation_key).toBe("ck_0123456789abcdef");
@@ -202,8 +202,16 @@ describe("PostHog carries behavior and nothing else", () => {
 
     expect(posthog.identify).toHaveBeenCalledTimes(2);
     for (const [distinctId, properties] of vi.mocked(posthog.identify).mock.calls) {
-      expect(String(distinctId)).not.toContain("@");
+      // The opaque first-party visitor ID, and nothing that describes a person.
+      expect(String(distinctId)).toMatch(/^tmv_[a-z0-9]{8,}$/);
       expect(properties).toEqual({ identity_source: "business_email_claim" });
+      const sent = sanitizePostHogCapture({
+        uuid: "identify-uuid",
+        event: "$identify",
+        properties: { distinct_id: distinctId, $set: { ...properties, email } }
+      });
+      expect(JSON.stringify(sent)).not.toContain(email);
+      expect(sent?.properties.$set).toEqual({ identity_source: "business_email_claim" });
     }
     const everything = JSON.stringify([
       captures(),

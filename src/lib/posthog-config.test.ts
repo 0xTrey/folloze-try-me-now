@@ -43,17 +43,45 @@ describe("PostHog browser privacy", () => {
     expect(JSON.stringify(sanitized)).toContain("[email]");
   });
 
-  it("allows the explicit claim email only on PostHog identify", () => {
-    const identified = sanitizePostHogCapture({
-      ...capture("$identify", { note: "claimed by buyer@example.com" }),
-      $set: { email: "buyer@example.com" }
-    });
+  it("strips a raw email from an identify call as readily as from any other event", () => {
+    const identified = sanitizePostHogCapture(
+      capture("$identify", {
+        note: "claimed by buyer@example.com",
+        $set: { email: "buyer@example.com", identity_source: "business_email_claim" },
+        $set_once: { first_email: "buyer@example.com" }
+      })
+    );
     const ordinary = sanitizePostHogCapture(capture("try_me_ui_click", {
       email: "buyer@example.com"
     }));
+    const serialized = JSON.stringify(identified);
 
-    expect(identified?.$set?.email).toBe("buyer@example.com");
+    expect(serialized).not.toContain("buyer@example.com");
+    expect(serialized).not.toContain("example.com");
+    expect(identified?.properties.$set).toEqual({
+      identity_source: "business_email_claim"
+    });
+    expect(identified?.properties.$set_once).toEqual({});
     expect(identified?.properties.note).toBe("claimed by [email]");
     expect(ordinary?.properties.email).toBe("[email]");
+  });
+
+  it("keeps hosts, links, and support references out of any payload", () => {
+    const sanitized = sanitizePostHogCapture(
+      capture("$pageview", {
+        $current_url: "https://app.folloze.example/e/abc?utm=x",
+        $host: "app.folloze.example",
+        support_ref: "TMN-6D58DEA9181B",
+        note: "seen on northwind-logistics.example"
+      })
+    );
+    const serialized = JSON.stringify(sanitized);
+
+    expect(serialized).not.toContain("folloze.example");
+    expect(serialized).not.toContain("northwind-logistics.example");
+    expect(serialized).not.toContain("TMN-6D58DEA9181B");
+    expect(sanitized?.properties.$current_url).toBe("[url]");
+    expect(sanitized?.properties.$host).toBe("[domain]");
+    expect(sanitized?.properties.support_ref).toBe("[support-ref]");
   });
 });

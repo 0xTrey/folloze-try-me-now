@@ -20,6 +20,9 @@ import {
 
 const FAMILIES: readonly WireframeFamilyV2[] = ["launch", "guide", "align"];
 
+/** The two desktop widths the experience is designed to hold its shape at. */
+const DESKTOP_WIDTHS = [1280, 1440] as const;
+
 /** Radii are rounded through layout, and a pill clamps to half the height. */
 const RADIUS_TOLERANCE_PX = 2;
 
@@ -51,14 +54,15 @@ function colorDistance(rendered: string, compiled: string): number {
 
 for (const archetype of BRAND_ARCHETYPE_FIXTURES) {
   for (const family of FAMILIES) {
-    test(`${archetype.id} renders ${family} faithfully to its compiled brand`, async ({ page }) => {
+    for (const width of DESKTOP_WIDTHS) {
+    test(`${archetype.id} renders ${family} faithfully to its compiled brand at ${width}px`, async ({ page }) => {
       const fixture = archetypeRuntimeFixture(archetype, family);
       const { semantics } = fixture;
       const compiled = await compileRuntimeVisualFixture(fixture);
 
       expect(compiled.page.familyDecision).toMatchObject({ family, locked: true });
 
-      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.setViewportSize({ width, height: 1000 });
       await page.emulateMedia({ reducedMotion: "reduce" });
       await fulfillRuntimeAssets(page);
       await page.setContent(compiled.html, { waitUntil: "domcontentloaded" });
@@ -96,7 +100,33 @@ for (const archetype of BRAND_ARCHETYPE_FIXTURES) {
           designedTreatments: document.querySelectorAll(
             "figure[data-asset-role].no-asset-treatment"
           ).length,
-          sectionCount: document.querySelectorAll("[data-journey-section]").length
+          sectionCount: document.querySelectorAll("[data-journey-section]").length,
+          documentWidth: document.documentElement.scrollWidth,
+          viewportWidth: document.documentElement.clientWidth,
+          // Widest element that nothing scrolls or clips. A tab strip is
+          // allowed to scroll sideways; a section is not allowed to hang off
+          // the edge of the page.
+          widestElement: Math.max(
+            0,
+            ...[...document.querySelectorAll<HTMLElement>("body *")]
+              .filter((element) => {
+                for (
+                  let parent = element.parentElement;
+                  parent;
+                  parent = parent.parentElement
+                ) {
+                  if (getComputedStyle(parent).overflowX !== "visible") return false;
+                }
+                return true;
+              })
+              .map((element) => element.getBoundingClientRect().right)
+          ),
+          placedSections: [...document.querySelectorAll<HTMLElement>(
+            "figure[data-asset-section] img"
+          )].map((image) => [
+            image.closest("figure")?.getAttribute("data-asset-section") ?? "",
+            image.getAttribute("src") ?? ""
+          ])
         };
       });
 
@@ -154,6 +184,20 @@ for (const archetype of BRAND_ARCHETYPE_FIXTURES) {
       if (!substantive.length) expect(measured.designedTreatments).toBeGreaterThan(0);
       expect(measured.sectionCount).toBeGreaterThanOrEqual(4);
 
+      // The page holds its shape: nothing is pushed off the side at either width.
+      expect(measured.documentWidth).toBeLessThanOrEqual(measured.viewportWidth + 1);
+      expect(measured.widestElement).toBeLessThanOrEqual(measured.viewportWidth + 1);
+
+      // Each rendered image sits in the section the plan compiled it for.
+      const planned = new Map(
+        compiled.assetPlan?.placements.map(({ sectionId, assetRef }) => [sectionId, assetRef])
+          ?? []
+      );
+      for (const [sectionId, source] of measured.placedSections) {
+        expect(planned.has(sectionId)).toBe(true);
+        expect(source).toContain(planned.get(sectionId)!.split("/").pop()!);
+      }
+
       // Incomplete or contradictory evidence still renders. The compiler says
       // so in its warnings instead of inventing a confident answer, and the
       // page keeps its designed fallbacks either way.
@@ -162,5 +206,6 @@ for (const archetype of BRAND_ARCHETYPE_FIXTURES) {
       }
       expect(semantics.score).toBeGreaterThan(0);
     });
+    }
   }
 }

@@ -437,7 +437,7 @@ describe("recursive schema enforcement", () => {
     ["an email", "ops@northwind-logistics.example"],
     ["html", "<script>alert(1)</script>"],
     ["a bearer token", "Bearer sk-live-0123456789abcdef"],
-    ["an api key", "sk_live_51H8xKzLm0PqRsT"],
+    ["an api key", "sk_live_51H8xKzLm0PqRsT"], // gitleaks:allow
     ["a control character", "accepted\u0000leaked"],
     ["a newline-delimited prompt", "system:\nwrite a hero headline"]
   ];
