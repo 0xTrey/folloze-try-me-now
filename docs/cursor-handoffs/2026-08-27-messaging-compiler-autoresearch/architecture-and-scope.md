@@ -55,7 +55,9 @@ interface MessageStrategyCandidate {
 
 interface StrategyEvaluation {
   candidateId: string;
+  /** Weighted strategy-quality score from 0 through 100. */
   total: number;
+  /** Each component is normalized from 0 through 100 before weighting. */
   dimensions: {
     audienceRelevance: number;
     offerSpecificity: number;
@@ -92,8 +94,18 @@ Exact names may change to fit local conventions. The behavior and provenance may
 1. Normalize the visitor brief and existing CampaignBrief.
 2. Adapt existing `SessionEvidenceItem` and reconciled evidence into one private compiler ledger.
 3. Generate three or four deterministic strategy candidates from the existing ranked frameworks, route, audience job, offer, objective, CTA, proof density, and known unknowns.
+   - Candidate order and IDs are stable for identical inputs.
+   - Candidates use at least three materially different supported angles or frameworks when evidence permits.
+   - A different headline on the same argument does not count as a different strategy.
 4. Reject candidates with wrong identity, unresolved evidence references, unsupported facts, generic audience language, or CTA mismatch.
 5. Score remaining candidates with deterministic weighted evaluation.
+   - Audience relevance: 20 percent.
+   - Offer specificity: 20 percent.
+   - Differentiation: 15 percent.
+   - Evidence strength: 20 percent.
+   - Narrative coherence: 15 percent.
+   - CTA alignment: 10 percent.
+   - This candidate score is separate from the four-dimension 100-point release score in `acceptance-and-autoresearch.md`.
 6. Select the highest score with a stable tie-breaker. A model may validate or rank within the bounded candidate set but may not create an untracked alternative.
 7. Compile the existing production message spine from the selected strategy.
 8. Select the existing wireframe family and bind every section role to one distinct strategy job.
@@ -118,4 +130,3 @@ This release covers campaign production through the existing Launch/Guide/Align 
 - no PostHog trace linkage;
 - no raw source text in benchmark logs;
 - no Jabra-specific branch or styling exception.
-

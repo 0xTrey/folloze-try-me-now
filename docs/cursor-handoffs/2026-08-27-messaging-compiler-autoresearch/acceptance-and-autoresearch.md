@@ -4,6 +4,8 @@
 
 Score every retained candidate from 0 to 100. Each dimension is worth 25 points.
 
+This is the release score. The strategy evaluator also produces a separate 0-to-100 weighted candidate score using the six component weights defined in `architecture-and-scope.md`. The compiler benchmark must report both without combining or silently dropping fields.
+
 ### Buyer specificity and evidence
 
 - names the actual buyer role and owned job;
@@ -106,10 +108,10 @@ The final report must include:
 - fixture-by-dimension score table;
 - hard-blocker result;
 - selected strategy receipt for at least three fixtures;
+- candidate-level receipts for those fixtures containing source-free candidate IDs, normalized dimension scores, hard-failure codes, selected ID, and digests;
 - one example of a rejected degraded candidate;
 - personalization patch receipt;
 - p50 and p95 shell, provisional, compiler, and final timings;
 - focused and full QA command receipts;
 - secret-scan result;
 - known limitations and deferred infrastructure work.
-
