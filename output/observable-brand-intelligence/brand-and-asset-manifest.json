@@ -1,0 +1,384 @@
+{
+  "supportRef": "TMN-6D58DEA9181B",
+  "outcome": "production-page",
+  "brandDecision": {
+    "version": "brand-system-v2.0.0",
+    "readiness": "partial",
+    "confidence": 0.7243,
+    "roles": [
+      {
+        "role": "accent",
+        "valueDigest": "dg_dcd5a7fcba0d26fc277911a3dae9a69b",
+        "sourceAuthority": "official_dom",
+        "candidateCount": 3,
+        "confidence": 0.85,
+        "selectionReasons": [
+          "semantic_role_accent"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      },
+      {
+        "role": "bodyfont",
+        "valueDigest": "dg_5937bac5a76c7ce6962e4c3d09002c6f",
+        "sourceAuthority": "portable_family",
+        "candidateCount": 3,
+        "confidence": 0.6375,
+        "selectionReasons": [
+          "font_substituted"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      },
+      {
+        "role": "borderwidth",
+        "valueDigest": "dg_afa6ab2c3faedf8de5ef26ab7919419d",
+        "sourceAuthority": "compiled_geometry",
+        "candidateCount": 3,
+        "confidence": 0.7243,
+        "selectionReasons": [
+          "representative_border_width"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      },
+      {
+        "role": "buttonradius",
+        "valueDigest": "dg_da4d153a97b4350dcc8e712819c392e2",
+        "sourceAuthority": "compiled_geometry",
+        "candidateCount": 3,
+        "confidence": 0.7243,
+        "selectionReasons": [
+          "representative_control_radius"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      },
+      {
+        "role": "cardradius",
+        "valueDigest": "dg_84045fef89eb1de05681ed95fc2682c5",
+        "sourceAuthority": "compiled_geometry",
+        "candidateCount": 3,
+        "confidence": 0.7243,
+        "selectionReasons": [
+          "representative_card_radius"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      },
+      {
+        "role": "ctabackground",
+        "valueDigest": "dg_dcd5a7fcba0d26fc277911a3dae9a69b",
+        "sourceAuthority": "official_dom",
+        "candidateCount": 3,
+        "confidence": 0.85,
+        "selectionReasons": [
+          "semantic_role_action"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      },
+      {
+        "role": "density",
+        "valueDigest": "dg_c1306779dba5b4f3e9d124cb32a88283",
+        "sourceAuthority": "compiled_layout",
+        "candidateCount": 3,
+        "confidence": 0.7243,
+        "selectionReasons": [
+          "representative_density"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      },
+      {
+        "role": "headingfont",
+        "valueDigest": "dg_5937bac5a76c7ce6962e4c3d09002c6f",
+        "sourceAuthority": "portable_family",
+        "candidateCount": 3,
+        "confidence": 0.6375,
+        "selectionReasons": [
+          "font_substituted"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      },
+      {
+        "role": "shadowcharacter",
+        "valueDigest": "dg_96879572855863624d6d3ec2de3206e2",
+        "sourceAuthority": "compiled_geometry",
+        "candidateCount": 3,
+        "confidence": 0.7243,
+        "selectionReasons": [
+          "representative_shadow"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      },
+      {
+        "role": "surface",
+        "valueDigest": "dg_d77a22f00a83189f2b74301b2f124632",
+        "sourceAuthority": "official_dom",
+        "candidateCount": 3,
+        "confidence": 0.85,
+        "selectionReasons": [
+          "semantic_role_surface"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      },
+      {
+        "role": "text",
+        "valueDigest": "dg_d56ae4852daa9b4ba7b4c5aecea7e577",
+        "sourceAuthority": "official_dom",
+        "candidateCount": 3,
+        "confidence": 0.85,
+        "selectionReasons": [
+          "semantic_role_ink"
+        ],
+        "evidenceRefs": [
+          "ev_89770d5a9d7617fe25dd",
+          "ev_d5dc63cf91829187b2c3",
+          "ev_ee18234551026994658c"
+        ]
+      }
+    ],
+    "warnings": [
+      "readiness_partial"
+    ],
+    "evidenceRefs": [
+      "ev_89770d5a9d7617fe25dd",
+      "ev_d5dc63cf91829187b2c3",
+      "ev_ee18234551026994658c"
+    ]
+  },
+  "assetAllocation": {
+    "version": "asset-allocator-v1",
+    "allocations": [
+      {
+        "allocationKey": "hero-hero",
+        "sectionId": "hero",
+        "semanticRole": "hero",
+        "assetDigest": "dg_c61ac4460b0ebd34cad8f268d2719d43",
+        "evidenceRef": "ev_89770d5a9d7617fe25dd",
+        "sourceUrlHash": "sh_5e07fbb320cff93dd6b5",
+        "purpose": "product",
+        "reusable": false,
+        "score": 0.4751
+      },
+      {
+        "allocationKey": "process-process",
+        "sectionId": "process",
+        "semanticRole": "process",
+        "assetDigest": "dg_671654faf55d52a30f0d4f0da3ceca38",
+        "evidenceRef": "ev_89770d5a9d7617fe25dd",
+        "sourceUrlHash": "sh_046e0a76246f4173e6ae",
+        "purpose": "supporting",
+        "reusable": false,
+        "score": 0.2251
+      },
+      {
+        "allocationKey": "supporting-supporting",
+        "sectionId": "supporting",
+        "semanticRole": "supporting",
+        "assetDigest": "dg_a59186c65a31d5e5f5becd6720187c19",
+        "evidenceRef": "ev_89770d5a9d7617fe25dd",
+        "sourceUrlHash": "sh_57bf6ca0313e3ec161d8",
+        "purpose": "supporting",
+        "reusable": false,
+        "score": 0.5251
+      }
+    ],
+    "substantiveCount": 3,
+    "reusableCount": 0,
+    "rejectedCount": 0,
+    "rejectionReasons": []
+  },
+  "allocationPlan": {
+    "version": "asset-allocator-v1",
+    "allocations": [
+      {
+        "allocationKey": "hero-hero",
+        "sectionId": "hero",
+        "semanticRole": "hero",
+        "assetRef": "https://northwind-logistics.example/media/dispatch-console.png",
+        "evidenceRef": "https://northwind-logistics.example/",
+        "sourceUrlHash": "1280ad18",
+        "purpose": "product",
+        "reusable": false,
+        "score": 0.4751
+      },
+      {
+        "allocationKey": "process-process",
+        "sectionId": "process",
+        "semanticRole": "process",
+        "assetRef": "https://northwind-logistics.example/media/yard-team.jpg",
+        "evidenceRef": "https://northwind-logistics.example/",
+        "sourceUrlHash": "de556e8e",
+        "purpose": "supporting",
+        "reusable": false,
+        "score": 0.2251
+      },
+      {
+        "allocationKey": "supporting-supporting",
+        "sectionId": "supporting",
+        "semanticRole": "supporting",
+        "assetRef": "https://northwind-logistics.example/media/carrier-scorecard.png",
+        "evidenceRef": "https://northwind-logistics.example/",
+        "sourceUrlHash": "ce195809",
+        "purpose": "supporting",
+        "reusable": false,
+        "score": 0.5251
+      }
+    ],
+    "treatments": [
+      {
+        "sectionId": "product",
+        "semanticRole": "product",
+        "treatment": "designed_non_image",
+        "reason": "assets_exhausted"
+      },
+      {
+        "sectionId": "proof",
+        "semanticRole": "proof",
+        "treatment": "designed_non_image",
+        "reason": "assets_exhausted"
+      }
+    ],
+    "rejections": [],
+    "substantiveCount": 3,
+    "reusableCount": 0
+  },
+  "quality": [
+    {
+      "dimension": "identity_and_logo",
+      "score": 0.85,
+      "blocking": false,
+      "warnings": [
+        "logo_low_confidence"
+      ],
+      "violations": [],
+      "evidenceRefs": [
+        "ev_89770d5a9d7617fe25dd",
+        "ev_d5dc63cf91829187b2c3",
+        "ev_ee18234551026994658c"
+      ]
+    },
+    {
+      "dimension": "semantic_palette",
+      "score": 0.805,
+      "blocking": false,
+      "warnings": [
+        "scalar_palette_without_observations"
+      ],
+      "violations": [],
+      "evidenceRefs": [
+        "ev_89770d5a9d7617fe25dd"
+      ]
+    },
+    {
+      "dimension": "typography_character",
+      "score": 0.7413,
+      "blocking": false,
+      "warnings": [
+        "typography_without_observations"
+      ],
+      "violations": [],
+      "evidenceRefs": [
+        "ev_89770d5a9d7617fe25dd"
+      ]
+    },
+    {
+      "dimension": "representative_geometry",
+      "score": 0.75,
+      "blocking": false,
+      "warnings": [
+        "geometry_without_observations"
+      ],
+      "violations": [],
+      "evidenceRefs": []
+    },
+    {
+      "dimension": "density_and_rhythm",
+      "score": 1,
+      "blocking": false,
+      "warnings": [],
+      "violations": [],
+      "evidenceRefs": []
+    },
+    {
+      "dimension": "imagery_quality",
+      "score": 0.95,
+      "blocking": false,
+      "warnings": [
+        "low_scoring_asset_allocated"
+      ],
+      "violations": [],
+      "evidenceRefs": [
+        "ev_89770d5a9d7617fe25dd"
+      ]
+    },
+    {
+      "dimension": "copy_specificity",
+      "score": 1,
+      "blocking": false,
+      "warnings": [],
+      "violations": [],
+      "evidenceRefs": []
+    },
+    {
+      "dimension": "evidence_linkage",
+      "score": 0.7333,
+      "blocking": false,
+      "warnings": [
+        "section_without_evidence_citation"
+      ],
+      "violations": [],
+      "evidenceRefs": [
+        "ev_04fcfe9f189ce9ee09db",
+        "ev_3265721ebb06853a98e1",
+        "ev_658266b245b215f99d94",
+        "ev_886a8b431efd0282b476",
+        "ev_a6ed7b37365cc9141548",
+        "ev_a7f1da416771fd6210b6"
+      ]
+    },
+    {
+      "dimension": "accessibility",
+      "score": 1,
+      "blocking": false,
+      "warnings": [],
+      "violations": [],
+      "evidenceRefs": []
+    }
+  ]
+}

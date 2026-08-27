@@ -1,0 +1,95 @@
+Build attempt_6d43df0e90506ade96218d4b
+  trace        session_evidence_001
+  session      session_evidence_001
+  revision     4
+  pipeline     try-me-build-v1.1.0 (schema v1)
+  status       fallback
+  started      2026-08-27T10:00:00.000Z
+  completed    2026-08-27T16:33:03.578Z
+  evidence     12 ref(s)
+
+Timeline
+  artifact-validation          300000ms  completed
+  provider-deadline            300000ms  completed
+  writer-wave                  300000ms  completed
+  factuality                   300000ms  completed
+  section-compile              300000ms  fallback
+  final-reveal                 300000ms  completed
+
+Decisions
+  framework   outcome-mechanism (1 candidate(s), confidence 0.8)
+              reasons: audience_business, content_standard, decision_medium, framework_baseline, motion_product, offer_confirmed, proof_sparse
+              * outcome-mechanism        score 0.8
+  wireframe   launch (3 candidate(s), confidence 0.9)
+              reasons: sections_6, subtype_product, v2-offer-promotion-launch
+              * launch                   score 0.9
+                align                    score 0
+                guide                    score 0
+
+Brand roles
+  readiness partial (confidence 0.7243)
+  accent             dg_dcd5a7fcba0d26fc277911a3dae9a69b  official_dom         conf 0.85  semantic_role_accent
+  bodyfont           dg_5937bac5a76c7ce6962e4c3d09002c6f  portable_family      conf 0.6375  font_substituted
+  borderwidth        dg_afa6ab2c3faedf8de5ef26ab7919419d  compiled_geometry    conf 0.7243  representative_border_width
+  buttonradius       dg_da4d153a97b4350dcc8e712819c392e2  compiled_geometry    conf 0.7243  representative_control_radius
+  cardradius         dg_84045fef89eb1de05681ed95fc2682c5  compiled_geometry    conf 0.7243  representative_card_radius
+  ctabackground      dg_dcd5a7fcba0d26fc277911a3dae9a69b  official_dom         conf 0.85  semantic_role_action
+  density            dg_c1306779dba5b4f3e9d124cb32a88283  compiled_layout      conf 0.7243  representative_density
+  headingfont        dg_5937bac5a76c7ce6962e4c3d09002c6f  portable_family      conf 0.6375  font_substituted
+  shadowcharacter    dg_96879572855863624d6d3ec2de3206e2  compiled_geometry    conf 0.7243  representative_shadow
+  surface            dg_d77a22f00a83189f2b74301b2f124632  official_dom         conf 0.85  semantic_role_surface
+  text               dg_d56ae4852daa9b4ba7b4c5aecea7e577  official_dom         conf 0.85  semantic_role_ink
+  warnings: readiness_partial
+
+Asset allocations
+  3 substantive, 0 reusable, 0 rejected
+  hero               hero         dg_c61ac4460b0ebd34cad8f268d2719d43  score 0.4751
+  process            process      dg_671654faf55d52a30f0d4f0da3ceca38  score 0.2251
+  supporting         supporting   dg_a59186c65a31d5e5f5becd6720187c19  score 0.5251
+
+Sections
+  launch-1             buyer-outcome        completed  deterministic
+                       prompt buyer-outcome-v1.0.0  template section-template-v1
+                       in dg_fee662aa95cd7aeb1fa21e577e917105  out dg_a5871c3883623e037dac93110eefdfeb  candidate 0 of 1
+                       reasons: contract_buyer-outcome, factuality_accepted, status_complete
+  launch-2             current-friction     completed  deterministic
+                       prompt current-friction-v1.0.0  template section-template-v1
+                       in dg_ee5d38938685db5366304af63c45f271  out dg_903496268ed19f5a1ff3edef13f064ba  candidate 0 of 1
+                       reasons: contract_current-friction, factuality_accepted, status_complete
+  launch-3             mechanism            completed  deterministic
+                       prompt mechanism-v1.0.0  template section-template-v1
+                       in dg_d85a886814a2c7a59870f1bb4a706276  out dg_a1cbfcefe815908db7ae2b8953c9d36c  candidate 0 of 1
+                       reasons: contract_mechanism, factuality_accepted, status_complete
+  launch-4             use-cases            completed  deterministic
+                       prompt use-cases-v1.0.0  template section-template-v1
+                       in dg_2b3d904e25d0981390452efe436b8d72  out dg_a3c1347aa26ec75fe003b73044ef1036  candidate 0 of 1
+                       reasons: contract_use-cases, factuality_accepted, status_complete
+  launch-5             proof                completed  deterministic
+                       prompt proof-v1.0.0  template section-template-v1
+                       in dg_bda05c39ce39c46f8e7d9bff57ab1f14  out dg_69b8ef5e0a4664bc58a8b236248d2060  candidate 0 of 1
+                       reasons: contract_proof, factuality_accepted, status_complete
+  launch-6             next-move            completed  deterministic
+                       prompt next-move-v1.0.0  template section-template-v1
+                       in dg_12cdcbad91ebd13a89d5500886ace225  out dg_deb6225e78665feb643c0366d0916a95  candidate 0 of 1
+                       reasons: contract_next-move, factuality_accepted, status_complete
+
+Quality
+  identity_and_logo            score 0.85  (never blocking)
+                               warnings: logo_low_confidence
+  semantic_palette             score 0.805  (never blocking)
+                               warnings: scalar_palette_without_observations
+  typography_character         score 0.7413  (never blocking)
+                               warnings: typography_without_observations
+  representative_geometry      score 0.75  (never blocking)
+                               warnings: geometry_without_observations
+  density_and_rhythm           score 1  (never blocking)
+  imagery_quality              score 0.95  (never blocking)
+                               warnings: low_scoring_asset_allocated
+  copy_specificity             score 1  (never blocking)
+  evidence_linkage             score 0.7333  (never blocking)
+                               warnings: section_without_evidence_citation
+  accessibility                score 1  (never blocking)
+
+Fallbacks
+  2026-08-27T16:33:03.578Z  section-compile              stage      production_page_partial_acceptance
+  2026-08-27T16:33:03.578Z  final-reveal                 experience generic_production_page_partial_acceptance

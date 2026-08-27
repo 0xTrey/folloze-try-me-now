@@ -1,0 +1,8 @@
+{
+  "unit": "ms",
+  "samples": 20,
+  "note": "Deterministic fixture compile including build-trace assembly. No provider calls.",
+  "p50": 2.44,
+  "p95": 4.36,
+  "max": 6.4
+}

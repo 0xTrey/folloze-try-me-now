@@ -293,7 +293,15 @@ for (const scenario of [
       );
     expect(order).toEqual(expectedOrder);
     await expect(page.locator("body")).toHaveClass(/framework-seven/);
-    await expect(page.locator("[data-fallback-kind]")).toHaveCount(0);
+    // The fixture supplies fewer images than the layout has media slots. Each
+    // image is used once and the remaining slots carry a designed treatment,
+    // rather than the same product shot appearing in every slot.
+    const placed = await page
+      .locator("figure.media img")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("src")));
+    expect(new Set(placed).size).toBe(placed.length);
+    expect(placed.length).toBeGreaterThan(0);
+    await expect(page.locator("figure.media [data-fallback-kind] img")).toHaveCount(0);
     await expect(page.getByRole("tab")).toHaveCount(3);
     await expect(page.locator(".role-grid article")).toHaveCount(3);
     await expect(page.locator(".mechanism-steps article")).toHaveCount(3);

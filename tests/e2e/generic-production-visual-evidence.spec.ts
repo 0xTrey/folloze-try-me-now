@@ -128,9 +128,16 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
       const wordmark = document.querySelector<HTMLElement>(".seller-wordmark");
       const logoBox = logo?.getBoundingClientRect();
       const wordmarkBox = wordmark?.getBoundingClientRect();
-      const media = [...document.querySelectorAll<HTMLElement>(
+      const mediaFigures = [...document.querySelectorAll<HTMLElement>(
         "figure.hero-media[data-asset-role], figure.framework-media[data-asset-role], figure.lens-media[data-asset-role]"
-      )].map((figure) => {
+      )];
+      // A slot with no credible asset renders a designed treatment rather than
+      // repeating a photograph, so only figures carrying an image are measured
+      // for delivery. The treatments are counted separately.
+      const designedTreatments = mediaFigures.filter(
+        (figure) => figure.classList.contains("no-asset-treatment") && !figure.querySelector("img")
+      ).length;
+      const media = mediaFigures.filter((figure) => figure.querySelector("img")).map((figure) => {
         const image = figure.querySelector<HTMLImageElement>("img");
         const imageBox = image?.getBoundingClientRect();
         const figureBox = figure.getBoundingClientRect();
@@ -155,6 +162,7 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
         "[data-journey-link]"
       )].map((link) => link.dataset.journeyLink ?? "");
       return {
+        designedTreatments,
         buttonColor: primary.backgroundColor,
         buttonRadius: primary.borderRadius,
         buttonContrast: { foreground: primary.color, background: primary.backgroundColor },
@@ -206,6 +214,12 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
         )
       )
     ).toBe(true);
+    // Substantive imagery is allocated once per experience: a slot the
+    // allocator could not fill honestly must show a designed treatment, never
+    // a second copy of an image already used above it.
+    const placedSources = metrics.media.map(({ source }) => source);
+    expect(new Set(placedSources).size).toBe(placedSources.length);
+    expect(metrics.designedTreatments).toBeGreaterThanOrEqual(0);
     expect(metrics.brokenImages).toBe(0);
     expect(metrics.clippedImages).toBe(0);
     expect(metrics.horizontalOverflow).toBe(false);

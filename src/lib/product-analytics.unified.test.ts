@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { analyticsCorrelationKey } from "@/lib/analytics-correlation";
 import { supportRefForTraceId } from "@/lib/observability";
-import { analyticsCorrelationKey } from "@/lib/product-analytics-contracts";
 import {
   assertUnifiedProductEventProperties,
   clearMemoryProductAnalyticsForTest,

@@ -1,6 +1,6 @@
+import { analyticsCorrelationKey } from "@/lib/analytics-correlation";
 import type { WireframeDecisionV2 } from "@/lib/generation/three-family-contract";
 import {
-  analyticsCorrelationKey,
   assertUnifiedProductEventProperties,
   boundedAnalyticsLabel,
   type UnifiedProductEventName

@@ -14,8 +14,8 @@ import {
   projectSectionViewedBehaviorEvent,
   projectWorkerTimingBehaviorEvent
 } from "@/lib/product-analytics-projection";
+import { analyticsCorrelationKey } from "@/lib/analytics-correlation";
 import {
-  analyticsCorrelationKey,
   assertUnifiedProductEventProperties,
   boundedAnalyticsLabel
 } from "@/lib/product-analytics-contracts";

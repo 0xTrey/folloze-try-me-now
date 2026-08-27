@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { sanitizeObservabilityText } from "@/lib/observability-sanitize";
 
 export const PRODUCT_EVENT_NAMES = [
@@ -303,21 +301,6 @@ export function isPrivateAnalyticsPropertyKey(key: string): boolean {
 
 export const ANALYTICS_CORRELATION_KEY_PATTERN = /^ck_[a-f0-9]{16}$/;
 export const ANALYTICS_CORRELATION_KEY_DOMAIN = "try-me-analytics-correlation-v1";
-
-/**
- * Derives the key PostHog carries so a behavior funnel can be joined to a
- * private build trace. The join is deliberately one-way: the key is a salted
- * digest of the trace ID, so an analytics reader can match a session they
- * already hold a trace for but cannot recover the trace ID from PostHog.
- */
-export function analyticsCorrelationKey(traceId: string): string {
-  return `ck_${createHash("sha256")
-    .update(ANALYTICS_CORRELATION_KEY_DOMAIN)
-    .update("\u0000")
-    .update(traceId)
-    .digest("hex")
-    .slice(0, 16)}`;
-}
 
 /** Bounded, buyer-facing label. Empty when nothing safe survives. */
 export function boundedAnalyticsLabel(value: string | undefined, maxChars = 64): string {

@@ -103,7 +103,13 @@ test.describe("generated 1:1 experience", () => {
       await loadGeneratedExperience(page, experience.html);
       await forceAssetResolution(page);
       await page.evaluate(() => document.fonts.ready);
-      await expect.poll(() => page.locator(".media.has-asset").count()).toBe(4);
+      // The fixture owns three distinct images. Each is placed once, so the
+      // count matches the supply rather than the number of media slots.
+      await expect.poll(() => page.locator(".media.has-asset").count()).toBe(3);
+      const placedSources = await page
+        .locator(".media.has-asset img")
+        .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("src")));
+      expect(new Set(placedSources).size).toBe(placedSources.length);
 
       const snapshot = await page.evaluate(() => {
         const coreRegionSelectors = [
