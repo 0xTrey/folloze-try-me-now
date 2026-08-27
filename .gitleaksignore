@@ -1,0 +1,2 @@
+# Synthetic PostHog-shaped value used only by a historical sanitizer test.
+4fbcbc642742d2876dffa9639b6a47bbb267529b:src/lib/posthog-config.test.ts:generic-api-key:36

@@ -33,7 +33,7 @@ describe("PostHog browser privacy", () => {
   it("redacts contact data, credentials, and URL details before native errors leave the browser", () => {
     const sanitized = sanitizePostHogCapture(capture("$exception", {
       $exception_message: "Request for buyer@example.com failed at https://example.com/path?token=private#fragment",
-      nested: { authorization: "Bearer private-token", key: "phx_1234567890abcdefghijklmnop" }
+      nested: { authorization: "Bearer private-token", key: "phx_1234567890abcdefghijklmnop" } // gitleaks:allow
     }));
 
     expect(JSON.stringify(sanitized)).not.toContain("buyer@example.com");
