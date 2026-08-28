@@ -483,6 +483,21 @@ export function toPublicSession(session: TryMeSession): PublicTryMeSession {
     curatedSections: session.curatedSections
       ? structuredClone(session.curatedSections)
       : undefined,
+    buildProgress: session.buildProgress
+      ? structuredClone(session.buildProgress)
+      : undefined,
+    // The receipt travels without its digest: the visitor needs the gate
+    // outcome, not a fingerprint of the document.
+    finalArtifact: session.finalArtifact
+      ? {
+          readiness: session.finalArtifact.readiness,
+          artifactRevision: session.finalArtifact.artifactRevision,
+          structuralGate: session.finalArtifact.structuralGate,
+          truthGate: session.finalArtifact.truthGate,
+          persistedAt: session.finalArtifact.persistedAt,
+          readBackAt: session.finalArtifact.readBackAt
+        }
+      : undefined,
     experienceSpec: session.experienceSpec
       ? {
           schemaVersion: session.experienceSpec.schemaVersion,

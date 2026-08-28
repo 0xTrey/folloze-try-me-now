@@ -1349,6 +1349,14 @@ export async function generateExperienceDraft(input: {
   useCase: UseCase;
   answers: SessionAnswers;
   sourceArtifact?: SourceArtifact;
+  /**
+   * Remaining share of the one customer deadline. It may only narrow the
+   * configured provider timeout, so a worker-specific value can never buy time
+   * past the finalization reserve.
+   */
+  timeoutMs?: number;
+  /** Caller-owned abort, joined with the local deadline. */
+  signal?: AbortSignal;
 }): Promise<{
   draft: ExperienceDraft;
   source: "openai" | "deterministic-fallback";
@@ -1358,7 +1366,14 @@ export async function generateExperienceDraft(input: {
 }> {
   const startedAt = Date.now();
   const controller = new AbortController();
-  const deadline = setTimeout(() => controller.abort(), config.generationTimeoutMs);
+  const budgetMs = Math.max(
+    0,
+    Math.min(config.generationTimeoutMs, Math.round(input.timeoutMs ?? config.generationTimeoutMs))
+  );
+  const deadline = setTimeout(() => controller.abort(), budgetMs);
+  const abortSignal = input.signal
+    ? AbortSignal.any([controller.signal, input.signal])
+    : controller.signal;
   let sourceContent: Awaited<ReturnType<typeof extractPublicContent>> | null = input.sourceArtifact
     ? sourceArtifactToPublicContentEvidence(input.sourceArtifact)
     : null;
@@ -1367,7 +1382,7 @@ export async function generateExperienceDraft(input: {
       try {
         sourceContent = await extractPublicContent(
           input.answers.sourceUrl,
-          AbortSignal.any([controller.signal, AbortSignal.timeout(7_000)])
+          AbortSignal.any([abortSignal, AbortSignal.timeout(Math.min(7_000, budgetMs || 1))])
         );
       } catch (error) {
         throw new SourceFetchError(error);
@@ -1504,11 +1519,11 @@ export async function generateExperienceDraft(input: {
         input: requestInput,
         text: { format: zodTextFormat(experienceDraftResponseSchema, "folloze_try_me_experience_v4") }
       },
-        { timeout, maxRetries: 0, signal: controller.signal }
+        { timeout, maxRetries: 0, signal: abortSignal }
       );
 
     const elapsed = Date.now() - startedAt;
-    const remaining = Math.max(1_000, config.generationTimeoutMs - elapsed - 500);
+    const remaining = Math.max(1_000, budgetMs - elapsed - 500);
     const response = await requestDraft(responseInput, remaining);
 
     if (!response.output_parsed) throw new Error("OpenAI returned no structured experience.");
@@ -1520,7 +1535,7 @@ export async function generateExperienceDraft(input: {
       sourceContent
     });
     if (failure) {
-      const repairBudget = config.generationTimeoutMs - (Date.now() - startedAt) - 650;
+      const repairBudget = budgetMs - (Date.now() - startedAt) - 650;
       if (repairBudget >= 4_500) {
         try {
           const repairBrief = JSON.stringify({

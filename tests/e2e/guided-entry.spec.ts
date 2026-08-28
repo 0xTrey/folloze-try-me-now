@@ -280,7 +280,7 @@ test.describe("unified guided first-run experience", () => {
 
   test("product-owner remediation keeps recommendations grounded and engagement manual on a full-width preview", async ({
     page
-  }) => {
+  }, testInfo) => {
     test.setTimeout(60_000);
     const sessions = new Map<string, PublicTryMeSession>();
     let fixtureMode: "evidence" | "none" | "ready" = "evidence";
@@ -320,6 +320,16 @@ test.describe("unified guided first-run experience", () => {
           readiness: "final",
           generationSource: "deterministic-fallback",
           artifactRevision: 2
+        },
+        // Reveal now requires the persisted, read-back final receipt, not just
+        // a final-looking experience object.
+        finalArtifact: {
+          readiness: "final",
+          artifactRevision: 2,
+          structuralGate: "passed",
+          truthGate: "passed",
+          persistedAt: "2026-08-22T12:00:52.000Z",
+          readBackAt: "2026-08-22T12:00:53.000Z"
         }
       };
     });
@@ -329,7 +339,10 @@ test.describe("unified guided first-run experience", () => {
     await expect(page.getByRole("button", { name: /Governed Revenue Automation/i })).toBeVisible();
     await expect(page.getByText(/Solution overview|Solution use cases|Solution evaluation questions/i)).toHaveCount(0);
     await page.screenshot({
-      path: "output/product-owner-remediation/evidence-backed-recommendations.png",
+      path:
+        process.env.CAPTURE_REVIEW_EVIDENCE === "1"
+          ? "output/product-owner-remediation/evidence-backed-recommendations.png"
+          : testInfo.outputPath("evidence-backed-recommendations.png"),
       fullPage: false
     });
 
@@ -339,7 +352,10 @@ test.describe("unified guided first-run experience", () => {
     await expect(page.getByLabel(/What are you taking to market/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /Pipeline Command Center|Governed Revenue Automation/i })).toHaveCount(0);
     await page.screenshot({
-      path: "output/product-owner-remediation/no-evidence-free-form.png",
+      path:
+        process.env.CAPTURE_REVIEW_EVIDENCE === "1"
+          ? "output/product-owner-remediation/no-evidence-free-form.png"
+          : testInfo.outputPath("no-evidence-free-form.png"),
       fullPage: false
     });
 

@@ -20,8 +20,20 @@ import {
   productionArgumentFromStrategy
 } from "@/lib/generation/message-strategy-compiler";
 import {
+  compileCampaignThesis,
+  type ThesisEvidenceClaim,
+  type ThesisEvidenceInput
+} from "@/lib/generation/campaign-thesis";
+import {
+  selectPageRecipe,
+  type PageRecipeSelection
+} from "@/lib/generation/page-recipes";
+import { compileThesisStrategy, thesisStrategyReceipt } from "@/lib/generation/thesis-strategy-bridge";
+import {
   compileEvidenceLedger,
-  type MessagingCompilerReceipt
+  type MessagingCompilerReceipt,
+  type CompilerEvidenceItem,
+  type MessageStrategyCandidate
 } from "@/lib/generation/messaging-compiler-contracts";
 import {
   recommendObjectiveCtas,
@@ -35,6 +47,7 @@ import {
 } from "@/lib/generation/production-message-spine";
 import { boundedCtaV2 } from "@/lib/generation/section-copy-types";
 import type { SectionModelClient } from "@/lib/generation/section-model-writer";
+import type { SectionStrategyBinding } from "@/lib/generation/section-writing-contract";
 import {
   applyV2SectionPlanToLegacySelection,
   selectThreeFamilyDecision,
@@ -279,6 +292,69 @@ function sectionCountFor(session: TryMeSession, brand: BrandProfile): WireframeS
   return 6;
 }
 
+/**
+ * Older successful brand-harvester records predate the structured diagnostics
+ * receipt. They still carry a first-party logo and an explicit harvested
+ * palette. Preserve that observed provenance when compiling the new brand
+ * system instead of treating the absence of a newer receipt as absence of the
+ * underlying evidence. A fallback or fast-extractor profile never crosses this
+ * bridge.
+ */
+function compilerReadyBrandProfile(profile: BrandProfile): BrandProfile {
+  if (profile.source !== "brand-harvester") return profile;
+
+  const distinctColors = new Set(
+    [profile.primaryColor, profile.accentColor, profile.surfaceColor, ...profile.colors]
+      .map((color) => color.trim().toUpperCase())
+      .filter(Boolean)
+  );
+  const hasExplicitPalette = distinctColors.size >= 3;
+  const existing = profile.diagnostics;
+  const palette = existing?.palette ?? (hasExplicitPalette
+    ? {
+        strategy: "semantic-tokens" as const,
+        confidence: "medium" as const,
+        candidateCount: distinctColors.size,
+        semanticCandidateCount: distinctColors.size,
+        rejectedCandidateCount: 0,
+        gradientCandidateCount: 0,
+        resolutionComplete: true
+      }
+    : undefined);
+  const logo = existing?.logo ?? (profile.logoUrl
+    ? {
+        strategy: "official-remote-portable" as const,
+        imageCandidateCount: 1,
+        rejectedImageCount: 0,
+        inlineSvgCandidateCount: 0,
+        resolutionComplete: true
+      }
+    : undefined);
+
+  if (!palette && !logo) return profile;
+  return {
+    ...profile,
+    diagnostics: {
+      logo: logo ?? {
+        strategy: "none",
+        imageCandidateCount: 0,
+        rejectedImageCount: 0,
+        inlineSvgCandidateCount: 0,
+        resolutionComplete: false
+      },
+      palette: palette ?? {
+        strategy: "fallback",
+        confidence: "low",
+        candidateCount: 0,
+        semanticCandidateCount: 0,
+        rejectedCandidateCount: 0,
+        gradientCandidateCount: 0,
+        resolutionComplete: false
+      }
+    }
+  };
+}
+
 function targetNameFor(
   session: TryMeSession,
   targetBrand?: BrandProfile
@@ -415,6 +491,154 @@ function familyArgument(input: {
   };
 }
 
+/**
+ * Adapts the existing evidence ledger into the deliberately narrower thesis
+ * evidence shape. The ledger is already permissioned by source and confidence,
+ * so this keeps the same ids and restrictions instead of granting a stronger
+ * use merely because a field is convenient to fill.
+ */
+function thesisEvidenceFromLedger(input: {
+  revision: number;
+  ledger: readonly CompilerEvidenceItem[];
+  sellerName: string;
+}): ThesisEvidenceInput {
+  const claimFor = (item: CompilerEvidenceItem): ThesisEvidenceClaim => ({
+    id: item.id,
+    claim: item.claim,
+    status: item.kind === "fact" ? "fact" : "inference",
+    confidence: item.confidence,
+    allowedUses: [...item.allowedUses],
+    prohibitedUses: [...item.prohibitedUses],
+    buyerFacing: true
+  });
+
+  return {
+    revision: input.revision,
+    entities: [
+      { id: "seller", kind: "seller", canonicalName: input.sellerName }
+    ],
+    claims: input.ledger.map(claimFor),
+    gaps: input.ledger.length
+      ? []
+      : ["No current-revision evidence was available for the campaign thesis."]
+  };
+}
+
+function productThesisProposals(input: {
+  evidence: ThesisEvidenceInput;
+  sellerName: string;
+  offer: string;
+  audience: { label: string; buyerJob: string };
+  objective: string;
+  ctaLabel: string;
+  publicContext?: string;
+}) {
+  const known = new Set(input.evidence.claims.map(({ id }) => id));
+  const refsFor = (...ids: string[]) => ids.filter((id) => known.has(id));
+  // A field without its own permitted evidence stays unsupported. Borrowing an
+  // arbitrary claim would make the thesis look complete while allowing a
+  // seller fact, for example, to masquerade as buyer or proof support.
+  const firstAvailable = (...ids: string[]) => refsFor(...ids);
+  const sellerRefs = firstAvailable("brief:companyName", "brief:canonicalDomain");
+  const offerRefs = firstAvailable("brief:offer");
+  const audienceRefs = firstAvailable("brief:audience");
+  const objectiveRefs = firstAvailable("brief:objective");
+  const ctaRefs = firstAvailable("brief:cta");
+  const positioningRefs = firstAvailable("brief:positioning", "brief:company", "brief:offer");
+  const objectiveAction = input.objective.trim()
+    ? `${input.objective.trim()[0]!.toLocaleLowerCase()}${input.objective.trim().slice(1)}`
+    : "make the next useful decision";
+
+  return {
+    seller: { value: input.sellerName, claimIds: sellerRefs },
+    offer: { value: input.offer, claimIds: offerRefs },
+    audience: { value: input.audience.label, claimIds: audienceRefs },
+    audienceJob: { value: input.audience.buyerJob, claimIds: audienceRefs },
+    desiredOutcome: { value: input.objective, claimIds: objectiveRefs },
+    promise: {
+      value: `${input.offer} gives ${input.audience.label} a focused way to ${objectiveAction}.`,
+      claimIds: [...new Set([...offerRefs, ...audienceRefs, ...objectiveRefs])]
+    },
+    mechanism: {
+      value: input.publicContext?.trim() ||
+        `Use a working session to map ${input.offer} to ${input.audience.buyerJob}.`,
+      claimIds: positioningRefs
+    },
+    nextAction: { value: input.ctaLabel, claimIds: ctaRefs }
+  };
+}
+
+/**
+ * A recipe changes the semantic progression, while the family remains the
+ * already-locked composition decision. Product/Solution is only activated for
+ * the Launch family today, so every recipe role has a matching family slot.
+ */
+function recipeDecisionFor(
+  familyDecision: ReturnType<typeof selectThreeFamilyDecision>,
+  selection: PageRecipeSelection
+): ReturnType<typeof selectThreeFamilyDecision> {
+  if (!selection.activated || selection.sections.length === 0) return familyDecision;
+  const sourceByRole = new Map(
+    familyDecision.sectionPlan.map((slot) => [slot.role, slot])
+  );
+  const mapped = selection.sections.map((section) => {
+    const source = sourceByRole.get(section.role);
+    if (!source) return undefined;
+    return {
+      ...source,
+      id: section.slotId,
+      optional: !section.required,
+      visualRole: section.visualRole,
+      ...(section.allowedCtas
+        ? { allowedCtas: [...section.allowedCtas] }
+        : { allowedCtas: source.allowedCtas ? [...source.allowedCtas] : undefined })
+    };
+  });
+  if (mapped.some((slot) => !slot)) return familyDecision;
+  return {
+    ...familyDecision,
+    sectionPlan: mapped as typeof familyDecision.sectionPlan
+  };
+}
+
+function thesisStrategyBindingFor(input: {
+  strategy?: MessageStrategyCandidate;
+  selection: PageRecipeSelection;
+  decision: ReturnType<typeof selectThreeFamilyDecision>;
+  audienceLabel: string;
+  offerLabel: string;
+}): SectionStrategyBinding | undefined {
+  const strategy = input.strategy;
+  if (!strategy) return undefined;
+  const planned = input.selection.activated
+    ? input.selection.sections.map((section) => ({
+        id: section.slotId,
+        job: section.semanticJob
+      }))
+    : input.decision.sectionPlan.map((section) => ({
+        id: section.id,
+        job: section.buyerJob
+      }));
+  return {
+    slots: {
+      bigIdea: strategy.bigIdea,
+      audienceJob: strategy.audienceJob,
+      promise: strategy.promise,
+      mechanism: strategy.mechanism,
+      proofPlan: strategy.proofPlan,
+      objectionPlan: strategy.objectionPlan,
+      ctaLogic: strategy.ctaLogic,
+      ...(strategy.tension ? { tension: strategy.tension } : {}),
+      ...(strategy.whyNow ? { whyNow: strategy.whyNow } : {})
+    },
+    jobsBySectionId: Object.fromEntries(
+      planned.map(({ id, job }) => [id, [job]])
+    ),
+    audienceLabel: input.audienceLabel,
+    offerLabel: input.offerLabel
+  };
+}
+
 export async function compileSessionProductionPage(input: {
   session: TryMeSession;
   brand: BrandProfile;
@@ -424,6 +648,12 @@ export async function compileSessionProductionPage(input: {
   /** Provider for the dedicated per-section writers. Deterministic when absent. */
   sectionModelClient?: SectionModelClient;
   sectionWriterDeadlineMs?: number;
+  /**
+   * Reads the revision that currently owns the session. Production callers use
+   * the captured session revision. Replay tooling may supply a live reader to
+   * prove that an in-flight result is discarded after newer inputs win.
+   */
+  currentRevision?: () => number;
   /** Story attempt this compile belongs to. Fences the private trace. */
   attemptId?: string;
   /**
@@ -433,7 +663,8 @@ export async function compileSessionProductionPage(input: {
    */
   traceId?: string;
 }): Promise<GenericProductionEngineResult> {
-  const { session, brand } = input;
+  const { session } = input;
+  const brand = compilerReadyBrandProfile(input.brand);
   const revision = session.revision;
   const observedAt = new Date().toISOString();
   const startedAt = session.stages.story.startedAt ?? observedAt;
@@ -614,16 +845,52 @@ export async function compileSessionProductionPage(input: {
       session.answers.eventSource
     )
   });
+  // The thesis is compiled from the same permissioned ledger used by the
+  // strategy compiler. This prevents a second, weaker evidence vocabulary from
+  // making a recipe look eligible while writers receive different support.
+  const ledger = compileEvidenceLedger({
+    sessionEvidence: session.evidenceItems,
+    liveBriefEvidence: evidence
+  });
+  const thesisEvidence = thesisEvidenceFromLedger({
+    revision,
+    ledger,
+    sellerName: brand.companyName
+  });
+  const thesisCompilation = compileCampaignThesis({
+    revision,
+    evidence: thesisEvidence,
+    proposals: productThesisProposals({
+      evidence: thesisEvidence,
+      sellerName: brand.companyName,
+      offer,
+      audience,
+      objective,
+      ctaLabel: cta.label,
+      publicContext: brand.publicContext
+    })
+  });
+  const recipeSelection = selectPageRecipe({
+    thesis: thesisCompilation.thesis,
+    signals: {
+      useCase: session.useCase,
+      campaignType: session.answers.campaignType,
+      offerKind: experienceSubtype(session),
+      objective,
+      strategicFamily: familyDecision.family
+    }
+  });
+  const selectedFamilyDecision = recipeDecisionFor(familyDecision, recipeSelection);
   const familyDecisionArtifact = productionArtifact({
     worker: "wireframe-ranker",
     sessionId: session.id,
     revision,
-    value: familyDecision,
-    evidenceRefs: [...familyDecision.evidenceRefs],
+    value: selectedFamilyDecision,
+    evidenceRefs: [...selectedFamilyDecision.evidenceRefs],
     confidence:
-      familyDecision.confidence === "high"
+      selectedFamilyDecision.confidence === "high"
         ? 0.9
-        : familyDecision.confidence === "medium"
+        : selectedFamilyDecision.confidence === "medium"
           ? 0.7
           : 0.4,
     startedAt,
@@ -657,7 +924,7 @@ export async function compileSessionProductionPage(input: {
   }, { selectedBy: "system", locked: true });
   const selection = applyV2SectionPlanToLegacySelection(
     legacySelection,
-    familyDecision
+    selectedFamilyDecision
   );
   const compositionArtifact = productionArtifact({
     worker: "wireframe-ranker",
@@ -679,15 +946,11 @@ export async function compileSessionProductionPage(input: {
     completedAt
   });
   const targetName = targetNameFor(session, input.targetBrand);
-  const ctaId = familyCtaId(familyDecision);
-  const ledger = compileEvidenceLedger({
-    sessionEvidence: session.evidenceItems,
-    liveBriefEvidence: evidence
-  });
+  const ctaId = familyCtaId(selectedFamilyDecision);
   const baseFamilyArgument = (base: RequiredProductionArgument) =>
     familyArgument({
       base,
-      family: familyDecision,
+      family: selectedFamilyDecision,
       sellerName: brand.companyName,
       targetName,
       offer,
@@ -699,9 +962,28 @@ export async function compileSessionProductionPage(input: {
   const baselineArgument = messageSpineArtifact.value
     ? baseFamilyArgument(messageSpineArtifact.value.argument)
     : undefined;
+  const thesisStrategy = baselineArgument
+    ? compileThesisStrategy({
+        thesis: thesisCompilation.thesis,
+        evidence: thesisEvidence,
+        recipeId: recipeSelection.recipeId,
+        ranking: framework,
+        family: selectedFamilyDecision.family,
+        baseline: {
+          promise: baselineArgument.promise.directive,
+          mechanism: baselineArgument.mechanism.directive,
+          decisionHelp: baselineArgument.decisionHelp.directive,
+          nextAction: baselineArgument.nextAction.directive,
+          ...(baselineArgument.tension ? { tension: baselineArgument.tension.directive } : {})
+        },
+        ctaLabel: cta.label,
+        objective,
+        ...(targetName ? { targetName } : {})
+      })
+    : undefined;
   const messagingCompiler = compileMessagingArtifact({
     ranking: framework,
-    family: familyDecision.family,
+    family: selectedFamilyDecision.family,
     baseline: {
       promise: baselineArgument?.promise.directive ?? "",
       mechanism: baselineArgument?.mechanism.directive ?? "",
@@ -711,7 +993,7 @@ export async function compileSessionProductionPage(input: {
         ? { tension: baselineArgument.tension.directive }
         : {})
     },
-    sectionPlan: familyDecision.sectionPlan,
+    sectionPlan: selectedFamilyDecision.sectionPlan,
     briefRevision: revision,
     ledger,
     sellerName: brand.companyName,
@@ -750,13 +1032,14 @@ export async function compileSessionProductionPage(input: {
         sessionId: session.id,
         revision,
         activeRevision: revision,
-        decision: familyDecision,
-        // The compiled strategy owns the directives when one cleared its gates.
-        // Otherwise the deterministic family argument still ships a safe page.
-        argument: messagingCompiler.selection.selected
+        decision: selectedFamilyDecision,
+        // The thesis strategy is the only selected strategy that may shape
+        // customer-facing directives. If it clears no gates, the original
+        // deterministic family argument remains the explicit fallback.
+        argument: thesisStrategy?.selected
             ? productionArgumentFromStrategy({
                 base: baselineArgument,
-                strategy: messagingCompiler.selection.selected,
+                strategy: thesisStrategy.selected,
                 ledger
               })
           : baselineArgument,
@@ -767,6 +1050,13 @@ export async function compileSessionProductionPage(input: {
         completedAt
       })
     : undefined;
+  const sectionStrategy = thesisStrategyBindingFor({
+    strategy: thesisStrategy?.selected,
+    selection: recipeSelection,
+    decision: selectedFamilyDecision,
+    audienceLabel: audience.label,
+    offerLabel: offer
+  });
 
   return compileGenericProductionPage({
     sessionId: session.id,
@@ -783,6 +1073,13 @@ export async function compileSessionProductionPage(input: {
     familyDecisionArtifact,
     ...(familyMessageSpineArtifact ? { familyMessageSpineArtifact } : {}),
     ...(messagingCompilerArtifact ? { messagingCompilerArtifact } : {}),
+    ...(sectionStrategy ? { sectionStrategy } : {}),
+    ...(recipeSelection.activated ? { recipeSelection } : {}),
+    diagnostics: {
+      thesis: { thesis: thesisCompilation.thesis, compilation: thesisCompilation },
+      ...(thesisStrategy ? { strategy: thesisStrategyReceipt(thesisStrategy) } : {}),
+      recipe: recipeSelection
+    },
     compositionArtifact,
     messageSpineArtifact,
     allowVisualRepair: true,
@@ -795,7 +1092,7 @@ export async function compileSessionProductionPage(input: {
         }
       : {})
   }, {
-    currentRevision: () => session.revision,
+    currentRevision: input.currentRevision ?? (() => session.revision),
     ...(input.sectionModelClient ? { sectionModelClient: input.sectionModelClient } : {}),
     ...(input.sectionWriterDeadlineMs !== undefined
       ? { sectionWriterDeadlineMs: input.sectionWriterDeadlineMs }

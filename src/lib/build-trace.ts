@@ -3,32 +3,51 @@ import { createHash } from "node:crypto";
 import {
   ASSET_ROLES as ASSET_ROLE_VALUES,
   BUILD_TRACE_CODE_MAX_LENGTH,
+  BUILD_TRACE_DIAGNOSTICS_VERSION,
   BUILD_TRACE_MAX_ALLOCATIONS,
   BUILD_TRACE_MAX_CANDIDATES,
+  BUILD_TRACE_MAX_DIAGNOSTIC_COUNT,
   BUILD_TRACE_MAX_EVIDENCE_REFS,
   BUILD_TRACE_MAX_FALLBACKS,
   BUILD_TRACE_MAX_QUALITY,
+  BUILD_TRACE_MAX_QUALITY_GATES,
   BUILD_TRACE_MAX_REASONS,
+  BUILD_TRACE_MAX_RECIPE_ALTERNATIVES,
+  BUILD_TRACE_MAX_RECIPE_SECTIONS,
+  BUILD_TRACE_MAX_RESEARCH_LANES,
   BUILD_TRACE_MAX_ROLES,
   BUILD_TRACE_MAX_SECTIONS,
   BUILD_TRACE_MAX_SERIALIZED_BYTES,
+  BUILD_TRACE_MAX_STRATEGY_CANDIDATES,
+  BUILD_TRACE_MAX_THESIS_FIELDS,
   BUILD_TRACE_MAX_TIMINGS,
   BUILD_TRACE_PIPELINE_VERSION,
   BUILD_TRACE_SCHEMA_VERSION,
   CODE_PATTERN,
+  COMPILER_DIGEST_PATTERN,
   CONTRACT_VERSION_PATTERN,
   DIGEST_PATTERN,
+  EVIDENCE_CONFIDENCES as EVIDENCE_CONFIDENCE_VALUES,
   EVIDENCE_REF_PATTERN,
+  EVIDENCE_STATUSES as EVIDENCE_STATUS_VALUES,
   FALLBACK_SCOPES as FALLBACK_SCOPE_VALUES,
+  FINGERPRINT_DIGEST_PATTERN,
   isUnsafeTraceString,
   PIPELINE_VERSION_PATTERN,
+  QUALITY_GATE_STATUSES as QUALITY_GATE_STATUS_VALUES,
+  RESEARCH_LANE_OUTCOMES as RESEARCH_LANE_OUTCOME_VALUES,
+  SCHEMA_VERSION_PATTERN,
   SECTION_QUALITY_KEYS,
+  SECTION_REPAIR_STATUSES as SECTION_REPAIR_STATUS_VALUES,
   SECTION_STATUSES as SECTION_STATUS_VALUES,
   SOURCE_HASH_PATTERN,
+  STRATEGY_DIMENSION_KEYS,
   TERMINAL_STATUSES as TERMINAL_STATUS_VALUES,
+  THESIS_PROOF_MODES as THESIS_PROOF_MODE_VALUES,
   TRACE_ID_PATTERN,
   validateBuildTraceFragment,
   validateBuildTraceShape,
+  VALUE_DIGEST_PATTERN,
   WRITER_MODES as WRITER_MODE_VALUES,
   type BuildTraceFragmentKind,
   type BuildTracePrivacyViolation
@@ -46,20 +65,31 @@ import {
  */
 export {
   BUILD_TRACE_CODE_MAX_LENGTH,
+  BUILD_TRACE_DIAGNOSTICS_VERSION,
   BUILD_TRACE_MAX_ALLOCATIONS,
   BUILD_TRACE_MAX_CANDIDATES,
   BUILD_TRACE_MAX_EVIDENCE_REFS,
   BUILD_TRACE_MAX_FALLBACKS,
   BUILD_TRACE_MAX_QUALITY,
+  BUILD_TRACE_MAX_QUALITY_GATES,
   BUILD_TRACE_MAX_REASONS,
+  BUILD_TRACE_MAX_RECIPE_ALTERNATIVES,
+  BUILD_TRACE_MAX_RECIPE_SECTIONS,
+  BUILD_TRACE_MAX_RESEARCH_LANES,
   BUILD_TRACE_MAX_ROLES,
   BUILD_TRACE_MAX_SECTIONS,
   BUILD_TRACE_MAX_SERIALIZED_BYTES,
+  BUILD_TRACE_MAX_STRATEGY_CANDIDATES,
+  BUILD_TRACE_MAX_THESIS_FIELDS,
   BUILD_TRACE_MAX_TIMINGS,
   BUILD_TRACE_PIPELINE_VERSION,
   BUILD_TRACE_SCHEMA_VERSION,
   isUnsafeTraceString,
+  QUALITY_GATE_STATUS_VALUES as BUILD_TRACE_QUALITY_GATE_STATUSES,
+  RESEARCH_LANE_OUTCOME_VALUES as BUILD_TRACE_RESEARCH_LANE_OUTCOMES,
   SECTION_QUALITY_KEYS,
+  SECTION_REPAIR_STATUS_VALUES as BUILD_TRACE_SECTION_REPAIR_STATUSES,
+  STRATEGY_DIMENSION_KEYS,
   validateBuildTraceFragment,
   validateBuildTraceShape,
   type BuildTraceFragmentKind,
@@ -140,9 +170,24 @@ export interface AssetAllocationTrace {
   rejectionReasons: string[];
 }
 
+export type BuildTraceResearchLaneOutcome = (typeof RESEARCH_LANE_OUTCOME_VALUES)[number];
+
+export type BuildTraceEvidenceStatus = (typeof EVIDENCE_STATUS_VALUES)[number];
+
+export type BuildTraceEvidenceConfidence = (typeof EVIDENCE_CONFIDENCE_VALUES)[number];
+
+export type BuildTraceThesisProofMode = (typeof THESIS_PROOF_MODE_VALUES)[number];
+
+export type BuildTraceQualityGateStatus = (typeof QUALITY_GATE_STATUS_VALUES)[number];
+
+export type BuildTraceSectionRepairStatus = (typeof SECTION_REPAIR_STATUS_VALUES)[number];
+
+export type BuildTraceStrategyDimensionKey = (typeof STRATEGY_DIMENSION_KEYS)[number];
+
 export interface SectionBuildTrace {
   sectionId: string;
   role: string;
+  jobCode?: string;
   promptVersion: string;
   templateVersion: string;
   writerMode: BuildTraceWriterMode;
@@ -150,12 +195,16 @@ export interface SectionBuildTrace {
   inputEvidenceRefs: string[];
   inputDigest: string;
   candidateDigests: string[];
+  candidateCount?: number;
   selectedCandidate: number;
   selectionReasons: string[];
+  rejectionCodes?: string[];
+  repairStatus?: BuildTraceSectionRepairStatus;
   outputDigest: string;
   quality: SectionQualityMetrics;
   startedAt: string;
   completedAt: string;
+  durationMs?: number;
   status: BuildTraceSectionStatus;
   fallbackCode?: string;
 }
@@ -185,6 +234,145 @@ export interface StageTimingTrace {
   status: string;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Diagnostics                                                                 */
+/* -------------------------------------------------------------------------- */
+
+export interface EvidenceGraphDiagnostics {
+  schemaVersion: string;
+  revision: number;
+  digest: string;
+  inputFingerprintDigest: string;
+  entityCount: number;
+  claimCount: number;
+  factCount: number;
+  inferenceCount: number;
+  unknownCount: number;
+  buyerFacingClaimCount: number;
+  relationshipCount: number;
+  gapCodes: string[];
+}
+
+export interface ResearchLaneDiagnostics {
+  laneId: string;
+  outcome: BuildTraceResearchLaneOutcome;
+  queryCount: number;
+  entityCount: number;
+  claimCount: number;
+  gapCount: number;
+  durationMs: number;
+}
+
+export interface ResearchDiagnostics {
+  queryCount: number;
+  laneCount: number;
+  lanes: ResearchLaneDiagnostics[];
+  outcomeCounts: Partial<Record<BuildTraceResearchLaneOutcome, number>>;
+}
+
+export interface ThesisFieldDiagnostics {
+  role: string;
+  present: boolean;
+  status: BuildTraceEvidenceStatus;
+  confidence: BuildTraceEvidenceConfidence;
+  buyerFacing: boolean;
+  evidenceRefs: string[];
+  valueDigest?: string;
+}
+
+export interface ThesisDiagnostics {
+  schemaVersion: string;
+  version: string;
+  revision: number;
+  digest: string;
+  proofMode: BuildTraceThesisProofMode;
+  fields: ThesisFieldDiagnostics[];
+  unsupportedFields: string[];
+  omittedFields: string[];
+  unknownCount: number;
+  reasonCodes: string[];
+}
+
+export interface StrategyCandidateDiagnostics {
+  candidateId: string;
+  angle: string;
+  argumentKind: string;
+  frameworkId: string;
+  selected: boolean;
+  score: number;
+  dimensions?: Partial<Record<BuildTraceStrategyDimensionKey, number>>;
+  hardFailures: string[];
+  reasonCodes: string[];
+}
+
+export interface StrategyDiagnostics {
+  schemaVersion: string;
+  version: string;
+  thesisDigest: string;
+  strategyDigest: string;
+  selectedCandidateId?: string;
+  candidates: StrategyCandidateDiagnostics[];
+  rejectedCandidateIds: string[];
+  reasonCodes: string[];
+}
+
+export interface RecipeDiagnostics {
+  schemaVersion: string;
+  recipeId: string;
+  recipeVersion: string;
+  digest: string;
+  thesisDigest: string;
+  activated: boolean;
+  thesisValid: boolean;
+  sections: Array<{ order: number; slotId: string; role: string; required: boolean }>;
+  rejected: Array<{ recipeId: string; reasonCode: string }>;
+  reasonCodes: string[];
+}
+
+export interface CompositionDiagnostics {
+  version: string;
+  selectedCompositionId: string;
+  archetypeId?: string;
+  digest?: string;
+  rejected: Array<{ candidateId: string; reasonCode: string }>;
+  reasonCodes: string[];
+}
+
+export interface QualityGateDiagnostics {
+  gate: string;
+  status: BuildTraceQualityGateStatus;
+  sectionId?: string;
+  violations: string[];
+}
+
+export interface LifecycleDiagnostics {
+  revision: number;
+  attemptId: string;
+  inputFingerprintDigest: string;
+  renderMs: number;
+  persistenceMs: number;
+  readbackMs: number;
+  totalMs: number;
+  fallbackCodes: string[];
+}
+
+/**
+ * The private diagnostics block. It exists so an operator can reconstruct every
+ * decision the pipeline made without any of the material those decisions were
+ * made from: no claim text, no query string, no prompt, no copy, no URL.
+ */
+export interface BuildTraceDiagnostics {
+  version: string;
+  evidenceGraph?: EvidenceGraphDiagnostics;
+  research?: ResearchDiagnostics;
+  thesis?: ThesisDiagnostics;
+  strategy?: StrategyDiagnostics;
+  recipe?: RecipeDiagnostics;
+  composition?: CompositionDiagnostics;
+  qualityGates: QualityGateDiagnostics[];
+  lifecycle: LifecycleDiagnostics;
+}
+
 export interface BuildTraceV1 {
   schemaVersion: 1;
   traceId: string;
@@ -208,6 +396,7 @@ export interface BuildTraceV1 {
   quality: QualityTrace[];
   fallbacks: FallbackTrace[];
   timings: StageTimingTrace[];
+  diagnostics?: BuildTraceDiagnostics;
 }
 
 const TERMINAL_STATUSES = new Set<BuildTraceTerminalStatus>(TERMINAL_STATUS_VALUES);
@@ -215,6 +404,20 @@ const SECTION_STATUSES = new Set<BuildTraceSectionStatus>(SECTION_STATUS_VALUES)
 const WRITER_MODES = new Set<BuildTraceWriterMode>(WRITER_MODE_VALUES);
 const ASSET_ROLES = new Set<BuildTraceAssetRole>(ASSET_ROLE_VALUES);
 const FALLBACK_SCOPES = new Set<BuildTraceFallbackScope>(FALLBACK_SCOPE_VALUES);
+const RESEARCH_LANE_OUTCOMES = new Set<BuildTraceResearchLaneOutcome>(
+  RESEARCH_LANE_OUTCOME_VALUES
+);
+const EVIDENCE_STATUSES = new Set<BuildTraceEvidenceStatus>(EVIDENCE_STATUS_VALUES);
+const EVIDENCE_CONFIDENCES = new Set<BuildTraceEvidenceConfidence>(
+  EVIDENCE_CONFIDENCE_VALUES
+);
+const THESIS_PROOF_MODES = new Set<BuildTraceThesisProofMode>(THESIS_PROOF_MODE_VALUES);
+const QUALITY_GATE_STATUSES = new Set<BuildTraceQualityGateStatus>(
+  QUALITY_GATE_STATUS_VALUES
+);
+const SECTION_REPAIR_STATUSES = new Set<BuildTraceSectionRepairStatus>(
+  SECTION_REPAIR_STATUS_VALUES
+);
 /** Substantive imagery may be placed once. Only these roles may repeat. */
 export const REUSABLE_ASSET_ROLES = new Set<BuildTraceAssetRole>(["logo", "decorative"]);
 
@@ -276,6 +479,40 @@ export function buildTraceSourceUrlHash(traceId: string, sourceUrl: string): str
 /** One-way support-reference hash. The public support code is not recoverable. */
 export function buildTraceSupportRefHash(supportRef: string): string {
   return `sr_${hash("try-me-build-trace-support-v1", supportRef, 20)}`;
+}
+
+/**
+ * One-way hash of an input fingerprint. Two attempts on the same brief share a
+ * value; the brief itself is not recoverable from it.
+ */
+export function buildTraceFingerprintDigest(inputFingerprint: string): string {
+  return FINGERPRINT_DIGEST_PATTERN.test(inputFingerprint)
+    ? inputFingerprint
+    : `fp_${hash("try-me-evidence-fingerprint-v1", inputFingerprint, 20)}`;
+}
+
+/**
+ * One-way hash of one private field's wording. It moves when the wording moves,
+ * which is the only thing a diagnostics reader needs from it.
+ */
+export function buildTraceValueDigest(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (VALUE_DIGEST_PATTERN.test(value)) return value;
+  return `vd_${hash("try-me-build-trace-value-v1", value, 16)}`;
+}
+
+/**
+ * Keeps an upstream compiler digest verbatim when it already carries one of the
+ * contract's prefixes, and re-mints it under the expected prefix otherwise. A
+ * malformed digest therefore stays distinct rather than collapsing onto a
+ * shared placeholder that would make two different builds look identical.
+ */
+export function buildTraceCompilerDigest(
+  value: string | undefined,
+  prefix: "eg" | "th" | "st" | "rc" | "cp"
+): string {
+  if (value && COMPILER_DIGEST_PATTERN.test(value)) return value;
+  return `${prefix}_${hash(`try-me-build-trace-compiler-${prefix}-v1`, value ?? "", 32)}`;
 }
 
 /**
@@ -519,6 +756,7 @@ export function normalizeAssetAllocationTrace(input: {
 export function normalizeSectionBuildTrace(input: {
   sectionId: string;
   role: string;
+  jobCode?: string;
   promptVersion?: string;
   templateVersion?: string;
   writerMode: string;
@@ -526,8 +764,11 @@ export function normalizeSectionBuildTrace(input: {
   inputEvidenceRefs?: readonly string[];
   inputDigest: string;
   candidateDigests?: readonly string[];
+  candidateCount?: number;
   selectedCandidate: number;
   selectionReasons?: readonly string[];
+  rejectionCodes?: readonly string[];
+  repairStatus?: string;
   outputDigest: string;
   quality?: SectionQualityMetrics;
   startedAt: string;
@@ -536,10 +777,21 @@ export function normalizeSectionBuildTrace(input: {
   fallbackCode?: string;
 }): SectionBuildTrace {
   const startedAt = instant(input.startedAt, new Date(0).toISOString());
+  const completedAt = instant(input.completedAt, startedAt);
   const model = input.model ? buildTraceCode(input.model, "") : "";
+  const jobCode = input.jobCode ? buildTraceCode(input.jobCode, "") : "";
+  const candidateDigests = (input.candidateDigests ?? [])
+    .slice(0, BUILD_TRACE_MAX_CANDIDATES)
+    .map((digest) => (DIGEST_PATTERN.test(digest) ? digest : buildTraceDigest(digest)));
+  const repairStatus = SECTION_REPAIR_STATUSES.has(
+    input.repairStatus as BuildTraceSectionRepairStatus
+  )
+    ? (input.repairStatus as BuildTraceSectionRepairStatus)
+    : undefined;
   return {
     sectionId: buildTraceCode(input.sectionId, "section"),
     role: buildTraceCode(input.role, "role"),
+    ...(jobCode ? { jobCode } : {}),
     promptVersion: versionCode(input.promptVersion, "section-writer-v1"),
     templateVersion: versionCode(input.templateVersion, "section-template-v1"),
     writerMode: WRITER_MODES.has(input.writerMode as BuildTraceWriterMode)
@@ -550,17 +802,25 @@ export function normalizeSectionBuildTrace(input: {
     inputDigest: DIGEST_PATTERN.test(input.inputDigest)
       ? input.inputDigest
       : buildTraceDigest(input.inputDigest),
-    candidateDigests: (input.candidateDigests ?? [])
-      .slice(0, BUILD_TRACE_MAX_CANDIDATES)
-      .map((digest) => (DIGEST_PATTERN.test(digest) ? digest : buildTraceDigest(digest))),
+    candidateDigests,
+    ...(input.candidateCount === undefined
+      ? {}
+      : {
+          candidateCount: boundedCount(input.candidateCount, BUILD_TRACE_MAX_CANDIDATES)
+        }),
     selectedCandidate: boundedCount(input.selectedCandidate, BUILD_TRACE_MAX_CANDIDATES),
     selectionReasons: buildTraceCodes(input.selectionReasons),
+    ...(input.rejectionCodes
+      ? { rejectionCodes: buildTraceCodes(input.rejectionCodes) }
+      : {}),
+    ...(repairStatus ? { repairStatus } : {}),
     outputDigest: DIGEST_PATTERN.test(input.outputDigest)
       ? input.outputDigest
       : buildTraceDigest(input.outputDigest),
     quality: normalizeQualityMap(input.quality),
     startedAt,
-    completedAt: instant(input.completedAt, startedAt),
+    completedAt,
+    durationMs: boundedDuration(Date.parse(completedAt) - Date.parse(startedAt)),
     status: SECTION_STATUSES.has(input.status as BuildTraceSectionStatus)
       ? (input.status as BuildTraceSectionStatus)
       : "fallback",
@@ -614,6 +874,333 @@ function versionCode(value: string | undefined, fallback: string): string {
   return value && CONTRACT_VERSION_PATTERN.test(value) ? value : fallback;
 }
 
+function schemaVersionCode(value: unknown, fallback = "1.0"): string {
+  return typeof value === "string" && SCHEMA_VERSION_PATTERN.test(value) ? value : fallback;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Diagnostics normalizers                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A closed metric map, like `normalizeQualityMap` but parameterized by its key
+ * vocabulary. Values outside the vocabulary are dropped rather than stored,
+ * because an unrecognized key is the only place free text could hide.
+ */
+function normalizeNumericMetricMap<Key extends string>(
+  values: Readonly<Record<string, unknown>> | undefined,
+  keys: readonly Key[]
+): Partial<Record<Key, number>> {
+  const allowed = new Set<string>(keys);
+  const entries: Array<[Key, number]> = [];
+  for (const [key, value] of Object.entries(values ?? {})) {
+    const safeKey = buildTraceCode(key, "");
+    if (!allowed.has(safeKey) || typeof value !== "number" || !Number.isFinite(value)) {
+      continue;
+    }
+    entries.push([safeKey as Key, Math.round(value * 10_000) / 10_000]);
+  }
+  entries.sort(([left], [right]) => left.localeCompare(right));
+  return Object.fromEntries(entries) as Partial<Record<Key, number>>;
+}
+
+export function normalizeEvidenceGraphDiagnostics(input: {
+  schemaVersion?: string;
+  revision: number;
+  digest: string;
+  inputFingerprintDigest?: string;
+  inputFingerprint?: string;
+  entityCount?: number;
+  claimCount?: number;
+  factCount?: number;
+  inferenceCount?: number;
+  unknownCount?: number;
+  buyerFacingClaimCount?: number;
+  relationshipCount?: number;
+  gaps?: readonly string[];
+}): EvidenceGraphDiagnostics {
+  return {
+    schemaVersion: schemaVersionCode(input.schemaVersion),
+    revision: boundedCount(input.revision, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+    digest: buildTraceCompilerDigest(input.digest, "eg"),
+    inputFingerprintDigest: buildTraceFingerprintDigest(
+      input.inputFingerprintDigest ?? input.inputFingerprint ?? ""
+    ),
+    entityCount: boundedCount(input.entityCount ?? 0, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+    claimCount: boundedCount(input.claimCount ?? 0, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+    factCount: boundedCount(input.factCount ?? 0, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+    inferenceCount: boundedCount(input.inferenceCount ?? 0, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+    unknownCount: boundedCount(input.unknownCount ?? 0, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+    buyerFacingClaimCount: boundedCount(
+      input.buyerFacingClaimCount ?? 0,
+      BUILD_TRACE_MAX_DIAGNOSTIC_COUNT
+    ),
+    relationshipCount: boundedCount(
+      input.relationshipCount ?? 0,
+      BUILD_TRACE_MAX_DIAGNOSTIC_COUNT
+    ),
+    gapCodes: buildTraceCodes(input.gaps)
+  };
+}
+
+export function normalizeResearchDiagnostics(input: {
+  lanes: readonly {
+    laneId: string;
+    outcome: string;
+    queryCount?: number;
+    entityCount?: number;
+    claimCount?: number;
+    gapCount?: number;
+    durationMs?: number;
+  }[];
+}): ResearchDiagnostics {
+  const lanes = input.lanes
+    .slice(0, BUILD_TRACE_MAX_RESEARCH_LANES)
+    .map((lane) => ({
+      laneId: buildTraceCode(lane.laneId, "lane"),
+      outcome: RESEARCH_LANE_OUTCOMES.has(lane.outcome as BuildTraceResearchLaneOutcome)
+        ? (lane.outcome as BuildTraceResearchLaneOutcome)
+        : ("error" as BuildTraceResearchLaneOutcome),
+      queryCount: boundedCount(lane.queryCount ?? 0, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+      entityCount: boundedCount(lane.entityCount ?? 0, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+      claimCount: boundedCount(lane.claimCount ?? 0, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+      gapCount: boundedCount(lane.gapCount ?? 0, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+      durationMs: boundedDuration(lane.durationMs ?? 0)
+    }))
+    .sort((left, right) => left.laneId.localeCompare(right.laneId));
+  const outcomeCounts: Partial<Record<BuildTraceResearchLaneOutcome, number>> = {};
+  for (const lane of lanes) {
+    outcomeCounts[lane.outcome] = (outcomeCounts[lane.outcome] ?? 0) + 1;
+  }
+  return {
+    queryCount: lanes.reduce((sum, lane) => sum + lane.queryCount, 0),
+    laneCount: lanes.length,
+    lanes,
+    outcomeCounts
+  };
+}
+
+export function normalizeThesisDiagnostics(input: {
+  schemaVersion?: string;
+  version?: string;
+  revision: number;
+  digest: string;
+  proofMode: string;
+  fields: readonly {
+    role: string;
+    present: boolean;
+    status: string;
+    confidence: string;
+    buyerFacing: boolean;
+    evidenceRefs?: readonly string[];
+    valueDigest?: string;
+  }[];
+  unsupportedFields?: readonly string[];
+  omittedFields?: readonly string[];
+  unknownCount?: number;
+  reasonCodes?: readonly string[];
+}): ThesisDiagnostics {
+  return {
+    schemaVersion: schemaVersionCode(input.schemaVersion),
+    version: versionCode(input.version, "campaign-thesis-v1.0.0"),
+    revision: boundedCount(input.revision, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+    digest: buildTraceCompilerDigest(input.digest, "th"),
+    proofMode: THESIS_PROOF_MODES.has(input.proofMode as BuildTraceThesisProofMode)
+      ? (input.proofMode as BuildTraceThesisProofMode)
+      : "validation-question",
+    fields: input.fields
+      .slice(0, BUILD_TRACE_MAX_THESIS_FIELDS)
+      .map((field) => {
+        const valueDigest = buildTraceValueDigest(field.valueDigest);
+        return {
+          role: buildTraceCode(field.role, "field"),
+          present: field.present === true,
+          status: EVIDENCE_STATUSES.has(field.status as BuildTraceEvidenceStatus)
+            ? (field.status as BuildTraceEvidenceStatus)
+            : "unknown",
+          confidence: EVIDENCE_CONFIDENCES.has(
+            field.confidence as BuildTraceEvidenceConfidence
+          )
+            ? (field.confidence as BuildTraceEvidenceConfidence)
+            : "low",
+          buyerFacing: field.buyerFacing === true,
+          evidenceRefs: safeRefs(field.evidenceRefs, EVIDENCE_REF_PATTERN),
+          ...(valueDigest ? { valueDigest } : {})
+        };
+      })
+      .sort((left, right) => left.role.localeCompare(right.role)),
+    unsupportedFields: buildTraceCodes(input.unsupportedFields, BUILD_TRACE_MAX_THESIS_FIELDS),
+    omittedFields: buildTraceCodes(input.omittedFields, BUILD_TRACE_MAX_THESIS_FIELDS),
+    unknownCount: boundedCount(input.unknownCount ?? 0, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+    reasonCodes: buildTraceCodes(input.reasonCodes)
+  };
+}
+
+export function normalizeStrategyDiagnostics(input: {
+  schemaVersion?: string;
+  version?: string;
+  thesisDigest: string;
+  strategyDigest: string;
+  selectedCandidateId?: string;
+  candidates: readonly {
+    candidateId: string;
+    angle: string;
+    argumentKind: string;
+    frameworkId: string;
+    total?: number;
+    dimensions?: Readonly<Record<string, unknown>>;
+    hardFailures?: readonly string[];
+    reasonCodes?: readonly string[];
+  }[];
+  rejectedCandidateIds?: readonly string[];
+  reasonCodes?: readonly string[];
+}): StrategyDiagnostics {
+  const selectedCandidateId = input.selectedCandidateId
+    ? buildTraceCode(input.selectedCandidateId, "")
+    : "";
+  return {
+    schemaVersion: schemaVersionCode(input.schemaVersion),
+    version: versionCode(input.version, "thesis-strategy-v1.0.0"),
+    thesisDigest: buildTraceCompilerDigest(input.thesisDigest, "th"),
+    strategyDigest: buildTraceCompilerDigest(input.strategyDigest, "st"),
+    ...(selectedCandidateId ? { selectedCandidateId } : {}),
+    candidates: input.candidates
+      .slice(0, BUILD_TRACE_MAX_STRATEGY_CANDIDATES)
+      .map((candidate) => {
+        const candidateId = buildTraceCode(candidate.candidateId, "unnamed_candidate");
+        const dimensions = candidate.dimensions
+          ? normalizeNumericMetricMap(candidate.dimensions, STRATEGY_DIMENSION_KEYS)
+          : undefined;
+        return {
+          candidateId,
+          angle: buildTraceCode(candidate.angle, "angle"),
+          argumentKind: buildTraceCode(candidate.argumentKind, "argument"),
+          frameworkId: buildTraceCode(candidate.frameworkId, "framework"),
+          selected: candidateId === selectedCandidateId,
+          // The evaluator scores out of 100; the trace contract stores a 0-1
+          // score, so the conversion happens here rather than at every caller.
+          score: boundedScore((candidate.total ?? 0) / 100),
+          ...(dimensions && Object.keys(dimensions).length > 0 ? { dimensions } : {}),
+          hardFailures: buildTraceCodes(candidate.hardFailures),
+          reasonCodes: buildTraceCodes(candidate.reasonCodes)
+        };
+      })
+      .sort((left, right) => left.candidateId.localeCompare(right.candidateId)),
+    rejectedCandidateIds: buildTraceCodes(
+      input.rejectedCandidateIds,
+      BUILD_TRACE_MAX_STRATEGY_CANDIDATES
+    ),
+    reasonCodes: buildTraceCodes(input.reasonCodes)
+  };
+}
+
+export function normalizeRecipeDiagnostics(input: {
+  schemaVersion?: string;
+  recipeId: string;
+  recipeVersion?: string;
+  digest: string;
+  thesisDigest: string;
+  activated: boolean;
+  thesisValid: boolean;
+  sections: readonly { order: number; slotId: string; role: string; required?: boolean }[];
+  rejected?: readonly { recipeId: string; reasonCode: string }[];
+  reasonCodes?: readonly string[];
+}): RecipeDiagnostics {
+  return {
+    schemaVersion: schemaVersionCode(input.schemaVersion),
+    recipeId: buildTraceCode(input.recipeId, "recipe"),
+    recipeVersion: versionCode(input.recipeVersion, "page-recipe-v1.0.0"),
+    digest: buildTraceCompilerDigest(input.digest, "rc"),
+    thesisDigest: buildTraceCompilerDigest(input.thesisDigest, "th"),
+    activated: input.activated === true,
+    thesisValid: input.thesisValid === true,
+    sections: input.sections
+      .slice(0, BUILD_TRACE_MAX_RECIPE_SECTIONS)
+      .map((section) => ({
+        order: boundedCount(section.order, BUILD_TRACE_MAX_RECIPE_SECTIONS),
+        slotId: buildTraceCode(section.slotId, "slot"),
+        role: buildTraceCode(section.role, "role"),
+        required: section.required === true
+      }))
+      .sort((left, right) => left.order - right.order || left.slotId.localeCompare(right.slotId)),
+    rejected: (input.rejected ?? [])
+      .slice(0, BUILD_TRACE_MAX_RECIPE_ALTERNATIVES)
+      .map((entry) => ({
+        recipeId: buildTraceCode(entry.recipeId, "recipe"),
+        reasonCode: buildTraceCode(entry.reasonCode, "unspecified")
+      }))
+      .sort((left, right) => left.recipeId.localeCompare(right.recipeId)),
+    reasonCodes: buildTraceCodes(input.reasonCodes)
+  };
+}
+
+export function normalizeCompositionDiagnostics(input: {
+  version?: string;
+  selectedCompositionId: string;
+  archetypeId?: string;
+  digest?: string;
+  rejected?: readonly { candidateId: string; reasonCode: string }[];
+  reasonCodes?: readonly string[];
+}): CompositionDiagnostics {
+  const archetypeId = input.archetypeId ? buildTraceCode(input.archetypeId, "") : "";
+  return {
+    version: versionCode(input.version, "three-family-v2.0.0"),
+    selectedCompositionId: buildTraceCode(input.selectedCompositionId, "composition"),
+    ...(archetypeId ? { archetypeId } : {}),
+    ...(input.digest ? { digest: buildTraceCompilerDigest(input.digest, "cp") } : {}),
+    rejected: (input.rejected ?? [])
+      .slice(0, BUILD_TRACE_MAX_RECIPE_ALTERNATIVES)
+      .map((entry) => ({
+        candidateId: buildTraceCode(entry.candidateId, "candidate"),
+        reasonCode: buildTraceCode(entry.reasonCode, "unspecified")
+      }))
+      .sort((left, right) => left.candidateId.localeCompare(right.candidateId)),
+    reasonCodes: buildTraceCodes(input.reasonCodes)
+  };
+}
+
+export function normalizeQualityGateDiagnostics(input: {
+  gate: string;
+  status: string;
+  sectionId?: string;
+  violations?: readonly string[];
+}): QualityGateDiagnostics {
+  const sectionId = input.sectionId ? buildTraceCode(input.sectionId, "") : "";
+  return {
+    gate: buildTraceCode(input.gate, "gate"),
+    status: QUALITY_GATE_STATUSES.has(input.status as BuildTraceQualityGateStatus)
+      ? (input.status as BuildTraceQualityGateStatus)
+      : "skipped",
+    ...(sectionId ? { sectionId } : {}),
+    violations: buildTraceCodes(input.violations)
+  };
+}
+
+export function normalizeLifecycleDiagnostics(input: {
+  revision: number;
+  attemptId: string;
+  inputFingerprintDigest?: string;
+  inputFingerprint?: string;
+  renderMs?: number;
+  persistenceMs?: number;
+  readbackMs?: number;
+  totalMs?: number;
+  fallbackCodes?: readonly string[];
+}): LifecycleDiagnostics {
+  return {
+    revision: boundedCount(input.revision, BUILD_TRACE_MAX_DIAGNOSTIC_COUNT),
+    attemptId: safeTraceIdentifier(input.attemptId, "attempt"),
+    inputFingerprintDigest: buildTraceFingerprintDigest(
+      input.inputFingerprintDigest ?? input.inputFingerprint ?? ""
+    ),
+    renderMs: boundedDuration(input.renderMs ?? 0),
+    persistenceMs: boundedDuration(input.persistenceMs ?? 0),
+    readbackMs: boundedDuration(input.readbackMs ?? 0),
+    totalMs: boundedDuration(input.totalMs ?? 0),
+    fallbackCodes: buildTraceCodes(input.fallbackCodes, BUILD_TRACE_MAX_FALLBACKS)
+  };
+}
+
 function safeRefs(
   refs: readonly string[] | undefined,
   pattern: RegExp,
@@ -653,7 +1240,12 @@ export class BuildTraceBuilder {
   private readonly quality: QualityTrace[] = [];
   private readonly fallbacks: FallbackTrace[] = [];
   private readonly timings: StageTimingTrace[] = [];
+  private readonly qualityGates: QualityGateDiagnostics[] = [];
   private decisions: BuildTraceV1["decisions"] = {};
+  private diagnostics: Omit<BuildTraceDiagnostics, "version" | "qualityGates"> = {
+    lifecycle: normalizeLifecycleDiagnostics({ revision: 0, attemptId: "attempt" })
+  };
+  private lifecycleRecorded = false;
 
   constructor(input: BuildTraceBuilderInput) {
     this.traceId = safeTraceIdentifier(input.traceId, "trace");
@@ -737,6 +1329,56 @@ export class BuildTraceBuilder {
     return this;
   }
 
+  recordEvidenceGraphDiagnostics(diagnostics: EvidenceGraphDiagnostics): this {
+    this.diagnostics = { ...this.diagnostics, evidenceGraph: diagnostics };
+    return this;
+  }
+
+  recordResearchDiagnostics(diagnostics: ResearchDiagnostics): this {
+    this.diagnostics = { ...this.diagnostics, research: diagnostics };
+    return this;
+  }
+
+  recordThesisDiagnostics(diagnostics: ThesisDiagnostics): this {
+    this.diagnostics = { ...this.diagnostics, thesis: diagnostics };
+    for (const field of diagnostics.fields) {
+      for (const ref of field.evidenceRefs) this.evidence.add(ref);
+    }
+    return this;
+  }
+
+  recordStrategyDiagnostics(diagnostics: StrategyDiagnostics): this {
+    this.diagnostics = { ...this.diagnostics, strategy: diagnostics };
+    return this;
+  }
+
+  recordRecipeDiagnostics(diagnostics: RecipeDiagnostics): this {
+    this.diagnostics = { ...this.diagnostics, recipe: diagnostics };
+    return this;
+  }
+
+  recordCompositionDiagnostics(diagnostics: CompositionDiagnostics): this {
+    this.diagnostics = { ...this.diagnostics, composition: diagnostics };
+    return this;
+  }
+
+  recordQualityGate(gate: QualityGateDiagnostics): this {
+    if (this.qualityGates.length >= BUILD_TRACE_MAX_QUALITY_GATES) return this;
+    this.qualityGates.push(gate);
+    return this;
+  }
+
+  /**
+   * The revision, attempt, fingerprint, timing, and fallback codes the whole
+   * attempt is fenced by. Recorded explicitly rather than derived from stage
+   * timings, because the reserve the lifecycle owns is not a stage.
+   */
+  recordLifecycleDiagnostics(diagnostics: LifecycleDiagnostics): this {
+    this.diagnostics = { ...this.diagnostics, lifecycle: diagnostics };
+    this.lifecycleRecorded = true;
+    return this;
+  }
+
   recordTiming(input: {
     stage: string;
     startedAt: string;
@@ -787,8 +1429,53 @@ export class BuildTraceBuilder {
       sections: structuredClone(this.sections),
       quality: structuredClone(this.quality),
       fallbacks: structuredClone(this.fallbacks),
-      timings: structuredClone(this.timings)
+      timings: structuredClone(this.timings),
+      // Emitted only when something was actually diagnosed, so an existing
+      // caller that records no diagnostics produces a byte-identical trace.
+      ...(this.hasDiagnostics() ? { diagnostics: this.buildDiagnostics() } : {})
     };
+  }
+
+  private hasDiagnostics(): boolean {
+    return (
+      this.lifecycleRecorded
+      || this.qualityGates.length > 0
+      || Boolean(
+        this.diagnostics.evidenceGraph
+        || this.diagnostics.research
+        || this.diagnostics.thesis
+        || this.diagnostics.strategy
+        || this.diagnostics.recipe
+        || this.diagnostics.composition
+      )
+    );
+  }
+
+  private buildDiagnostics(): BuildTraceDiagnostics {
+    const lifecycle = this.lifecycleRecorded
+      ? this.diagnostics.lifecycle
+      : normalizeLifecycleDiagnostics({
+          revision: this.revision,
+          attemptId: this.attemptId,
+          fallbackCodes: this.fallbacks.map(({ code }) => code)
+        });
+    return structuredClone({
+      version: BUILD_TRACE_DIAGNOSTICS_VERSION,
+      ...(this.diagnostics.evidenceGraph
+        ? { evidenceGraph: this.diagnostics.evidenceGraph }
+        : {}),
+      ...(this.diagnostics.research ? { research: this.diagnostics.research } : {}),
+      ...(this.diagnostics.thesis ? { thesis: this.diagnostics.thesis } : {}),
+      ...(this.diagnostics.strategy ? { strategy: this.diagnostics.strategy } : {}),
+      ...(this.diagnostics.recipe ? { recipe: this.diagnostics.recipe } : {}),
+      ...(this.diagnostics.composition ? { composition: this.diagnostics.composition } : {}),
+      qualityGates: [...this.qualityGates].sort(
+        (left, right) =>
+          left.gate.localeCompare(right.gate)
+          || (left.sectionId ?? "").localeCompare(right.sectionId ?? "")
+      ),
+      lifecycle
+    });
   }
 }
 

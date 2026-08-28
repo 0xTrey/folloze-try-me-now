@@ -94,6 +94,10 @@ export type ExperienceDependency = (typeof EXPERIENCE_DEPENDENCIES)[number];
 export type CuratedSectionFamily = (typeof CURATED_SECTION_FAMILIES)[number];
 export type StageKey = "brand" | "audience" | "story";
 export type StageStatus = "pending" | "running" | "complete" | "fallback" | "failed";
+/**
+ * `preview_provisional` is retained only so persisted sessions written before
+ * the final-only lifecycle stay readable. No current code path assigns it.
+ */
 export type SessionStatus =
   | "collecting"
   | "generating"
@@ -105,6 +109,73 @@ export type SessionStatus =
   | "generation_failed"
   | "claim_failed"
   | "expired";
+
+/**
+ * Customer-visible build phases. The visitor sees the active phase and the
+ * receipts behind it; they never see an artifact until `ready`.
+ */
+export const BUILD_PHASES = [
+  "queued",
+  "researching",
+  "planning",
+  "writing",
+  "checking",
+  "finalizing",
+  "ready",
+  "failed"
+] as const;
+export type BuildPhase = (typeof BUILD_PHASES)[number];
+
+export type BuildPhaseStatus = "queued" | "active" | "complete" | "failed";
+
+/**
+ * One honest receipt per build phase. `detail` is an active verb phrase; there
+ * is deliberately no percentage or synthetic elapsed figure to report.
+ */
+export interface BuildPhaseReceipt {
+  phase: Exclude<BuildPhase, "ready" | "failed">;
+  status: BuildPhaseStatus;
+  startedAt?: string;
+  completedAt?: string;
+  detail: string;
+  /** Bounded, source-free counts the visitor may see, e.g. "4 sources read". */
+  evidenceNote?: string;
+}
+
+export interface BuildFailureState {
+  code: string;
+  /** Smallest next action the visitor can take. */
+  nextAction: string;
+  retryable: boolean;
+}
+
+export interface BuildProgressState {
+  phase: BuildPhase;
+  startedAt: string;
+  updatedAt: string;
+  /** True once the build passes the slow threshold but is still working. */
+  slow: boolean;
+  receipts: BuildPhaseReceipt[];
+  failure?: BuildFailureState;
+}
+
+/**
+ * Proof that exactly one artifact passed the structural and truth gates, was
+ * persisted, and was read back before any HTML became reachable. The reveal
+ * gate reads this receipt, never the artifact alone.
+ */
+export interface FinalArtifactReceipt {
+  readiness: "final";
+  artifactRevision: number;
+  artifactDigest: string;
+  structuralGate: "passed";
+  truthGate: "passed";
+  persistedAt: string;
+  readBackAt: string;
+}
+
+/** The digest stays server-side; the visitor only needs the gate outcome. */
+export type PublicFinalArtifactReceipt = Omit<FinalArtifactReceipt, "artifactDigest">;
 
 export interface StageState {
   status: StageStatus;
@@ -449,6 +520,10 @@ export interface ExperienceModel {
   closingHeadline: string;
   closingBody: string;
   html: string;
+  /**
+   * `provisional` remains representable only for sessions persisted before the
+   * final-only lifecycle. New artifacts are written as `final` or not at all.
+   */
   readiness?: "provisional" | "final";
   generationSource: "openai" | "deterministic-fallback";
   artifactRevision: number;
@@ -1016,6 +1091,10 @@ export interface TryMeSession {
   experienceSpec?: ExperienceSpec;
   /** Server-side worker lifecycle receipts for latency, fallback, and QA review. */
   workerReceipts?: WorkerReceipt[];
+  /** Honest customer-facing build phase and receipts. No provisional artifact. */
+  buildProgress?: BuildProgressState;
+  /** Written only after persistence readback proves one final artifact. */
+  finalArtifact?: FinalArtifactReceipt;
   experience?: ExperienceModel;
   claim?: ClaimState;
   events: SessionEvent[];
@@ -1044,12 +1123,14 @@ export type PublicTryMeSession = Omit<
   | "analytics"
   | "sourceFingerprint"
   | "sourceArtifact"
+  | "finalArtifact"
 > & {
   supportRef: string;
   answers: PublicSessionAnswers;
   brand?: PublicBrandProfile;
   targetBrand?: PublicBrandProfile;
   stages: Record<StageKey, PublicStageState>;
+  finalArtifact?: PublicFinalArtifactReceipt;
   experience?: PublicExperienceSummary;
   experienceSpec?: PublicExperienceSpecSummary;
   campaignOfferSource?: PublicCampaignOfferSource;

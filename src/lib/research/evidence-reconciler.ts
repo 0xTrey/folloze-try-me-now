@@ -21,8 +21,20 @@ import type {
 import type { CtaType } from "@/lib/types";
 import {
   reconcileEvidenceRecordsV2,
+  researchSourceAuthorityRankV2,
   type EvidenceRecordV2
 } from "@/lib/orchestration/research-query-plan-v2";
+
+import {
+  downgradeEvidenceConfidence,
+  evidenceClaimStatusRank,
+  evidenceConfidenceRank,
+  narrowPermissions,
+  normalizeClaimText,
+  normalizePermissions,
+  type EvidenceClaim,
+  type EvidenceClaimCandidate
+} from "./evidence-graph";
 
 import type { CompanyResearchBrief } from "./company-research";
 import type {
@@ -916,5 +928,247 @@ export function reconcileLiveBriefEvidence(
     ...(materialCompleteness === "complete"
       ? {}
       : { fallbackCode: "material_live_brief_evidence_incomplete" })
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Evidence Graph claim reconciliation                                         */
+/* -------------------------------------------------------------------------- */
+
+export type EvidenceClaimConflictResolution =
+  | "source_authority"
+  | "claim_status"
+  | "confidence"
+  | "stable_id";
+
+export interface EvidenceClaimConflict {
+  subjectId: string;
+  topic: string;
+  selectedClaimId: string;
+  supersededClaimIds: string[];
+  resolution: EvidenceClaimConflictResolution;
+  /** Equal-authority disagreement is honest about being less certain. */
+  confidenceDowngraded: boolean;
+}
+
+export interface EvidenceClaimCoverage {
+  subjectId: string;
+  topic: string;
+  claimId: string;
+  status: EvidenceClaim["status"];
+}
+
+export interface ReconciledEvidenceGraphClaims {
+  claims: EvidenceClaim[];
+  conflicts: EvidenceClaimConflict[];
+  /** Which subject/topic pairs resolved, so a caller can name what is missing. */
+  coverage: EvidenceClaimCoverage[];
+  /** Candidates folded into a surviving claim by identical statement. */
+  duplicateCandidateCount: number;
+  supersededClaimIds: string[];
+  rejectedClaimIds: string[];
+}
+
+interface NormalizedClaimCandidate {
+  claim: EvidenceClaim;
+  subjectId: string;
+  topic: string;
+  laneId: string;
+  textKey: string;
+}
+
+function normalizeClaimCandidate(
+  candidate: EvidenceClaimCandidate
+): NormalizedClaimCandidate | undefined {
+  const id = candidate.claim.id.trim();
+  const subjectId = candidate.claim.subjectId.trim();
+  const topic = candidate.topic.trim().toLocaleLowerCase();
+  const statement = normalizeClaimText(candidate.claim.claim);
+  if (
+    !id ||
+    !subjectId ||
+    !topic ||
+    statement.length < 3 ||
+    !candidate.claim.sourceRef.trim() ||
+    !candidate.claim.sourceAuthority.trim()
+  ) {
+    return undefined;
+  }
+  return {
+    claim: {
+      ...candidate.claim,
+      id,
+      subjectId,
+      claim: statement,
+      ...normalizePermissions(candidate.claim)
+    },
+    subjectId,
+    topic,
+    laneId: candidate.laneId,
+    textKey: statement.toLocaleLowerCase()
+  };
+}
+
+/**
+ * Status outranks authority on purpose. Authority answers "who said it", which
+ * only matters once two claims are equally verified: an unconfirmed visitor
+ * guess must not beat a confirmed official page just because the visitor said
+ * it. Within one status tier, authority still decides.
+ */
+function compareClaimCandidates(
+  left: NormalizedClaimCandidate,
+  right: NormalizedClaimCandidate
+): number {
+  return (
+    evidenceClaimStatusRank(right.claim.status) -
+      evidenceClaimStatusRank(left.claim.status) ||
+    researchSourceAuthorityRankV2(right.claim.sourceAuthority) -
+      researchSourceAuthorityRankV2(left.claim.sourceAuthority) ||
+    evidenceConfidenceRank(right.claim.confidence) -
+      evidenceConfidenceRank(left.claim.confidence) ||
+    (left.claim.id < right.claim.id ? -1 : left.claim.id > right.claim.id ? 1 : 0)
+  );
+}
+
+function claimConflictResolution(
+  selected: NormalizedClaimCandidate,
+  runnerUp: NormalizedClaimCandidate
+): EvidenceClaimConflictResolution {
+  if (
+    evidenceClaimStatusRank(selected.claim.status) !==
+    evidenceClaimStatusRank(runnerUp.claim.status)
+  ) {
+    return "claim_status";
+  }
+  if (
+    researchSourceAuthorityRankV2(selected.claim.sourceAuthority) !==
+    researchSourceAuthorityRankV2(runnerUp.claim.sourceAuthority)
+  ) {
+    return "source_authority";
+  }
+  if (
+    evidenceConfidenceRank(selected.claim.confidence) !==
+    evidenceConfidenceRank(runnerUp.claim.confidence)
+  ) {
+    return "confidence";
+  }
+  return "stable_id";
+}
+
+/**
+ * Collapses duplicate statements and resolves conflicting statements so one
+ * subject holds one claim per topic. Selection order is status, then source
+ * authority, then confidence, then claim id.
+ *
+ * Permissions are narrowed across every candidate in the group, including the
+ * ones that lose: allowed uses intersect, prohibited uses union, and
+ * buyer-facing permission must be unanimous. Reconciliation can therefore only
+ * ever restrict what a claim may be used for, never widen it.
+ */
+export function reconcileEvidenceGraphClaims(
+  candidates: readonly EvidenceClaimCandidate[]
+): ReconciledEvidenceGraphClaims {
+  const rejectedClaimIds: string[] = [];
+  const normalized: NormalizedClaimCandidate[] = [];
+  for (const candidate of candidates) {
+    const value = normalizeClaimCandidate(candidate);
+    if (!value) {
+      rejectedClaimIds.push(candidate.claim.id.trim() || "unidentified_claim");
+      continue;
+    }
+    normalized.push(value);
+  }
+
+  const groups = new Map<string, NormalizedClaimCandidate[]>();
+  for (const item of normalized) {
+    const key = `${item.subjectId}\u0000${item.topic}`;
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+
+  const claims: EvidenceClaim[] = [];
+  const conflicts: EvidenceClaimConflict[] = [];
+  const coverage: EvidenceClaimCoverage[] = [];
+  let duplicateCandidateCount = 0;
+
+  for (const key of [...groups.keys()].sort()) {
+    const group = groups.get(key) ?? [];
+    const byStatement = new Map<string, NormalizedClaimCandidate[]>();
+    for (const item of group) {
+      const members = byStatement.get(item.textKey);
+      if (members) members.push(item);
+      else byStatement.set(item.textKey, [item]);
+    }
+
+    const representatives = [...byStatement.values()]
+      .map((members) => {
+        duplicateCandidateCount += members.length - 1;
+        return [...members].sort(compareClaimCandidates)[0] as NormalizedClaimCandidate;
+      })
+      .sort(compareClaimCandidates);
+
+    const selected = representatives[0];
+    if (!selected) continue;
+    const runnerUp = representatives[1];
+    const permissions = narrowPermissions(group.map((item) => item.claim));
+    // Peers of equal standing disagreeing is a reason to be less certain, not
+    // a reason to pick one and keep its original confidence.
+    const equalStanding =
+      runnerUp !== undefined &&
+      evidenceClaimStatusRank(selected.claim.status) ===
+        evidenceClaimStatusRank(runnerUp.claim.status) &&
+      researchSourceAuthorityRankV2(selected.claim.sourceAuthority) ===
+        researchSourceAuthorityRankV2(runnerUp.claim.sourceAuthority);
+
+    claims.push({
+      ...selected.claim,
+      ...permissions,
+      confidence: equalStanding
+        ? downgradeEvidenceConfidence(selected.claim.confidence)
+        : selected.claim.confidence
+    });
+    coverage.push({
+      subjectId: selected.subjectId,
+      topic: selected.topic,
+      claimId: selected.claim.id,
+      status: selected.claim.status
+    });
+
+    if (runnerUp) {
+      conflicts.push({
+        subjectId: selected.subjectId,
+        topic: selected.topic,
+        selectedClaimId: selected.claim.id,
+        supersededClaimIds: unique(
+          representatives.slice(1).map((item) => item.claim.id)
+        ),
+        resolution: claimConflictResolution(selected, runnerUp),
+        confidenceDowngraded: equalStanding
+      });
+    }
+  }
+
+  const survivingIds = new Set(claims.map((claim) => claim.id));
+  return {
+    claims: claims.sort((left, right) =>
+      left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+    ),
+    conflicts,
+    coverage: coverage.sort(
+      (left, right) =>
+        (left.subjectId < right.subjectId
+          ? -1
+          : left.subjectId > right.subjectId
+            ? 1
+            : 0) || (left.topic < right.topic ? -1 : left.topic > right.topic ? 1 : 0)
+    ),
+    duplicateCandidateCount,
+    supersededClaimIds: unique(
+      normalized
+        .map((item) => item.claim.id)
+        .filter((id) => !survivingIds.has(id))
+    ),
+    rejectedClaimIds: unique(rejectedClaimIds)
   };
 }

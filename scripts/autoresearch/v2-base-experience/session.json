@@ -1,0 +1,28 @@
+{
+  "sessionId": "v2-base-experience-2026-08-27",
+  "scope": "final-only-base-experience",
+  "status": "accepted",
+  "runner": "run-v2-base-experience.mjs",
+  "fixtureSource": "tests/fixtures/v2-base-experience/fixtures.json",
+  "releaseGate": {
+    "consecutiveRuns": 2,
+    "minimumScore": 90,
+    "maximumTotalMs": 60000,
+    "hardBlockers": true
+  },
+  "dimensions": [
+    "buyerOfferSpecificity",
+    "evidenceTrust",
+    "argumentPageQuality",
+    "brandFlowReliability"
+  ],
+  "degradationCommand": "npm run autoresearch:v2-base-experience -- --include-degraded",
+  "network": false,
+  "secrets": false,
+  "legacyState": "untouched",
+  "latestScore": 100,
+  "consecutivePassingRuns": 2,
+  "degradationDetected": true,
+  "releaseEvidence": "docs/cursor-handoffs/2026-08-27-v2-final-only-base-experience/evidence/v2-base-experience-latest.json",
+  "degradationEvidence": "docs/cursor-handoffs/2026-08-27-v2-final-only-base-experience/evidence/v2-base-experience-degraded.json"
+}

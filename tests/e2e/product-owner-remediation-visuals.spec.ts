@@ -24,7 +24,7 @@ test.describe("product-owner remediation visual fixtures", () => {
     });
   });
 
-  test("captures a verified brand with distinct seller imagery", async ({ page }) => {
+  test("captures a verified brand with distinct seller imagery", async ({ page }, testInfo) => {
     const html = generatedExperienceHtml({
       seller: {
         ...sellerBrand,
@@ -59,14 +59,17 @@ test.describe("product-owner remediation visual fixtures", () => {
     expect(laterSrc).toBeTruthy();
     expect(heroSrc).not.toBe(laterSrc);
     await page.screenshot({
-      path: "output/product-owner-remediation/verified-brand-with-imagery.png",
+      path:
+        process.env.CAPTURE_REVIEW_EVIDENCE === "1"
+          ? "output/product-owner-remediation/verified-brand-with-imagery.png"
+          : testInfo.outputPath("verified-brand-with-imagery.png"),
       fullPage: true
     });
   });
 
   test("captures the explicit neutral fallback when visual evidence is unavailable", async ({
     page
-  }) => {
+  }, testInfo) => {
     const html = generatedExperienceHtml({
       seller: {
         ...sellerBrand,
@@ -106,7 +109,10 @@ test.describe("product-owner remediation visual fixtures", () => {
     await expect(page.locator(".hero-media img")).toHaveCount(0);
     await expect(page.locator(".hero-media .media-fallback")).toBeVisible();
     await page.screenshot({
-      path: "output/product-owner-remediation/partial-unavailable-brand-fallback.png",
+      path:
+        process.env.CAPTURE_REVIEW_EVIDENCE === "1"
+          ? "output/product-owner-remediation/partial-unavailable-brand-fallback.png"
+          : testInfo.outputPath("partial-unavailable-brand-fallback.png"),
       fullPage: true
     });
   });

@@ -70,6 +70,58 @@ export interface SectionWriterBrief {
   tension?: string;
   whyNow?: string;
   unknowns: readonly string[];
+  /**
+   * Concrete statements no section may assert, whatever its evidence. Held
+   * alongside `unknowns` rather than merged into it: an unknown is a gap the
+   * page is honest about, while these are claims a caller has ruled out.
+   */
+  prohibitedClaims?: readonly string[];
+  /** Ideas no section may raise. Each section brief adds its own role's. */
+  prohibitedIdeas?: readonly string[];
+}
+
+/**
+ * One section's writing brief: the single buyer movement it owns and the exact
+ * material it may use to make it.
+ *
+ * Evidence scope is least-privileged by construction. `requiredEvidenceRefs`
+ * and `optionalEvidenceRefs` together are the entire set this section may cite,
+ * so a reference outside them is a contract violation rather than a scoping
+ * accident, and no section can reach another section's evidence.
+ */
+export interface SectionBrief {
+  sectionId: string;
+  /** Internal job label. Never rendered. */
+  semanticJob: string;
+  /** The belief or question this section moves the buyer from, and to. */
+  buyerMovement: string;
+  /** What the reader already accepted when they arrive. */
+  previousConclusion?: string;
+  /** What the next section needs this one to have established. */
+  nextSetup?: string;
+  thesisFields: string[];
+  /** Evidence the section was scoped for. A fact section must cite one. */
+  requiredEvidenceRefs: string[];
+  /** Evidence the section may cite but does not have to. */
+  optionalEvidenceRefs: string[];
+  prohibitedClaims: string[];
+  prohibitedIdeas: string[];
+  allowedCtas: string[];
+  visualRole: string;
+  wordBudget: { headline: [number, number]; body: [number, number] };
+}
+
+/** Where the copy that survived review actually came from. */
+export type SectionCopySource =
+  | "model"
+  | "repaired-model"
+  | "fallback"
+  | "omitted"
+  | "none";
+
+/** Every evidence id the brief permits, deduped and ordered. */
+export function sectionBriefEvidenceRefs(brief: SectionBrief): string[] {
+  return [...new Set([...brief.requiredEvidenceRefs, ...brief.optionalEvidenceRefs])].sort();
 }
 
 export interface SectionWriterInput {

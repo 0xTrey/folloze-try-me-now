@@ -959,9 +959,9 @@
       "timing": {
         "unit": "ms",
         "samples": 56,
-        "p50": 0.13,
-        "p95": 0.2,
-        "max": 0.35
+        "p50": 0.12,
+        "p95": 0.21,
+        "max": 0.27
       },
       "candidateDigest": "16173441b501912f"
     },
@@ -1838,8 +1838,8 @@
         "unit": "ms",
         "samples": 56,
         "p50": 0.05,
-        "p95": 0.06,
-        "max": 0.22
+        "p95": 0.07,
+        "max": 0.18
       },
       "candidateDigest": "694711079a9b55aa"
     },
@@ -2846,8 +2846,8 @@
         "unit": "ms",
         "samples": 56,
         "p50": 0.11,
-        "p95": 0.22,
-        "max": 0.37
+        "p95": 0.18,
+        "max": 0.28
       },
       "candidateDigest": "f333948c27a6f84a"
     },
@@ -3801,8 +3801,8 @@
         "unit": "ms",
         "samples": 56,
         "p50": 0.12,
-        "p95": 0.15,
-        "max": 0.63
+        "p95": 0.21,
+        "max": 0.29
       },
       "candidateDigest": "7028b53caad59f98"
     },
@@ -4767,9 +4767,9 @@
       "timing": {
         "unit": "ms",
         "samples": 56,
-        "p50": 0.11,
-        "p95": 0.21,
-        "max": 0.32
+        "p50": 0.12,
+        "p95": 0.22,
+        "max": 0.37
       },
       "candidateDigest": "e346764ee23acb44"
     },
@@ -5703,7 +5703,7 @@
         "samples": 56,
         "p50": 0.08,
         "p95": 0.11,
-        "max": 0.4
+        "max": 0.42
       },
       "candidateDigest": "24ca0f274cee19fb"
     },
@@ -6663,9 +6663,9 @@
       "timing": {
         "unit": "ms",
         "samples": 56,
-        "p50": 0.12,
-        "p95": 0.25,
-        "max": 0.31
+        "p50": 0.11,
+        "p95": 0.18,
+        "max": 0.32
       },
       "candidateDigest": "dd3c34ac8a767a5f"
     },
@@ -7646,9 +7646,9 @@
       "timing": {
         "unit": "ms",
         "samples": 56,
-        "p50": 0.12,
-        "p95": 0.16,
-        "max": 0.23
+        "p50": 0.11,
+        "p95": 0.2,
+        "max": 0.28
       },
       "candidateDigest": "765738507f5eb927"
     },
@@ -8630,8 +8630,8 @@
         "unit": "ms",
         "samples": 56,
         "p50": 0.12,
-        "p95": 0.21,
-        "max": 0.28
+        "p95": 0.14,
+        "max": 0.22
       },
       "candidateDigest": "5cc339fecd9b19d1"
     },
@@ -9584,9 +9584,9 @@
       "timing": {
         "unit": "ms",
         "samples": 56,
-        "p50": 0.12,
-        "p95": 0.2,
-        "max": 0.24
+        "p50": 0.11,
+        "p95": 0.15,
+        "max": 0.27
       },
       "candidateDigest": "fcc849f415dd4d44"
     }

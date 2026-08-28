@@ -163,6 +163,40 @@ evidence-backed treatment available and keep refining it.
 - Keep WCAG AA contrast, visible labels, focus rings, correct dialog focus, and
   contained preview scrolling.
 
+## Final-only visible shell (D-040)
+
+The visitor sees three surfaces and nothing in between: intake, build, reveal.
+
+**Intake.** One centered conversational surface. Completed answers collapse into
+editable brief receipts that keep company-specific suggestions and their honest
+provenance. No preview pane, placeholder frame, or "composing" panel sits beside
+it, because there is nothing truthful to show there yet.
+
+**Build.** One stable full-height shell with fixed geometry across every phase.
+It renders one row per build phase, and each row's status and detail come from a
+`BuildPhaseReceipt`, never from a timer, a guess, or a derived fraction. A
+phase with no receipt reads as queued. Four states exist:
+
+| State | Source | What changes |
+| --- | --- | --- |
+| Working | `buildProgress` receipts | Row statuses only |
+| Slow | `buildProgress.slow` | Adds one notice naming the active work and confirming the brief is safe |
+| Failed | `buildProgress.failure` | Replaces the body with `failure.nextAction`, plus retry when `failure.retryable` |
+| Complete | `canRevealFinalExperience` | The shell is replaced by the reveal |
+
+Forbidden in this shell: percentages, progress bars, elapsed counters, estimated
+finish times, page skeletons, placeholder page imagery, and any internal recipe,
+strategy, evidence ID, trace ID, digest, or model or provider name.
+
+**Reveal.** The finished HTML is the full-frame plane and the only HTML the
+visitor ever receives. `AssemblyPreview` has no non-final branch: it renders
+nothing until a persisted, read-back final artifact receipt matches the current
+experience revision, which makes a partial page structurally impossible rather
+than merely discouraged.
+
+Row and phase states must remain distinguishable without color. The build rows
+carry a written state label beside the glyph for exactly this reason.
+
 ## Change discipline
 
 Material design changes must name the affected decision IDs in

@@ -188,6 +188,81 @@ export function buildResearchQueryPlanV2(
   };
 }
 
+export type ResearchLaneIdV2 =
+  | "seller_identity"
+  | "offer"
+  | "audience"
+  | "proof"
+  | "target"
+  | "source";
+
+/**
+ * One executable unit of the bounded plan. Lanes are independent so a caller
+ * can run them in parallel and let a single slow lane degrade on its own.
+ */
+export interface ResearchLaneV2 {
+  id: ResearchLaneIdV2;
+  authority: ResearchSourceAuthorityV2;
+  queries: ResearchQueryV2[];
+  sourceUrls: string[];
+}
+
+export const researchLaneOrderV2: readonly ResearchLaneIdV2[] = [
+  "seller_identity",
+  "offer",
+  "audience",
+  "proof",
+  "target",
+  "source"
+];
+
+/**
+ * Derives executable lanes from an existing plan. A lane with no queries and
+ * no source URLs is omitted rather than scheduled as empty work.
+ */
+export function planResearchLanesV2(plan: ResearchQueryPlanV2): ResearchLaneV2[] {
+  const definitions: Array<{
+    id: ResearchLaneIdV2;
+    authority: ResearchSourceAuthorityV2;
+    queries: readonly ResearchQueryV2[];
+    sourceUrls: readonly string[];
+  }> = [
+    {
+      id: "seller_identity",
+      authority: "seller_official",
+      queries: plan.sellerQueries,
+      sourceUrls: []
+    },
+    { id: "offer", authority: "seller_official", queries: plan.offerQueries, sourceUrls: [] },
+    {
+      id: "audience",
+      authority: "seller_official",
+      queries: plan.audienceQueries,
+      sourceUrls: []
+    },
+    { id: "proof", authority: "seller_official", queries: plan.proofQueries, sourceUrls: [] },
+    {
+      id: "target",
+      authority: "target_official",
+      queries: plan.targetQueries ?? [],
+      sourceUrls: []
+    },
+    { id: "source", authority: "seller_official", queries: [], sourceUrls: plan.sourceUrls }
+  ];
+
+  return definitions
+    .filter(
+      (definition) =>
+        definition.queries.length > 0 || definition.sourceUrls.length > 0
+    )
+    .map((definition) => ({
+      id: definition.id,
+      authority: definition.authority,
+      queries: [...definition.queries],
+      sourceUrls: [...definition.sourceUrls]
+    }));
+}
+
 const authorityRank: Record<ResearchSourceAuthorityV2, number> = {
   visitor: 5,
   seller_official: 4,
@@ -195,6 +270,11 @@ const authorityRank: Record<ResearchSourceAuthorityV2, number> = {
   third_party: 2,
   provider_metadata: 1
 };
+
+/** Rank for an authority string that may not be a known V2 authority. */
+export function researchSourceAuthorityRankV2(authority: string): number {
+  return authorityRank[authority as ResearchSourceAuthorityV2] ?? 0;
+}
 
 function boundedConfidence(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;

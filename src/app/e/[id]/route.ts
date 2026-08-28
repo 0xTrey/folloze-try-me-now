@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 
-import { getSession } from "@/lib/session-store";
+import { canRevealFinalExperience } from "@/lib/preview-lifecycle";
+import { getSession, toPublicSession } from "@/lib/session-store";
 
 import { experienceDocumentHeaders, nonceExperienceRuntime } from "./security-headers";
 
@@ -28,7 +29,11 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 410, headers: experienceDocumentHeaders() }
     );
   }
-  if (session.experience?.html) {
+  // An artifact on the session is not enough to serve. Only a `final` artifact
+  // with a matching receipt, structural and truth gates passed, persisted, and
+  // read back, is a public document. An internal draft stays internal even
+  // though its HTML is sitting right here.
+  if (session.experience?.html && canRevealFinalExperience(toPublicSession(session))) {
     const nonce = randomBytes(18).toString("base64");
     return new Response(nonceExperienceRuntime(session.experience.html, nonce), {
       status: 200,

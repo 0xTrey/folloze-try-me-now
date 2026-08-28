@@ -7,7 +7,7 @@ import {
 } from "@/lib/brand-intelligence";
 import {
   assessBrandReadiness,
-  canRenderProvisionalPreview
+  canRenderExperienceWithBrand
 } from "@/lib/brand-readiness";
 import { config } from "@/lib/config";
 import type { SourceArtifact } from "@/lib/content-intelligence";
@@ -15,8 +15,11 @@ import {
   canStartOptionalRefinement,
   canStartExternalWork as budgetAllowsExternalWork,
   generationBudgetFor,
-  timingMetaForGenerationBudget
+  providerBudgetMsForPhase,
+  timingMetaForGenerationBudget,
+  type GenerationBudget
 } from "@/lib/generation-budget";
+import { BUILD_PHASE_COPY, BUILD_PHASE_ORDER } from "@/lib/preview-lifecycle";
 import { fetchPublicUrlSourceArtifact } from "@/lib/content-url";
 import {
   buildExperienceSpec,
@@ -58,6 +61,7 @@ import {
   openAIErrorDiagnostics,
   SourceFetchError
 } from "@/lib/integrations/openai";
+import { sectionModelClient } from "@/lib/integrations/openai-section-writer";
 import { leadStoreMode, recordLeadCapture, updateLeadOutcome } from "@/lib/lead-store";
 import { emitObservabilityLog } from "@/lib/observability";
 import {
@@ -90,6 +94,9 @@ import {
 import type {
   BriefRecommendationOption,
   BrandProfile,
+  BuildFailureState,
+  BuildPhase,
+  BuildPhaseReceipt,
   ClaimResult,
   CreateSessionInput,
   DuplicateSessionInput,
@@ -112,6 +119,9 @@ import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 // generation cannot be duplicated by recovery polling.
 const STORY_GENERATION_LEASE_SECONDS = 90;
 const STORY_GENERATION_STALE_MS = STORY_GENERATION_LEASE_SECONDS * 1_000;
+/** Past this share of the customer deadline the build honestly reads as slow. */
+const BUILD_SLOW_FRACTION = 0.6;
+type LiveBuildPhase = Exclude<BuildPhase, "ready" | "failed">;
 const sourceIntelligenceControllers = new Map<string, AbortController>();
 const sourceArtifactSingleFlight = createSingleFlight<string, SourceArtifact>(
   (value) => createHash("sha256").update(value).digest("hex")
@@ -993,9 +1003,19 @@ async function assembleExperienceArtifact(input: {
   trustFallbackReason?: string;
   /** Story attempt this artifact belongs to, so its trace can be fenced. */
   attemptId?: string;
+  /**
+   * The customer-facing budget. The section writers get the slice that remains
+   * before finalization, so per-section provider work can shorten the compile
+   * but can never push the reveal past the shared deadline.
+   */
+  budget?: GenerationBudget;
 }) {
   syncCampaignContracts(input.session);
   const storyStartedAt = Date.parse(input.session.stages.story.startedAt ?? "");
+  const sectionWriterDeadlineMs = input.budget
+    ? providerBudgetMsForPhase(input.budget, "writing", config.generationTimeoutMs)
+    : undefined;
+  const sectionWriter = sectionModelClient();
   const productionResult = await compileSessionProductionPage({
     session: input.session,
     brand: input.brand,
@@ -1003,26 +1023,23 @@ async function assembleExperienceArtifact(input: {
     providerStartedAtMs: Number.isFinite(storyStartedAt) ? storyStartedAt : Date.now(),
     currentTimeMs: Date.now(),
     traceId: traceIdForSession(input.session),
-    ...(input.attemptId ? { attemptId: input.attemptId } : {})
+    ...(input.attemptId ? { attemptId: input.attemptId } : {}),
+    ...(sectionWriterDeadlineMs !== undefined && sectionWriterDeadlineMs > 0
+      ? { sectionWriterDeadlineMs }
+      : {}),
+    ...(sectionWriter ? { sectionModelClient: sectionWriter } : {})
   });
   const productionPage =
     productionResult.outcome === "production-page" &&
     productionResult.artifact.revision === input.session.revision
       ? productionResult.artifact.value
       : undefined;
-  const familyDraft = productionPage
-    ? applyProductionPageToDraft(input.draft, productionPage)
-    : input.draft;
-  const sourceAwareDraft = input.generationSource === "openai"
-    ? {
-        ...familyDraft,
-        headline: input.draft.headline,
-        subhead: input.draft.subhead,
-        primaryCta: input.draft.primaryCta
-      }
-    : familyDraft;
+  // The reviewed production page is the copy authority. The global draft is
+  // only a fallback for the fields production did not write: reinstating its
+  // hero over a reviewed opening would put unreviewed copy at the top of the
+  // page and silently discard the section writer's evidence-scoped result.
   const productionDraft = draftWithBlockControls(
-    sourceAwareDraft,
+    productionPage ? applyProductionPageToDraft(input.draft, productionPage) : input.draft,
     input.session.blockControls
   );
   const qualityReceipt = qualityReceiptFor(
@@ -1099,7 +1116,8 @@ async function assembleExperienceArtifact(input: {
 function recordProductionEngineResult(
   session: TryMeSession,
   result: GenericProductionEngineResult,
-  reveal: "provisional" | "final"
+  /** `withheld` when the compile happened but no artifact reaches the visitor. */
+  reveal: "withheld" | "final"
 ): void {
   session.workerReceipts = structuredClone([...result.workerReceipts]);
   const revision =
@@ -1170,6 +1188,125 @@ function recordProductionEngineResult(
   }
 }
 
+/**
+ * Moves the customer-visible build forward.
+ *
+ * Every phase up to and including `completed` is marked complete, the `active`
+ * phase is opened, and everything after it stays queued. Statuses are derived
+ * from what the orchestrator has actually finished, so a phase can never read
+ * as done before its work is.
+ */
+function advanceBuildProgress(
+  session: TryMeSession,
+  input: {
+    completed: readonly LiveBuildPhase[];
+    active?: LiveBuildPhase;
+    phase: BuildPhase;
+    budget?: GenerationBudget;
+    notes?: Partial<Record<LiveBuildPhase, string>>;
+    failure?: BuildFailureState;
+  }
+): void {
+  const now = new Date().toISOString();
+  const startedAt = session.buildProgress?.startedAt ?? now;
+  const previous = new Map(
+    (session.buildProgress?.receipts ?? []).map((receipt) => [receipt.phase, receipt])
+  );
+  const completed = new Set(input.completed);
+  const receipts: BuildPhaseReceipt[] = BUILD_PHASE_ORDER.map((phase) => {
+    const prior = previous.get(phase);
+    const note = input.notes?.[phase] ?? prior?.evidenceNote;
+    const status: BuildPhaseReceipt["status"] = completed.has(phase)
+      ? "complete"
+      : phase === input.active
+        ? "active"
+        : prior?.status === "complete"
+          ? "complete"
+          : "queued";
+    return {
+      phase,
+      status,
+      detail: BUILD_PHASE_COPY[phase].detail,
+      ...(prior?.startedAt
+        ? { startedAt: prior.startedAt }
+        : status === "active" || status === "complete"
+          ? { startedAt: now }
+          : {}),
+      ...(status === "complete" ? { completedAt: prior?.completedAt ?? now } : {}),
+      ...(note ? { evidenceNote: note } : {})
+    };
+  });
+  const elapsedMs = Math.max(0, Date.now() - Date.parse(startedAt));
+  session.buildProgress = {
+    phase: input.phase,
+    startedAt,
+    updatedAt: now,
+    slow:
+      input.phase !== "ready" &&
+      input.phase !== "failed" &&
+      elapsedMs >= (input.budget?.totalMs ?? config.generationDeadlineMs) * BUILD_SLOW_FRACTION,
+    receipts,
+    ...(input.failure ? { failure: input.failure } : {})
+  };
+}
+
+/**
+ * Publishes a build phase transition for a live attempt.
+ *
+ * The write is fenced on the story attempt and on the input fingerprint, so a
+ * superseded attempt cannot repaint progress for a brief the visitor has since
+ * changed. Returns the committed session so the caller can re-anchor the
+ * revision it will fence its own final write against.
+ */
+async function advanceBuildPhase(input: {
+  id: string;
+  attemptId: string;
+  expectedFingerprint: string;
+  completed: readonly LiveBuildPhase[];
+  active?: LiveBuildPhase;
+  phase: BuildPhase;
+  budget?: GenerationBudget;
+  notes?: Partial<Record<LiveBuildPhase, string>>;
+}): Promise<TryMeSession | null> {
+  return updateSession(
+    input.id,
+    (session) => {
+      if (
+        session.stages.story.attemptId !== input.attemptId ||
+        storyInputFingerprint(session) !== input.expectedFingerprint
+      ) {
+        return session;
+      }
+      advanceBuildProgress(session, {
+        completed: input.completed,
+        ...(input.active ? { active: input.active } : {}),
+        phase: input.phase,
+        ...(input.budget ? { budget: input.budget } : {}),
+        ...(input.notes ? { notes: input.notes } : {})
+      });
+      return session;
+    },
+    { ttlSeconds: config.sessionTtlSeconds }
+  );
+}
+
+/** Phases whose work the production compile owns, derived from its receipts. */
+function compilePhaseNotes(
+  result: GenericProductionEngineResult
+): Partial<Record<LiveBuildPhase, string>> {
+  const sectionCount =
+    result.outcome === "production-page" ? (result.artifact.value?.sections.length ?? 0) : 0;
+  const evidenceCount =
+    result.outcome === "production-page" ? result.artifact.evidenceRefs.length : 0;
+  return {
+    ...(evidenceCount
+      ? { researching: `${evidenceCount} source signals read` }
+      : {}),
+    ...(sectionCount ? { writing: `${sectionCount} sections written` } : {}),
+    ...(sectionCount ? { checking: `${sectionCount} sections checked` } : {})
+  };
+}
+
 function generationEligibleAt(session: TryMeSession): number | undefined {
   const event = [...session.events]
     .reverse()
@@ -1217,7 +1354,7 @@ export function isGenerationReady(useCase: UseCase, answers: SessionAnswers): bo
   return isMaterialBriefEligible(useCase, answers);
 }
 
-function provisionalAnswersFor(session: TryMeSession): SessionAnswers {
+function normalizedAnswersFor(session: TryMeSession): SessionAnswers {
   const audience = session.answers.customAudience || session.answers.audience ||
     session.audienceSuggestions[0] || "Business and revenue leaders";
   return {
@@ -2499,6 +2636,8 @@ export async function duplicateSession(
     experienceSpecRevision: undefined,
     experienceSpec: undefined,
     qualityReceipt: undefined,
+    finalArtifact: undefined,
+    buildProgress: undefined,
     cockpit: undefined,
     claim: undefined,
     previewAnalytics: { totalInteractions: 0, counts: {} },
@@ -2935,13 +3074,14 @@ export async function runPreviewEnrichmentWave(
       latest.useCase === "campaign"
         ? latest.answers.offerSourceUrl
         : latest.answers.sourceUrl;
-    // Deterministic render assembly is not external work; it may still run to
-    // preserve the best honest artifact even near the shared deadline.
+    // Final assembly shares the same customer-facing deadline as research and
+    // writing. The wrapper may not outlive the generation contract and expose
+    // a late result after the final-only shell has already reported failure.
     const renderExecutions = await runPreviewWorkerWave(
       [
         {
           worker: "render",
-          timeoutMs: Math.min(75_000, config.generationDeadlineMs + 10_000),
+          timeoutMs: config.generationDeadlineMs,
           dependencies: [
             "brand-enrichment",
             ...(latest.useCase === "abm" ? ["account-research" as const] : []),
@@ -2961,8 +3101,8 @@ export async function runPreviewEnrichmentWave(
               })),
               confidence: session?.qualityReceipt?.status === "passed" ? 1 : 0.7,
               artifactRef: session?.experience?.artifactDigest,
-              ...(!session?.experience
-                ? { fallback: "The renderer kept the best available provisional experience." }
+              ...(!session?.finalArtifact
+                ? { fallback: "The renderer did not produce a verified final experience." }
                 : {})
             };
           }
@@ -3022,6 +3162,14 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     const budget = generationBudgetFor(eligibleAt, {
       totalMs: config.generationDeadlineMs,
       finalizationReserveMs: config.generationFinalizationReserveMs
+    });
+    // The shell opens on a real receipt: routing is done, research is running.
+    // Nothing downstream is claimed until its work actually finishes.
+    advanceBuildProgress(session, {
+      completed: ["queued"],
+      active: "researching",
+      phase: "researching",
+      budget
     });
     appendEvent(session, "generation_started", {
       attemptId,
@@ -3123,105 +3271,9 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     const generationTargetBrand = curatedTargetBrand(latest, targetBrand);
     const selectedBrands = brandsWithSelectedAssets(latest, brand, generationTargetBrand);
 
-    // The first buyer-readable artifact uses the same canonical spec and
-    // renderer as the final experience. It is deliberately deterministic so
-    // slow model refinement can never hold the first useful preview hostage.
-    // Existing final previews remain visible during later regenerations.
-    if (
-      !latest.experience &&
-      canRenderProvisionalPreview(selectedBrands.brand)
-    ) {
-      const provisionalSourceRevision = latest.revision;
-      const provisionalStartedAt = Date.now();
-      const answers = provisionalAnswersFor(latest);
-      const provisionalDraft = deterministicDraft({
-        brand: selectedBrands.brand,
-        targetBrand: selectedBrands.targetBrand,
-        useCase: latest.useCase,
-        answers,
-        sourceArtifact: latest.sourceArtifact
-      });
-      const provisionalArtifact = await assembleExperienceArtifact({
-        id,
-        session: { ...latest, answers },
-        draft: provisionalDraft,
-        brand: selectedBrands.brand,
-        targetBrand: selectedBrands.targetBrand,
-        imageSourceBrand: brand,
-        imageSourceTargetBrand: targetBrand,
-        generationSource: "deterministic-fallback",
-        attemptId
-      });
-      const provisionalReadyAt = Date.now();
-      const eligibleAt = generationEligibleAt(latest);
-      const storyStartedAt = Date.parse(latest.stages.story.startedAt ?? "");
-      const previewTimingOrigin = eligibleAt ?? (
-        Number.isFinite(storyStartedAt) ? storyStartedAt : provisionalStartedAt
-      );
-      let provisionalCommitted = false;
-      const provisioned = await updateSession(
-        id,
-        (session) => {
-          if (
-            session.stages.story.attemptId !== attemptId ||
-            session.revision !== provisionalSourceRevision ||
-            storyInputFingerprint(session) !== expectedFingerprint ||
-            session.experience
-          ) {
-            staleGeneration = true;
-            return session;
-          }
-          provisionalCommitted = true;
-          session.brand = brand;
-          session.targetBrand = targetBrand;
-          session.experience = {
-            ...provisionalArtifact.webDraft,
-            html: provisionalArtifact.html,
-            readiness: "provisional",
-            generationSource: "deterministic-fallback",
-            artifactRevision: session.revision + 1,
-            artifactDigest: createHash("sha256")
-              .update(provisionalArtifact.html)
-              .digest("hex")
-          };
-          session.experienceSpecRevision = provisionalArtifact.experienceSpec.revision;
-          session.experienceSpec = provisionalArtifact.experienceSpec;
-          session.qualityReceipt = provisionalArtifact.qualityReceipt;
-          recordProductionEngineResult(
-            session,
-            provisionalArtifact.productionResult,
-            "provisional"
-          );
-          session.status = "preview_provisional";
-          session.expiresAt = new Date(
-            provisionalReadyAt + config.sessionTtlSeconds * 1000
-          ).toISOString();
-          session.stages.story = {
-            ...session.stages.story,
-            status: "running",
-            attemptId,
-            inputFingerprint: expectedFingerprint,
-            detail: "The first buyer-ready draft is live while Folloze refines the copy and evidence.",
-            artifact: provisionalArtifact.controlledDraft.narrativeArc
-          };
-          appendEvent(session, "preview_provisional_ready", {
-            attemptId,
-            source: "deterministic-fallback",
-            durationMs: Math.max(0, provisionalReadyAt - provisionalStartedAt),
-            generationEligibleToPreviewMs: Math.max(
-              0,
-              provisionalReadyAt - previewTimingOrigin
-            ),
-            artifactRevision: session.revision + 1
-          });
-          return session;
-        },
-        { ttlSeconds: config.sessionTtlSeconds }
-      );
-      if (!provisionalCommitted) return false;
-      latest = provisioned ?? latest;
-    }
-
+    // Research has produced everything the compiler can use. No artifact is
+    // committed here: an internal draft is fine, but the visitor gets HTML only
+    // after one final artifact clears its gates and is read back.
     const eligibleAt = generationEligibleAt(latest) ?? Date.parse(
       latest.stages.story.startedAt ?? ""
     );
@@ -3232,17 +3284,32 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         finalizationReserveMs: config.generationFinalizationReserveMs
       }
     );
-    const refinementSkipped = !canStartOptionalRefinement(
+    latest = (await advanceBuildPhase({
+      id,
+      attemptId,
+      expectedFingerprint,
+      completed: ["queued", "researching"],
+      active: "planning",
+      phase: "planning",
+      budget: refinementBudget
+    })) ?? latest;
+
+    // One budget, three limits, smallest wins. A provider-specific timeout can
+    // narrow the window but never widen it past the finalization reserve.
+    const draftBudgetMs = providerBudgetMsForPhase(
       refinementBudget,
+      "writing",
       config.generationTimeoutMs
     );
+    const refinementSkipped =
+      !canStartOptionalRefinement(refinementBudget, 1) || draftBudgetMs <= 0;
     let generated = refinementSkipped
       ? {
           draft: deterministicDraft({
             brand: selectedBrands.brand,
             targetBrand: selectedBrands.targetBrand,
             useCase: latest.useCase,
-            answers: provisionalAnswersFor(latest),
+            answers: normalizedAnswersFor(latest),
             sourceArtifact: latest.sourceArtifact
           }),
           source: "deterministic-fallback" as const,
@@ -3253,15 +3320,16 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           brand: selectedBrands.brand,
           targetBrand: selectedBrands.targetBrand,
           useCase: latest.useCase,
-          answers: provisionalAnswersFor(latest),
-          sourceArtifact: latest.sourceArtifact
+          answers: normalizedAnswersFor(latest),
+          sourceArtifact: latest.sourceArtifact,
+          timeoutMs: draftBudgetMs
         });
     const trustFallbackReason = generationTrustFailureFor({
       draft: generated.draft,
       brand: selectedBrands.brand,
       targetBrand: selectedBrands.targetBrand,
       useCase: latest.useCase,
-      answers: provisionalAnswersFor(latest)
+      answers: normalizedAnswersFor(latest)
     });
     if (trustFallbackReason && generated.source === "openai") {
       generated = {
@@ -3269,7 +3337,7 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           brand: selectedBrands.brand,
           targetBrand: selectedBrands.targetBrand,
           useCase: latest.useCase,
-          answers: provisionalAnswersFor(latest),
+          answers: normalizedAnswersFor(latest),
           sourceArtifact: latest.sourceArtifact
         }),
         source: "deterministic-fallback",
@@ -3277,10 +3345,9 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         fallbackReason: `trust_gate_${trustFallbackReason}`
       };
     }
-    const finalSourceRevision = latest.revision;
     const finalArtifact = await assembleExperienceArtifact({
       id,
-      session: { ...latest, answers: provisionalAnswersFor(latest) },
+      session: { ...latest, answers: normalizedAnswersFor(latest) },
       draft: generated.draft,
       brand: selectedBrands.brand,
       targetBrand: selectedBrands.targetBrand,
@@ -3288,14 +3355,25 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       imageSourceTargetBrand: targetBrand,
       generationSource: generated.source,
       trustFallbackReason,
-      attemptId
+      attemptId,
+      budget: refinementBudget
     });
-    // A complete design-DNA pass is valuable enrichment, but it must not
-    // erase a usable page after the seller's identity, official logo, source
-    // evidence, and semantic palette have been verified. Keep the strict gate
-    // for genuinely untrusted brand authority while allowing a labelled
-    // provisional preview to continue when geometry/typography is incomplete.
-    const finalBrandHelpRequired = !canRenderProvisionalPreview(selectedBrands.brand);
+    latest = (await advanceBuildPhase({
+      id,
+      attemptId,
+      expectedFingerprint,
+      completed: ["queued", "researching", "planning", "writing", "checking"],
+      active: "finalizing",
+      phase: "finalizing",
+      budget: refinementBudget,
+      notes: compilePhaseNotes(finalArtifact.productionResult)
+    })) ?? latest;
+    const finalSourceRevision = latest.revision;
+    // A complete design-DNA pass is valuable enrichment, but it must not erase
+    // a usable page after the seller's identity, official logo, source
+    // evidence, and semantic palette have been verified. The strict gate stays
+    // for genuinely untrusted brand authority.
+    const finalBrandHelpRequired = !canRenderExperienceWithBrand(selectedBrands.brand);
     if (generated.error) {
       logServerError(generated.error, {
         sessionId: id,
@@ -3325,11 +3403,22 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       });
     }
     const readyAt = Date.now();
-    const provisionalReadyEvent = [...latest.events]
-      .reverse()
-      .find((event) => event.name === "preview_provisional_ready");
-    const provisionalReadyTimestamp = Date.parse(provisionalReadyEvent?.at ?? "");
-    const committed = await updateSession(
+    const artifactDigest = createHash("sha256").update(finalArtifact.html).digest("hex");
+    const structuralGatePassed =
+      finalArtifact.html.trim().length > 0 &&
+      finalArtifact.webDraft.sections.length > 0 &&
+      finalArtifact.qualityReceipt.artifactRevision > 0;
+    // Only the truth-bearing checks gate a reveal. Completeness warnings,
+    // such as an unconfirmed source or thin account evidence, are honest to show and are
+    // reported rather than used to withhold a page.
+    const truthGateFailures = finalArtifact.qualityReceipt.checks
+      .filter(
+        (check) =>
+          ["identity", "copy", "claims"].includes(check.id) && check.status === "warning"
+      )
+      .map((check) => check.id);
+    const truthGatePassed = truthGateFailures.length === 0;
+    let committed = await updateSession(
       id,
       (session) => {
         if (
@@ -3355,7 +3444,8 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           session.experienceSpec = undefined;
           session.experienceSpecRevision = undefined;
           session.qualityReceipt = undefined;
-          recordProductionEngineResult(session, finalArtifact.productionResult, "final");
+          session.finalArtifact = undefined;
+          recordProductionEngineResult(session, finalArtifact.productionResult, "withheld");
           session.status = "brand_help_required";
           session.stages.story = {
             status: "fallback",
@@ -3364,6 +3454,17 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
             detail:
               "We found the company, but we need a clearer brand source. Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed."
           };
+          advanceBuildProgress(session, {
+            completed: ["queued", "researching", "planning", "writing", "checking"],
+            phase: "failed",
+            budget: refinementBudget,
+            failure: {
+              code: "brand_help_required",
+              nextAction:
+                "Add a logo, brand guide, screenshot, or a more specific page URL, and we will continue from the research already completed.",
+              retryable: true
+            }
+          });
           appendEvent(session, "brand_help_required", {
             attemptId,
             revision: session.revision,
@@ -3374,23 +3475,74 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           });
           return session;
         }
-        const finalIsProvisional = !isGenerationReady(session.useCase, session.answers);
+        // No artifact is written unless it can be written as final. A brief
+        // that stopped being generation-ready, or a page that failed a truth or
+        // structural gate, produces a recoverable failure instead of a page the
+        // visitor would have to be told to distrust.
+        if (
+          !isGenerationReady(session.useCase, session.answers) ||
+          !structuralGatePassed ||
+          !truthGatePassed
+        ) {
+          const code = !structuralGatePassed
+            ? "final_structural_gate_failed"
+            : !truthGatePassed
+              ? `final_truth_gate_failed_${truthGateFailures.join("_")}`
+              : "brief_no_longer_generation_ready";
+          session.experience = undefined;
+          session.experienceSpec = undefined;
+          session.experienceSpecRevision = undefined;
+          session.qualityReceipt = undefined;
+          session.finalArtifact = undefined;
+          session.status = "generation_failed";
+          session.stages.story = {
+            status: "failed",
+            startedAt: session.stages.story.startedAt,
+            completedAt: new Date().toISOString(),
+            detail:
+              "We could not finish an experience we would stand behind. Your inputs are safe and ready to retry.",
+            errorCode: code
+          };
+          advanceBuildProgress(session, {
+            completed: ["queued", "researching", "planning", "writing", "checking"],
+            phase: "failed",
+            budget: refinementBudget,
+            failure: {
+              code,
+              nextAction: "Retry the build, or adjust the offer and audience and retry.",
+              retryable: true
+            }
+          });
+          appendEvent(session, "final_artifact_rejected", {
+            attemptId,
+            code,
+            ...timingMetaForGenerationBudget(refinementBudget)
+          });
+          return session;
+        }
         session.experience = {
           ...finalArtifact.webDraft,
           html: finalArtifact.html,
-          readiness: finalIsProvisional ? "provisional" : "final",
+          readiness: "final",
           generationSource: generated.source,
           artifactRevision: session.revision + 1,
-          artifactDigest: createHash("sha256").update(finalArtifact.html).digest("hex")
+          artifactDigest
         };
         session.experienceSpecRevision = finalArtifact.experienceSpec.revision;
         session.experienceSpec = finalArtifact.experienceSpec;
         session.qualityReceipt = finalArtifact.qualityReceipt;
         recordProductionEngineResult(session, finalArtifact.productionResult, "final");
-        session.status = finalIsProvisional ? "preview_provisional" : "preview_ready_unclaimed";
+        // Persisted, but not yet revealable: `finalArtifact` is written only
+        // after this record is read back from the store.
+        session.status = "generating";
         session.expiresAt = new Date(readyAt + config.sessionTtlSeconds * 1000).toISOString();
         session.stages.story = {
           status: generated.source === "openai" ? "complete" : "fallback",
+          // The attempt and fingerprint stay on the stage. The read-back write
+          // still has to prove it is finishing this attempt, and dropping them
+          // here would leave that fence with nothing to compare against.
+          attemptId,
+          inputFingerprint: expectedFingerprint,
           startedAt: session.stages.story.startedAt,
           completedAt: new Date().toISOString(),
           detail:
@@ -3424,20 +3576,98 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           durationMs: finalArtifact.renderDurationMs,
           artifactRevision: session.revision + 1
         });
-        if (!finalIsProvisional) {
-          appendEvent(session, "preview_ready", {
-            attemptId,
-            artifactRevision: session.revision + 1,
-            provisionalToFinalMs: Number.isFinite(provisionalReadyTimestamp)
-              ? Math.max(0, readyAt - provisionalReadyTimestamp)
-              : 0,
-            submissionToPreviewMs: Math.max(0, readyAt - Date.parse(session.createdAt))
-          });
-        }
+        appendEvent(session, "final_artifact_persisted", {
+          attemptId,
+          artifactRevision: session.revision + 1,
+          structuralGate: "passed",
+          truthGate: "passed"
+        });
         return session;
       },
       { ttlSeconds: config.sessionTtlSeconds }
     );
+
+    // Read back what the store actually holds. Until a durable record repeats
+    // the digest we just wrote, the artifact is not final and the visitor must
+    // not be able to reach it. An in-memory success is not persistence.
+    if (
+      !staleGeneration &&
+      committed?.experience?.artifactDigest === artifactDigest &&
+      committed.stages.story.attemptId === attemptId
+    ) {
+      const persistedAt = new Date().toISOString();
+      const readBack = await getSession(id);
+      const readBackConfirmed =
+        readBack?.experience?.artifactDigest === artifactDigest &&
+        readBack.experience.readiness === "final" &&
+        readBack.stages.story.attemptId === attemptId &&
+        storyInputFingerprint(readBack) === expectedFingerprint;
+      committed = await updateSession(
+        id,
+        (session) => {
+          if (
+            session.stages.story.attemptId !== attemptId ||
+            session.experience?.artifactDigest !== artifactDigest ||
+            storyInputFingerprint(session) !== expectedFingerprint
+          ) {
+            staleGeneration = true;
+            return session;
+          }
+          if (!readBackConfirmed) {
+            session.finalArtifact = undefined;
+            session.status = "generation_failed";
+            session.stages.story = {
+              ...session.stages.story,
+              status: "failed",
+              completedAt: new Date().toISOString(),
+              detail:
+                "The finished experience could not be verified after saving. Your inputs are safe and ready to retry.",
+              errorCode: "final_readback_failed"
+            };
+            advanceBuildProgress(session, {
+              completed: ["queued", "researching", "planning", "writing", "checking"],
+              phase: "failed",
+              budget: refinementBudget,
+              failure: {
+                code: "final_readback_failed",
+                nextAction: "Retry the build.",
+                retryable: true
+              }
+            });
+            appendEvent(session, "final_artifact_rejected", {
+              attemptId,
+              code: "final_readback_failed"
+            });
+            return session;
+          }
+          const readBackAt = new Date().toISOString();
+          session.finalArtifact = {
+            readiness: "final",
+            artifactRevision: session.experience!.artifactRevision,
+            artifactDigest,
+            structuralGate: "passed",
+            truthGate: "passed",
+            persistedAt,
+            readBackAt
+          };
+          session.status = "preview_ready_unclaimed";
+          advanceBuildProgress(session, {
+            completed: [...BUILD_PHASE_ORDER],
+            phase: "ready",
+            budget: refinementBudget
+          });
+          appendEvent(session, "preview_ready", {
+            attemptId,
+            artifactRevision: session.experience!.artifactRevision,
+            readbackMs: Math.max(0, Date.parse(readBackAt) - Date.parse(persistedAt)),
+            submissionToPreviewMs: Math.max(0, Date.now() - Date.parse(session.createdAt)),
+            eligibleToFinalMs: Math.max(0, Date.now() - refinementBudget.eligibleAt)
+          });
+          return session;
+        },
+        { ttlSeconds: config.sessionTtlSeconds }
+      );
+    }
     if (!staleGeneration) {
       await retainCommittedBuildTrace({
         committed,
@@ -3470,25 +3700,47 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         }
         return session;
       }
-      session.status = session.experience
-        ? session.experience.readiness === "provisional"
-          ? "preview_provisional"
-          : "preview_ready_unclaimed"
-        : "generation_failed";
+      // A failed replacement falls back to the previous experience only when
+      // that experience is itself a read-back final artifact. Without that
+      // receipt there is nothing revealable to fall back to, so the session
+      // fails rather than pointing the visitor at an unverified page.
+      const revealableFallback = Boolean(session.experience && session.finalArtifact);
+      session.status = revealableFallback ? "preview_ready_unclaimed" : "generation_failed";
+      if (!revealableFallback) {
+        session.experience = undefined;
+        session.finalArtifact = undefined;
+      }
+      const detail =
+        errorCode === "source_fetch_failed"
+          ? revealableFallback
+            ? "The replacement source could not be read. Your finished experience is still available; check the URL or try a PDF."
+            : "The public content URL could not be read. Check the URL or try a PDF instead."
+          : revealableFallback
+            ? "The replacement could not be completed. Your finished experience and latest inputs are safe to retry."
+            : "The story could not be completed. Your inputs are safe and ready to retry.";
       session.stages.story = {
         status: "failed",
         startedAt: session.stages.story.startedAt,
         completedAt: new Date().toISOString(),
-        detail:
-          errorCode === "source_fetch_failed"
-            ? session.experience
-              ? "The replacement source could not be read. The current preview is still available; check the URL or try a PDF."
-              : "The public content URL could not be read. Check the URL or try a PDF instead."
-            : session.experience
-              ? "The replacement could not be completed. The current preview and latest inputs are safe to retry."
-              : "The story could not be completed. Your inputs are safe and ready to retry.",
+        detail,
         errorCode
       };
+      advanceBuildProgress(session, {
+        completed: [],
+        phase: revealableFallback ? "ready" : "failed",
+        ...(revealableFallback
+          ? {}
+          : {
+              failure: {
+                code: errorCode,
+                nextAction:
+                  errorCode === "source_fetch_failed"
+                    ? "Check the source URL, or upload the material as a PDF, then retry."
+                    : "Retry the build. Your brief is saved.",
+                retryable: true
+              }
+            })
+      });
       appendEvent(session, "generation_failed", {
         attemptId,
         error: error instanceof Error ? error.name : "unknown",
@@ -3665,18 +3917,23 @@ async function claimSessionUnlocked(
   email: string
 ): Promise<ClaimResult & { traceId: string }> {
   const current = await getSession(id);
-  if (!current || !current.experience) throw new Error("This temporary experience is not ready or has expired.");
-  if (current.experience.readiness === "provisional") {
+  if (!current) throw new Error("This temporary experience is not ready or has expired.");
+  // A build in progress and an expired session are different situations, and a
+  // visitor mid-build should not be told their work may be gone.
+  if (!current.experience) throw new Error("This experience is still being built. Save is available once it is ready.");
+  // Saving is offered against the same artifact the visitor was shown, so it
+  // requires the same read-back receipt the reveal gate requires.
+  if (
+    current.experience.readiness !== "final" ||
+    current.finalArtifact?.artifactDigest !== current.experience.artifactDigest
+  ) {
     throw new HttpError(
       409,
       "claim_not_ready",
-      "This first preview is still being refined. Save it after the final quality pass is ready."
+      "This experience is still being built. Save it once the finished experience is ready."
     );
   }
-  if (
-    current.experience.readiness === "final" &&
-    current.qualityReceipt?.artifactRevision !== current.experience.artifactRevision
-  ) {
+  if (current.qualityReceipt?.artifactRevision !== current.experience.artifactRevision) {
     throw new HttpError(
       409,
       "claim_not_ready",
@@ -3760,11 +4017,14 @@ async function claimSessionUnlocked(
       if (session.status === "claimed") {
         throw new HttpError(409, "already_claimed", "This experience has already been claimed.");
       }
-      if (session.experience?.readiness === "provisional") {
+      if (
+        session.experience &&
+        session.finalArtifact?.artifactDigest !== session.experience.artifactDigest
+      ) {
         throw new HttpError(
           409,
           "claim_not_ready",
-          "This first preview is still being refined."
+          "This experience is still being built."
         );
       }
       if (

@@ -1,4 +1,6 @@
+import type { ThesisFieldRole } from "@/lib/generation/campaign-thesis";
 import type {
+  SectionBrief,
   SectionEvidenceClaim,
   SectionWriterBrief,
   SectionWriterSlot
@@ -8,6 +10,7 @@ import type {
   CtaIdV2,
   EvidenceKindV2,
   SectionRoleV2,
+  SectionSlotV2,
   WireframeDecisionV2,
   WireframeFamilyV2
 } from "@/lib/generation/three-family-contract";
@@ -43,6 +46,53 @@ export const BANNED_INTERNAL_PHRASES: readonly RegExp[] = [
   /\bunlock value\b/i,
   /\bwireframe\b/i
 ];
+
+/**
+ * Copy that talks about the page instead of to the reader. Distinct from the
+ * banned phrases above: those are internal vocabulary, these are sentences
+ * about the artifact, the brief, the evidence list, or the generation. Either
+ * way the reader is being shown the machinery, so both reject.
+ */
+export const INTERNAL_NARRATION_PATTERNS: readonly RegExp[] = [
+  /\bthis (?:page|experience|section|brief|microsite)\b/i,
+  /\bthe (?:brief|prompt|template|generation process|section plan|word budget)\b/i,
+  /\bthe evidence (?:provided|supplied|below|above|list)\b/i,
+  /\b(?:generated|assembled|compiled) (?:for|by|from) (?:you|your|the)\b/i,
+  /\bbased on (?:the|your) (?:brief|inputs?|answers?|responses?)\b/i,
+  /\bwe (?:generated|compiled|assembled|drafted) (?:this|the)\b/i,
+  /\bsource material\b/i
+];
+
+/**
+ * Softer self-reference. It reads as a tour of the deliverable rather than an
+ * argument, which is a persuasion penalty and not a factual failure, so it is
+ * scored down instead of rejected.
+ */
+export const NARRATION_PENALTY_PATTERNS: readonly RegExp[] = [
+  /\bbelow you(?:'ll| will) find\b/i,
+  /\bcurated\b/i,
+  /\bhand-?picked\b/i,
+  /\bin this (?:overview|summary|write-?up|round-?up)\b/i,
+  /\bread on\b/i,
+  /\btailored (?:for|to) you\b/i,
+  /\bwe(?:'ve| have) (?:put|pulled) together\b/i
+];
+
+/**
+ * Urgency the page may only state when the argument actually owns a why-now.
+ * A calendar reference the reader already lives with ("this quarter") is not
+ * urgency; a manufactured deadline is.
+ */
+export const INVENTED_URGENCY_PATTERN =
+  /\b(?:act now|last chance|limited time|limited availability|hurry|expires?|expiring|deadline|don't miss|do not miss|before it(?:'s| is) too late|only \d+ (?:spots?|seats?|days?|places?)\b)/i;
+
+/**
+ * A customer result stated as its own kind of authority. Deliberately narrow:
+ * a figure or superlative is already caught by claim coverage, so this only has
+ * to catch the uncitable version: "our customers see" with nobody named.
+ */
+export const CUSTOMER_RESULT_PATTERN =
+  /\b(?:our (?:customers?|clients?)|customers? (?:report|see|saw|achieved?)|case stud(?:y|ies)|testimonials?|reference customers?)\b/i;
 
 export interface SectionPromptSpec {
   /** Stable per-role prompt identity. Bump when the instruction text changes. */
@@ -293,6 +343,102 @@ export const SECTION_PROMPT_REGISTRY: Record<SectionRoleV2, SectionPromptSpec> =
   )
 };
 
+/**
+ * The buyer movement each role owns when no recipe supplies one. Every section
+ * has to move the reader from one stated belief to the next, so a section
+ * without a recipe entry still gets an explicit movement rather than none.
+ */
+const ROLE_BUYER_MOVEMENT: Record<SectionRoleV2, string> = {
+  "buyer-outcome": "From scanning the page to recognizing their own job in it.",
+  "current-friction": "From recognizing the topic to accepting the constraint is theirs.",
+  mechanism: "From accepting the constraint to understanding how it is removed.",
+  "use-cases": "From understanding the mechanism to locating their own work inside it.",
+  proof: "From understanding the claim to judging whether it holds.",
+  "next-move": "From a held judgement to one bounded next step.",
+  "market-change": "From current assumptions to a changed decision context.",
+  stakes: "From an abstract change to a personal consequence.",
+  "evaluation-criteria": "From concern to a way of judging the options.",
+  "solution-mapping": "From criteria to one approach that answers them.",
+  applications: "From one sequence to their own variant of it.",
+  "evaluation-close": "From a formed judgement to the decision now on the table.",
+  "shared-priority": "From a vendor pitch to a priority both sides already hold.",
+  "account-relevance": "From a general priority to why it matters at this account.",
+  "shared-opportunity": "From shared relevance to work the two sides could do.",
+  "priority-paths": "From available work to the path worth starting first.",
+  "validation-plan": "From a plausible claim to a test they could run.",
+  "first-decision": "From the whole commitment to the first decision only.",
+  "proof-depth": "From an accepted proof point to the detail behind it.",
+  resource: "From a stated question to whether this material answers it."
+};
+
+/**
+ * The thesis fields each role may read when no recipe scopes them. Least
+ * privileged for the same reason as the strategy slots below: a section that
+ * can see the whole thesis will argue the whole thesis.
+ */
+const ROLE_THESIS_FIELDS: Record<SectionRoleV2, readonly ThesisFieldRole[]> = {
+  "buyer-outcome": ["seller", "offer", "audience", "audienceJob", "desiredOutcome", "promise"],
+  "current-friction": ["audienceJob", "currentState"],
+  mechanism: ["seller", "offer", "mechanism", "promise"],
+  "use-cases": ["audience", "audienceJob", "mechanism"],
+  proof: ["proof", "mechanism", "promise"],
+  "next-move": ["nextAction", "desiredOutcome", "audienceJob"],
+  "market-change": ["whyNow", "currentState", "audience"],
+  stakes: ["audienceJob", "currentState", "desiredOutcome"],
+  "evaluation-criteria": ["objection", "audienceJob"],
+  "solution-mapping": ["offer", "mechanism", "promise"],
+  applications: ["audienceJob", "mechanism"],
+  "evaluation-close": ["nextAction", "desiredOutcome"],
+  "shared-priority": ["audience", "audienceJob", "whyNow"],
+  "account-relevance": ["audience", "currentState", "whyNow"],
+  "shared-opportunity": ["offer", "promise", "mechanism"],
+  "priority-paths": ["audienceJob", "objection"],
+  "validation-plan": ["proof", "mechanism"],
+  "first-decision": ["nextAction", "objection"],
+  "proof-depth": ["proof", "seller"],
+  resource: ["offer", "proof"]
+};
+
+/**
+ * Ideas each role must leave to the section that owns them. Prompt-facing
+ * vocabulary: enforcement is by the fixed patterns above, keyed off the
+ * brief's own thesis fields, because term-matching a paraphrase of an idea
+ * rejects honest copy about the same subject.
+ */
+const ROLE_PROHIBITED_IDEAS: Partial<Record<SectionRoleV2, readonly string[]>> = {
+  "buyer-outcome": ["the mechanism in detail", "the proof point"],
+  "current-friction": ["the seller's answer to the constraint", "the next action"],
+  mechanism: ["the customer result", "the closing ask"],
+  "use-cases": ["the proof point", "the closing ask"],
+  proof: ["the closing ask", "a second unrelated claim"],
+  "next-move": ["a restatement of the opening promise", "a new factual claim"],
+  "market-change": ["the seller's reaction to the change", "a prediction"],
+  stakes: ["fear language", "an invented deadline"],
+  "evaluation-criteria": ["product features disguised as criteria"],
+  "solution-mapping": ["a capability the evidence does not state"],
+  applications: ["a repeat of another application"],
+  "evaluation-close": ["reopening an earlier section"],
+  "shared-priority": ["speculation about internal account plans"],
+  "account-relevance": ["inferred headcount, spend, tooling, or org structure"],
+  "shared-opportunity": ["a purchase framing"],
+  "priority-paths": ["a path that cannot be started on its own"],
+  "validation-plan": ["an outcome the test has not produced"],
+  "first-decision": ["the whole commitment"],
+  "proof-depth": ["a new proof claim"],
+  resource: ["why the material is impressive"]
+};
+
+/**
+ * Self-reference no section may use, in the words a writer can act on. The
+ * detection lives in `INTERNAL_NARRATION_PATTERNS`.
+ */
+const INTERNAL_NARRATION_IDEAS: readonly string[] = [
+  "the page, section, or experience itself",
+  "the brief, prompt, or template behind the copy",
+  "the research or generation process",
+  "the evidence list supplied to the writer"
+];
+
 export interface SectionWritingContract {
   version: typeof SECTION_WRITING_CONTRACT_VERSION;
   registryVersion: string;
@@ -311,7 +457,14 @@ export interface SectionWritingContract {
   evidenceRefs: readonly string[];
   allowedCtas: readonly CtaIdV2[];
   candidateCount: number;
+  /** The page-wide brief. Shared by every section. */
   brief: SectionWriterBrief;
+  /**
+   * This section's own brief: the one buyer movement it owns, the thesis fields
+   * and evidence it may use, and what it may not say. Everything a writer or
+   * reviewer needs to judge the section in isolation.
+   */
+  sectionBrief: SectionBrief;
   /**
    * The one job this section owns in the selected strategy. Distinct per
    * section, so a section that has nothing left to argue omits rather than
@@ -409,6 +562,19 @@ export interface SectionStrategyBinding {
   offerLabel: string;
 }
 
+/**
+ * Recipe-level section metadata, carried by value so this module stays below
+ * the recipe layer. A slot with no entry falls back to its own locked job and
+ * the role defaults above.
+ */
+export interface SectionJobSource {
+  slotId: string;
+  semanticJob: string;
+  buyerMovement: string;
+  thesisFields?: readonly string[];
+  visualRole?: string;
+}
+
 export interface BuildSectionContractsInput {
   sessionId: string;
   revision: number;
@@ -416,6 +582,97 @@ export interface BuildSectionContractsInput {
   brief: SectionWriterBrief;
   evidence: readonly SectionEvidenceClaim[];
   strategy?: SectionStrategyBinding;
+  /** Section jobs and movements from the selected page recipe, when one ran. */
+  sectionJobs?: readonly SectionJobSource[];
+}
+
+/**
+ * Splits a section's scoped evidence into what it was built for and what it may
+ * merely draw on.
+ *
+ * A claim that declares a kind the slot asked for is what the section exists to
+ * cite. A claim admitted only because its source role is compatible is weaker
+ * support, so it stays optional. The two together are exactly the scoped set:
+ * nothing is added and nothing is dropped, which is what keeps a reference
+ * outside the union a violation rather than a gap.
+ */
+function splitEvidenceByRequirement(
+  slot: SectionSlotV2,
+  evidence: readonly SectionEvidenceClaim[]
+): { required: string[]; optional: string[] } {
+  const declared = new Set(slot.requiredEvidenceKinds);
+  const required: string[] = [];
+  const optional: string[] = [];
+  for (const claim of evidence) {
+    if (claim.kind && declared.has(claim.kind)) required.push(claim.id);
+    else optional.push(claim.id);
+  }
+  return { required: required.sort(), optional: optional.sort() };
+}
+
+/**
+ * The job every slot carries, recipe-supplied or defaulted. Resolved for the
+ * whole plan before any brief is built, because a section's own brief depends
+ * on its neighbours' movements.
+ */
+function resolveSectionJobs(
+  plan: readonly SectionSlotV2[],
+  supplied: readonly SectionJobSource[]
+): SectionJobSource[] {
+  const bySlotId = new Map(supplied.map((entry) => [entry.slotId, entry]));
+  return plan.map((slot) => {
+    const entry = bySlotId.get(slot.id);
+    return {
+      slotId: slot.id,
+      semanticJob: entry?.semanticJob?.trim() || slot.buyerJob,
+      buyerMovement: entry?.buyerMovement?.trim() || ROLE_BUYER_MOVEMENT[slot.role],
+      ...(entry?.thesisFields?.length ? { thesisFields: entry.thesisFields } : {}),
+      ...(entry?.visualRole ? { visualRole: entry.visualRole } : {})
+    };
+  });
+}
+
+function buildSectionBrief(input: {
+  slot: SectionSlotV2;
+  evidence: readonly SectionEvidenceClaim[];
+  brief: SectionWriterBrief;
+  job: SectionJobSource;
+  previous: SectionJobSource | undefined;
+  next: SectionJobSource | undefined;
+}): SectionBrief {
+  const { slot, job } = input;
+  const scope = splitEvidenceByRequirement(slot, input.evidence);
+  const thesisFields = job.thesisFields?.length
+    ? [...new Set(job.thesisFields)].sort()
+    : [...ROLE_THESIS_FIELDS[slot.role]].sort();
+  const previousConclusion = input.previous?.buyerMovement;
+  const nextSetup = input.next?.buyerMovement;
+  return {
+    sectionId: slot.id,
+    semanticJob: job.semanticJob,
+    buyerMovement: job.buyerMovement,
+    ...(previousConclusion ? { previousConclusion } : {}),
+    ...(nextSetup ? { nextSetup } : {}),
+    thesisFields,
+    requiredEvidenceRefs: scope.required,
+    optionalEvidenceRefs: scope.optional,
+    prohibitedClaims: [
+      ...new Set([...input.brief.unknowns, ...(input.brief.prohibitedClaims ?? [])])
+    ].sort(),
+    prohibitedIdeas: [
+      ...new Set([
+        ...INTERNAL_NARRATION_IDEAS,
+        ...(ROLE_PROHIBITED_IDEAS[slot.role] ?? []),
+        ...(input.brief.prohibitedIdeas ?? [])
+      ])
+    ].sort(),
+    allowedCtas: [...(slot.allowedCtas ?? [])].sort(),
+    visualRole: job.visualRole ?? slot.visualRole,
+    wordBudget: {
+      headline: [slot.wordBudget.headline[0], slot.wordBudget.headline[1]],
+      body: [slot.wordBudget.body[0], slot.wordBudget.body[1]]
+    }
+  };
 }
 
 /**
@@ -430,6 +687,7 @@ export function buildSectionWritingContracts(
   const currentEvidence = input.evidence.filter(
     (claim) => claim.revision === input.revision
   );
+  const jobs = resolveSectionJobs(input.decision.sectionPlan, input.sectionJobs ?? []);
 
   return input.decision.sectionPlan.map((slot, order) => {
     const promptSpec = SECTION_PROMPT_REGISTRY[slot.role];
@@ -470,6 +728,14 @@ export function buildSectionWritingContracts(
       allowedCtas: [...(slot.allowedCtas ?? [])],
       candidateCount: SECTION_CANDIDATES_PER_SLOT,
       brief: input.brief,
+      sectionBrief: buildSectionBrief({
+        slot,
+        evidence,
+        brief: input.brief,
+        job: jobs[order]!,
+        previous: jobs[order - 1],
+        next: jobs[order + 1]
+      }),
       strategyJobs: input.strategy?.jobsBySectionId[slot.id] ?? [],
       strategySlots: strategySlotsForRole(slot.role, input.strategy),
       ...(input.strategy
@@ -506,11 +772,37 @@ export function sectionContractDigestSource(
     // Job names and slot keys are vocabulary, not copy, so they can be
     // receipted. The slot values behind them stay out of the digest source.
     strategyJobs: [...contract.strategyJobs].sort(),
-    strategySlotKeys: Object.keys(contract.strategySlots).sort()
+    strategySlotKeys: Object.keys(contract.strategySlots).sort(),
+    // The brief's scope is receiptable; its wording is not. A movement or a
+    // prohibited claim is prose written for this build, so only the shape of
+    // the brief travels into the digest.
+    sectionBrief: {
+      sectionId: contract.sectionBrief.sectionId,
+      thesisFields: [...contract.sectionBrief.thesisFields].sort(),
+      requiredEvidenceRefs: [...contract.sectionBrief.requiredEvidenceRefs],
+      optionalEvidenceRefs: [...contract.sectionBrief.optionalEvidenceRefs],
+      prohibitedClaimCount: contract.sectionBrief.prohibitedClaims.length,
+      prohibitedIdeaCount: contract.sectionBrief.prohibitedIdeas.length,
+      allowedCtas: [...contract.sectionBrief.allowedCtas],
+      visualRole: contract.sectionBrief.visualRole,
+      wordBudget: contract.sectionBrief.wordBudget,
+      hasPreviousConclusion: Boolean(contract.sectionBrief.previousConclusion),
+      hasNextSetup: Boolean(contract.sectionBrief.nextSetup)
+    }
   };
 }
 
 /** True when the text contains a phrase that exposes internal build mechanics. */
 export function containsBannedInternalPhrase(value: string): boolean {
   return BANNED_INTERNAL_PHRASES.some((pattern) => pattern.test(value));
+}
+
+/** True when the copy discusses the artifact instead of the reader's situation. */
+export function containsInternalNarration(value: string): boolean {
+  return INTERNAL_NARRATION_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+/** True when the copy reads as a tour of the deliverable. Scored, not rejected. */
+export function readsAsInternallyNarrated(value: string): boolean {
+  return NARRATION_PENALTY_PATTERNS.some((pattern) => pattern.test(value));
 }

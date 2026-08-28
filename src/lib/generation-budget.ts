@@ -59,6 +59,58 @@ export function canStartExternalWork(budget: GenerationBudget): boolean {
   return budget.remainingMs > 0;
 }
 
+/**
+ * Phase checkpoints as a fraction of the customer deadline, taken from the
+ * approved budget table (2s/15s/22s/44s/52s/59s of 60s). Expressed as fractions
+ * so a shortened deadline in a test or a slower environment compresses every
+ * phase proportionally instead of starving the last one.
+ */
+export const BUILD_PHASE_CHECKPOINT_FRACTIONS = {
+  queued: 2 / 60,
+  researching: 15 / 60,
+  planning: 22 / 60,
+  writing: 44 / 60,
+  checking: 52 / 60,
+  finalizing: 59 / 60
+} as const;
+
+export type BuildPhaseCheckpoint = keyof typeof BUILD_PHASE_CHECKPOINT_FRACTIONS;
+
+/** Absolute wall-clock instant by which a phase should have handed over. */
+export function phaseCheckpointAt(
+  budget: GenerationBudget,
+  phase: BuildPhaseCheckpoint
+): number {
+  return budget.eligibleAt + Math.round(budget.totalMs * BUILD_PHASE_CHECKPOINT_FRACTIONS[phase]);
+}
+
+/**
+ * How long a provider may run inside one phase.
+ *
+ * Three limits apply and the smallest always wins: the caller's own requested
+ * timeout, the time left before this phase must hand over, and the time left
+ * before the finalization reserve. A worker-specific timeout can therefore
+ * never push work past the customer deadline. This is why the function returns a
+ * number the caller must use rather than a boolean it may ignore.
+ */
+export function providerBudgetMsForPhase(
+  budget: GenerationBudget,
+  phase: BuildPhaseCheckpoint,
+  requestedMs: number,
+  now = Date.now()
+): number {
+  const untilPhaseHandover = phaseCheckpointAt(budget, phase) - now;
+  const untilFinalization = budget.finalizationAt - now;
+  return Math.max(
+    0,
+    Math.min(
+      Math.max(0, Math.round(requestedMs)),
+      Math.round(untilPhaseHandover),
+      Math.round(untilFinalization)
+    )
+  );
+}
+
 export function timingMetaForGenerationBudget(budget: GenerationBudget) {
   return {
     budgetMs: budget.totalMs,

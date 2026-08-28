@@ -25,8 +25,9 @@ import {
   personalizationVariantOptionsFor,
   preservePreviewDuringRegeneration,
   previewBoundaryScrollDelta,
+  previewUpdateState,
   recommendedObjectiveFor,
-  shouldShowStreamingBuildStage,
+  shouldShowBuildShell,
   shouldAutoConfirmSource,
   streamingCampaignPatchForIntent,
   streamingCampaignQuestions
@@ -267,23 +268,97 @@ describe("Try Me Now experience copy", () => {
     expect(suggestions.join(" ")).not.toMatch(/data and ai leaders/i);
   });
 
-  it("shows the dedicated build stage only after the campaign brief is complete", () => {
-    const collecting = session("campaign");
-    expect(shouldShowStreamingBuildStage(collecting, false)).toBe(false);
-    expect(shouldShowStreamingBuildStage(collecting, true)).toBe(true);
-    const ready = session("campaign", {
+  it("shows the build shell while the worker runs and stops at the final reveal", () => {
+    const materialBrief = {
+      campaignType: "product" as const,
+      promotedOffer: "Harmony",
+      audience: "Enterprise architects",
+      objective: "Generate demand"
+    };
+    expect(shouldShowBuildShell(session("campaign", { answers: materialBrief }))).toBe(false);
+
+    const building = session("campaign", {
+      status: "generating",
+      answers: materialBrief,
+      buildProgress: {
+        phase: "writing",
+        startedAt: "2026-07-30T20:00:00.000Z",
+        updatedAt: "2026-07-30T20:00:20.000Z",
+        slow: false,
+        receipts: [{ phase: "writing", status: "active", detail: "Writing each step of the buyer journey" }]
+      }
+    });
+    expect(shouldShowBuildShell(building)).toBe(true);
+
+    const failed = session("campaign", {
+      status: "generation_failed",
+      answers: materialBrief,
+      buildProgress: {
+        phase: "failed",
+        startedAt: "2026-07-30T20:00:00.000Z",
+        updatedAt: "2026-07-30T20:00:50.000Z",
+        slow: false,
+        receipts: [],
+        failure: { code: "no_final_artifact", nextAction: "Try the build again.", retryable: true }
+      }
+    });
+    expect(shouldShowBuildShell(failed)).toBe(true);
+
+    const revealed = session("campaign", {
+      status: "preview_ready_unclaimed",
+      answers: materialBrief,
       experience: {
         title: "Ready",
         headline: "Ready",
         ready: true,
+        readiness: "final",
+        generationSource: "deterministic-fallback",
+        artifactRevision: 4
+      },
+      finalArtifact: {
+        readiness: "final",
+        artifactRevision: 4,
+        structuralGate: "passed",
+        truthGate: "passed",
+        persistedAt: "2026-07-30T20:00:50.000Z",
+        readBackAt: "2026-07-30T20:00:51.000Z"
+      },
+      buildProgress: {
+        phase: "ready",
+        startedAt: "2026-07-30T20:00:00.000Z",
+        updatedAt: "2026-07-30T20:00:51.000Z",
+        slow: false,
+        receipts: []
+      }
+    });
+    expect(shouldShowBuildShell(revealed)).toBe(false);
+    expect(shouldShowBuildShell(session("campaign", { status: "brand_help_required" }))).toBe(false);
+  });
+
+  it("never announces a preview update for an artifact the visitor cannot see", () => {
+    const draft = session("campaign", {
+      experience: {
+        title: "Draft",
+        headline: "Draft",
+        ready: true,
+        readiness: "provisional",
         generationSource: "deterministic-fallback",
         artifactRevision: 1
       }
-    });
-    expect(shouldShowStreamingBuildStage(ready, true, false)).toBe(true);
-    expect(shouldShowStreamingBuildStage(ready, true, true)).toBe(false);
-    expect(shouldShowStreamingBuildStage(session("campaign", { status: "generation_failed" }), true)).toBe(false);
-    expect(shouldShowStreamingBuildStage(session("abm"), true)).toBe(false);
+    }, { story: "running" });
+    expect(previewUpdateState(draft)).toBeUndefined();
+
+    const revealed = session("campaign", {
+      experience: {
+        title: "Ready",
+        headline: "Ready",
+        ready: true,
+        readiness: "final",
+        generationSource: "deterministic-fallback",
+        artifactRevision: 2
+      }
+    }, { story: "running" });
+    expect(previewUpdateState(revealed)).toBe("running");
   });
 
   it("fills inferred Live Brief rows instead of leaving them waiting", () => {

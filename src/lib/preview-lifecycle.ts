@@ -1,15 +1,22 @@
 import { isMaterialBriefEligible } from "@/lib/orchestration/research-plan";
 import type {
+  BuildPhase,
+  BuildPhaseReceipt,
   PublicTryMeSession,
   SessionAnswers,
   StageKey,
   UseCase
 } from "@/lib/types";
 
-/** Distinct prospect-facing lifecycle phases for reveal, claim, and publication honesty. */
+/**
+ * Distinct prospect-facing lifecycle phases for reveal, claim, and publication
+ * honesty. `building` replaced the former `enriching` phase: there is no
+ * enrichment of a visible artifact any more, because nothing is visible until
+ * one final artifact passes its gates.
+ */
 export type PreviewLifecyclePhase =
   | "intake"
-  | "enriching"
+  | "building"
   | "preview_ready"
   | "saved_locally"
   | "claimed"
@@ -44,7 +51,7 @@ const STAGE_LABELS: Record<StageKey, string> = {
 };
 
 /**
- * Material brief eligibility — not domain-only. Matches the Wave 1 research-plan gate.
+ * Material brief eligibility, not domain-only. Matches the Wave 1 research-plan gate.
  */
 export function isSessionGenerationEligible(
   session: Pick<PublicTryMeSession, "useCase" | "answers"> | undefined
@@ -54,16 +61,33 @@ export function isSessionGenerationEligible(
 }
 
 /**
- * Preview may appear only after the material brief is generation-eligible and an artifact exists.
+ * The single reveal gate.
+ *
+ * An artifact object is not enough. The visitor may only receive HTML once a
+ * `final` artifact has a matching receipt proving it passed the structural and
+ * truth gates, was persisted, and was read back from the store. Anything else
+ * including a `final` artifact whose receipt belongs to an earlier
+ * revision, is still an internal draft.
  */
-export function canRevealPreview(
-  session: Pick<PublicTryMeSession, "useCase" | "answers" | "experience" | "status"> | undefined
+export function canRevealFinalExperience(
+  session:
+    | Pick<PublicTryMeSession, "useCase" | "answers" | "experience" | "status" | "finalArtifact">
+    | undefined
 ): boolean {
-  if (!session?.experience) return false;
+  if (!session?.experience || !session.finalArtifact) return false;
+  if (session.experience.readiness !== "final") return false;
+  if (session.finalArtifact.readiness !== "final") return false;
+  if (session.finalArtifact.artifactRevision !== session.experience.artifactRevision) {
+    return false;
+  }
+  if (
+    session.finalArtifact.structuralGate !== "passed" ||
+    session.finalArtifact.truthGate !== "passed"
+  ) {
+    return false;
+  }
   if (!isSessionGenerationEligible(session)) return false;
   return [
-    "generating",
-    "preview_provisional",
     "preview_ready_unclaimed",
     "claim_pending",
     "claimed",
@@ -71,23 +95,29 @@ export function canRevealPreview(
   ].includes(session.status);
 }
 
-export function isProvisionalExperience(
-  session: Pick<PublicTryMeSession, "experience" | "status"> | undefined
-): boolean {
-  if (!session?.experience) return false;
-  return (
-    session.experience.readiness === "provisional" ||
-    session.status === "preview_provisional"
-  );
-}
+/**
+ * Retained under its former name so existing call sites keep compiling, but it
+ * now means exactly one thing: a persisted, read-back final artifact.
+ */
+export const canRevealPreview = canRevealFinalExperience;
 
-export function isEnrichingPreview(
-  session: Pick<PublicTryMeSession, "experience" | "status" | "stages"> | undefined
+/** True while the build is working and the visitor has no artifact yet. */
+export function isBuildInProgress(
+  session:
+    | Pick<
+        PublicTryMeSession,
+        "useCase" | "answers" | "experience" | "status" | "stages" | "finalArtifact" | "buildProgress"
+      >
+    | undefined
 ): boolean {
-  if (!session?.experience) return false;
-  if (isProvisionalExperience(session)) return true;
-  return Object.values(session.stages).some(
-    (stage) => stage.status === "running"
+  if (!session) return false;
+  if (canRevealFinalExperience(session)) return false;
+  if (session.buildProgress) {
+    return session.buildProgress.phase !== "failed";
+  }
+  return (
+    session.status === "generating" ||
+    Object.values(session.stages).some((stage) => stage.status === "running")
   );
 }
 
@@ -98,10 +128,20 @@ export function isEnrichingPreview(
 export function previewLifecyclePhase(
   session: Pick<
     PublicTryMeSession,
-    "experience" | "status" | "stages" | "claim" | "useCase" | "answers"
+    | "experience"
+    | "status"
+    | "stages"
+    | "claim"
+    | "useCase"
+    | "answers"
+    | "finalArtifact"
+    | "buildProgress"
   > | undefined
 ): PreviewLifecyclePhase {
-  if (!session || !canRevealPreview(session)) return "intake";
+  if (!session) return "intake";
+  if (!canRevealFinalExperience(session)) {
+    return isBuildInProgress(session) ? "building" : "intake";
+  }
   if (session.claim?.publishStatus === "published") return "published";
   if (session.status === "claimed") {
     return session.claim?.publishStatus === "preview-only" ||
@@ -111,7 +151,6 @@ export function previewLifecyclePhase(
       : "claimed";
   }
   if (session.status === "claim_pending") return "claimed";
-  if (isEnrichingPreview(session)) return "enriching";
   return "preview_ready";
 }
 
@@ -127,11 +166,11 @@ export function previewLifecycleCopy(phase: PreviewLifecyclePhase): {
         statusLabel: "Collecting the material brief",
         publicationNote: "Nothing is published yet"
       };
-    case "enriching":
+    case "building":
       return {
-        kicker: "Preview ready · enriching",
-        statusLabel: "Interactive preview · enrichment continuing",
-        publicationNote: "App-hosted preview only · not published to Folloze"
+        kicker: "Building",
+        statusLabel: "Building the finished experience",
+        publicationNote: "Nothing is shared until the finished experience passes its checks"
       };
     case "preview_ready":
       return {
@@ -175,17 +214,89 @@ export function hasMeaningfulPreviewEngagement(
 }
 
 export function canOfferClaimModal(
-  session: Pick<PublicTryMeSession, "experience" | "status"> | undefined,
+  session:
+    | Pick<PublicTryMeSession, "experience" | "status" | "finalArtifact" | "useCase" | "answers">
+    | undefined,
   engagement: { events: readonly PreviewLifecycleEvent[]; previewOpened?: boolean }
 ): boolean {
-  if (!session?.experience || session.experience.readiness === "provisional") return false;
+  if (!session) return false;
   if (!["preview_ready_unclaimed", "claim_failed"].includes(session.status)) return false;
+  // Saving is offered against the same artifact the visitor can see, so it
+  // reuses the reveal gate rather than a second, looser readiness check.
+  if (!canRevealFinalExperience({ ...session, status: "preview_ready_unclaimed" })) return false;
   return hasMeaningfulPreviewEngagement(engagement.events, {
     previewOpened: engagement.previewOpened
   });
 }
 
-/** Stage rows backed only by public stage receipts — no invented percentages. */
+/**
+ * Customer-visible language for each build phase. Active verbs, no percentages,
+ * and no internal recipe, strategy, or evidence labels.
+ */
+export const BUILD_PHASE_COPY: Record<
+  Exclude<BuildPhase, "ready" | "failed">,
+  { label: string; detail: string }
+> = {
+  queued: {
+    label: "Preparing the build",
+    detail: "Preparing the build from your brief"
+  },
+  researching: {
+    label: "Reading the brand, offer, and buyer context",
+    detail: "Reading the public brand, offer, and buyer context"
+  },
+  planning: {
+    label: "Choosing the strongest story for this buyer",
+    detail: "Choosing the strongest story for this buyer"
+  },
+  writing: {
+    label: "Writing the buyer journey",
+    detail: "Writing each step of the buyer journey"
+  },
+  checking: {
+    label: "Checking the claims, flow, and brand treatment",
+    detail: "Checking the claims, flow, and brand treatment"
+  },
+  finalizing: {
+    label: "Finalizing the experience",
+    detail: "Finalizing, saving, and verifying the experience"
+  }
+};
+
+export const BUILD_PHASE_ORDER: ReadonlyArray<Exclude<BuildPhase, "ready" | "failed">> = [
+  "queued",
+  "researching",
+  "planning",
+  "writing",
+  "checking",
+  "finalizing"
+];
+
+/**
+ * Rows for the build shell. Statuses come from real receipts, so a queued
+ * phase reads as queued rather than as partial progress toward a percentage.
+ */
+export function buildPhaseRows(
+  session: Pick<PublicTryMeSession, "buildProgress"> | undefined
+): Array<BuildPhaseReceipt & { label: string }> {
+  const receipts = new Map(
+    (session?.buildProgress?.receipts ?? []).map((receipt) => [receipt.phase, receipt])
+  );
+  return BUILD_PHASE_ORDER.map((phase) => {
+    const receipt = receipts.get(phase);
+    return {
+      label: BUILD_PHASE_COPY[phase].label,
+      phase,
+      status: receipt?.status ?? "queued",
+      detail: receipt?.detail ?? BUILD_PHASE_COPY[phase].detail,
+      ...(receipt?.startedAt ? { startedAt: receipt.startedAt } : {}),
+      ...(receipt?.completedAt ? { completedAt: receipt.completedAt } : {}),
+      ...(receipt?.evidenceNote ? { evidenceNote: receipt.evidenceNote } : {})
+    };
+  });
+}
+
+/** Stage rows backed only by public stage receipts, with no invented percentages. */
 export function receiptBackedStageProgress(
   session: Pick<PublicTryMeSession, "stages">
 ): StageReceiptRow[] {
@@ -235,9 +346,9 @@ export function analyticsDurationBucket(durationMs: number | undefined): string 
 }
 
 export function analyticsQualityGate(
-  session: Pick<PublicTryMeSession, "experience" | "stages">
+  session: Pick<PublicTryMeSession, "experience" | "stages" | "finalArtifact">
 ): string {
-  if (session.experience?.readiness === "provisional") return "provisional";
+  if (session.experience && !session.finalArtifact) return "unreceipted";
   if (Object.values(session.stages).some((stage) => stage.status === "fallback")) {
     return "fallback";
   }
@@ -263,6 +374,10 @@ export function answersPatchForStageRetry(
   return answers.objective ? { objective: answers.objective } : {};
 }
 
-export function useCaseAllowsEarlyStreamingPreview(useCase: UseCase): boolean {
+/**
+ * Retained for the campaign-specific research lane ordering. It no longer
+ * authorizes an early visible artifact. Nothing is visible before `ready`.
+ */
+export function useCaseAllowsEarlyResearchFanout(useCase: UseCase): boolean {
   return useCase === "campaign";
 }

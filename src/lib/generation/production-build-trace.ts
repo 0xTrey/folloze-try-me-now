@@ -2,10 +2,19 @@ import { privateAssetAllocationFor, type BrandSystemV2 } from "@/lib/brand-syste
 import {
   BuildTraceBuilder,
   buildTraceDigest,
+  buildTraceValueDigest,
   normalizeAssetAllocationTrace,
   normalizeBrandDecisionTrace,
+  normalizeCompositionDiagnostics,
+  normalizeEvidenceGraphDiagnostics,
+  normalizeLifecycleDiagnostics,
+  normalizeQualityGateDiagnostics,
   normalizeRankedDecisionTrace,
+  normalizeRecipeDiagnostics,
+  normalizeResearchDiagnostics,
   normalizeSectionBuildTrace,
+  normalizeStrategyDiagnostics,
+  normalizeThesisDiagnostics,
   safeTraceIdentifier,
   type BuildTraceTerminalStatus,
   type BuildTraceV1,
@@ -15,17 +24,28 @@ import type { AssetAllocationPlan } from "@/lib/asset-allocation";
 import { evaluateBrandFidelity } from "@/lib/brand-fidelity-evaluator";
 import type { SemanticRoleSelection } from "@/lib/brand-semantics";
 import {
+  THESIS_FIELD_ROLES,
+  type CampaignThesis,
+  type CampaignThesisCompilation
+} from "@/lib/generation/campaign-thesis";
+import {
   messageStrategyDigestSource,
   messagingCompilerDigestSource,
   type MessagingCompilerArtifact,
   type StrategyEvaluation
 } from "@/lib/generation/messaging-compiler-contracts";
+import type { PageRecipeSelection } from "@/lib/generation/page-recipes";
 import type { ProductionMessageSpine } from "@/lib/generation/production-message-spine";
 import type {
   SectionCopyCandidate,
   SectionWriterSlot
 } from "@/lib/generation/section-copy-types";
-import type { WireframeDecisionV2 } from "@/lib/generation/three-family-contract";
+import type { thesisStrategyReceipt } from "@/lib/generation/thesis-strategy-bridge";
+import {
+  wireframeFamiliesV2,
+  type WireframeDecisionV2
+} from "@/lib/generation/three-family-contract";
+import type { EvidenceGraphTraceReceipt } from "@/lib/research/evidence-graph";
 
 export const PRODUCTION_BUILD_TRACE_TEMPLATE_VERSION = "three-family-v2";
 export const PRODUCTION_BUILD_TRACE_PROMPT_VERSION = "section-writer-v1.0.0";
@@ -47,6 +67,8 @@ export interface ProductionTraceStage {
 export interface ProductionTraceSection {
   sectionId: string;
   role: string;
+  /** The recipe slot's job code. The brief's prose job never enters the trace. */
+  jobCode?: string;
   writerMode: BuildTraceWriterMode;
   model?: string;
   promptVersion?: string;
@@ -54,14 +76,67 @@ export interface ProductionTraceSection {
   evidenceIds: readonly string[];
   inputDigestSource: unknown;
   candidateDigestSources?: readonly unknown[];
+  /** Candidates produced, which may exceed the number that were digested. */
+  candidateCount?: number;
   selectedCandidate?: number;
   selectionReasons?: readonly string[];
+  /** Review rejection codes, from `CandidateRejectionCode`. */
+  rejectionCodes?: readonly string[];
+  repairStatus?: "not-attempted" | "repaired" | "repair-rejected";
   outputDigestSource: unknown;
   quality?: Record<string, number | boolean | string>;
   startedAt: string;
   completedAt: string;
   status: "completed" | "fallback" | "failed" | "stale";
   fallbackCode?: string;
+}
+
+/**
+ * The upstream receipts the diagnostics block is projected from. Each member is
+ * the source-free receipt its own layer already publishes, so this module never
+ * recomputes a digest and never sees the material behind one.
+ */
+export interface ProductionTraceDiagnosticsInput {
+  /** From `evidenceGraphTraceReceipt`. Supplies both graph and research blocks. */
+  evidenceGraph?: EvidenceGraphTraceReceipt;
+  /** The compiled thesis plus its own compilation receipt. */
+  thesis?: {
+    thesis: CampaignThesis;
+    compilation: Pick<
+      CampaignThesisCompilation,
+      "version" | "digest" | "proofMode" | "omittedFields" | "unsupportedFields" | "reasonCodes"
+    >;
+  };
+  /** From `thesisStrategyReceipt`. */
+  strategy?: ReturnType<typeof thesisStrategyReceipt>;
+  /** From `selectPageRecipe`. Only ids, order, codes, and digests are read. */
+  recipe?: PageRecipeSelection;
+  /**
+   * Composition selection. Defaults to a projection of `familyDecision`, which
+   * is the composition authority in the current pipeline.
+   */
+  composition?: {
+    version?: string;
+    selectedCompositionId: string;
+    archetypeId?: string;
+    digest?: string;
+    rejected?: readonly { candidateId: string; reasonCode: string }[];
+    reasonCodes?: readonly string[];
+  };
+  qualityGates?: readonly {
+    gate: string;
+    status: "passed" | "failed" | "warned" | "skipped";
+    sectionId?: string;
+    violations?: readonly string[];
+  }[];
+  lifecycle?: {
+    inputFingerprint?: string;
+    renderMs?: number;
+    persistenceMs?: number;
+    readbackMs?: number;
+    totalMs?: number;
+    fallbackCodes?: readonly string[];
+  };
 }
 
 export interface ProductionBuildTraceInput {
@@ -97,6 +172,8 @@ export interface ProductionBuildTraceInput {
   /** Final copy the visitor receives. Scored for fidelity, never gated on. */
   sectionCopy?: readonly SectionCopyCandidate[];
   fallbackCode?: string;
+  /** Private diagnostics. Omitted entirely when nothing upstream reported. */
+  diagnostics?: ProductionTraceDiagnosticsInput;
 }
 
 /**
@@ -445,6 +522,134 @@ export function sectionSlotDigestSource(
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Diagnostics projections                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Projects the thesis into per-field provenance. Each field contributes its
+ * status, confidence, buyer-facing permission, and opaque evidence refs; the
+ * wording contributes only a hash, so a reader sees that the argument moved
+ * without reading the argument.
+ */
+function thesisDiagnosticsFor(
+  builder: BuildTraceBuilder,
+  input: NonNullable<ProductionTraceDiagnosticsInput["thesis"]>
+) {
+  const { thesis, compilation } = input;
+  return normalizeThesisDiagnostics({
+    schemaVersion: thesis.schemaVersion,
+    version: compilation.version,
+    revision: thesis.revision,
+    digest: compilation.digest,
+    proofMode: compilation.proofMode,
+    fields: THESIS_FIELD_ROLES.map((role) => {
+      const field = thesis[role];
+      if (!field) {
+        return {
+          role,
+          present: false,
+          status: "unknown",
+          confidence: "low",
+          buyerFacing: false,
+          evidenceRefs: []
+        };
+      }
+      const valueDigest = buildTraceValueDigest(field.value);
+      return {
+        role,
+        present: true,
+        status: field.status,
+        confidence: field.confidence,
+        buyerFacing: field.buyerFacing,
+        evidenceRefs: builder.refs(field.evidenceRefs),
+        ...(valueDigest ? { valueDigest } : {})
+      };
+    }),
+    unsupportedFields: compilation.unsupportedFields,
+    omittedFields: compilation.omittedFields,
+    unknownCount: thesis.unknowns.length,
+    reasonCodes: compilation.reasonCodes
+  });
+}
+
+/**
+ * Projects the strategy receipt. Dimension results and hard failures are what
+ * make a rejection reviewable, so they are kept per candidate; the arguments
+ * themselves stay in the private selection the receipt was taken from.
+ */
+function strategyDiagnosticsFor(
+  receipt: NonNullable<ProductionTraceDiagnosticsInput["strategy"]>
+) {
+  return normalizeStrategyDiagnostics({
+    version: receipt.version,
+    thesisDigest: receipt.thesisDigest,
+    strategyDigest: receipt.strategyDigest,
+    ...(receipt.selectedId ? { selectedCandidateId: receipt.selectedId } : {}),
+    candidates: receipt.records.map((record) => ({
+      candidateId: record.candidateId,
+      angle: record.angle,
+      argumentKind: record.argumentKind,
+      frameworkId: record.frameworkId,
+      ...(record.total === undefined ? {} : { total: record.total }),
+      ...(record.dimensions ? { dimensions: record.dimensions } : {}),
+      hardFailures: record.hardFailures,
+      reasonCodes: record.reasonCodes
+    })),
+    rejectedCandidateIds: receipt.rejectedIds,
+    reasonCodes: receipt.reasonCodes
+  });
+}
+
+function recipeDiagnosticsFor(selection: PageRecipeSelection) {
+  return normalizeRecipeDiagnostics({
+    schemaVersion: selection.schemaVersion,
+    recipeId: selection.recipeId,
+    recipeVersion: selection.recipeVersion,
+    digest: selection.digest,
+    thesisDigest: selection.thesisDigest,
+    activated: selection.activated,
+    thesisValid: selection.thesisValidation.valid,
+    sections: selection.sections.map((section) => ({
+      order: section.order,
+      slotId: section.slotId,
+      role: section.role,
+      required: section.required
+    })),
+    rejected: selection.rejected.map((entry) => ({
+      recipeId: entry.recipeId,
+      reasonCode: entry.reasonCode
+    })),
+    reasonCodes: selection.reasonCodes
+  });
+}
+
+/**
+ * The composition selection, defaulted from the family decision. The two
+ * families that were not chosen are recorded as the rejected alternatives,
+ * because "which visual family lost" is otherwise unrecoverable from the trace.
+ */
+function compositionDiagnosticsFor(
+  decision: WireframeDecisionV2 | undefined,
+  override: ProductionTraceDiagnosticsInput["composition"]
+) {
+  if (override) return normalizeCompositionDiagnostics(override);
+  if (!decision) return undefined;
+  return normalizeCompositionDiagnostics({
+    version: "three-family-v2.0.0",
+    selectedCompositionId: decision.family,
+    archetypeId: decision.subtype,
+    rejected: wireframeFamiliesV2
+      .filter((family) => family !== decision.family)
+      .map((family) => ({ candidateId: family, reasonCode: "family_signal_absent" })),
+    reasonCodes: [
+      decision.reasonCode,
+      `confidence_${decision.confidence}`,
+      `sections_${decision.sectionPlan.length}`
+    ]
+  });
+}
+
 /**
  * Assembles one private BuildTrace for a production attempt. Every value is
  * normalized by the trace contract, so no raw copy, URL, or prompt can pass.
@@ -519,6 +724,7 @@ export function compileProductionBuildTrace(
       normalizeSectionBuildTrace({
         sectionId: section.sectionId,
         role: section.role,
+        ...(section.jobCode ? { jobCode: section.jobCode } : {}),
         promptVersion: section.promptVersion ?? PRODUCTION_BUILD_TRACE_PROMPT_VERSION,
         templateVersion:
           section.templateVersion ?? `${PRODUCTION_BUILD_TRACE_TEMPLATE_VERSION}.0`,
@@ -529,8 +735,12 @@ export function compileProductionBuildTrace(
         candidateDigests: (section.candidateDigestSources ?? []).map((candidate) =>
           buildTraceDigest(candidate)
         ),
+        candidateCount:
+          section.candidateCount ?? section.candidateDigestSources?.length ?? 0,
         selectedCandidate: section.selectedCandidate ?? 0,
         selectionReasons: [...(section.selectionReasons ?? [])],
+        ...(section.rejectionCodes ? { rejectionCodes: [...section.rejectionCodes] } : {}),
+        ...(section.repairStatus ? { repairStatus: section.repairStatus } : {}),
         outputDigest: buildTraceDigest(section.outputDigestSource),
         quality: section.quality ?? {},
         startedAt: section.startedAt,
@@ -574,8 +784,114 @@ export function compileProductionBuildTrace(
     });
   }
 
+  recordProductionDiagnostics(builder, input);
+
   return builder.build({
     terminalStatus: input.terminalStatus,
     completedAt: input.completedAt
   });
+}
+
+/**
+ * Records the diagnostics block. Kept separate from assembly so a reader can see
+ * at a glance that diagnostics only ever consume already-published receipts and
+ * that the lifecycle entry is always written when anything else was.
+ */
+function recordProductionDiagnostics(
+  builder: BuildTraceBuilder,
+  input: ProductionBuildTraceInput
+): void {
+  const diagnostics = input.diagnostics;
+  const composition = compositionDiagnosticsFor(
+    input.familyDecision,
+    diagnostics?.composition
+  );
+
+  if (diagnostics?.evidenceGraph) {
+    const receipt = diagnostics.evidenceGraph;
+    builder.recordEvidenceGraphDiagnostics(
+      normalizeEvidenceGraphDiagnostics({
+        schemaVersion: receipt.schemaVersion,
+        revision: receipt.revision,
+        digest: receipt.digest,
+        inputFingerprintDigest: receipt.inputFingerprintDigest,
+        entityCount: receipt.entityCount,
+        claimCount: receipt.claimCount,
+        factCount: receipt.factCount,
+        inferenceCount: receipt.inferenceCount,
+        unknownCount: receipt.unknownCount,
+        buyerFacingClaimCount: receipt.buyerFacingClaimCount,
+        relationshipCount: receipt.relationshipCount,
+        gaps: receipt.gaps
+      })
+    );
+    builder.recordResearchDiagnostics(
+      normalizeResearchDiagnostics({
+        lanes: receipt.lanes.map((lane) => ({
+          laneId: lane.laneId,
+          outcome: lane.outcome,
+          queryCount: lane.queryCount,
+          entityCount: lane.entityCount,
+          claimCount: lane.claimCount,
+          gapCount: lane.gapCount,
+          durationMs: lane.durationMs
+        }))
+      })
+    );
+  }
+  if (diagnostics?.thesis) {
+    builder.recordThesisDiagnostics(thesisDiagnosticsFor(builder, diagnostics.thesis));
+  }
+  if (diagnostics?.strategy) {
+    builder.recordStrategyDiagnostics(strategyDiagnosticsFor(diagnostics.strategy));
+  }
+  if (diagnostics?.recipe) {
+    builder.recordRecipeDiagnostics(recipeDiagnosticsFor(diagnostics.recipe));
+  }
+  if (composition) builder.recordCompositionDiagnostics(composition);
+  for (const gate of diagnostics?.qualityGates ?? []) {
+    builder.recordQualityGate(normalizeQualityGateDiagnostics(gate));
+  }
+
+  const fallbackCodes = [
+    ...(diagnostics?.lifecycle?.fallbackCodes ?? []),
+    ...input.stages
+      .filter(({ status }) => ["fallback", "failed", "stale", "timed_out"].includes(status))
+      .map(({ detailCode }) => detailCode),
+    ...(input.sections ?? [])
+      .map(({ fallbackCode }) => fallbackCode)
+      .filter((code): code is string => Boolean(code)),
+    ...(input.fallbackCode ? [input.fallbackCode] : [])
+  ];
+  const totalMs =
+    diagnostics?.lifecycle?.totalMs
+    ?? Math.max(0, Date.parse(input.completedAt) - Date.parse(input.startedAt));
+
+  builder.recordLifecycleDiagnostics(
+    normalizeLifecycleDiagnostics({
+      revision: input.revision,
+      attemptId: input.identity.attemptId,
+      inputFingerprintDigest:
+        diagnostics?.evidenceGraph?.inputFingerprintDigest
+        ?? (diagnostics?.lifecycle?.inputFingerprint
+          ? undefined
+          : `fingerprint-unreported-${input.revision}`),
+      ...(diagnostics?.lifecycle?.inputFingerprint
+        ? { inputFingerprint: diagnostics.lifecycle.inputFingerprint }
+        : {}),
+      renderMs: diagnostics?.lifecycle?.renderMs ?? stageDurationMs(input, "render"),
+      persistenceMs:
+        diagnostics?.lifecycle?.persistenceMs ?? stageDurationMs(input, "persist"),
+      readbackMs: diagnostics?.lifecycle?.readbackMs ?? stageDurationMs(input, "readback"),
+      totalMs,
+      fallbackCodes
+    })
+  );
+}
+
+/** Duration of the first stage whose name contains the given fragment. */
+function stageDurationMs(input: ProductionBuildTraceInput, fragment: string): number {
+  const stage = input.stages.find(({ stage: name }) => name.includes(fragment));
+  if (!stage) return 0;
+  return Math.max(0, Date.parse(stage.completedAt) - Date.parse(stage.startedAt));
 }

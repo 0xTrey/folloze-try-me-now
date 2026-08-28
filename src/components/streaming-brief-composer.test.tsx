@@ -5,7 +5,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { StreamingBriefComposer, StreamingBuildStage } from "./streaming-brief-composer";
+import { StreamingBriefComposer } from "./streaming-brief-composer";
 
 afterEach(() => {
   cleanup();
@@ -113,38 +113,4 @@ describe("StreamingBriefComposer", () => {
     expect(onSummaryEdit).toHaveBeenCalledWith("offer");
   });
 
-  it("replaces the intake with an audience-specific, full-page build stage", () => {
-    render(
-      <StreamingBuildStage
-        audience="Clinical laboratory directors"
-        brandName="Thermo Fisher Scientific"
-        brandLogoUrl="/brand/folloze-logo.svg"
-        brandColors={["#ed1c24", "#005daa"]}
-        receipts={[{ id: "brand", label: "Brand", detail: "Reading the public site", state: "working" }]}
-      />
-    );
-
-    expect(screen.getByRole("heading", { name: "Building a buyer experience for Clinical laboratory directors." })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Thermo Fisher Scientific's brand, offer, audience, and objective");
-    expect(document.querySelector('[data-build-stage="active"]')).toHaveAttribute("aria-busy", "true");
-    expect(document.querySelector('[data-motion="orbit"]')).toBeInTheDocument();
-    expect(screen.queryByText(/%|seconds remaining/i)).not.toBeInTheDocument();
-  });
-
-  it("keeps real receipt language visible without inventing completion", () => {
-    render(
-      <StreamingBuildStage
-        audience="Security operations leaders"
-        brandName="Cisco"
-        receipts={[
-          { id: "brand", label: "Brand verified", detail: "Official public identity captured", state: "complete" },
-          { id: "composition", label: "Composing page structure", detail: "Messaging and imagery are being assembled", state: "working" }
-        ]}
-      />
-    );
-
-    expect(screen.getByText("Brand verified")).toBeInTheDocument();
-    expect(screen.getByText("Composing page structure")).toBeInTheDocument();
-    expect(screen.queryByText(/ready to explore/i)).not.toBeInTheDocument();
-  });
 });

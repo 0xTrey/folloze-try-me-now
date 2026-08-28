@@ -10,6 +10,7 @@ import {
   type ProductionTraceSection,
   type ProductionTraceStage
 } from "@/lib/generation/production-build-trace";
+import type { ProductionTraceDiagnosticsInput } from "@/lib/generation/production-build-trace";
 import {
   editCopyForFactuality,
   type ClaimEvidenceMapping,
@@ -18,7 +19,6 @@ import {
 } from "@/lib/generation/copy-factuality-editor";
 import { writeExplorationSections } from "@/lib/generation/exploration-section-writer";
 import {
-  sectionStrategyBinding,
   validateMessagingCompilerArtifact,
   type MessagingCompilerReceipt
 } from "@/lib/generation/messaging-compiler-contracts";
@@ -49,8 +49,11 @@ import {
 import {
   buildSectionWritingContracts,
   sectionContractDigestSource,
-  type SectionWritingContract
+  type SectionWritingContract,
+  type SectionJobSource,
+  type SectionStrategyBinding
 } from "@/lib/generation/section-writing-contract";
+import type { PageRecipeSelection } from "@/lib/generation/page-recipes";
 import { writeTeamCtaSections } from "@/lib/generation/team-cta-section-writer";
 import type { WireframeSelectionV1 } from "@/lib/generation/wireframe-library";
 import type {
@@ -86,6 +89,40 @@ const USABLE_STATUSES = new Set<ProductionArtifact<unknown>["status"]>([
   "fallback",
   "timed_out"
 ]);
+
+/**
+ * A brand source can be incomplete for non-essential observations such as a
+ * portable font or measured radius, while still providing the three visual
+ * facts that make a customer-facing final page recognizably theirs.  Treat
+ * that state as a partial render, not a reason to throw away a verified logo
+ * and explicit palette.  Missing identity or palette evidence still stops the
+ * reveal and asks for a clearer source.
+ */
+function hasRenderableBrandCore(artifact: ProductionArtifact<BrandSystemV2>): boolean {
+  const brand = artifact.value;
+  return Boolean(
+    brand &&
+      brand.logo.status === "verified" &&
+      brand.logo.ref &&
+      brand.colorRoles.ink.value &&
+      brand.colorRoles.surface.value &&
+      brand.colorRoles.accent.value &&
+      brand.colorRoles.action.value &&
+      brand.colorRoles.ink.confidence > 0 &&
+      brand.colorRoles.surface.confidence > 0 &&
+      brand.colorRoles.accent.confidence > 0
+  );
+}
+
+function usableDependencyArtifact(
+  artifact: ProductionArtifact<unknown>,
+  brandArtifact: ProductionArtifact<BrandSystemV2>
+): boolean {
+  return (
+    USABLE_STATUSES.has(artifact.status) ||
+    (artifact === brandArtifact && hasRenderableBrandCore(brandArtifact))
+  ) && artifact.value !== undefined;
+}
 
 export type GenericProductionMediaIntent =
   | "image-led"
@@ -180,11 +217,20 @@ export interface GenericProductionEngineInput {
   familyMessageSpineArtifact?: ProductionArtifact<FamilyProductionMessageSpine>;
   /** Private strategy decision. Absent when no candidate cleared its gates. */
   messagingCompilerArtifact?: ProductionArtifact<MessagingCompilerReceipt>;
+  /**
+   * The private strategy selected from the Campaign Thesis. It takes
+   * precedence over the legacy compiler receipt, which remains trace-only for
+   * compatibility while the recipe migration is in progress.
+   */
+  sectionStrategy?: SectionStrategyBinding;
+  /** The activated semantic progression that supplied the locked slots. */
+  recipeSelection?: PageRecipeSelection;
   compositionArtifact: ProductionArtifact<WireframeSelectionV1>;
   messageSpineArtifact: ProductionArtifact<ProductionMessageSpine>;
   allowVisualRepair?: boolean;
   /** Optional session trace identity. Derived deterministically when absent. */
   trace?: { traceId?: string; attemptId?: string; supportRef?: string };
+  diagnostics?: ProductionTraceDiagnosticsInput;
 }
 
 type Writer = (
@@ -372,7 +418,7 @@ function buildTraceFor(
     sessionId: input.sessionId,
     revision: input.revision,
     startedAt: input.startedAt,
-    completedAt: input.completedAt,
+    completedAt: compileReceipts.at(-1)?.completedAt ?? input.completedAt,
     terminalStatus,
     stages: traceStages(compileReceipts),
     evidenceIds: context.evidenceIds,
@@ -396,6 +442,7 @@ function buildTraceFor(
       : {}),
     sections: context.sections,
     sectionCopy: context.sectionCopy,
+    ...(input.diagnostics ? { diagnostics: input.diagnostics } : {}),
     ...(fallbackCode ? { fallbackCode } : {})
   });
 }
@@ -437,15 +484,28 @@ function sectionWritingContracts(
 ): Map<string, SectionWritingContract> {
   const decision = input.familyDecisionArtifact?.value;
   if (!decision) return new Map();
-  const receipt = input.messagingCompilerArtifact?.value;
-  const strategy = receipt ? sectionStrategyBinding(receipt) : undefined;
+  // The thesis bridge is the live authority. The legacy compiler receipt is
+  // deliberately not used as a second strategy source: falling back from a
+  // rejected thesis strategy to a different selected argument would make the
+  // trace and rendered copy disagree about what won.
+  const strategy = input.sectionStrategy;
+  const sectionJobs: SectionJobSource[] | undefined = input.recipeSelection?.activated
+    ? input.recipeSelection.sections.map((section) => ({
+        slotId: section.slotId,
+        semanticJob: section.semanticJob,
+        buyerMovement: section.buyerMovement,
+        thesisFields: [...section.thesisFields],
+        visualRole: section.visualRole
+      }))
+    : undefined;
   const contracts = buildSectionWritingContracts({
     sessionId: input.sessionId,
     revision: input.revision,
     decision,
     brief,
     evidence,
-    ...(strategy ? { strategy } : {})
+    ...(strategy ? { strategy } : {}),
+    ...(sectionJobs ? { sectionJobs } : {})
   });
   return new Map(contracts.map((contract) => [contract.sectionId, contract]));
 }
@@ -669,6 +729,8 @@ function sectionTraces(input: {
   });
 }
 
+const compileReceiptClock = new WeakMap<GenericProductionEngineInput, number>();
+
 function compileReceipt(
   input: GenericProductionEngineInput,
   stage: GenericProductionCompileStage,
@@ -677,13 +739,16 @@ function compileReceipt(
   artifactCount: number,
   evidenceCount: number
 ): GenericProductionCompileReceipt {
+  const startedAtMs = compileReceiptClock.get(input) ?? Date.now();
+  const completedAtMs = Math.max(startedAtMs, Date.now());
+  compileReceiptClock.set(input, completedAtMs);
   return {
     stage,
     status,
     sessionId: input.sessionId,
     revision: input.revision,
-    startedAt: input.startedAt,
-    completedAt: input.completedAt,
+    startedAt: new Date(startedAtMs).toISOString(),
+    completedAt: new Date(completedAtMs).toISOString(),
     detailCode,
     artifactCount,
     evidenceCount
@@ -831,7 +896,10 @@ function artifactFailure(
       status: "failed"
     };
   }
-  if (input.brandArtifact.status === "needs_input") {
+  if (
+    input.brandArtifact.status === "needs_input" &&
+    !hasRenderableBrandCore(input.brandArtifact)
+  ) {
     return {
       code: "GPE_BRAND_HELP_REQUIRED",
       reason:
@@ -849,6 +917,24 @@ function artifactFailure(
     return {
       code: "GPE_CONTRACT_MISMATCH",
       reason: "The V2 family decision is not a locked wireframe-ranker artifact.",
+      status: "failed"
+    };
+  }
+  if (
+    input.recipeSelection &&
+    (!input.recipeSelection.activated ||
+      input.recipeSelection.sections.length < GENERIC_PRODUCTION_MIN_SECTIONS ||
+      input.recipeSelection.sections.length > GENERIC_PRODUCTION_MAX_SECTIONS ||
+      !input.familyDecisionArtifact ||
+      input.recipeSelection.sections.some(
+        (section, index) =>
+          section.slotId !== input.familyDecisionArtifact?.value?.sectionPlan[index]?.id ||
+          section.role !== input.familyDecisionArtifact?.value?.sectionPlan[index]?.role
+      ))
+  ) {
+    return {
+      code: "GPE_CONTRACT_MISMATCH",
+      reason: "The activated recipe and locked section plan do not describe the same page.",
       status: "failed"
     };
   }
@@ -884,9 +970,7 @@ function artifactFailure(
     };
   }
   if (
-    artifacts.some(
-      (artifact) => !USABLE_STATUSES.has(artifact.status) || artifact.value === undefined
-    )
+    artifacts.some((artifact) => !usableDependencyArtifact(artifact, input.brandArtifact))
   ) {
     return {
       code: "GPE_DEPENDENCY_UNAVAILABLE",
@@ -1070,6 +1154,7 @@ export async function compileGenericProductionPage(
   input: GenericProductionEngineInput,
   dependencies: GenericProductionEngineDependencies = {}
 ): Promise<GenericProductionEngineResult> {
+  compileReceiptClock.set(input, Date.now());
   const dependencyArtifacts = [
     input.evidenceArtifact,
     input.brandArtifact,

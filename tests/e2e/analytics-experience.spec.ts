@@ -113,6 +113,16 @@ function readySession(): PublicTryMeSession {
       readiness: "final",
       generationSource: "deterministic-fallback",
       artifactRevision: 2
+    },
+    // Reveal now requires the persisted, read-back final receipt, not just
+    // a final-looking experience object.
+    finalArtifact: {
+      readiness: "final",
+      artifactRevision: 2,
+      structuralGate: "passed",
+      truthGate: "passed",
+      persistedAt: "2099-08-23T12:00:52.000Z",
+      readBackAt: "2099-08-23T12:00:53.000Z"
     }
   };
 }

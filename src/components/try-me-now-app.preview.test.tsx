@@ -7,6 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicTryMeSession } from "@/lib/types";
 
+import { canRevealFinalExperience } from "@/lib/preview-lifecycle";
+
+import { FinalBuildShell } from "./final-build-shell";
 import {
   AssemblyPreview,
   buildMoments,
@@ -18,6 +21,7 @@ import {
   PreviewUpdateNotice,
   ProgressiveQuestions,
   SaveExperienceDialog,
+  shouldShowBuildShell,
   SourceUnderstandingSummary,
   UseCasePortals
 } from "./try-me-now-app";
@@ -42,7 +46,12 @@ const readySession: PublicTryMeSession = {
     audience: { status: "complete" },
     story: { status: "complete" }
   },
-  answers: { audience: "Enterprise architects", objective: "Generate demand" },
+  answers: {
+    campaignType: "product",
+    promotedOffer: "Jitterbit Harmony",
+    audience: "Enterprise architects",
+    objective: "Generate demand"
+  },
   brand: {
     domain: "jitterbit.com",
     companyName: "Jitterbit",
@@ -69,6 +78,14 @@ const readySession: PublicTryMeSession = {
     readiness: "final",
     generationSource: "openai",
     artifactRevision: 1
+  },
+  finalArtifact: {
+    readiness: "final",
+    artifactRevision: 1,
+    structuralGate: "passed",
+    truthGate: "passed",
+    persistedAt: "2026-07-31T10:00:09.000Z",
+    readBackAt: "2026-07-31T10:00:10.000Z"
   }
 };
 
@@ -102,50 +119,90 @@ describe("AssemblyPreview", () => {
     expect(frame).toHaveAttribute("data-preview-scroll", "contained");
   });
 
-  it("uses the first-party image route for the in-progress brand logo", () => {
-    render(
+  it("renders nothing at all while the build is still running", () => {
+    const { container } = render(
       <AssemblyPreview
         session={{
           ...readySession,
-          status: "collecting",
-          brand: {
-            ...readySession.brand!,
-            logoUrl: "https://cdn.example.test/jitterbit-logo.svg"
-          },
+          status: "generating",
           stages: {
             ...readySession.stages,
             story: { status: "running" }
           },
-          experience: undefined
+          experience: undefined,
+          finalArtifact: undefined
         }}
       />
     );
 
-    expect(screen.getByRole("img", { name: "Jitterbit logo" })).toHaveAttribute(
-      "src",
-      "/api/sessions/desktop-preview-session/image/seller-logo"
-    );
+    expect(container).toBeEmptyDOMElement();
+    expect(container.querySelector("iframe")).toBeNull();
   });
 
-  it("does not present neutral assembly colors as detected brand evidence", () => {
-    render(
+  it("withholds the frame when a final artifact has no matching persisted receipt", () => {
+    const { container } = render(
+      <AssemblyPreview session={{ ...readySession, finalArtifact: undefined }} />
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("withholds the frame when the receipt belongs to an earlier revision", () => {
+    const { container } = render(
       <AssemblyPreview
         session={{
           ...readySession,
-          status: "collecting",
-          brand: undefined,
-          stages: {
-            brand: { status: "running" },
-            audience: { status: "pending" },
-            story: { status: "pending" }
-          },
-          experience: undefined
+          finalArtifact: { ...readySession.finalArtifact!, artifactRevision: 0 }
         }}
       />
     );
 
-    expect(screen.getByText("Researching Jitterbit's visual identity")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Detected brand palette")).not.toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("final-only shell", () => {
+  const building: PublicTryMeSession = {
+    ...readySession,
+    status: "generating",
+    stages: { ...readySession.stages, story: { status: "running" } },
+    experience: undefined,
+    finalArtifact: undefined,
+    buildProgress: {
+      phase: "writing",
+      startedAt: "2026-07-31T10:00:00.000Z",
+      updatedAt: "2026-07-31T10:00:22.000Z",
+      slow: false,
+      receipts: [
+        { phase: "researching", status: "complete", detail: "Read the public brand, offer, and buyer context" },
+        { phase: "writing", status: "active", detail: "Writing each step of the buyer journey" }
+      ]
+    }
+  };
+
+  it("shows the build shell and no generated markup while the worker is running", () => {
+    expect(canRevealFinalExperience(building)).toBe(false);
+    expect(shouldShowBuildShell(building)).toBe(true);
+
+    const { container } = render(
+      <>
+        <FinalBuildShell session={building} brandName="Jitterbit" audience="Enterprise architects" />
+        <AssemblyPreview session={building} />
+      </>
+    );
+
+    expect(container.querySelector("[data-build-shell]")).toBeInTheDocument();
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector(".assembly")).toBeNull();
+    expect(container.textContent).not.toMatch(/%/);
+  });
+
+  it("hands the frame over only once the persisted final receipt lands", () => {
+    expect(canRevealFinalExperience(readySession)).toBe(true);
+    expect(shouldShowBuildShell(readySession)).toBe(false);
+
+    render(<AssemblyPreview session={readySession} />);
+    expect(screen.getByTitle("Generated buyer experience preview")).toBeInTheDocument();
   });
 });
 
@@ -253,33 +310,30 @@ describe("guided build state", () => {
 });
 
 describe("PreviewUpdateNotice", () => {
-  it("shows the interactive first preview while keeping claim gated", () => {
-    const provisional = {
+  it("stays silent about a draft revision the visitor was never shown", () => {
+    const draft = {
       ...readySession,
-      status: "preview_provisional" as const,
+      status: "generating" as const,
       experience: {
         ...readySession.experience!,
         readiness: "provisional" as const
       },
+      finalArtifact: undefined,
       stages: {
         ...readySession.stages,
         story: { status: "running" as const }
       }
     };
 
-    render(
+    const { container } = render(
       <>
-        <PreviewUpdateNotice session={provisional} onRetry={vi.fn()} />
-        <AssemblyPreview session={provisional} />
+        <PreviewUpdateNotice session={draft} onRetry={vi.fn()} />
+        <AssemblyPreview session={draft} />
       </>
     );
 
-    const notice = screen.getByRole("status");
-    expect(notice).toHaveAttribute("data-preview-update-state", "provisional");
-    expect(notice).toHaveTextContent("Your first preview is ready.");
-    expect(notice).toHaveTextContent("Story enrichment receipt · running");
-    expect(screen.getByTitle("Generated buyer experience preview")).toBeInTheDocument();
-    expect(canClaimPreview(provisional)).toBe(false);
+    expect(container).toBeEmptyDOMElement();
+    expect(canClaimPreview(draft)).toBe(false);
     expect(canClaimPreview(readySession)).toBe(true);
   });
 

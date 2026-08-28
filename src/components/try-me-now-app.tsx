@@ -32,7 +32,6 @@ import {
   X
 } from "lucide-react";
 import {
-  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type RefObject,
@@ -53,13 +52,12 @@ import {
 } from "@/components/try-me-now-enhancements";
 import { BrandHelpRecovery } from "@/components/brand-help-recovery";
 import { usePreviewForegroundSeconds } from "@/components/use-preview-foreground-seconds";
+import { FinalBuildShell } from "@/components/final-build-shell";
 import {
-  StreamingBuildStage,
   StreamingBriefComposer,
   type StreamingAudienceFinding,
   type StreamingBriefAnswer,
   type StreamingBriefQuestion,
-  type StreamingBriefReceipt,
   type StreamingBriefSummaryField
 } from "@/components/streaming-brief-composer";
 
@@ -103,8 +101,8 @@ import {
   analyticsQualityGate,
   answersPatchForStageRetry,
   canOfferClaimModal,
-  canRevealPreview,
-  isProvisionalExperience,
+  canRevealFinalExperience,
+  isBuildInProgress,
   isSessionGenerationEligible,
   previewLifecycleCopy,
   previewLifecyclePhase,
@@ -312,7 +310,7 @@ export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCa
 const NORTHPEAK_ACCOUNT_EXAMPLE_URL = "https://experience.folloze.com/northpeak--folloze";
 const NORTHPEAK_CAMPAIGN_EXAMPLE_URL = "https://engage.folloze.com/120367";
 
-/** Optional Northpeak worked states for the unified entry — never primary CTAs. */
+/** Optional Northpeak worked states for the unified entry, never primary CTAs. */
 export const northpeakWorkedStates = [
   {
     id: "account",
@@ -565,8 +563,6 @@ function conciseIntentLabel(value: string, fallback: string): string {
   const firstThought = normalized.split(/(?:[.!?]\s|\n)/, 1)[0]?.trim() || fallback;
   return firstThought.slice(0, 160);
 }
-
-export const STREAMING_BUILD_MINIMUM_DWELL_MS = 6_000;
 
 export function streamingCampaignQuestions(
   mode: CampaignEntryMode,
@@ -1227,14 +1223,14 @@ export function canClaimPreview(
   return ["preview_ready_unclaimed", "claim_failed"].includes(session.status);
 }
 
+/**
+ * Only a revealed final artifact can be "updating". A draft revision is never
+ * customer-visible, so it never earns a notice.
+ */
 export function previewUpdateState(
   session: Pick<PublicTryMeSession, "experience" | "stages">
-): "provisional" | "running" | "failed" | undefined {
-  if (!session.experience) return undefined;
-  if (
-    session.experience.readiness === "provisional" &&
-    session.stages.story.status === "running"
-  ) return "provisional";
+): "running" | "failed" | undefined {
+  if (!session.experience || session.experience.readiness !== "final") return undefined;
   if (session.stages.story.status === "running") return "running";
   if (session.stages.story.status === "failed") return "failed";
   return undefined;
@@ -1255,16 +1251,6 @@ export function PreviewUpdateNotice({
     || (session.stages.story.errorCode
       ? `Story worker receipt: ${session.stages.story.errorCode}`
       : undefined);
-
-  if (state === "provisional") {
-    return (
-      <section className="previewUpdateNotice isRunning" role="status" aria-live="polite" data-preview-update-state="provisional">
-        <span className="previewUpdateIcon" aria-hidden="true"><LoaderCircle className="spin" size={18} /></span>
-        <span><strong>Your first preview is ready.</strong>Explore now while enrichment continues from worker receipts.</span>
-        <small><i className="liveDot" />{storyDetail || "Story enrichment receipt · running"}</small>
-      </section>
-    );
-  }
 
   if (state === "running") {
     return (
@@ -1553,14 +1539,24 @@ export function liveBriefFilledCount(session: PublicTryMeSession): number {
     .filter((row) => Boolean(row.value)).length;
 }
 
-export function shouldShowStreamingBuildStage(
-  session: Pick<PublicTryMeSession, "useCase" | "status" | "experience"> | undefined,
-  briefComplete: boolean,
-  minimumDwellComplete = false
+/**
+ * The build shell replaces intake once the worker is running, and stays up
+ * for a recoverable failure so the visitor keeps a next action. It is never
+ * shown once the final artifact can be revealed.
+ */
+export function shouldShowBuildShell(
+  session:
+    | Pick<
+        PublicTryMeSession,
+        "useCase" | "answers" | "experience" | "status" | "stages" | "finalArtifact" | "buildProgress"
+      >
+    | undefined
 ): boolean {
-  if (!session || session.useCase !== "campaign" || !briefComplete) return false;
-  if (["brand_help_required", "generation_failed", "expired"].includes(session.status)) return false;
-  return !session.experience || !minimumDwellComplete;
+  if (!session) return false;
+  if (canRevealFinalExperience(session)) return false;
+  if (session.status === "brand_help_required") return false;
+  if (session.buildProgress?.failure) return true;
+  return isBuildInProgress(session);
 }
 
 export function audienceHubFindingsFor(session: PublicTryMeSession): StreamingAudienceFinding[] {
@@ -1674,7 +1670,7 @@ export function CampaignOverviewRail({
       {activeMoment && (
         <div className={`overviewNow is-${activeMoment.status} ${waitingForInput ? "is-waiting" : ""}`} role="status" aria-live="polite">
           <span>{!waitingForInput && <span className="liveDot" />}{waitingForInput ? "Ready for your next choice" : "Folloze is working"}</span>
-          <strong>{session.status === "generation_failed" ? "Build paused — your brief is safe" : activeMoment.title}</strong>
+          <strong>{session.status === "generation_failed" ? "Build paused. Your brief is safe" : activeMoment.title}</strong>
           <p>{session.status === "generation_failed" ? `Retry with support reference ${session.supportRef}.` : activeMoment.detail}</p>
         </div>
       )}
@@ -1703,7 +1699,6 @@ export function UseCasePortals({
           onSelect("campaign", "campaign");
         }}
       >
-        <span>Primary path</span>
         <strong>Build a buyer experience</strong>
         <small>Add your company and a few signals. Folloze infers the experience type and assembles the page.</small>
         <ArrowRight size={18} aria-hidden="true" />
@@ -2783,7 +2778,7 @@ export function ProgressiveQuestions({
             {productMode === "url" && (
               <div className="contextPanel" role="tabpanel">
                 <label htmlFor="abm-product-source">Existing product page</label>
-                <div className="contextUrlInput"><ExternalLink size={17} /><input id="abm-product-source" value={productSourceUrlValue} onChange={(event) => { setFieldValues((current) => ({ ...current, "abm-product-source": event.target.value })); setProductResearchStartRevision(session.revision); lastProductResearchRef.current = undefined; }} placeholder={productSourceReady ? "A product page is attached — paste another URL to replace it" : "https://yourcompany.com/product"} inputMode="url" /></div>
+                <div className="contextUrlInput"><ExternalLink size={17} /><input id="abm-product-source" value={productSourceUrlValue} onChange={(event) => { setFieldValues((current) => ({ ...current, "abm-product-source": event.target.value })); setProductResearchStartRevision(session.revision); lastProductResearchRef.current = undefined; }} placeholder={productSourceReady ? "A product page is attached. Paste another URL to replace it" : "https://yourcompany.com/product"} inputMode="url" /></div>
                 <div className="contextPanelFooter">
                   <small role={productSourceFailed ? "alert" : "status"} aria-live="polite">{productSourceReady ? `Product page understood${session.sourceInsight?.title ? `: ${session.sourceInsight.title}` : "."} Its offer and proof are ready for the experience.` : productSourceFailed ? "We could not read that page. Paste another URL or choose a PDF or description." : validProductUrl ? "Reading this product page now. We’re identifying the offer, proof, and useful buyer message." : "Paste a public HTTPS product page. Research starts after you pause typing."}</small>
                 </div>
@@ -3025,130 +3020,65 @@ export function previewBoundaryScrollDelta(message: unknown): number | undefined
   return Math.max(-1_600, Math.min(1_600, candidate.deltaY));
 }
 
+/**
+ * The full-frame reveal of the finished experience.
+ *
+ * There is deliberately no non-final branch: the component renders nothing
+ * until `canRevealFinalExperience` proves a persisted, read-back final
+ * artifact, so no skeleton or partial page can ever stand in for the real one.
+ */
 export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSession; iframeRef?: RefObject<HTMLIFrameElement | null> }) {
-  const brandName = session.brand?.companyName || displayNameFromDomain(session.companyDomain);
-  const brandPresentation = prospectBrandPresentation(
-    session.brand,
-    brandName,
-    session.stages.brand.status
-  );
-  const brandReady = brandPresentation.state === "verified";
-  const showBrandProviderDiagnostic =
-    process.env.NODE_ENV !== "production" &&
-    session.brand?.providerAvailability?.remoteHarvester === "not_configured" &&
-    session.brand.providerAvailability.brandfetch === "not_configured";
-  const audienceReady = session.stages.audience.status === "complete" || Boolean(session.answers.audience);
-  const storyReady = Boolean(session.experience);
-  const moments = buildMoments(session);
-  const lockedCount = moments.filter((moment) => ["complete", "fallback"].includes(moment.status)).length;
-  const currentMoment = moments.find((moment) => moment.status === "running")
-    ?? moments.find((moment) => moment.status === "pending")
-    ?? moments[moments.length - 1];
-  const targetName = session.useCase === "abm"
-    ? session.targetBrand?.companyName || displayNameFromDomain(session.answers.targetDomain)
-    : undefined;
-  const audience = session.answers.customAudience || session.answers.audience;
-  const objective = session.answers.objective;
+  const revealable = canRevealFinalExperience(session);
   const previewRevision = session.experience?.artifactRevision ?? 0;
   const previewLoadStarted = useRef<number | undefined>(undefined);
   useEffect(() => {
     previewLoadStarted.current = performance.now();
   }, [previewRevision]);
-  const verifiedPalette = brandReady && session.brand?.colors.length ? session.brand.colors : undefined;
-  const palette = verifiedPalette ?? ["#eef0f4", "#64748b", "#ffffff"];
-  const canvasStyle = {
-    "--build-primary": verifiedPalette ? session.brand?.primaryColor || palette[0] : "#64748b",
-    "--build-accent": verifiedPalette ? session.brand?.accentColor || palette[1] || palette[0] : "#0077ff",
-    "--build-surface": verifiedPalette ? session.brand?.surfaceColor || "#ffffff" : "#ffffff"
-  } as CSSProperties;
+  if (!revealable) return null;
   return (
-    <div className={`assembly ${storyReady ? "isReady" : ""}`}>
+    <div className="assembly isReady">
       <div className="browserBar"><i /><i /><i /><span>{(session.liveUrl || session.temporaryUrl).replace(/^https?:\/\//, "")}</span></div>
-      {storyReady ? (
-        <iframe
-          ref={iframeRef}
-          key={getAssemblyPreviewKey(session)}
-          src={`/e/${session.id}?embed=1`}
-          title="Generated buyer experience preview"
-          // The generated route nonces the one trusted runtime and blocks every
-          // other script through CSP. The iframe retains same-origin access only
-          // for protected preview fonts and allowlisted engagement delivery.
-          allow="fullscreen"
-          scrolling="yes"
-          tabIndex={0}
-          data-preview-scroll="contained"
-          onLoad={() => {
-            const startedAt = previewLoadStarted.current;
-            captureProductEvent("preview_rendered", {
-              category: "performance",
-              outcome: "success",
-              sessionId: session.id,
-              ...(startedAt === undefined
-                ? {}
-                : { durationMs: Math.max(0, Math.round(performance.now() - startedAt)) }),
-              properties: {
-                use_case: session.useCase,
-                artifact_revision: previewRevision,
-                readiness: session.experience?.readiness ?? "final",
-                generation_source: session.experience?.generationSource ?? "unknown"
-              }
-            });
-          }}
-        />
-      ) : (
-        <div className="assemblyCanvas" style={canvasStyle}>
-          <div className="assemblyGrid" aria-hidden="true" />
-          <div className="assemblyStatus" role="status" aria-live="polite">
-            <span><i className="liveDot" />{currentMoment.title}</span>
-            <small>{lockedCount} / {moments.length} intelligence layers ready</small>
-          </div>
-          <div className={`artifact brandArtifact ${brandReady ? "isPlaced" : ""}`}>
-            <div className="assemblyIdentity">
-              {previewLogoUrl(session) ? (
-                <Image
-                  src={previewLogoUrl(session) ?? ""}
-                  alt={`${brandName} logo`}
-                  width={140}
-                  height={40}
-                  style={{ width: "auto", height: "auto" }}
-                  unoptimized
-                />
-              ) : <span>{brandName.slice(0, 1)}</span>}
-              <div><small>Brand system</small><strong>{brandName}</strong></div>
-            </div>
-            {targetName && <div className="accountBridge"><small>Building for</small><strong>{targetName}</strong></div>}
-            {verifiedPalette ? (
-              <div className="swatches" aria-label="Detected brand palette">{palette.slice(0, 4).map((color) => <i style={{ background: color }} key={color} />)}</div>
-            ) : (
-              <span className="brandEvidencePending">{brandPresentation.label}</span>
-            )}
-            {showBrandProviderDiagnostic && (
-              <small className="brandProviderDiagnostic">
-                QA diagnostic: Brandfetch and remote brand harvesting are not configured.
-              </small>
-            )}
-          </div>
-          <div className="assemblyInputs">
-            <div className={`artifact audienceArtifact ${audienceReady ? "isPlaced" : ""}`}>
-              <small>Buyer</small><strong>{audience || "Mapping company-fit roles"}</strong>
-            </div>
-            <div className={`artifact objectiveArtifact ${objective ? "isPlaced" : ""}`}>
-              <small>Objective</small><strong>{objective || "Waiting for one outcome"}</strong>
-            </div>
-          </div>
-          <div className={`storySkeleton ${session.stages.story.status === "running" ? "isWriting" : ""}`}>
-            <div className="compositionLabel"><small>Message architecture</small><strong>{session.stages.story.status === "running" ? `Composing for ${audience || "the buyer"}` : objective ? `Ready to build around ${objective.toLowerCase()}` : "Waiting for the final signal"}</strong></div>
-            <span className="skeletonKicker" /><span className="skeletonHeadline" /><span className="skeletonHeadline short" /><span className="skeletonBody" /><span className="skeletonButton" />
-          </div>
-          <div className="moduleSkeleton" aria-hidden="true">
-            {[["01", "Tension"], ["02", "Proof"], ["03", "Next move"]].map(([number, label]) => (
-              <div key={number}><span>{number}</span><strong>{label}</strong><i /><i /></div>
-            ))}
-          </div>
-        </div>
-      )}
+      <iframe
+        ref={iframeRef}
+        key={getAssemblyPreviewKey(session)}
+        src={`/e/${session.id}?embed=1`}
+        title="Generated buyer experience preview"
+        // The generated route nonces the one trusted runtime and blocks every
+        // other script through CSP. The iframe retains same-origin access only
+        // for protected preview fonts and allowlisted engagement delivery.
+        allow="fullscreen"
+        scrolling="yes"
+        tabIndex={0}
+        data-preview-scroll="contained"
+        onLoad={() => {
+          const startedAt = previewLoadStarted.current;
+          captureProductEvent("preview_rendered", {
+            category: "performance",
+            outcome: "success",
+            sessionId: session.id,
+            ...(startedAt === undefined
+              ? {}
+              : { durationMs: Math.max(0, Math.round(performance.now() - startedAt)) }),
+            properties: {
+              use_case: session.useCase,
+              artifact_revision: previewRevision,
+              readiness: session.experience?.readiness ?? "final",
+              generation_source: session.experience?.generationSource ?? "unknown"
+            }
+          });
+        }}
+      />
     </div>
   );
+}
+
+/**
+ * V2 is a final-only, app-hosted reveal. Keep the older claim, analytics, and
+ * variant controls available for the legacy renderer, but never put them in
+ * front of the finished V2 experience.
+ */
+export function isUnifiedFinalOnlyV2(session: Pick<PublicTryMeSession, "experienceSpec"> | undefined): boolean {
+  return session?.experienceSpec?.schemaVersion === "2.0";
 }
 
 function useDialogBehavior(onClose: () => void) {
@@ -3301,7 +3231,6 @@ export function TryMeNowApp() {
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([]);
   const [revealedAt, setRevealedAt] = useState<number>();
   const [previewClockNow, setPreviewClockNow] = useState(() => Date.now());
-  const [streamingBuildDwellCompleteFor, setStreamingBuildDwellCompleteFor] = useState<string>();
   const [personalizationSelection, setPersonalizationSelection] = useState<{
     key: string;
     variantId: PersonalizationVariantId;
@@ -3310,6 +3239,7 @@ export function TryMeNowApp() {
   const stabilizedSellerDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
   const initialPreviewScrolled = useRef(false);
+  const buildShellScrolled = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const patchRequestRef = useRef(0);
   const persistedSectionSignals = useRef(new Set<string>());
@@ -3318,7 +3248,6 @@ export function TryMeNowApp() {
   const buildTrackedSession = useRef<string | undefined>(undefined);
   const previewScrolledSession = useRef<string | undefined>(undefined);
   const activePreflightKey = useRef<string | undefined>(undefined);
-  const provisionalRenderTracked = useRef<string | undefined>(undefined);
   const finalRenderTracked = useRef<string | undefined>(undefined);
   const supportRefTracked = useRef<string | undefined>(undefined);
   const [preflightCoordinator] = useState(() => (
@@ -3336,16 +3265,9 @@ export function TryMeNowApp() {
       }
     )
   ));
-  const streamingMaterialBriefComplete = Boolean(
-    session?.useCase === "campaign"
-    && answers.promotedOffer?.trim()
-    && (answers.customAudience?.trim() || answers.audience?.trim())
-    && answers.objective?.trim()
-  );
-  const streamingBuildSessionId = session?.useCase === "campaign" ? session.id : undefined;
-  const streamingBuildDwellComplete = Boolean(
-    session?.id && streamingBuildDwellCompleteFor === session.id
-  );
+  const isReveal = Boolean(session && canRevealFinalExperience(session));
+  const showBuildShell = shouldShowBuildShell(session);
+  const buildShellSessionId = showBuildShell ? session?.id : undefined;
 
   useEffect(() => {
     initializeProductAnalytics();
@@ -3354,15 +3276,6 @@ export function TryMeNowApp() {
   useEffect(() => {
     setProductAnalyticsSessionId(session?.id);
   }, [session?.id]);
-
-  useEffect(() => {
-    if (!streamingBuildSessionId || !streamingMaterialBriefComplete) return;
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    const timer = window.setTimeout(() => {
-      setStreamingBuildDwellCompleteFor(streamingBuildSessionId);
-    }, STREAMING_BUILD_MINIMUM_DWELL_MS);
-    return () => window.clearTimeout(timer);
-  }, [streamingBuildSessionId, streamingMaterialBriefComplete]);
 
   useEffect(() => {
     if (!session || lastTrackedStatus.current === session.status) return;
@@ -3389,7 +3302,6 @@ export function TryMeNowApp() {
     setCampaignEntryMode(selectedCampaignMode ?? "campaign");
     setStreamingAnswers([]);
     setStreamingFocusId(undefined);
-    setStreamingBuildDwellCompleteFor(undefined);
     setDomain("");
     setSession(undefined);
     setAnswers({});
@@ -3412,7 +3324,6 @@ export function TryMeNowApp() {
     persistedSectionSignals.current.clear();
     buildTrackedSession.current = undefined;
     previewScrolledSession.current = undefined;
-    provisionalRenderTracked.current = undefined;
     finalRenderTracked.current = undefined;
     supportRefTracked.current = undefined;
     setPersonalizationSelection({ key: "", variantId: "generic" });
@@ -3426,7 +3337,6 @@ export function TryMeNowApp() {
     setCampaignEntryMode("campaign");
     setStreamingAnswers([]);
     setStreamingFocusId(undefined);
-    setStreamingBuildDwellCompleteFor(undefined);
     setDomain("");
     setSession(undefined);
     setAnswers({});
@@ -3450,7 +3360,6 @@ export function TryMeNowApp() {
     persistedSectionSignals.current.clear();
     buildTrackedSession.current = undefined;
     previewScrolledSession.current = undefined;
-    provisionalRenderTracked.current = undefined;
     finalRenderTracked.current = undefined;
     supportRefTracked.current = undefined;
     setPersonalizationSelection({ key: "", variantId: "generic" });
@@ -3580,15 +3489,20 @@ export function TryMeNowApp() {
   }, [pollSessionId, pollSessionStatus]);
 
   useEffect(() => {
-    if (!session?.experience || initialPreviewScrolled.current) return;
-    if (!canRevealPreview(session)) return;
-    if (session.useCase === "campaign" && !streamingBuildDwellComplete) return;
-    initialPreviewScrolled.current = true;
+    if (!buildShellSessionId || buildShellScrolled.current === buildShellSessionId) return;
+    buildShellScrolled.current = buildShellSessionId;
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [session, streamingBuildDwellComplete]);
+  }, [buildShellSessionId]);
 
   useEffect(() => {
-    if (!session?.experience || !canRevealPreview(session)) return;
+    if (!session?.experience || initialPreviewScrolled.current) return;
+    if (!canRevealFinalExperience(session)) return;
+    initialPreviewScrolled.current = true;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [session]);
+
+  useEffect(() => {
+    if (!session?.experience || !canRevealFinalExperience(session)) return;
     const revision = session.experience.artifactRevision ?? 1;
     const durationMs = Math.max(0, Date.now() - Date.parse(session.createdAt || session.updatedAt));
     const properties = {
@@ -3596,16 +3510,6 @@ export function TryMeNowApp() {
       duration_bucket: analyticsDurationBucket(durationMs),
       quality_gate: analyticsQualityGate(session)
     };
-    if (isProvisionalExperience(session)) {
-      const key = `${session.id}:provisional:${revision}`;
-      if (provisionalRenderTracked.current === key) return;
-      provisionalRenderTracked.current = key;
-      captureUnifiedProductEvent("provisional_rendered", {
-        sessionId: session.id,
-        properties
-      });
-      return;
-    }
     const key = `${session.id}:final:${revision}`;
     if (finalRenderTracked.current === key) return;
     finalRenderTracked.current = key;
@@ -3631,8 +3535,7 @@ export function TryMeNowApp() {
   }, [session]);
 
   useEffect(() => {
-    if (!session || !canRevealPreview(session) || revealTracked.current) return;
-    if (session.useCase === "campaign" && !streamingBuildDwellComplete) return;
+    if (!session || !canRevealFinalExperience(session) || revealTracked.current) return;
     revealTracked.current = true;
     const sessionId = session.id;
     const sessionUseCase = session.useCase;
@@ -3651,7 +3554,7 @@ export function TryMeNowApp() {
       void recordPreviewSignal(sessionId, "preview-opened", "experience-preview").catch(() => undefined);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [session, streamingBuildDwellComplete]);
+  }, [session]);
 
   const personalizationSourceKey = session?.experienceSpec?.personalizationVariantIds?.length
     ? `${session.id}:${session.experienceSpec.artifactDigest ?? session.revision}`
@@ -4044,7 +3947,6 @@ export function TryMeNowApp() {
   const nextStreamingQuestionId = streamingQuestions.find((question) => (
     !canonicalStreamingAnswers.some((answer) => answer.questionId === question.id)
   ))?.id;
-  const streamingBriefComplete = streamingQuestions.length > 0 && !nextStreamingQuestionId;
   const streamingBuildAudience = canonicalStreamingAnswers.find(
     (answer) => answer.questionId === "audience"
   )?.value || session?.audienceSuggestions[0] || "the selected buyer group";
@@ -4058,32 +3960,6 @@ export function TryMeNowApp() {
         session.stages.brand.status
       )
     : undefined;
-  const streamingReceipts: StreamingBriefReceipt[] = session ? [
-    {
-      id: "brand",
-      label: currentBrandPresentation!.label,
-      detail: currentBrandPresentation!.detail,
-      state:
-        currentBrandPresentation!.state === "verified"
-          ? "complete" as const
-          : currentBrandPresentation!.state === "researching"
-            ? "working" as const
-            : "attention" as const
-    },
-    ...(canonicalStreamingAnswers.some((answer) => answer.questionId === "audience") ? [{
-      id: "audience",
-      label: "Audience signal captured",
-      detail: `The page is being written for ${canonicalStreamingAnswers.find((answer) => answer.questionId === "audience")?.value}.`,
-      state: "complete" as const
-    }] : []),
-    ...(streamingBriefComplete ? [{
-      id: "composition",
-      label: "Composing page structure",
-      detail: "Messaging, imagery, and the guided buyer path are being assembled.",
-      state: "working" as const
-    }] : [])
-  ].slice(-3) : [];
-
   const handleStreamingAnswer = (answer: StreamingBriefAnswer) => {
     if (!session || session.useCase !== "campaign") return;
     const isEdit = streamingAnswers.some((candidate) => candidate.questionId === answer.questionId);
@@ -4225,32 +4101,18 @@ export function TryMeNowApp() {
   };
 
   const generationEligible = isSessionGenerationEligible(session);
-  const isReveal = Boolean(
-    session
-    && canRevealPreview(session)
-    && (session.useCase !== "campaign" || streamingBuildDwellComplete)
-  );
-  const showStreamingBuildStage = shouldShowStreamingBuildStage(
-    session,
-    streamingBriefComplete,
-    streamingBuildDwellComplete
-  );
   const engagementSeconds = usePreviewForegroundSeconds(
     isReveal && revealedAt && session ? session.id : undefined
   );
-  const isProvisionalPreview = isProvisionalExperience(session);
   const lifecyclePhase = previewLifecyclePhase(session);
+  const isFinalOnlyV2 = isUnifiedFinalOnlyV2(session);
   const lifecycleCopy = previewLifecycleCopy(lifecyclePhase);
   const personalizationOptions = session ? personalizationVariantOptionsFor(session) : [];
   const canSaveExperience = canOfferClaimModal(session, {
     events: clientEvents,
     previewOpened: Boolean(revealedAt)
   });
-  const saveDialogOpen = Boolean(showSavePrompt && session && canSaveExperience);
-  const showCampaignPreviewPane = Boolean(
-    session?.useCase === "campaign"
-    && (canRevealPreview(session) || (generationEligible && session.experience))
-  );
+  const saveDialogOpen = !isFinalOnlyV2 && Boolean(showSavePrompt && session && canSaveExperience);
   const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
   const revealCopy = session ? getRevealCopy(session) : undefined;
   const analyticsSignals: AnalyticsSignal[] = clientEvents.map((event, index) => ({
@@ -4273,17 +4135,15 @@ export function TryMeNowApp() {
       ? useCase === "content"
         ? "Content Magic selected"
         : "Buyer experience selected"
-      : showStreamingBuildStage
-        ? "Building your buyer experience now"
-      : lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed"
-        ? lifecycleCopy.statusLabel
-        : lifecyclePhase === "enriching"
+      : showBuildShell
+        ? session.buildProgress?.failure
+          ? "The build stopped before it finished"
+          : lifecycleCopy.statusLabel
+        : isReveal
           ? lifecycleCopy.statusLabel
-          : isReveal
-            ? lifecycleCopy.statusLabel
-            : generationEligible
-              ? "Material brief ready · composing preview"
-              : currentBrandPresentation?.label ?? "Researching the public brand";
+          : generationEligible
+            ? "Material brief ready · starting the build"
+            : currentBrandPresentation?.label ?? "Researching the public brand";
 
   return (
     <>
@@ -4301,7 +4161,6 @@ export function TryMeNowApp() {
       {!useCase && (
         <section className="entryStage">
           <div className="entryHero">
-            <span className="sectionKicker">Try Folloze</span>
             <h1>Build a buyer experience.</h1>
             <p>Start with your company. Answer one missing signal at a time. Folloze assembles a branded buyer experience you can explore before you save.</p>
             <div className="entryPromise" aria-label="Try Me Now experience promise">
@@ -4335,17 +4194,18 @@ export function TryMeNowApp() {
         />
       )}
 
-      {session && !isReveal && showStreamingBuildStage && (
-        <StreamingBuildStage
-          audience={streamingBuildAudience}
+      {session && showBuildShell && (
+        <FinalBuildShell
+          session={session}
           brandName={brandNameFor(session)}
+          audience={streamingBuildAudience}
           brandLogoUrl={previewLogoUrl(session)}
           brandColors={session.brand?.colors}
-          receipts={streamingReceipts}
+          onRetry={() => void retryFailedStage("story")}
         />
       )}
 
-      {session && !isReveal && buildPanelCopy && !showStreamingBuildStage && (
+      {session && !isReveal && buildPanelCopy && !showBuildShell && (
         <section className={`workbench ${session.useCase === "campaign" ? "streamingWorkbench" : ""}`}>
           <div className="mobileStatus"><button type="button" aria-expanded={showProcess} aria-controls="mobile-process-dialog" onClick={() => setShowProcess(true)}><span className="liveDot" /><strong>{buildPanelCopy.mobileLabel}</strong><span>{buildPanelCopy.mobileStep}</span><ChevronDown size={15} /></button></div>
           <div className="briefPanel">
@@ -4466,38 +4326,6 @@ export function TryMeNowApp() {
               {connectionError && <div className="connectionNotice" role="status"><LoaderCircle className="spin" size={15} />{connectionError}</div>}
             </div>
           </div>
-          {session.useCase === "campaign" && (
-            <div className="buildPanel streamingPreviewPanel">
-              <div className="buildTop">
-                <span className="sectionKicker">
-                  {showCampaignPreviewPane
-                    ? "Live preview"
-                    : generationEligible
-                      ? "Composing"
-                      : "Brand lock"}
-                </span>
-                <strong>
-                  {showCampaignPreviewPane
-                    ? "The page stays visible while enrichment continues."
-                    : generationEligible
-                      ? "The material brief is ready. Provisional preview starts next."
-                      : buildPanelCopy.headline}
-                </strong>
-              </div>
-              {showCampaignPreviewPane ? (
-                <AssemblyPreview session={session} iframeRef={previewFrameRef} />
-              ) : (
-                <div className="previewEligibilityHold" role="status" data-preview-gated="material-brief">
-                  <span className="sectionKicker">Preview waits on the material brief</span>
-                  <p>
-                    {generationEligible
-                      ? "Generation is eligible. Folloze is composing the first interactive preview."
-                      : "Finish seller, audience or target, offer, and objective before the preview reveals."}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
           <aside className="processRail">
             <CampaignOverviewRail
               session={session}
@@ -4513,48 +4341,37 @@ export function TryMeNowApp() {
       )}
 
       {session && isReveal && revealCopy && (
-        <section className="revealStage" data-lifecycle-phase={lifecyclePhase}>
+        <section className="revealStage" data-lifecycle-phase={lifecyclePhase} data-final-only-reveal={isFinalOnlyV2 ? "true" : undefined}>
           <div className="revealIntro">
             <div className="revealIntroCopy">
-              <span className="sectionKicker">
-                {lifecycleCopy.kicker}
-              </span>
               <h1>{getRevealShellHeadline(session)}</h1>
-              <p className="revealPayoff">
-                {isProvisionalPreview
-                  ? "The experience is interactive now. Enrichment continues from worker receipts without taking the page away."
-                  : revealCopy.summary}
-              </p>
-              <div className="revealMeta">
+            <div className="revealMeta">
+                <span>{lifecycleCopy.statusLabel}</span>
+                <i />
                 <span>Built from public brand and company signals</span>
                 <i />
                 <span>{lifecycleCopy.publicationNote}</span>
               </div>
             </div>
             <div className="revealActions">
-              {session.status === "claimed" ? (
+              {!isFinalOnlyV2 && session.status === "claimed" ? (
                 <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
-              ) : canSaveExperience ? (
+              ) : !isFinalOnlyV2 && canSaveExperience ? (
                 <button className="buttonPrimary" type="button" onClick={openSavePrompt}>
                   <Mail size={16} />Save this preview
                 </button>
-              ) : isProvisionalPreview ? (
-                <span className="buttonPrimary" role="status">
-                  <LoaderCircle className="spin" size={16} />
-                  Enriching from receipts
-                </span>
-              ) : (
+              ) : !isFinalOnlyV2 ? (
                 <span className="buttonSecondary" role="status">
                   Explore the preview to unlock save
                 </span>
-              )}
-              <a className="buttonSecondary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">{isProvisionalPreview ? "Open working preview" : "Open full screen"}<ExternalLink size={16} /></a>
+              ) : null}
+              <a className="buttonSecondary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
             </div>
           </div>
-          <PreviewUpdateNotice
+          {!isFinalOnlyV2 && <PreviewUpdateNotice
             session={session}
             onRetry={() => void retryFailedStage("story")}
-          />
+          />}
           <div className="revealGrid">
             <div className="revealPreview">
               <div className="previewControlBar">
@@ -4562,14 +4379,10 @@ export function TryMeNowApp() {
                   <Globe2 size={16} aria-hidden="true" />
                   <span><strong>Live preview</strong><small>Scroll inside to explore the full experience.</small></span>
                 </div>
-                <div className="previewToolbarActions">
+                {!isFinalOnlyV2 && <div className="previewToolbarActions">
                   {lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed" ? (
                     <span className="previewReadinessStatus isSaved" data-lifecycle-phase={lifecyclePhase}>
                       <Check size={14} />{lifecycleCopy.statusLabel}
-                    </span>
-                  ) : lifecyclePhase === "enriching" ? (
-                    <span className="previewReadinessStatus isEnriching" data-lifecycle-phase="enriching">
-                      <LoaderCircle className="spin" size={14} />Interactive · enriching
                     </span>
                   ) : (
                     <span
@@ -4590,13 +4403,13 @@ export function TryMeNowApp() {
                   >
                     <Gauge size={16} />See live engagement<span aria-hidden="true">{Math.max(analyticsSignals.length, 1)}</span>
                   </button>
-                </div>
+                </div>}
               </div>
-              <PersonalizationVariantBar
+              {!isFinalOnlyV2 && <PersonalizationVariantBar
                 options={personalizationOptions}
                 selectedId={personalizationVariantId}
                 onSelect={selectPersonalizationVariant}
-              />
+              />}
               <div className="desktopPreviewShell">
                 <AssemblyPreview session={session} iframeRef={previewFrameRef} />
               </div>
@@ -4606,21 +4419,19 @@ export function TryMeNowApp() {
                 target="_blank"
                 rel="noopener"
               >
-                {isProvisionalPreview ? "Explore the working preview" : "Explore the full experience"}<ArrowRight size={16} />
+                Explore the full experience<ArrowRight size={16} />
               </a>
             </div>
           </div>
-          <div className="revealFooter">
+          {!isFinalOnlyV2 && <div className="revealFooter">
             <span>{lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed" ? "Saved URL" : "Temporary URL"}</span>
             <code>{session.liveUrl || session.temporaryUrl}</code>
             <span>
               {lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed"
                 ? lifecycleCopy.statusLabel
-                : lifecyclePhase === "enriching"
-                  ? "Enrichment continuing from worker receipts"
-                  : "Expires 30 minutes after generation"}
+                : "Expires 30 minutes after generation"}
             </span>
-          </div>
+          </div>}
         </section>
       )}
 
@@ -4644,7 +4455,7 @@ export function TryMeNowApp() {
       />
     )}
     <AnalyticsSignalPanel
-      open={showAnalyticsPanel}
+      open={!isFinalOnlyV2 && showAnalyticsPanel}
       signals={analyticsSignals}
       engagedSeconds={engagementSeconds}
       sessionId={session?.id}

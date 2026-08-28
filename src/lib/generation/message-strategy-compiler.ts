@@ -144,6 +144,14 @@ function citationSupportsDirective(directive: string, claim: string): boolean {
   return false;
 }
 
+/**
+ * The same subject test the evaluator uses, for compilers above this one that
+ * must judge an argument by identical rules rather than by their own.
+ */
+export function argumentSharesSubject(left: string, right: string): boolean {
+  return sharesTerm(left, right);
+}
+
 function concise(value: string, max = 240): string {
   const collapsed = value.replace(/\s+/g, " ").trim();
   if (collapsed.length <= max) return collapsed;

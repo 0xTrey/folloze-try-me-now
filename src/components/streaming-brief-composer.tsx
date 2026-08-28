@@ -1,7 +1,6 @@
 "use client";
 
-import Image from "next/image";
-import { type CSSProperties, type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 
 import styles from "./streaming-brief-composer.module.css";
 
@@ -22,13 +21,6 @@ export type StreamingBriefAnswer = {
   questionId: string;
   label: string;
   value: string;
-};
-
-export type StreamingBriefReceipt = {
-  id: string;
-  label: string;
-  detail: string;
-  state?: "working" | "complete" | "attention";
 };
 
 export type StreamingAudienceFinding = {
@@ -246,78 +238,6 @@ export function StreamingBriefComposer({
             </div>
           </form>
         ) : null}
-      </div>
-    </section>
-  );
-}
-
-const buildSceneImages = [
-  { src: "/entry/campaign-preview.webp", alt: "A campaign landing page taking shape" },
-  { src: "/entry/abm-preview.webp", alt: "A buyer-focused page layout taking shape" },
-  { src: "/entry/content-preview.webp", alt: "An interactive content layout taking shape" }
-] as const;
-
-export type StreamingBuildStageProps = {
-  audience: string;
-  brandName: string;
-  brandLogoUrl?: string;
-  brandColors?: readonly string[];
-  receipts: readonly StreamingBriefReceipt[];
-};
-
-export function StreamingBuildStage({
-  audience,
-  brandName,
-  brandLogoUrl,
-  brandColors = [],
-  receipts
-}: StreamingBuildStageProps) {
-  const sceneStyle = {
-    "--build-accent": brandColors[0] || "#0077ff",
-    "--build-accent-two": brandColors[1] || "#17b890"
-  } as CSSProperties;
-
-  return (
-    <section
-      className={styles.buildStage}
-      style={sceneStyle}
-      data-build-stage="active"
-      aria-labelledby="streaming-build-title"
-      aria-busy="true"
-    >
-      <div className={styles.buildStageInner}>
-        <div className={styles.buildNarrative} role="status" aria-live="polite" aria-atomic="true">
-          {brandLogoUrl && (
-            <span className={styles.buildBrandMark}>
-              <Image src={brandLogoUrl} alt={`${brandName} logo`} width={156} height={52} unoptimized />
-            </span>
-          )}
-          <h1 id="streaming-build-title">Building a buyer experience for {audience}.</h1>
-          <p>Folloze is combining {brandName}&apos;s brand, offer, audience, and objective into one guided page.</p>
-          <ol className={styles.buildReceipts} aria-label="Live build progress">
-            {receipts.map((receipt) => (
-              <li key={receipt.id} data-state={receipt.state || "working"}>
-                <span aria-hidden="true" />
-                <div>
-                  <strong>{receipt.label}</strong>
-                  <p>{receipt.detail}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        <div className={styles.buildVisual} aria-label="Folloze is composing page layouts and buyer paths">
-          <div className={styles.orbitRoad} data-motion="orbit" aria-hidden="true"><i /><i /><i /></div>
-          <div className={styles.orbitCards} aria-hidden="true">
-            {buildSceneImages.map((image, index) => (
-              <figure key={image.src} className={styles.orbitCard} data-position={index + 1}>
-                <Image src={image.src} alt="" width={720} height={380} priority={index === 0} />
-              </figure>
-            ))}
-          </div>
-          <p className={styles.buildVisualCaption}>Brand system, message, and page structure are being assembled together.</p>
-        </div>
       </div>
     </section>
   );

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   canEditSession,
@@ -11,7 +11,12 @@ import {
 } from "@/lib/orchestrator";
 import { generateExperienceDraft } from "@/lib/integrations/openai";
 import { deleteSession, getSession, putSession } from "@/lib/session-store";
-import type { BrandProfile, TryMeSession } from "@/lib/types";
+import type {
+  BrandProfile,
+  ExperienceModel,
+  FinalArtifactReceipt,
+  TryMeSession
+} from "@/lib/types";
 
 vi.mock("@/lib/integrations/openai", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/integrations/openai")>()),
@@ -96,6 +101,24 @@ const target: BrandProfile = {
     provenance: []
   }
 };
+
+/**
+ * The read-back receipt that makes an artifact revealable and claimable. A
+ * seeded experience without it is only an internal draft under the final-only
+ * lifecycle, so every fixture that stands for an already-revealed experience
+ * has to carry one.
+ */
+function finalReceiptFor(experience: ExperienceModel, at: string): FinalArtifactReceipt {
+  return {
+    readiness: "final",
+    artifactRevision: experience.artifactRevision,
+    artifactDigest: experience.artifactDigest,
+    structuralGate: "passed",
+    truthGate: "passed",
+    persistedAt: at,
+    readBackAt: at
+  };
+}
 
 function workspaceSession(id: string, status: TryMeSession["status"] = "preview_ready_unclaimed") {
   const now = new Date().toISOString();
@@ -209,6 +232,7 @@ function workspaceSession(id: string, status: TryMeSession["status"] = "preview_
       closingHeadline: "Put the first architecture question on the table.",
       closingBody: "Bring the relevant stakeholders into one focused working session.",
       html: "<!doctype html><title>private generated artifact</title>",
+      readiness: "final",
       generationSource: "openai",
       artifactRevision: 8,
       artifactDigest: "a".repeat(64)
@@ -225,8 +249,17 @@ function workspaceSession(id: string, status: TryMeSession["status"] = "preview_
         : undefined,
     events: []
   };
+  session.finalArtifact = finalReceiptFor(session.experience!, now);
   return session;
 }
+
+beforeEach(() => {
+  // A verified brand with resolved fonts and palette reaches real font and
+  // asset resolution, which is the only part of this path that touches the
+  // network. Failing every fetch keeps these assertions hermetic instead of
+  // letting them stall on live requests.
+  vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network disabled in test"));
+});
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -487,6 +520,7 @@ describe("session workspace foundation", () => {
     const originalDigest = original.experience?.artifactDigest;
     const originalSpec = structuredClone(original.experienceSpec);
     const originalReceipt = structuredClone(original.qualityReceipt);
+    const originalFinalArtifact = structuredClone(original.finalArtifact);
     await putSession(original);
 
     await patchSessionWorkspace(id, {
@@ -503,12 +537,43 @@ describe("session workspace foundation", () => {
       stages: {
         story: {
           status: "failed",
-          detail: expect.stringMatching(/current preview.*safe/i)
+          detail: expect.stringMatching(/finished experience.*safe/i)
         }
       }
     });
     expect(stored?.experienceSpec).toEqual(originalSpec);
     expect(stored?.qualityReceipt).toEqual(originalReceipt);
+    // Revision N stays revealable only because it kept its own read-back
+    // receipt. The fallback must never point at an artifact the gate rejects.
+    expect(stored?.finalArtifact).toEqual(originalFinalArtifact);
+    expect(stored?.finalArtifact?.artifactDigest).toBe(stored?.experience?.artifactDigest);
+  });
+
+  it("fails closed instead of falling back to an unreceipted revision N", async () => {
+    const id = `unreceipted-replacement-failure-${Date.now()}`;
+    ids.add(id);
+    const original = workspaceSession(id);
+    // A session persisted before the final-only lifecycle: an artifact with no
+    // read-back receipt. It was never revealable, so it is not a legal fallback.
+    original.finalArtifact = undefined;
+    await putSession(original);
+
+    await patchSessionWorkspace(id, {
+      answers: { objective: "Accelerate an opportunity" }
+    });
+    vi.mocked(generateExperienceDraft).mockRejectedValueOnce(new Error("generation unavailable"));
+
+    await runStoryStage(id);
+
+    const stored = await getSession(id);
+    expect(stored?.status).toBe("generation_failed");
+    expect(stored?.experience).toBeUndefined();
+    expect(stored?.finalArtifact).toBeUndefined();
+    expect(stored?.buildProgress?.phase).toBe("failed");
+    expect(stored?.buildProgress?.failure).toMatchObject({
+      code: "generation_failed",
+      retryable: true
+    });
   });
 
   it("replaces source provenance atomically and binds confirmation to the newly submitted source", async () => {
@@ -681,6 +746,12 @@ describe("session workspace foundation", () => {
     expect(version.session.claim).toBeUndefined();
     expect(version.session.cockpit).toBeUndefined();
     expect(version.session.experience).toBeUndefined();
+    // A copied workspace has not built anything yet, so it must not inherit a
+    // receipt claiming a passed final artifact or a stale build phase.
+    expect(version.session.finalArtifact).toBeUndefined();
+    expect(version.session.buildProgress).toBeUndefined();
+    expect(duplicate.session.finalArtifact).toBeUndefined();
+    expect(duplicate.session.buildProgress).toBeUndefined();
     expect(await canEditSession(version.session.id, version.editorToken)).toBe(true);
     expect(await canEditSession(version.session.id, editorToken)).toBe(false);
     expect(duplicate.session.lineage).toMatchObject({

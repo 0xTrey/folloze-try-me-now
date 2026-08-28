@@ -1,0 +1,1053 @@
+{
+  "schemaVersion": "v2-base-runtime-evaluation-1.1",
+  "evaluationKind": "deliberate-degradation",
+  "fixtureCount": 10,
+  "qualityFixtureCount": 6,
+  "total": 100,
+  "dimensions": {
+    "buyerOfferSpecificity": 25,
+    "evidenceTrust": 25,
+    "argumentPageQuality": 25,
+    "brandFlowReliability": 25
+  },
+  "blockers": [
+    "generic-degradation:generic_candidate_rejected"
+  ],
+  "totalTiming": {
+    "p50Ms": 4,
+    "p95Ms": 10
+  },
+  "stageTimings": {
+    "artifact-validation": {
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "samples": 10
+    },
+    "provider-deadline": {
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "samples": 8
+    },
+    "writer-wave": {
+      "p50Ms": 0,
+      "p95Ms": 1,
+      "samples": 8
+    },
+    "section-writers": {
+      "p50Ms": 0,
+      "p95Ms": 3,
+      "samples": 7
+    },
+    "factuality": {
+      "p50Ms": 1,
+      "p95Ms": 1,
+      "samples": 7
+    },
+    "section-compile": {
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "samples": 7
+    },
+    "final-reveal": {
+      "p50Ms": 0,
+      "p95Ms": 0,
+      "samples": 10
+    }
+  },
+  "writerSourceDistribution": {
+    "mixed": 3,
+    "deterministic": 4,
+    "none": 3
+  },
+  "fallbackRate": 0.3,
+  "recipeDistribution": {
+    "product-solution": 10
+  },
+  "strategyDistribution": {
+    "strategy-mechanism": 5,
+    "strategy-proof": 2,
+    "strategy-upside": 2,
+    "none": 1
+  },
+  "fixtureResults": [
+    {
+      "id": "seller-product-a",
+      "outcome": "production-page",
+      "instructionCode": null,
+      "elapsedMs": 11,
+      "recipe": "product-solution",
+      "recipeActivated": true,
+      "strategy": "strategy-mechanism",
+      "writerModes": [
+        "deterministic",
+        "model"
+      ],
+      "writerSource": "mixed",
+      "fallbackCodes": [
+        "generic_production_page_partial_acceptance",
+        "production_page_partial_acceptance",
+        "section_writers_partial"
+      ],
+      "traceTimings": [
+        {
+          "stage": "artifact-validation",
+          "durationMs": 0
+        },
+        {
+          "stage": "provider-deadline",
+          "durationMs": 0
+        },
+        {
+          "stage": "writer-wave",
+          "durationMs": 0
+        },
+        {
+          "stage": "section-writers",
+          "durationMs": 3
+        },
+        {
+          "stage": "factuality",
+          "durationMs": 1
+        },
+        {
+          "stage": "section-compile",
+          "durationMs": 1
+        },
+        {
+          "stage": "final-reveal",
+          "durationMs": 0
+        }
+      ],
+      "sectionReceipts": [
+        {
+          "sectionId": "recognize-buyer-outcome",
+          "role": "buyer-outcome",
+          "writerMode": "model",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "name-constraint",
+          "role": "current-friction",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 4,
+          "status": "completed"
+        },
+        {
+          "sectionId": "distinct-mechanism",
+          "role": "mechanism",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "relevant-use-cases",
+          "role": "use-cases",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "proof-or-validation",
+          "role": "proof",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "next-action",
+          "role": "next-move",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 0,
+          "status": "completed"
+        }
+      ],
+      "sectionCount": 6,
+      "evidenceLinkedSectionCount": 5,
+      "tracePresent": true,
+      "finalArtifact": true,
+      "copyChecks": {
+        "buyerSpecific": true,
+        "offerSpecific": true,
+        "genericPhraseFree": true,
+        "uniqueHeadlines": true,
+        "primaryCtaPresent": true
+      },
+      "expectedOutcome": "production-page",
+      "expectedInstructionCode": null,
+      "expectedWriterSource": "mixed",
+      "qualityFixture": true,
+      "degradedFixture": false,
+      "blockers": [],
+      "dimensions": {
+        "buyerOfferSpecificity": 25,
+        "evidenceTrust": 25,
+        "argumentPageQuality": 25,
+        "brandFlowReliability": 25
+      },
+      "total": 100
+    },
+    {
+      "id": "seller-product-b",
+      "outcome": "production-page",
+      "instructionCode": null,
+      "elapsedMs": 6,
+      "recipe": "product-solution",
+      "recipeActivated": true,
+      "strategy": "strategy-proof",
+      "writerModes": [
+        "deterministic",
+        "model"
+      ],
+      "writerSource": "mixed",
+      "fallbackCodes": [
+        "generic_production_page_partial_acceptance",
+        "production_page_partial_acceptance",
+        "section_writers_partial"
+      ],
+      "traceTimings": [
+        {
+          "stage": "artifact-validation",
+          "durationMs": 0
+        },
+        {
+          "stage": "provider-deadline",
+          "durationMs": 0
+        },
+        {
+          "stage": "writer-wave",
+          "durationMs": 1
+        },
+        {
+          "stage": "section-writers",
+          "durationMs": 1
+        },
+        {
+          "stage": "factuality",
+          "durationMs": 1
+        },
+        {
+          "stage": "section-compile",
+          "durationMs": 0
+        },
+        {
+          "stage": "final-reveal",
+          "durationMs": 0
+        }
+      ],
+      "sectionReceipts": [
+        {
+          "sectionId": "recognize-buyer-outcome",
+          "role": "buyer-outcome",
+          "writerMode": "model",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "name-constraint",
+          "role": "current-friction",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 4,
+          "status": "completed"
+        },
+        {
+          "sectionId": "distinct-mechanism",
+          "role": "mechanism",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "relevant-use-cases",
+          "role": "use-cases",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "proof-or-validation",
+          "role": "proof",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "next-action",
+          "role": "next-move",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 0,
+          "status": "completed"
+        }
+      ],
+      "sectionCount": 6,
+      "evidenceLinkedSectionCount": 5,
+      "tracePresent": true,
+      "finalArtifact": true,
+      "copyChecks": {
+        "buyerSpecific": true,
+        "offerSpecific": true,
+        "genericPhraseFree": true,
+        "uniqueHeadlines": true,
+        "primaryCtaPresent": true
+      },
+      "expectedOutcome": "production-page",
+      "expectedInstructionCode": null,
+      "expectedWriterSource": "mixed",
+      "qualityFixture": true,
+      "degradedFixture": false,
+      "blockers": [],
+      "dimensions": {
+        "buyerOfferSpecificity": 25,
+        "evidenceTrust": 25,
+        "argumentPageQuality": 25,
+        "brandFlowReliability": 25
+      },
+      "total": 100
+    },
+    {
+      "id": "seller-solution-c",
+      "outcome": "production-page",
+      "instructionCode": null,
+      "elapsedMs": 4,
+      "recipe": "product-solution",
+      "recipeActivated": true,
+      "strategy": "strategy-mechanism",
+      "writerModes": [
+        "deterministic",
+        "model"
+      ],
+      "writerSource": "mixed",
+      "fallbackCodes": [
+        "generic_production_page_partial_acceptance",
+        "production_page_partial_acceptance",
+        "section_writers_partial"
+      ],
+      "traceTimings": [
+        {
+          "stage": "artifact-validation",
+          "durationMs": 0
+        },
+        {
+          "stage": "provider-deadline",
+          "durationMs": 0
+        },
+        {
+          "stage": "writer-wave",
+          "durationMs": 0
+        },
+        {
+          "stage": "section-writers",
+          "durationMs": 0
+        },
+        {
+          "stage": "factuality",
+          "durationMs": 1
+        },
+        {
+          "stage": "section-compile",
+          "durationMs": 0
+        },
+        {
+          "stage": "final-reveal",
+          "durationMs": 0
+        }
+      ],
+      "sectionReceipts": [
+        {
+          "sectionId": "recognize-buyer-outcome",
+          "role": "buyer-outcome",
+          "writerMode": "model",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "name-constraint",
+          "role": "current-friction",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 4,
+          "status": "completed"
+        },
+        {
+          "sectionId": "distinct-mechanism",
+          "role": "mechanism",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "relevant-use-cases",
+          "role": "use-cases",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "proof-or-validation",
+          "role": "proof",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "next-action",
+          "role": "next-move",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 0,
+          "status": "completed"
+        }
+      ],
+      "sectionCount": 6,
+      "evidenceLinkedSectionCount": 5,
+      "tracePresent": true,
+      "finalArtifact": true,
+      "copyChecks": {
+        "buyerSpecific": true,
+        "offerSpecific": true,
+        "genericPhraseFree": true,
+        "uniqueHeadlines": true,
+        "primaryCtaPresent": true
+      },
+      "expectedOutcome": "production-page",
+      "expectedInstructionCode": null,
+      "expectedWriterSource": "mixed",
+      "qualityFixture": true,
+      "degradedFixture": false,
+      "blockers": [],
+      "dimensions": {
+        "buyerOfferSpecificity": 25,
+        "evidenceTrust": 25,
+        "argumentPageQuality": 25,
+        "brandFlowReliability": 25
+      },
+      "total": 100
+    },
+    {
+      "id": "weak-proof",
+      "outcome": "production-page",
+      "instructionCode": null,
+      "elapsedMs": 4,
+      "recipe": "product-solution",
+      "recipeActivated": true,
+      "strategy": "strategy-mechanism",
+      "writerModes": [
+        "deterministic"
+      ],
+      "writerSource": "deterministic",
+      "fallbackCodes": [
+        "generic_production_page_partial_acceptance",
+        "production_page_partial_acceptance",
+        "section_writers_partial"
+      ],
+      "traceTimings": [
+        {
+          "stage": "artifact-validation",
+          "durationMs": 0
+        },
+        {
+          "stage": "provider-deadline",
+          "durationMs": 0
+        },
+        {
+          "stage": "writer-wave",
+          "durationMs": 0
+        },
+        {
+          "stage": "section-writers",
+          "durationMs": 0
+        },
+        {
+          "stage": "factuality",
+          "durationMs": 1
+        },
+        {
+          "stage": "section-compile",
+          "durationMs": 0
+        },
+        {
+          "stage": "final-reveal",
+          "durationMs": 0
+        }
+      ],
+      "sectionReceipts": [
+        {
+          "sectionId": "recognize-buyer-outcome",
+          "role": "buyer-outcome",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "name-constraint",
+          "role": "current-friction",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 4,
+          "status": "completed"
+        },
+        {
+          "sectionId": "distinct-mechanism",
+          "role": "mechanism",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "relevant-use-cases",
+          "role": "use-cases",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "proof-or-validation",
+          "role": "proof",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "next-action",
+          "role": "next-move",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 0,
+          "status": "completed"
+        }
+      ],
+      "sectionCount": 6,
+      "evidenceLinkedSectionCount": 5,
+      "tracePresent": true,
+      "finalArtifact": true,
+      "copyChecks": {
+        "buyerSpecific": true,
+        "offerSpecific": true,
+        "genericPhraseFree": true,
+        "uniqueHeadlines": true,
+        "primaryCtaPresent": true
+      },
+      "expectedOutcome": "production-page",
+      "expectedInstructionCode": null,
+      "expectedWriterSource": "deterministic",
+      "qualityFixture": true,
+      "degradedFixture": false,
+      "blockers": [],
+      "dimensions": {
+        "buyerOfferSpecificity": 25,
+        "evidenceTrust": 25,
+        "argumentPageQuality": 25,
+        "brandFlowReliability": 25
+      },
+      "total": 100
+    },
+    {
+      "id": "weak-brand",
+      "outcome": "safe-deterministic-fallback",
+      "instructionCode": "GPE_BRAND_HELP_REQUIRED",
+      "elapsedMs": 3,
+      "recipe": "product-solution",
+      "recipeActivated": true,
+      "strategy": "strategy-upside",
+      "writerModes": [],
+      "writerSource": "none",
+      "fallbackCodes": [
+        "gpe_brand_help_required"
+      ],
+      "traceTimings": [
+        {
+          "stage": "artifact-validation",
+          "durationMs": 0
+        },
+        {
+          "stage": "final-reveal",
+          "durationMs": 0
+        }
+      ],
+      "sectionReceipts": [],
+      "sectionCount": 0,
+      "evidenceLinkedSectionCount": 0,
+      "tracePresent": true,
+      "finalArtifact": false,
+      "copyChecks": {
+        "buyerSpecific": false,
+        "offerSpecific": false,
+        "genericPhraseFree": true,
+        "uniqueHeadlines": true,
+        "primaryCtaPresent": false
+      },
+      "expectedOutcome": "safe-deterministic-fallback",
+      "expectedInstructionCode": "GPE_BRAND_HELP_REQUIRED",
+      "expectedWriterSource": "none",
+      "qualityFixture": false,
+      "degradedFixture": false,
+      "blockers": [],
+      "dimensions": null,
+      "total": null
+    },
+    {
+      "id": "no-logo",
+      "outcome": "safe-deterministic-fallback",
+      "instructionCode": "GPE_BRAND_HELP_REQUIRED",
+      "elapsedMs": 4,
+      "recipe": "product-solution",
+      "recipeActivated": true,
+      "strategy": "strategy-upside",
+      "writerModes": [],
+      "writerSource": "none",
+      "fallbackCodes": [
+        "gpe_brand_help_required"
+      ],
+      "traceTimings": [
+        {
+          "stage": "artifact-validation",
+          "durationMs": 1
+        },
+        {
+          "stage": "final-reveal",
+          "durationMs": 0
+        }
+      ],
+      "sectionReceipts": [],
+      "sectionCount": 0,
+      "evidenceLinkedSectionCount": 0,
+      "tracePresent": true,
+      "finalArtifact": false,
+      "copyChecks": {
+        "buyerSpecific": false,
+        "offerSpecific": false,
+        "genericPhraseFree": true,
+        "uniqueHeadlines": true,
+        "primaryCtaPresent": false
+      },
+      "expectedOutcome": "safe-deterministic-fallback",
+      "expectedInstructionCode": "GPE_BRAND_HELP_REQUIRED",
+      "expectedWriterSource": "none",
+      "qualityFixture": false,
+      "degradedFixture": false,
+      "blockers": [],
+      "dimensions": null,
+      "total": null
+    },
+    {
+      "id": "model-invalid",
+      "outcome": "production-page",
+      "instructionCode": null,
+      "elapsedMs": 4,
+      "recipe": "product-solution",
+      "recipeActivated": true,
+      "strategy": "strategy-proof",
+      "writerModes": [
+        "deterministic"
+      ],
+      "writerSource": "deterministic",
+      "fallbackCodes": [
+        "copy_factuality_editor_partial_acceptance",
+        "generic_production_page_partial_acceptance",
+        "production_page_partial_acceptance",
+        "section_not_accepted",
+        "section_writers_partial"
+      ],
+      "traceTimings": [
+        {
+          "stage": "artifact-validation",
+          "durationMs": 0
+        },
+        {
+          "stage": "provider-deadline",
+          "durationMs": 0
+        },
+        {
+          "stage": "writer-wave",
+          "durationMs": 0
+        },
+        {
+          "stage": "section-writers",
+          "durationMs": 0
+        },
+        {
+          "stage": "factuality",
+          "durationMs": 1
+        },
+        {
+          "stage": "section-compile",
+          "durationMs": 0
+        },
+        {
+          "stage": "final-reveal",
+          "durationMs": 0
+        }
+      ],
+      "sectionReceipts": [
+        {
+          "sectionId": "recognize-buyer-outcome",
+          "role": "buyer-outcome",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "name-constraint",
+          "role": "current-friction",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 4,
+          "status": "completed"
+        },
+        {
+          "sectionId": "distinct-mechanism",
+          "role": "mechanism",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "relevant-use-cases",
+          "role": "use-cases",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "proof-or-validation",
+          "role": "proof",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "fallback"
+        },
+        {
+          "sectionId": "next-action",
+          "role": "next-move",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 0,
+          "status": "completed"
+        }
+      ],
+      "sectionCount": 5,
+      "evidenceLinkedSectionCount": 4,
+      "tracePresent": true,
+      "finalArtifact": true,
+      "copyChecks": {
+        "buyerSpecific": true,
+        "offerSpecific": true,
+        "genericPhraseFree": true,
+        "uniqueHeadlines": true,
+        "primaryCtaPresent": true
+      },
+      "expectedOutcome": "production-page",
+      "expectedInstructionCode": null,
+      "expectedWriterSource": "deterministic",
+      "qualityFixture": true,
+      "degradedFixture": false,
+      "blockers": [],
+      "dimensions": {
+        "buyerOfferSpecificity": 25,
+        "evidenceTrust": 25,
+        "argumentPageQuality": 25,
+        "brandFlowReliability": 25
+      },
+      "total": 100
+    },
+    {
+      "id": "provider-slow",
+      "outcome": "production-page",
+      "instructionCode": null,
+      "elapsedMs": 10,
+      "recipe": "product-solution",
+      "recipeActivated": true,
+      "strategy": "strategy-mechanism",
+      "writerModes": [
+        "deterministic"
+      ],
+      "writerSource": "deterministic",
+      "fallbackCodes": [
+        "generic_production_page_partial_acceptance",
+        "production_page_partial_acceptance",
+        "section_writers_deadline_exceeded"
+      ],
+      "traceTimings": [
+        {
+          "stage": "artifact-validation",
+          "durationMs": 0
+        },
+        {
+          "stage": "provider-deadline",
+          "durationMs": 0
+        },
+        {
+          "stage": "writer-wave",
+          "durationMs": 0
+        },
+        {
+          "stage": "section-writers",
+          "durationMs": 6
+        },
+        {
+          "stage": "factuality",
+          "durationMs": 0
+        },
+        {
+          "stage": "section-compile",
+          "durationMs": 0
+        },
+        {
+          "stage": "final-reveal",
+          "durationMs": 0
+        }
+      ],
+      "sectionReceipts": [
+        {
+          "sectionId": "recognize-buyer-outcome",
+          "role": "buyer-outcome",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "name-constraint",
+          "role": "current-friction",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 4,
+          "status": "completed"
+        },
+        {
+          "sectionId": "distinct-mechanism",
+          "role": "mechanism",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "relevant-use-cases",
+          "role": "use-cases",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "proof-or-validation",
+          "role": "proof",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "next-action",
+          "role": "next-move",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 0,
+          "status": "completed"
+        }
+      ],
+      "sectionCount": 6,
+      "evidenceLinkedSectionCount": 5,
+      "tracePresent": true,
+      "finalArtifact": true,
+      "copyChecks": {
+        "buyerSpecific": true,
+        "offerSpecific": true,
+        "genericPhraseFree": true,
+        "uniqueHeadlines": true,
+        "primaryCtaPresent": true
+      },
+      "expectedOutcome": "production-page",
+      "expectedInstructionCode": null,
+      "expectedWriterSource": "deterministic",
+      "qualityFixture": true,
+      "degradedFixture": false,
+      "blockers": [],
+      "dimensions": {
+        "buyerOfferSpecificity": 25,
+        "evidenceTrust": 25,
+        "argumentPageQuality": 25,
+        "brandFlowReliability": 25
+      },
+      "total": 100
+    },
+    {
+      "id": "stale-revision",
+      "outcome": "safe-deterministic-fallback",
+      "instructionCode": "GPE_STALE_REVISION",
+      "elapsedMs": 2,
+      "recipe": "product-solution",
+      "recipeActivated": true,
+      "strategy": "strategy-mechanism",
+      "writerModes": [],
+      "writerSource": "none",
+      "fallbackCodes": [
+        "gpe_stale_revision",
+        "writer_wave_stale_revision"
+      ],
+      "traceTimings": [
+        {
+          "stage": "artifact-validation",
+          "durationMs": 0
+        },
+        {
+          "stage": "provider-deadline",
+          "durationMs": 0
+        },
+        {
+          "stage": "writer-wave",
+          "durationMs": 0
+        },
+        {
+          "stage": "final-reveal",
+          "durationMs": 0
+        }
+      ],
+      "sectionReceipts": [],
+      "sectionCount": 0,
+      "evidenceLinkedSectionCount": 0,
+      "tracePresent": true,
+      "finalArtifact": false,
+      "copyChecks": {
+        "buyerSpecific": false,
+        "offerSpecific": false,
+        "genericPhraseFree": true,
+        "uniqueHeadlines": true,
+        "primaryCtaPresent": false
+      },
+      "expectedOutcome": "safe-deterministic-fallback",
+      "expectedInstructionCode": "GPE_STALE_REVISION",
+      "expectedWriterSource": "none",
+      "qualityFixture": false,
+      "degradedFixture": false,
+      "blockers": [],
+      "dimensions": null,
+      "total": null
+    },
+    {
+      "id": "generic-degradation",
+      "outcome": "production-page",
+      "instructionCode": null,
+      "elapsedMs": 3,
+      "recipe": "product-solution",
+      "recipeActivated": true,
+      "strategy": null,
+      "writerModes": [
+        "deterministic"
+      ],
+      "writerSource": "deterministic",
+      "fallbackCodes": [
+        "generic_production_page_partial_acceptance",
+        "production_page_partial_acceptance",
+        "section_writers_partial"
+      ],
+      "traceTimings": [
+        {
+          "stage": "artifact-validation",
+          "durationMs": 0
+        },
+        {
+          "stage": "provider-deadline",
+          "durationMs": 0
+        },
+        {
+          "stage": "writer-wave",
+          "durationMs": 1
+        },
+        {
+          "stage": "section-writers",
+          "durationMs": 0
+        },
+        {
+          "stage": "factuality",
+          "durationMs": 0
+        },
+        {
+          "stage": "section-compile",
+          "durationMs": 0
+        },
+        {
+          "stage": "final-reveal",
+          "durationMs": 0
+        }
+      ],
+      "sectionReceipts": [
+        {
+          "sectionId": "recognize-buyer-outcome",
+          "role": "buyer-outcome",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "name-constraint",
+          "role": "current-friction",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 6,
+          "status": "completed"
+        },
+        {
+          "sectionId": "distinct-mechanism",
+          "role": "mechanism",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 5,
+          "status": "completed"
+        },
+        {
+          "sectionId": "relevant-use-cases",
+          "role": "use-cases",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "proof-or-validation",
+          "role": "proof",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 3,
+          "status": "completed"
+        },
+        {
+          "sectionId": "next-action",
+          "role": "next-move",
+          "writerMode": "deterministic",
+          "evidenceRefCount": 0,
+          "status": "completed"
+        }
+      ],
+      "sectionCount": 6,
+      "evidenceLinkedSectionCount": 5,
+      "tracePresent": true,
+      "finalArtifact": true,
+      "copyChecks": {
+        "buyerSpecific": true,
+        "offerSpecific": true,
+        "genericPhraseFree": false,
+        "uniqueHeadlines": true,
+        "primaryCtaPresent": true
+      },
+      "expectedOutcome": "production-page",
+      "expectedInstructionCode": null,
+      "expectedWriterSource": "deterministic",
+      "qualityFixture": false,
+      "degradedFixture": true,
+      "blockers": [
+        "generic_candidate_rejected"
+      ],
+      "dimensions": null,
+      "total": null
+    }
+  ],
+  "passed": false,
+  "releaseRuns": [
+    {
+      "total": 100,
+      "blockers": [
+        "generic-degradation:generic_candidate_rejected"
+      ],
+      "passed": false
+    },
+    {
+      "total": 100,
+      "blockers": [
+        "generic-degradation:generic_candidate_rejected"
+      ],
+      "passed": false
+    }
+  ],
+  "releasePassed": false,
+  "degradationDetected": true,
+  "limitations": [
+    "Vitest executes the real session production compiler with deterministic public-safe inputs.",
+    "No network or secrets are used.",
+    "Compiler stage timings are measured from private BuildTrace receipts. Persistence and readback are covered by lifecycle tests and browser verification."
+  ]
+}

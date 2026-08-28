@@ -234,8 +234,99 @@ describe("compileSessionProductionPage", () => {
     expect(spec.schemaVersion).toBe("2.0");
     expect(spec.production?.sections).toHaveLength(page.sections.length);
     expect(html.match(/data-journey-section=/g)).toHaveLength(page.sections.length);
-    expect(html).toContain("Why the current approach creates avoidable friction");
+    expect(html).toContain("How the supported change works in practice");
     expect(html).toContain(">Book a meeting</a>");
+  });
+
+  it("uses the evidence-permitted Product/Solution thesis to bind live writer jobs", async () => {
+    const profile = brand();
+    const observed: SectionWritingContract[] = [];
+    const result = await compileSessionProductionPage({
+      session: session(profile),
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000,
+      sectionModelClient: {
+        async writeSection(contract) {
+          observed.push(contract);
+          return { sectionId: contract.sectionId, candidates: [] };
+        }
+      }
+    });
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+
+    const plan = result.artifact.value!.familyDecision!.sectionPlan;
+    expect(plan.map(({ id, role }) => ({ id, role }))).toEqual([
+      { id: "recognize-buyer-outcome", role: "buyer-outcome" },
+      { id: "name-constraint", role: "current-friction" },
+      { id: "distinct-mechanism", role: "mechanism" },
+      { id: "relevant-use-cases", role: "use-cases" },
+      { id: "proof-or-validation", role: "proof" },
+      { id: "next-action", role: "next-move" }
+    ]);
+    expect(observed.map(({ sectionId, role }) => ({ id: sectionId, role }))).toEqual(
+      plan.map(({ id, role }) => ({ id, role }))
+    );
+    expect(observed.map(({ sectionBrief }) => sectionBrief.semanticJob)).toEqual([
+      "recognize the buyer and the promised outcome",
+      "name the current constraint in the buyer's language",
+      "explain the seller's distinct mechanism",
+      "show the most relevant use cases or workflow",
+      "establish proof or a credible validation path",
+      "make the next action the logical continuation"
+    ]);
+    expect(observed.every(({ strategyJobs }) => strategyJobs.length > 0)).toBe(true);
+  });
+
+  it("changes rendered copy with supported thesis inputs while keeping raw brief text out of diagnostics", async () => {
+    const leftProfile = brand();
+    const rightProfile: BrandProfile = {
+      ...brand(),
+      companyName: "Beacon Systems",
+      title: "Signal Router",
+      description: "Beacon Systems provides Signal Router.",
+      publicContext: "Revenue teams route high-intent signals into named account work.",
+      publicTopics: ["Signal Router", "Revenue orchestration"]
+    };
+    const leftSession = session(leftProfile);
+    const rightSession = session(rightProfile);
+    rightSession.answers = {
+      ...rightSession.answers,
+      promotedOffer: "Signal Router",
+      audience: "Revenue orchestration leaders",
+      objective: "route high-intent signals into named account work"
+    };
+    const privateOnlyInput = "unpublished-free-form-brief-phrase-493";
+    rightSession.answers.messageBelief = privateOnlyInput;
+
+    const [left, right] = await Promise.all([
+      compileSessionProductionPage({
+        session: leftSession,
+        brand: leftProfile,
+        providerStartedAtMs: 0,
+        currentTimeMs: 10_000
+      }),
+      compileSessionProductionPage({
+        session: rightSession,
+        brand: rightProfile,
+        providerStartedAtMs: 0,
+        currentTimeMs: 10_000
+      })
+    ]);
+
+    expect(left.outcome).toBe("production-page");
+    expect(right.outcome).toBe("production-page");
+    if (left.outcome !== "production-page" || right.outcome !== "production-page") return;
+
+    const leftHtml = renderPage(leftSession, leftProfile, left.artifact.value!);
+    const rightHtml = renderPage(rightSession, rightProfile, right.artifact.value!);
+    expect(leftHtml).toContain("Acme Workflow Cloud");
+    expect(rightHtml).toContain("Signal Router");
+    expect(rightHtml).not.toEqual(leftHtml);
+    expect(JSON.stringify(right.buildTrace.diagnostics)).not.toContain(privateOnlyInput);
+    expect(JSON.stringify(right.buildTrace.diagnostics)).not.toContain("Signal Router");
   });
 
   it.each([
@@ -243,7 +334,6 @@ describe("compileSessionProductionPage", () => {
       family: "launch" as const,
       labels: [
         "Outcome",
-        "Why change",
         "How it works",
         "Use cases",
         "Evidence",
@@ -251,14 +341,13 @@ describe("compileSessionProductionPage", () => {
       ],
       sectionIds: [
         "experience-overview",
-        "why-change-now",
-        "outcome-mechanism",
-        "application-paths",
         "credibility-anchor",
+        "starting-points",
+        "outcome-mechanism",
         "next-step"
       ],
       copy: [
-        "Why the current approach creates avoidable friction",
+        "How the supported change works in practice",
         "Choose the buyer job that matters most"
       ],
       cta: "Book a meeting"
@@ -744,6 +833,7 @@ describe("dedicated section writers reach the rendered page", () => {
     expect(html).not.toMatch(/lorem ipsum|\bTBD\b|coming soon|\{\{|\[insert/i);
     expect(html).toContain(currentSession.answers.audience!);
     expect(html).toMatch(/>Book a meeting</);
+    expect(html).not.toContain('<p class="eyebrow"');
     expect(html).not.toMatch(
       /<p class="eyebrow">[\s\S]{0,200}?<h2>[\s\S]{0,200}?<p class="dek">/
     );

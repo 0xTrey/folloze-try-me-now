@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assessBrandReadiness,
-  canRenderProvisionalPreview,
+  canRenderExperienceWithBrand,
   prospectBrandPresentation
 } from "@/lib/brand-readiness";
 import { portableBrandLogoFromSvg } from "@/lib/portable-brand-logo";
@@ -145,17 +145,17 @@ describe("brand readiness", () => {
       designReady: false,
       sourceEvidenceReady: true
     });
-    expect(canRenderProvisionalPreview(candidate)).toBe(true);
+    expect(canRenderExperienceWithBrand(candidate)).toBe(true);
   });
 
   it("does not allow provisional rendering from a cross-domain source", () => {
     const candidate = profile({ sourceUrl: "https://unrelated.example.com/brand" });
-    expect(canRenderProvisionalPreview(candidate)).toBe(false);
+    expect(canRenderExperienceWithBrand(candidate)).toBe(false);
   });
 
   it("does not allow provisional rendering without confirmed identity or logo", () => {
     expect(
-      canRenderProvisionalPreview(
+      canRenderExperienceWithBrand(
         profile({
           identity: undefined,
           portableLogo: undefined,

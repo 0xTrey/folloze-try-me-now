@@ -13,8 +13,19 @@ import {
   recoverSessionWork,
   runStoryStage
 } from "@/lib/orchestrator";
-import { deleteSession, getSession, putSession } from "@/lib/session-store";
-import type { BrandProfile, ExperienceModel, TryMeSession } from "@/lib/types";
+import {
+  BUILD_PHASE_ORDER,
+  canRevealFinalExperience,
+  isBuildInProgress
+} from "@/lib/preview-lifecycle";
+import { deleteSession, getSession, putSession, toPublicSession } from "@/lib/session-store";
+import type {
+  BrandProfile,
+  ExperienceModel,
+  FinalArtifactReceipt,
+  QualityReceipt,
+  TryMeSession
+} from "@/lib/types";
 
 vi.mock("@/lib/integrations/email", () => ({ sendClaimEmail: vi.fn() }));
 vi.mock("@/lib/integrations/folloze", () => ({ publishClaimedExperience: vi.fn() }));
@@ -137,9 +148,36 @@ function experience(): ExperienceModel {
     sections: draft.sections.map((section) => ({ ...section })),
     signalLabels: [...draft.signalLabels],
     html: "<!doctype html><title>Jitterbit enterprise automation</title>",
+    readiness: "final",
     generationSource: "deterministic-fallback",
     artifactRevision: 2,
     artifactDigest: "a".repeat(64)
+  };
+}
+
+/**
+ * Under the final-only lifecycle an artifact is not claimable on its own. Save
+ * reuses the reveal gate, so a fixture that stands for an already-revealed
+ * experience needs the read-back receipt and a matching quality receipt.
+ */
+function finalReceiptFor(model: ExperienceModel): FinalArtifactReceipt {
+  return {
+    readiness: "final",
+    artifactRevision: model.artifactRevision,
+    artifactDigest: model.artifactDigest,
+    structuralGate: "passed",
+    truthGate: "passed",
+    persistedAt: "2026-07-30T00:00:01.000Z",
+    readBackAt: "2026-07-30T00:00:02.000Z"
+  };
+}
+
+function qualityReceiptFor(model: ExperienceModel): QualityReceipt {
+  return {
+    status: "passed",
+    checkedAt: "2026-07-30T00:00:01.000Z",
+    artifactRevision: model.artifactRevision,
+    checks: []
   };
 }
 
@@ -149,6 +187,7 @@ function session(input: {
   includeExperience?: boolean;
 }): TryMeSession {
   sessionIds.add(input.id);
+  const model = input.includeExperience ? experience() : undefined;
   return {
     id: input.id,
     editorTokenHash: "private-editor-token-hash",
@@ -172,7 +211,9 @@ function session(input: {
     },
     brand,
     audienceSuggestions: [],
-    experience: input.includeExperience ? experience() : undefined,
+    experience: model,
+    finalArtifact: model ? finalReceiptFor(model) : undefined,
+    qualityReceipt: model ? qualityReceiptFor(model) : undefined,
     events: []
   };
 }
@@ -181,6 +222,11 @@ describe("anonymous preview and claim publication boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+    // The verified brand fixture reaches real font and asset resolution, the
+    // only part of this path that touches the network. Failing every fetch
+    // keeps the claim-boundary assertions hermetic rather than letting them
+    // stall on live requests.
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network disabled in test"));
     vi.mocked(generateExperienceDraft).mockResolvedValue({
       draft: {
         ...draft,
@@ -244,11 +290,14 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(sendClaimEmail).not.toHaveBeenCalled();
   });
 
-  it("uses the deterministic preview when a full model pass would consume the finalization reserve", async () => {
+  it("uses the deterministic final when a model pass would consume the finalization reserve", async () => {
     const pending = session({ id: "anonymous-preview-budget-reserve" });
+    // Past the writing-phase handover, so the shared budget leaves the section
+    // writer no window at all and the reserve stays intact for render, persist,
+    // and read-back.
     pending.events.push({
       name: "generation_eligible",
-      at: new Date(Date.now() - 30_500).toISOString(),
+      at: new Date(Date.now() - 44_500).toISOString(),
       meta: { trigger: "answers" }
     });
     await putSession(pending);
@@ -271,10 +320,24 @@ describe("anonymous preview and claim publication boundary", () => {
         })
       })
     ]));
+    // Skipping the model pass is only correct if it buys a real final artifact:
+    // the reserve was still unspent and the deterministic result was read back.
+    const skipped = stored?.events.find(
+      (event) => event.name === "generation_refinement_skipped"
+    );
+    expect(Number(skipped?.meta?.remainingBeforeFinalizationMs)).toBeGreaterThan(0);
+    expect(stored?.finalArtifact).toMatchObject({
+      readiness: "final",
+      structuralGate: "passed",
+      truthGate: "passed",
+      artifactRevision: stored?.experience?.artifactRevision,
+      artifactDigest: stored?.experience?.artifactDigest
+    });
+    expect(canRevealFinalExperience(toPublicSession(stored!))).toBe(true);
   });
 
-  it("shows an unclaimable deterministic preview before slow model refinement finishes", async () => {
-    const pending = session({ id: "provisional-preview-before-model" });
+  it("reveals nothing while slow model refinement runs, then only the receipted final", async () => {
+    const pending = session({ id: "build-in-progress-before-model" });
     pending.events.push({
       name: "generation_eligible",
       at: new Date().toISOString(),
@@ -292,28 +355,23 @@ describe("anonymous preview and claim publication boundary", () => {
     const completion = runStoryStage(pending.id);
     await vi.waitFor(async () => {
       expect(await getSession(pending.id)).toMatchObject({
-        status: "preview_provisional",
-        experience: {
-          readiness: "provisional",
-          generationSource: "deterministic-fallback"
-        },
+        status: "generating",
         stages: { story: { status: "running" } }
       });
     });
 
-    const provisional = await getSession(pending.id);
-    const provisionalEvent = provisional?.events.find(
-      (event) => event.name === "preview_provisional_ready"
+    // The former provisional artifact is gone: mid-build there is no artifact,
+    // no receipt, and nothing the reveal gate will serve.
+    const building = await getSession(pending.id);
+    expect(building?.experience).toBeUndefined();
+    expect(building?.finalArtifact).toBeUndefined();
+    expect(isBuildInProgress(toPublicSession(building!))).toBe(true);
+    expect(BUILD_PHASE_ORDER).toContain(building?.buildProgress?.phase);
+    expect(canRevealFinalExperience(toPublicSession(building!))).toBe(false);
+    expect(building?.events.map(({ name }) => name)).not.toContain("preview_provisional_ready");
+    await expect(claimSession(pending.id, "buyer@example.com")).rejects.toThrow(
+      /not ready|still being built/i
     );
-    expect(provisionalEvent?.meta).toMatchObject({
-      source: "deterministic-fallback",
-      artifactRevision: provisional?.experience?.artifactRevision,
-      generationEligibleToPreviewMs: expect.any(Number)
-    });
-    expect(Number(provisionalEvent?.meta?.generationEligibleToPreviewMs)).toBeLessThan(10_000);
-    await expect(claimSession(pending.id, "buyer@example.com")).rejects.toMatchObject({
-      code: "claim_not_ready"
-    });
     expect(recordLeadCapture).not.toHaveBeenCalled();
 
     resolveGeneration({
@@ -329,21 +387,59 @@ describe("anonymous preview and claim publication boundary", () => {
     await completion;
 
     const final = await getSession(pending.id);
+    // The slow model pass, not a deterministic fallback, is what produced the
+    // one revealed artifact. Its global draft hero deliberately does not win the
+    // headline; production section copy owns that.
     expect(final).toMatchObject({
       status: "preview_ready_unclaimed",
       experience: {
         readiness: "final",
-        headline: "A refined buyer-ready campaign"
+        generationSource: "openai"
       },
-      stages: { story: { status: "complete" } }
+      stages: { story: { status: "complete" } },
+      buildProgress: { phase: "ready" }
     });
-    expect(final!.experience!.artifactRevision).toBeGreaterThan(
-      provisional!.experience!.artifactRevision
-    );
+    expect(final?.experience?.html).not.toContain("A refined buyer-ready campaign");
+    expect(final?.finalArtifact).toMatchObject({
+      readiness: "final",
+      structuralGate: "passed",
+      truthGate: "passed",
+      artifactRevision: final?.experience?.artifactRevision,
+      artifactDigest: final?.experience?.artifactDigest
+    });
+    expect(canRevealFinalExperience(toPublicSession(final!))).toBe(true);
+    expect(final!.experience!.artifactRevision).toBeGreaterThan(pending.revision);
+
+    // The reveal latency receipt the provisional event used to carry now lives
+    // on the one event that marks a revealable artifact.
+    const readyEvent = final?.events.find((event) => event.name === "preview_ready");
+    expect(readyEvent?.meta).toMatchObject({
+      artifactRevision: final?.experience?.artifactRevision,
+      eligibleToFinalMs: expect.any(Number)
+    });
+    expect(Number(readyEvent?.meta?.eligibleToFinalMs)).toBeLessThan(10_000);
   });
 
-  it("keeps a verified brand with incomplete design DNA on the provisional path", async () => {
-    const pending = session({ id: "provisional-incomplete-design-dna" });
+  it("refuses to claim a persisted final artifact that has not been read back", async () => {
+    const persisted = session({
+      id: "claim-before-readback",
+      status: "preview_ready_unclaimed",
+      includeExperience: true
+    });
+    // The window between the final write and the read-back confirmation: the
+    // artifact exists and says `final`, but nothing has proved it is readable.
+    persisted.finalArtifact = undefined;
+    await putSession(persisted);
+
+    await expect(claimSession(persisted.id, "buyer@example.com")).rejects.toMatchObject({
+      code: "claim_not_ready"
+    });
+    expect(canRevealFinalExperience(toPublicSession(persisted))).toBe(false);
+    expect(recordLeadCapture).not.toHaveBeenCalled();
+  });
+
+  it("keeps a verified brand with incomplete design DNA on the build path", async () => {
+    const pending = session({ id: "build-incomplete-design-dna" });
     pending.brand = {
       ...brand,
       portableLogo: portableBrandLogoFromSvg(
@@ -372,13 +468,17 @@ describe("anonymous preview and claim publication boundary", () => {
     const completion = runStoryStage(pending.id);
     await vi.waitFor(async () => {
       expect(await getSession(pending.id)).toMatchObject({
-        status: "preview_provisional",
-        experience: { readiness: "provisional" }
+        status: "generating",
+        stages: { story: { status: "running" } }
       });
     });
-    expect((await getSession(pending.id))?.events).not.toContainEqual(
+    const building = await getSession(pending.id);
+    // Incomplete design DNA must not make the build ask the buyer for brand
+    // help, and it must not produce a visible intermediate artifact either.
+    expect(building?.events).not.toContainEqual(
       expect.objectContaining({ name: "brand_help_required" })
     );
+    expect(building?.experience).toBeUndefined();
 
     resolveGeneration({
       draft: { ...draft, sections: draft.sections.map((section) => ({ ...section })) },
@@ -387,10 +487,15 @@ describe("anonymous preview and claim publication boundary", () => {
     });
     await completion;
 
-    expect(await getSession(pending.id)).toMatchObject({
+    const final = await getSession(pending.id);
+    expect(final).toMatchObject({
       status: "preview_ready_unclaimed",
       experience: { readiness: "final" }
     });
+    expect(final?.events).not.toContainEqual(
+      expect.objectContaining({ name: "brand_help_required" })
+    );
+    expect(canRevealFinalExperience(toPublicSession(final!))).toBe(true);
   });
 
   it("does not start generation before the material brief is eligible", async () => {
@@ -421,7 +526,7 @@ describe("anonymous preview and claim publication boundary", () => {
   });
 
   it("discards a late refinement after the buyer brief changes", async () => {
-    const pending = session({ id: "provisional-stale-refinement" });
+    const pending = session({ id: "build-stale-refinement" });
     await putSession(pending);
 
     let resolveGeneration!: (value: Awaited<ReturnType<typeof generateExperienceDraft>>) => void;
@@ -433,9 +538,11 @@ describe("anonymous preview and claim publication boundary", () => {
 
     const completion = runStoryStage(pending.id);
     await vi.waitFor(async () => {
-      expect((await getSession(pending.id))?.experience?.readiness).toBe("provisional");
+      expect((await getSession(pending.id))?.stages.story.status).toBe("running");
     });
-    const provisional = await getSession(pending.id);
+    const building = await getSession(pending.id);
+    const supersededAttemptId = building?.stages.story.attemptId;
+    expect(supersededAttemptId).toBeTruthy();
 
     await patchSessionAnswers(pending.id, { objective: "Drive product evaluation" });
     resolveGeneration({
@@ -452,18 +559,31 @@ describe("anonymous preview and claim publication boundary", () => {
 
     const stored = await getSession(pending.id);
     expect(stored?.answers.objective).toBe("Drive product evaluation");
-    expect(stored?.experience?.artifactRevision).toBeGreaterThanOrEqual(
-      provisional?.experience?.artifactRevision ?? 0
-    );
-    expect(stored?.experience?.headline).not.toBe(
-      "Stale model output must never replace the page"
-    );
     expect(stored?.events).toContainEqual(
       expect.objectContaining({
         name: "generation_discarded",
-        meta: expect.objectContaining({ reason: "input_changed" })
+        meta: expect.objectContaining({
+          reason: "input_changed",
+          attemptId: supersededAttemptId
+        })
       })
     );
+    // The superseded attempt's copy may never become the revealed page.
+    // Restarting against the newer brief is correct, so any artifact that
+    // survives has to belong to the attempt that actually finished and carry
+    // its own matching receipt.
+    expect(stored?.experience?.headline).not.toBe(
+      "Stale model output must never replace the page"
+    );
+    expect(JSON.stringify(stored?.experience ?? {})).not.toContain("Stale model output");
+    expect(stored?.stages.story.attemptId).not.toBe(supersededAttemptId);
+    if (stored?.finalArtifact) {
+      expect(stored.finalArtifact.artifactRevision).toBe(stored.experience?.artifactRevision);
+      expect(stored.finalArtifact.artifactDigest).toBe(stored.experience?.artifactDigest);
+      expect(canRevealFinalExperience(toPublicSession(stored))).toBe(true);
+    } else {
+      expect(canRevealFinalExperience(toPublicSession(stored!))).toBe(false);
+    }
   });
 
   it("passes CTA readiness from intent and style without requiring a destination URL", async () => {

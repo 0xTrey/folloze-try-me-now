@@ -54,14 +54,14 @@ the newer recorded decision wins.
 | D-008 | A business email is requested only to keep and share the experience. | Claiming persists the experience and triggers a transactional email containing the live URL. | Accepted |
 | D-009 | Unclaimed previews expire 30 minutes after the first preview becomes ready. | The final five minutes show a countdown. Expired URLs must not expose generated content. | Accepted |
 | D-010 | Claimed experiences do not automatically expire in V1. | They persist until administrative removal so “keep this experience” is an honest promise. | Accepted default |
-| D-011 | Prospect progress and Folloze work are separate. The prospect sees three choices—account or offer, audience, and goal—while brand, research, message, and page work appear in one compact autonomous-work receipt. | One progress system answers “what do I need to do?” and one honest receipt answers “what is Folloze doing?” without contradictory counts. | Accepted; clarified 2026-08-08 |
+| D-011 | Prospect progress and Folloze work are separate. The prospect sees three choices: account or offer, audience, and goal. Brand, research, message, and page work appear in one compact autonomous-work receipt. | One progress system answers “what do I need to do?” and one honest receipt answers “what is Folloze doing?” without contradictory counts. | Accepted; clarified 2026-08-08 |
 | D-012 | Checklist state must be honest. | Each visible transition comes from a real job event. Timers may rotate explanatory cards but never fake task completion or percentages. | Accepted |
 | D-013 | One purposeful processing module explains what Folloze is doing and why it matters. | Loading time becomes a selling experience without turning the page into an operations dashboard. The active visual changes by stage, is reduced-motion safe, and never fakes completion. | Accepted; clarified 2026-08-08 |
 | D-014 | The target experience is a credible preview in 30 seconds or less. | This was the original latency target. Trey later approved a longer bounded window for materially stronger copy and visuals. | Superseded by D-026 on 2026-08-04 |
 | D-015 | The ABM V1 personalizes for one target account. | A Default/Target preview demonstrates personalization without the latency and complexity of the June brief's three-account example. | Accepted default |
 | D-016 | Publish/share is an outcome, not a setup question. | The app automatically creates a 30-minute cache-only preview. It must not create or publish a Folloze board before a validated business-email claim. | Accepted; clarified 2026-07-30 |
 | D-017 | Advanced freeform instructions are hidden behind an optional post-preview control. | First-time visitors get a guided path; they do not face the current six broad Campaign Agent fields. | Accepted |
-| D-018 | Engagement analytics is a primary demo story. | The result includes “See who engages—and what they care about,” followed by a demo CTA. Illustrative data must be labeled. | Accepted |
+| D-018 | Engagement analytics is a primary demo story. | The result includes “See who engages and what they care about,” followed by a demo CTA. Illustrative data must be labeled. | Accepted |
 | D-019 | Use OpenAI for generation and Folloze MCP/experience capabilities for the Folloze outcome. | Credentials remain server-side. A fresh Folloze instance will replace the test integration when available. | Accepted |
 | D-020 | Do not use n8n. | Application orchestration lives in the app/backend and its job model. | Accepted |
 | D-021 | Vercel is the default application host; Cloudflare remains available for a justified edge or browser-runtime need. | Start with the simplest deployable architecture and do not couple product behavior to a second platform unnecessarily. | Superseded by D-037 on 2026-08-12 |
@@ -71,7 +71,7 @@ the newer recorded decision wins.
 | D-025 | Every validated business-email claim is written to a durable lead ledger before publication begins. | The ledger is keyed idempotently by session and records qualification, experience URL, publication, and delivery outcomes without storing generated HTML or source content. Transactional delivery still does not create a marketing subscription. | Accepted 2026-07-30 |
 | D-026 | The target experience uses a 30–60 second quality window, with the first useful build signal or provisional artifact visible within 10 seconds. | Trey explicitly superseded D-014 so generation can spend more time on copy and visual quality. The first-preview OpenAI pass now defaults to 25 seconds and is hard-capped at 30 seconds; browser brand evidence defaults to 12 seconds and is hard-capped at 20 seconds. Verified public HTML/CSS and Brandfetch evidence run concurrently, and deterministic fallback remains available at the model deadline. | Accepted 2026-08-04; latency budget tightened 2026-08-07; supersedes D-014 |
 | D-027 | Brand fidelity fails closed and separates identity from presentation. Brandfetch and public-site evidence establish identity, logo, and canonical domain; verified HTML/CSS and browser evidence build `BrandDesignDNA` for layout, typography, surfaces, density, and imagery. | A returned official Brandfetch asset is accepted; a broken image or generic palette is never presented as harvested brand truth. `BrandDesignDNA` may change presentation but never invent narrative, proof, audience, or CTA claims. | Implemented 2026-08-06; render behavior clarified by D-036 |
-| D-028 | Folloze selects the wireframe; prospects do not browse a template marketplace before value. Seventeen reviewed archetypes—five account, six campaign, and six content—map to six shared composition grammars and one canonical `ExperienceSpec`. | The system can produce varied, explainable experiences without 17 renderer forks. The locked selection receipt preserves why a structure was chosen, while shared analytics, accessibility, save, expiration, and brand primitives remain consistent. | Implemented 2026-08-07 |
+| D-028 | Folloze selects the wireframe; prospects do not browse a template marketplace before value. Seventeen reviewed archetypes, five account, six campaign, and six content, map to six shared composition grammars and one canonical `ExperienceSpec`. | The system can produce varied, explainable experiences without 17 renderer forks. The locked selection receipt preserves why a structure was chosen, while shared analytics, accessibility, save, expiration, and brand primitives remain consistent. | Implemented 2026-08-07 |
 | D-029 | Account and campaign experiences use the seven-section persuasion framework; content experiences remain source-preserving companions. | Account and campaign pages may reframe a verified seller/target/offer story. Content pages must preserve the original asset, distinguish source fact from interpretation, and never turn thin extraction into unsupported campaign copy. | Implemented 2026-08-07 |
 | D-030 | The deterministic provisional preview is a real but unclaimable artifact. It appears before optional enrichment or model refinement completes, remains visible through refinement, and upgrades atomically only when attempt ID, input fingerprint, and artifact revision still match. | The visitor sees credible value quickly without weakening claim, source, or stale-result safety. Only a final `preview_ready_unclaimed` artifact can be saved or published; late work cannot overwrite changed inputs or a claimed revision. | Implemented 2026-08-07 |
 | D-031 | The three entry examples are Aprio for Georgia-Pacific (one-to-one), ServiceNow AI Platform (campaign), and Cisco Hybrid Mesh Firewall (content). | Each card opens a motion-appropriate, verified example instead of a generic placeholder or a mismatched API/demo board. Example links are secondary proof, not the primary creation action. | Accepted and implemented 2026-08-07 |
@@ -117,6 +117,31 @@ fallback, and progressive work receipts. It may not expose HTML until the
 current-revision artifact is final, persisted, read back, and structurally and
 factually valid. D-039 and D-040 define the matching compiler and interface
 architecture for the first V2 base-experience release.
+
+On 2026-08-27, D-040 landed in the interface. The visitor now moves through
+exactly three surfaces: one centered conversational intake with editable brief
+receipts, one build shell, and the full-frame final reveal. Consequences that
+constrain future work:
+
+- `AssemblyPreview` has no non-final branch. It returns nothing until
+  `canRevealFinalExperience` proves a persisted, read-back final receipt whose
+  revision matches the experience, so no skeleton, provisional page, or partial
+  copy can stand in for the real artifact. The provisional preview notice, the
+  campaign "live preview while enrichment continues" pane, the eligibility hold,
+  the assembly skeleton canvas, and the orbiting page-preview imagery are gone.
+- The build shell renders one row per `BUILD_PHASE_ORDER` phase and copies each
+  row's status and detail straight from `buildPhaseRows(session)`. A phase with
+  no receipt reads as queued. There is no percentage, progress bar, elapsed
+  figure, or estimated finish time anywhere in the shell.
+- `buildProgress.slow` is the only signal that may say the build is taking
+  longer, and `buildProgress.failure` is the only source of the failed state.
+  The failure block shows `failure.nextAction` verbatim and offers retry only
+  when `failure.retryable` is true.
+- Row state is written as text ("Done", "Working", "Queued", "Stopped") next to
+  the glyph, so active, complete, and queued survive reduced motion and
+  color-only perception.
+- The reveal drops its eyebrow. One direct headline is followed by a separate
+  status block carrying lifecycle status, provenance, and the publication note.
 
 ## Superseded June 1 directions
 
