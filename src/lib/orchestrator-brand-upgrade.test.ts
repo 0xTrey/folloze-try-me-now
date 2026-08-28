@@ -1,12 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const integrationMocks = vi.hoisted(() => ({
-  harvestBrand: vi.fn()
+  harvestBrand: vi.fn(),
+  harvestOfferDiscoveryGraph: vi.fn()
 }));
 
 vi.mock("@/lib/integrations/brand-harvester", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/integrations/brand-harvester")>();
   return { ...actual, harvestBrand: integrationMocks.harvestBrand };
+});
+
+vi.mock("@/lib/research/offer-discovery", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/research/offer-discovery")>();
+  return {
+    ...actual,
+    harvestOfferDiscoveryGraph: integrationMocks.harvestOfferDiscoveryGraph
+  };
 });
 
 import { fallbackBrand } from "@/lib/integrations/brand-harvester";
@@ -49,6 +58,7 @@ function fallbackSession(id: string, domain: string): TryMeSession {
 
 afterEach(async () => {
   integrationMocks.harvestBrand.mockReset();
+  integrationMocks.harvestOfferDiscoveryGraph.mockReset();
   await Promise.all([...ids].map((id) => deleteSession(id)));
   ids.clear();
 });
@@ -114,6 +124,16 @@ describe("verified fallback brand recovery", () => {
     ids.add(id);
     await putSession(session);
     integrationMocks.harvestBrand.mockResolvedValue(verified!);
+    const discoveryGraph = {
+      origin: verified!.sourceUrl,
+      pages: [
+        {
+          url: `${verified!.sourceUrl.replace(/\/$/, "")}/solutions/`,
+          html: "<h2>Account Experience Platform</h2>"
+        }
+      ]
+    };
+    integrationMocks.harvestOfferDiscoveryGraph.mockResolvedValue(discoveryGraph);
 
     await runBrandStage(id);
 
@@ -130,10 +150,15 @@ describe("verified fallback brand recovery", () => {
         status: "incomplete",
         logoReady: true,
         paletteReady: true,
-        designReady: false
+        designReady: false,
+        sourceEvidenceReady: true
       }
     });
     expect(stored?.stages.brand.status).toBe("fallback");
+    expect(integrationMocks.harvestOfferDiscoveryGraph).toHaveBeenCalledWith({
+      origin: verified!.sourceUrl
+    });
+    expect(stored?.offerDiscoveryGraph).toEqual(discoveryGraph);
   });
 
   it("does not relabel an unknown fallback profile as verified evidence", async () => {

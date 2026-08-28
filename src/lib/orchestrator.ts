@@ -1589,7 +1589,7 @@ async function runBrandStageUnlocked(
     const harvestedEvidence = trusted.rejectedProfile ?? harvested;
     const readiness = profile.readiness ?? assessBrandReadiness(profile);
     let offerDiscoveryGraph: Awaited<ReturnType<typeof harvestOfferDiscoveryGraph>>;
-    if (!trusted.usedFallback && readiness.status === "ready") {
+    if (!trusted.usedFallback && readiness.sourceEvidenceReady) {
       try {
         offerDiscoveryGraph = await harvestOfferDiscoveryGraph({ origin: profile.sourceUrl });
       } catch {

@@ -106,6 +106,89 @@ describe("rankOfferRecommendations", () => {
     ).toHaveLength(0);
   });
 
+  it("does not relabel root-page editorial topics as official offers", () => {
+    const result = rankOfferRecommendations({
+      revision: 6,
+      motion: "solution",
+      evidence: [
+        evidence({
+          ref: "official-root:campaign",
+          label: "Account Anything AI",
+          kind: "solution",
+          source: "official-page",
+          sourceUrl: "https://example.com/",
+          confidence: 0.95
+        }),
+        evidence({
+          ref: "official-root:outlook",
+          label: "Pulse Economy Capital",
+          kind: "solution",
+          source: "official-page",
+          sourceUrl: "https://example.com/",
+          confidence: 0.93
+        }),
+        evidence({
+          ref: "official-root:insights",
+          label: "Tax Insights",
+          kind: "solution",
+          source: "official-page",
+          sourceUrl: "https://example.com/",
+          confidence: 0.99
+        })
+      ]
+    });
+
+    expect(result.presentation.mode).toBe("freeform-with-url");
+    expect(result.presentation.candidateIds).toEqual([]);
+    expect(
+      result.candidates.filter(({ recommendationKind }) => recommendationKind === "evidence-backed")
+    ).toHaveLength(0);
+  });
+
+  it("keeps named offers from product and solution pages while rejecting editorial-path topics", () => {
+    const result = rankOfferRecommendations({
+      revision: 7,
+      motion: "solution",
+      evidence: [
+        evidence({
+          ref: "official:harmony",
+          label: "Harmony",
+          kind: "solution",
+          source: "official-page",
+          sourceUrl: "https://example.com/products/harmony/",
+          confidence: 0.84
+        }),
+        evidence({
+          ref: "official:northstar",
+          label: "Northstar",
+          kind: "solution",
+          source: "official-page",
+          sourceUrl: "https://example.com/solutions/northstar/",
+          confidence: 0.82
+        }),
+        evidence({
+          ref: "editorial:outlook",
+          label: "2027 Market Outlook",
+          kind: "solution",
+          source: "official-page",
+          sourceUrl: "https://example.com/insights/market-outlook/",
+          confidence: 0.99
+        })
+      ]
+    });
+
+    expect(result.candidates.slice(0, 2).map(({ label }) => label)).toEqual([
+      "Harmony",
+      "Northstar"
+    ]);
+    expect(result.presentation.candidateIds).toEqual(
+      result.candidates.slice(0, 2).map(({ id }) => id)
+    );
+    expect(
+      result.candidates.find(({ label }) => label === "2027 Market Outlook")
+    ).toMatchObject({ recommendationKind: "fallback" });
+  });
+
   it.each([
     ["solution", "Pipeline Orchestration", "solution"],
     ["industry", "Financial Services", "industry"]

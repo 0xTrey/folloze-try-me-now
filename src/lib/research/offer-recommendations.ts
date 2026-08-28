@@ -169,6 +169,9 @@ const homepageEditorialPattern =
 const homepageEditorialOfferOverridePattern =
   /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application)\b/i;
 
+const editorialSourcePathPattern =
+  /\/(?:insights?|research|trends?|blog|articles?|stories|news|updates?|resources?|podcasts?|videos?|reports?|guides?|case-stud(?:y|ies)|events?)(?:\/|$)/i;
+
 function isStrongHomepageOfferLabel(value: string): boolean {
   const clean = cleanLabel(value);
   if (/^[\s\d.,+$€£¥%]+$/.test(clean)) return false;
@@ -181,6 +184,25 @@ function isStrongHomepageOfferLabel(value: string): boolean {
     /\b[A-Za-z][A-Za-z-]*\d+[A-Za-z\d-]*\b/.test(clean) ||
     /\b\d+[A-Za-z][A-Za-z\d-]*\b/.test(clean)
   );
+}
+
+function sourcePathname(value: string | undefined): string | undefined {
+  if (!value?.trim()) return undefined;
+  try {
+    return new URL(value).pathname.replace(/\/{2,}/g, "/") || "/";
+  } catch {
+    return undefined;
+  }
+}
+
+function sourceRequiresExplicitOfferMarker(
+  evidence: ExtractedOfferEvidence
+): boolean {
+  if (evidence.source === "homepage") return true;
+  if (evidence.source !== "official-page") return false;
+  const pathname = sourcePathname(evidence.sourceUrl);
+  if (!pathname) return false;
+  return pathname === "/" || editorialSourcePathPattern.test(pathname);
 }
 
 function isCompanySpecificOfferLabel(value: string): boolean {
@@ -201,7 +223,7 @@ function isEvidenceBackedOffer(
     evidence.source !== "visitor-input" &&
     evidence.confidence >= MIN_SUPPORTED_CONFIDENCE &&
     isCompanySpecificOfferLabel(evidence.label) &&
-    (evidence.source !== "homepage" || isStrongHomepageOfferLabel(evidence.label))
+    (!sourceRequiresExplicitOfferMarker(evidence) || isStrongHomepageOfferLabel(evidence.label))
   );
 }
 
@@ -349,12 +371,18 @@ function rankEvidenceGroups(
     }
   }
 
-  return [...groups.values()].sort(
-    (left, right) =>
+  return [...groups.values()].sort((left, right) => {
+    const priority = (group: RankedEvidenceGroup): number => {
+      if (group.best.source === "visitor-input") return 2;
+      return isEvidenceBackedOffer(group.best) ? 1 : 0;
+    };
+    return (
+      priority(right) - priority(left) ||
       right.score - left.score ||
       right.best.confidence - left.best.confidence ||
       left.key.localeCompare(right.key)
-  );
+    );
+  });
 }
 
 function fallbackLabels(input: RankOfferRecommendationsInput): readonly string[] {

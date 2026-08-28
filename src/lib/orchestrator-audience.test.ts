@@ -1,12 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const integrationMocks = vi.hoisted(() => ({
-  harvestBrand: vi.fn()
+  harvestBrand: vi.fn(),
+  harvestOfferDiscoveryGraph: vi.fn()
 }));
 
 vi.mock("@/lib/integrations/brand-harvester", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/integrations/brand-harvester")>();
   return { ...actual, harvestBrand: integrationMocks.harvestBrand };
+});
+
+vi.mock("@/lib/research/offer-discovery", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/research/offer-discovery")>();
+  return {
+    ...actual,
+    harvestOfferDiscoveryGraph: integrationMocks.harvestOfferDiscoveryGraph
+  };
 });
 
 import { audienceSuggestionsFor } from "@/lib/brand-intelligence";
@@ -31,7 +40,10 @@ function profile(
   };
 }
 
-afterEach(() => integrationMocks.harvestBrand.mockReset());
+afterEach(() => {
+  integrationMocks.harvestBrand.mockReset();
+  integrationMocks.harvestOfferDiscoveryGraph.mockReset();
+});
 
 describe("target-aware ABM audience orchestration", () => {
   it("removes stale seller roles, then replaces them after the target harvest", async () => {
