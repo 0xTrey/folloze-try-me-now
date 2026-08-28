@@ -214,6 +214,81 @@ describe("harvestOfferDiscoveryGraph", () => {
     );
   });
 
+  it("prioritizes solution indexes and real service pages over generic navigation", async () => {
+    const { harvestOfferDiscoveryGraph } = await import("@/lib/research/offer-discovery");
+    const realisticHomepage = page(
+      "/",
+      `<nav>
+        <a href="/about/alliance-ecosystem/">Alliance ecosystem</a>
+        <a href="/pay-invoices/">Pay invoices</a>
+        <a href="/about/locations/">Locations</a>
+        <a href="/contact/">Contact</a>
+        <a href="/all-solutions/">All Solutions</a>
+        <a href="/business-tax/">Business Tax</a>
+        <a href="/audit-assurance/">Audit &amp; Assurance</a>
+        <a href="/advisory-services/">Advisory Services</a>
+        <a href="/client-accounting-services/">Client Accounting &amp; Advisory Services</a>
+      </nav>
+      <main>
+        <h1>Business Advisory, Tax &amp; Accounting Firm</h1>
+        <h2>Account Anything AI</h2>
+        <h2>Pulse Economy Capital</h2>
+        <h2>3,400+</h2>
+      </main>`
+    );
+    const solutionIndex = page(
+      "/all-solutions/",
+      `<main>
+        <h1>All Solutions</h1>
+        <a href="/business-tax/">Business Tax</a>
+        <a href="/audit-assurance/">Audit &amp; Assurance</a>
+        <a href="/advisory-services/">Advisory Services</a>
+        <a href="/client-accounting-services/">Client Accounting &amp; Advisory Services</a>
+      </main>`
+    );
+    const servicePages = [
+      page("/business-tax/", "<main><h1>Business Tax</h1></main>"),
+      page("/audit-assurance/", "<main><h1>Audit &amp; Assurance</h1></main>"),
+      page("/advisory-services/", "<main><h1>Advisory Services</h1></main>"),
+      page(
+        "/client-accounting-services/",
+        "<main><h1>Client Accounting &amp; Advisory Services</h1></main>"
+      )
+    ];
+    const pageMap = new Map(
+      [realisticHomepage, solutionIndex, ...servicePages].map((entry) => [entry.url, entry])
+    );
+    const fetched: string[] = [];
+
+    const graph = await harvestOfferDiscoveryGraph({
+      origin: ORIGIN,
+      budget: { maxPages: 6, maxLinks: 12 },
+      fetchPage: async (url) => {
+        fetched.push(url);
+        return pageMap.get(url);
+      }
+    });
+    const ranked = rankOfferRecommendations({
+      revision: 44,
+      motion: "solution",
+      evidence: extractOfferEvidence({ motion: "solution", discoveryPages: graph })
+    });
+
+    expect(fetched.slice(0, 2)).toEqual([`${ORIGIN}/`, `${ORIGIN}/all-solutions/`]);
+    expect(fetched).not.toEqual(expect.arrayContaining([
+      `${ORIGIN}/contact/`,
+      `${ORIGIN}/pay-invoices/`,
+      `${ORIGIN}/about/locations/`
+    ]));
+    expect(ranked.presentation.mode).toBe("recommendations");
+    expect(ranked.candidates.map(({ label }) => label)).toEqual(
+      expect.arrayContaining(["Business Tax", "Audit & Assurance", "Advisory Services"])
+    );
+    expect(ranked.candidates.map(({ label }) => label)).not.toEqual(
+      expect.arrayContaining(["3,400+", "Account Anything AI", "Pulse Economy Capital"])
+    );
+  });
+
   it("rejects an off-host redirect result before it enters the discovery graph", async () => {
     const { harvestOfferDiscoveryGraph } = await import("@/lib/research/offer-discovery");
     const graph = await harvestOfferDiscoveryGraph({

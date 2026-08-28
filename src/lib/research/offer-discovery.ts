@@ -48,10 +48,27 @@ const htmlEntityMap: Record<string, string> = {
 };
 
 const offerHeadingPattern =
-  /\b(?:services?|solutions?|products?|platforms?|advisory|accounting|payroll|erp|webinar|summit|conference)\b/i;
+  /\b(?:services?|solutions?|products?|platforms?|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth management|managed services|digital transformation|erp|webinar|summit|conference)\b/i;
+
+const companyDescriptorPattern = /\b(?:firm|company|provider)\b/i;
 
 const offerPathPattern =
-  /\/(?:services?|solutions?|products?|advisory|accounting|payroll|erp|industr(?:y|ies)|offerings?)(?:\/|$)/i;
+  /\/(?:services?|solutions?|products?|advisory|accounting|payroll|erp|tax|audit|assurance|consulting|compliance|wealth-management|managed-services|digital-transformation|industr(?:y|ies)|offerings?)(?:\/|$)/i;
+
+const nonOfferPathPattern =
+  /\/(?:about|contact|locations?|careers?|jobs?|pay-invoices?|login|privacy|legal|alliance|ecosystem|insights?(?:-events)?|news|blog|articles?|resources?|customer-stories|case-stud(?:y|ies)|events?)(?:\/|$)/i;
+
+const offerIndexPathPattern =
+  /\/(?:all-)?(?:services?|solutions?|products?|offerings?)(?:\/|$)/i;
+
+const explicitOfferLabelPattern =
+  /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth management|managed services|digital transformation|automation|headsets?|cameras?|devices?|erp)\b/i;
+
+const editorialLabelPattern =
+  /\b(?:insights?|research|trends?|blog|articles?|stories|news|updates?|resources?|podcasts?|videos?|reports?|guides?|case studies|events?)\b/i;
+
+const editorialOfferOverridePattern =
+  /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application)\b/i;
 
 const navigationOnlyLabel =
   /^(?:(?:explore|view|see|browse|learn more|read more|skip to)\s+)?(?:(?:all|our|featured|latest|the latest from)\s+)?(?:products?(?:\s+(?:and|&)\s+services?)?|services?|solutions?|resources?|support|partners?|customers?|customer stories|company|about(?:\s+us)?|contact(?:\s+us)?|news|events?|careers?|industries|use cases?|why\s+[\p{L}\p{N}.&'-]+|take your next steps?|quick links?|resources and legal)$/iu;
@@ -63,7 +80,27 @@ const genericEvidenceLabels = new Set([
 ]);
 
 const sentencePattern =
-  /\b(?:helps?|supports?|serves?|includes?|managing|evaluating|improving|navigating|for|with|across)\b/i;
+  /\b(?:helps?|supports?|serves?|includes?|managing|evaluating|improving|navigating|for|with|across|put|puts|unlock|unlocks|transform|transforms)\b/i;
+
+function hasExplicitOfferMarker(value: string): boolean {
+  const clean = cleanLabel(value);
+  return (
+    explicitOfferLabelPattern.test(clean) ||
+    /\b[A-Za-z][A-Za-z-]*\d+[A-Za-z\d-]*\b/.test(clean) ||
+    /\b\d+[A-Za-z][A-Za-z\d-]*\b/.test(clean)
+  );
+}
+
+function isStatOnlyLabel(value: string): boolean {
+  return /^[\s\d.,+$€£¥%]+$/.test(cleanLabel(value));
+}
+
+function isEditorialLabel(value: string): boolean {
+  const clean = cleanLabel(value);
+  if (!clean) return false;
+  if (/^(?:how|what|when|where|why|who)\b/i.test(clean) || /\?$/.test(clean)) return true;
+  return editorialLabelPattern.test(clean) && !editorialOfferOverridePattern.test(clean);
+}
 
 function isNavigationOnlyOfferLabel(label: string): boolean {
   const clean = cleanLabel(label);
@@ -80,6 +117,8 @@ function looksLikeSentence(value: string): boolean {
 function isBoundedOfferLabel(value: string): boolean {
   const clean = cleanLabel(value);
   if (!clean || clean.length < 6 || isNavigationOnlyOfferLabel(clean)) return false;
+  if (isStatOnlyLabel(clean) || isEditorialLabel(clean)) return false;
+  if (companyDescriptorPattern.test(clean)) return false;
   if (genericEvidenceLabels.has(clean.toLocaleLowerCase())) return false;
   if (looksLikeSentence(clean) || clean.length > 72) return false;
   const tokens = clean.split(/\s+/).filter(Boolean);
@@ -250,9 +289,17 @@ function isBrandRelatedSeed(pageUrl: string, brandOriginUrl: string): boolean {
 
 function isOfferPath(pathname: string): boolean {
   if (offerPathPattern.test(pathname)) return true;
-  return /\/[a-z0-9-]+-(?:services?|solutions?|products?|advisory|accounting|payroll)(?:\/|$)/i.test(
+  return /\/[a-z0-9-]+-(?:services?|solutions?|products?|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth-management|managed-services|digital-transformation)(?:\/|$)/i.test(
     pathname
   );
+}
+
+function isNonOfferPath(pathname: string): boolean {
+  return nonOfferPathPattern.test(pathname);
+}
+
+function isOfferIndexPath(pathname: string): boolean {
+  return offerIndexPathPattern.test(pathname);
 }
 
 function inferKind(label: string, motion: OfferCampaignMotion): OfferEvidenceKind {
@@ -283,10 +330,20 @@ function looksLikeMarketingTagline(label: string): boolean {
   return tokens.length <= 6 && /^[A-Z]/.test(clean);
 }
 
-function acceptDiscoveredLabel(label: string): string | undefined {
+function acceptDiscoveredLabel(label: string, sourceUrl?: string): string | undefined {
   const phrase = offerLikePhrase(label) ?? (isBoundedOfferLabel(label) ? cleanLabel(label) : undefined);
   if (!phrase) return undefined;
   if (isNavigationOnlyOfferLabel(phrase)) return undefined;
+  if (isStatOnlyLabel(phrase) || isEditorialLabel(phrase)) return undefined;
+  if (sourceUrl) {
+    try {
+      if (isNonOfferPath(new URL(sourceUrl).pathname) && !hasExplicitOfferMarker(phrase)) {
+        return undefined;
+      }
+    } catch {
+      return undefined;
+    }
+  }
   if (looksLikeMarketingTagline(phrase)) return undefined;
   return phrase;
 }
@@ -393,7 +450,7 @@ export function discoverOfferEvidenceFromPages(
 
   const push = (candidate: ExtractedOfferEvidence) => {
     const label = cleanLabel(candidate.label);
-    const accepted = acceptDiscoveredLabel(label);
+    const accepted = acceptDiscoveredLabel(label, candidate.sourceUrl);
     if (!accepted) return;
     const key = dedupeKey(accepted);
     if (!key || seen.has(key)) return;
@@ -442,21 +499,28 @@ export function discoverOfferEvidenceFromPages(
       if (!isSameOrigin(anchor.url, input.graph.origin)) continue;
 
       const anchorOnOfferPath = isOfferPath(anchorUrl.pathname);
-      if (!anchor.inNav && !anchorOnOfferPath) continue;
+      if (isNonOfferPath(anchorUrl.pathname)) continue;
+      if (!anchorOnOfferPath && !hasExplicitOfferMarker(anchor.label)) continue;
 
-      const label = acceptDiscoveredLabel(anchor.label);
+      const label = acceptDiscoveredLabel(anchor.label, anchor.url);
       if (!label) continue;
+
+      const evidenceSource: OfferEvidenceSource = anchorOnOfferPath
+        ? "official-page"
+        : anchor.inNav && source === "homepage"
+          ? "homepage"
+          : "official-page";
 
       push({
         ref: stableId("offer-discovery", anchor.url, "link", label),
         label,
         kind: inferKind(label, input.motion),
-        source: anchor.inNav && source === "homepage" ? "homepage" : "official-page",
+        source: evidenceSource,
         sourceUrl: anchor.url,
         confidence: confidenceForCandidate({
           inNav: anchor.inNav,
           onOfferPath: anchorOnOfferPath,
-          source: anchor.inNav && source === "homepage" ? "homepage" : "official-page"
+          source: evidenceSource
         })
       });
     }
@@ -475,23 +539,31 @@ function offerDetailUrlsFromHtml(html: string, origin: string, maxLinks: number)
   } catch {
     return [];
   }
-  const urls: string[] = [];
+  const candidates: Array<{ url: string; priority: number; order: number }> = [];
   const seen = new Set<string>();
-  for (const anchor of extractAnchors(html, base)) {
-    if (urls.length >= maxLinks) break;
+  for (const [order, anchor] of extractAnchors(html, base).entries()) {
     try {
       const pathname = new URL(anchor.url).pathname;
       const anchorOnOfferPath = isOfferPath(pathname);
-      if (!anchor.inNav && !anchorOnOfferPath) continue;
+      if (isNonOfferPath(pathname)) continue;
+      const explicitLabel = hasExplicitOfferMarker(anchor.label);
+      if (!anchorOnOfferPath && !explicitLabel) continue;
       const key = pathname.replace(/\/+$/, "").toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      urls.push(anchor.url);
+      candidates.push({
+        url: anchor.url,
+        priority: isOfferIndexPath(pathname) ? 300 : anchorOnOfferPath ? 200 : 100,
+        order
+      });
     } catch {
       continue;
     }
   }
-  return urls;
+  return candidates
+    .sort((left, right) => right.priority - left.priority || left.order - right.order)
+    .slice(0, maxLinks)
+    .map(({ url }) => url);
 }
 
 export interface HarvestOfferDiscoveryGraphInput {

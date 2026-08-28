@@ -37,7 +37,7 @@ describe("rankOfferRecommendations", () => {
         }),
         evidence({
           ref: "home:account-data",
-          label: "Account Data",
+          label: "Account Data Cloud",
           kind: "product",
           confidence: 0.7
         })
@@ -52,7 +52,7 @@ describe("rankOfferRecommendations", () => {
     expect(result.candidates.map(({ label }) => label)).toEqual([
       "Revenue Intelligence Platform",
       "Buying Signal Suite",
-      "Account Data"
+      "Account Data Cloud"
     ]);
     expect(result.candidates).toHaveLength(3);
     expect(
@@ -71,6 +71,39 @@ describe("rankOfferRecommendations", () => {
     expect(result.candidates[0].reasonCodes).toEqual(
       expect.arrayContaining(["homepage_discovery", "motion_match"])
     );
+  });
+
+  it("does not present editorial homepage topics as product or service recommendations", () => {
+    const result = rankOfferRecommendations({
+      revision: 5,
+      motion: "solution",
+      evidence: [
+        evidence({
+          ref: "home:campaign",
+          label: "Account Anything AI",
+          kind: "solution",
+          confidence: 0.9
+        }),
+        evidence({
+          ref: "home:outlook",
+          label: "Pulse Economy Capital",
+          kind: "solution",
+          confidence: 0.86
+        }),
+        evidence({
+          ref: "home:tax-insights",
+          label: "Tax Insights",
+          kind: "solution",
+          confidence: 0.92
+        })
+      ]
+    });
+
+    expect(result.presentation.mode).toBe("freeform-with-url");
+    expect(result.presentation.candidateIds).toEqual([]);
+    expect(
+      result.candidates.filter(({ recommendationKind }) => recommendationKind === "evidence-backed")
+    ).toHaveLength(0);
   });
 
   it.each([

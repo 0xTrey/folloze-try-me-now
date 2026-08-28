@@ -160,9 +160,33 @@ const genericOfferTokens = new Set([
   "webinar"
 ]);
 
+const strongHomepageOfferPattern =
+  /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth management|managed services|digital transformation|automation|headsets?|cameras?|devices?|erp)\b/i;
+
+const homepageEditorialPattern =
+  /\b(?:insights?|research|trends?|blog|articles?|stories|news|updates?|resources?|podcasts?|videos?|reports?|guides?|case studies|events?)\b/i;
+
+const homepageEditorialOfferOverridePattern =
+  /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application)\b/i;
+
+function isStrongHomepageOfferLabel(value: string): boolean {
+  const clean = cleanLabel(value);
+  if (/^[\s\d.,+$€£¥%]+$/.test(clean)) return false;
+  if (/^(?:how|what|when|where|why|who)\b/i.test(clean) || /\?$/.test(clean)) return false;
+  if (homepageEditorialPattern.test(clean) && !homepageEditorialOfferOverridePattern.test(clean)) {
+    return false;
+  }
+  return (
+    strongHomepageOfferPattern.test(clean) ||
+    /\b[A-Za-z][A-Za-z-]*\d+[A-Za-z\d-]*\b/.test(clean) ||
+    /\b\d+[A-Za-z][A-Za-z\d-]*\b/.test(clean)
+  );
+}
+
 function isCompanySpecificOfferLabel(value: string): boolean {
   const key = dedupeKey(value);
   if (!key) return false;
+  if (/\b(?:firm|company|provider)\b/i.test(key)) return false;
   const tokens = key.split(/\s+/).filter(Boolean);
   if (tokens.every((token) => genericOfferTokens.has(token))) return false;
   return !/^(?:product|solution|industry|event|webinar)(?:\s+(?:overview|agenda|priorities|use cases|evaluation questions|audience questions))?$/i.test(
@@ -176,7 +200,8 @@ function isEvidenceBackedOffer(
   return (
     evidence.source !== "visitor-input" &&
     evidence.confidence >= MIN_SUPPORTED_CONFIDENCE &&
-    isCompanySpecificOfferLabel(evidence.label)
+    isCompanySpecificOfferLabel(evidence.label) &&
+    (evidence.source !== "homepage" || isStrongHomepageOfferLabel(evidence.label))
   );
 }
 

@@ -33,7 +33,15 @@ const genericEvidenceLabels = new Set([
 ]);
 
 const offerHeadingPattern =
-  /\b(?:services?|solutions?|products?|platforms?|advisory|accounting|payroll|erp|webinar|summit|conference)\b/i;
+  /\b(?:services?|solutions?|products?|platforms?|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth management|managed services|digital transformation|erp|webinar|summit|conference)\b/i;
+
+const companyDescriptorPattern = /\b(?:firm|company|provider)\b/i;
+
+const editorialLabelPattern =
+  /\b(?:insights?|research|trends?|blog|articles?|stories|news|updates?|resources?|podcasts?|videos?|reports?|guides?|case studies|events?)\b/i;
+
+const editorialOfferOverridePattern =
+  /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application)\b/i;
 
 function cleanLabel(value: string, max = 120): string {
   return value
@@ -137,6 +145,10 @@ function looksLikeSentence(value: string): boolean {
 export function isBoundedOfferLabel(value: string): boolean {
   const clean = cleanLabel(value);
   if (!clean || clean.length < 6 || isNavigationOnlyOfferLabel(clean)) return false;
+  if (companyDescriptorPattern.test(clean)) return false;
+  if (/^[\s\d.,+$€£¥%]+$/.test(clean)) return false;
+  if (/^(?:how|what|when|where|why|who)\b/i.test(clean) || /\?$/.test(clean)) return false;
+  if (editorialLabelPattern.test(clean) && !editorialOfferOverridePattern.test(clean)) return false;
   if (genericEvidenceLabels.has(clean.toLocaleLowerCase())) return false;
   if (looksLikeSentence(clean) || clean.length > 72) return false;
   const tokens = clean.split(/\s+/).filter(Boolean);
