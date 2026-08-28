@@ -54,4 +54,42 @@ Each result resolves to an official Aprio service page and carries an evidence r
 - Turbopack production build: passed.
 - Critical lifecycle browser suite: 28 passed.
 
-The correction must be committed, pushed, deployed, and rerun through the production canary before the ten-point repair can be called complete.
+## Final production acceptance
+
+Final implementation commit: `018b44c`
+
+Production deployment: `dpl_AnDc4BJndax6ncfc8LSV3sTAAo8c`
+
+Production alias: `https://folloze-try-me-now.vercel.app`
+
+The first corrected production run exposed two HTTP 400 responses from the first-party analytics endpoint. Review found two general defects:
+
+- Older UI calls sent unified event names with property keys outside the server allowlist.
+- A failed pre-reset request could requeue events from the old visitor identity after Start over created a new identity.
+
+The browser client now enforces the same unified event contract as the server, uses typed properties for build, research, engagement, and claim events, and discards stale retries after an identity rotation. Ordinary same-identity retries still work.
+
+The final production Aprio canary passed with:
+
+- Offer recommendations: Audit & Assurance Solutions, Business Tax Services, and Risk & Compliance Solutions.
+- Audience recommendations: CFOs and finance executives, plus controllers and accounting leaders.
+- Objective actions: explore the service, speak with an advisor, and review the service overview.
+- All six receipt-backed build phases observed before the final reveal.
+- Embedded preview wheel scroll moved from 0 to 800 pixels while the host page remained at 0.
+- Live engagement opened with the required disclosure.
+- The email-save dialog unlocked after real exploration and opened without submitting an address.
+- Start over cleared the build and reveal state.
+- Zero page errors, zero console errors, and zero failed responses.
+
+Final correction gates:
+
+- Focused analytics and route tests: 15 passed.
+- Full unit suite: 146 files and 1,681 tests passed.
+- Preview benchmark: 5 files and 33 tests passed.
+- Focused analytics and guided-entry browser suite: 15 passed.
+- Lint: zero errors and three pre-existing warnings.
+- Typecheck: passed.
+- Webpack production build: passed.
+- Vercel production health: production-capable with no blockers.
+
+Final verdict: accept the ten-point production repair at 100 out of 100. No hard blocker remains.
