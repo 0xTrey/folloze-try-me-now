@@ -16,6 +16,7 @@ This decision does not authorize a GitHub push or Vercel deployment. Those remai
 | Branch | `codex/messaging-compiler-v1` |
 | Starting source | `3c556052bbbb27c29ef610652d76c4018e4fccb2` |
 | Planning contract | `3fc11f6` |
+| Accepted implementation | `14034be1890a030ca74bcb395363e0d4f1515fc1` |
 | Active recipe | Product/Solution |
 | Public artifact | App-hosted final HTML only |
 | Personalized variants | Deferred |
