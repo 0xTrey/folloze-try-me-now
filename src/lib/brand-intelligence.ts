@@ -597,7 +597,7 @@ const profiles: Record<BrandCategory, CategoryProfile> = {
     signalLabels: ["Customer moment", "Commerce stack", "Growth path"]
   },
   "finance-operations": {
-    signals: /\b(finance|financial operations|accounts payable|accounts receivable|procurement|spend management|billing|payments|treasury)\b/i,
+    signals: /\b(finance|financial operations|accounts payable|accounts receivable|procurement|spend management|billing|payments|treasury|accounting|bookkeeping|tax|audit|assurance|advisory|controller|cfo)\b/i,
     audiences: [
       "Finance transformation leaders",
       "Accounting and financial operations teams",
@@ -1117,6 +1117,23 @@ function isCloudCostOffer(context: AudienceSuggestionContext): boolean {
   );
 }
 
+function isAccountingAdvisoryOffer(context: AudienceSuggestionContext): boolean {
+  const offer = context.promotedOffer ?? "";
+  return (
+    /\b(?:accounting|bookkeeping|tax|audit|assurance|cfo advisory|financial advisory|client accounting|business advisory)\b/i.test(offer) &&
+    !/\b(?:payroll|human resources|hr|workforce|people operations|benefits)\b/i.test(offer)
+  );
+}
+
+function accountingAdvisoryAudienceSuggestions(): string[] {
+  return [
+    "CFOs and finance executives",
+    "Controllers and accounting leaders",
+    "Business owners and executive teams",
+    "Risk and compliance leaders"
+  ].map(boundedAudience);
+}
+
 function cloudCostAudienceSuggestions(target?: BrandProfile): string[] {
   const targetContext = target ? ` in ${target.companyName}'s cloud environment` : "";
   return [
@@ -1137,12 +1154,18 @@ export function audienceSuggestionsFor(
   target?: BrandProfile,
   context: AudienceSuggestionContext = {}
 ): string[] {
-  const offerCategory = context.promotedOffer && !unsafeIntelligenceText.test(context.promotedOffer)
-    ? identifyBrandCategoryFromText(context.promotedOffer)
+  const promotedOffer = context.promotedOffer ?? "";
+  const offerCategory = promotedOffer && !unsafeIntelligenceText.test(promotedOffer)
+    ? /\b(?:payroll|human resources|hr|workforce|people operations|benefits)\b/i.test(promotedOffer)
+      ? "people-operations" as const
+      : identifyBrandCategoryFromText(promotedOffer)
     : undefined;
   const sellerCategory = offerCategory ?? identifyBrandCategory(brand);
   if (isCloudCostOffer(context)) {
     return conciseAudienceSuggestions(cloudCostAudienceSuggestions(target));
+  }
+  if (!target && isAccountingAdvisoryOffer(context)) {
+    return conciseAudienceSuggestions(accountingAdvisoryAudienceSuggestions());
   }
   if (!target) {
     return conciseAudienceSuggestions([...profiles[sellerCategory].audiences]);

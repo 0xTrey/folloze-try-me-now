@@ -96,6 +96,7 @@ import {
 } from "@/lib/client-brand-preflight";
 import { imageDeliveryPath } from "@/lib/image-delivery";
 import { interpretConversationalBrief } from "@/lib/conversational-brief";
+import { isProfessionalServicesOffer } from "@/lib/generation/objective-cta-recommendations";
 import {
   analyticsDurationBucket,
   analyticsQualityGate,
@@ -624,11 +625,13 @@ export function streamingCampaignPatchForIntent(
   const publicUrl = interpretation.sourceUrl?.value;
   const inferredType = mode === "event"
     ? "event"
-    : interpretation.campaignType?.value === "demand"
+    : isProfessionalServicesOffer(value)
       ? "demand"
-      : interpretation.campaignType?.value === "event"
-        ? "event"
-        : "product";
+      : interpretation.campaignType?.value === "demand"
+        ? "demand"
+        : interpretation.campaignType?.value === "event"
+          ? "event"
+          : "product";
   const eventIntent = inferredType === "event";
   const promotedOffer = conciseIntentLabel(
     interpretation.offer?.value || value,

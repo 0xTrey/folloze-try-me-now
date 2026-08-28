@@ -216,7 +216,7 @@ function isCompanySpecificOfferLabel(value: string): boolean {
   );
 }
 
-function isEvidenceBackedOffer(
+export function isEvidenceBackedOfferEvidence(
   evidence: ExtractedOfferEvidence
 ): boolean {
   return (
@@ -374,7 +374,7 @@ function rankEvidenceGroups(
   return [...groups.values()].sort((left, right) => {
     const priority = (group: RankedEvidenceGroup): number => {
       if (group.best.source === "visitor-input") return 2;
-      return isEvidenceBackedOffer(group.best) ? 1 : 0;
+      return isEvidenceBackedOfferEvidence(group.best) ? 1 : 0;
     };
     return (
       priority(right) - priority(left) ||
@@ -414,7 +414,7 @@ export function rankOfferRecommendations(
       Boolean(canonicalUrl(input.suppliedUrl))
         ? ("supplied-url" as const)
         : group.best.source,
-    recommendationKind: isEvidenceBackedOffer(group.best)
+    recommendationKind: isEvidenceBackedOfferEvidence(group.best)
       ? "evidence-backed" as const
       : "fallback" as const,
     reasonCodes: isCompanySpecificOfferLabel(group.best.label)

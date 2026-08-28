@@ -98,6 +98,7 @@ export interface ObjectiveCtaRecommendationInput {
   revision: number;
   activeRevision: number;
   motion: ObjectiveCtaMotion;
+  offerLabel?: string;
   evidence?: readonly ObjectiveCtaEvidence[];
   startedAt: string;
   completedAt: string;
@@ -122,6 +123,13 @@ type RecommendationPlan = {
 const DEFAULT_CONFIDENCE = 0.6;
 const FALLBACK_CONFIDENCE = 0.45;
 const EVIDENCE_THRESHOLD = 0.7;
+
+const professionalServicesOfferPattern =
+  /\b(?:accounting|bookkeeping|tax|audit|assurance|advisory|consulting|wealth management|cfo services?|compliance services?)\b/i;
+
+export function isProfessionalServicesOffer(value: string | undefined): boolean {
+  return professionalServicesOfferPattern.test(value ?? "");
+}
 
 const defaultPlans = {
   campaign: [
@@ -266,6 +274,62 @@ const defaultPlans = {
   ObjectiveCtaMotion,
   readonly [CandidateSeed, CandidateSeed, CandidateSeed]
 >;
+
+function boundedOfferLabel(value: string | undefined): string {
+  const clean = (value ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 72)
+    .replace(/[\s,;:|/-]+$/g, "");
+  return clean || "the service";
+}
+
+function professionalServicesPlan(
+  offerLabel: string | undefined,
+  supportingEvidence: readonly ObjectiveCtaEvidence[]
+): RecommendationPlan {
+  const offer = boundedOfferLabel(offerLabel);
+  const overviewSubject = offer
+    .replace(/\s+(?:services?|solutions?)$/i, "")
+    .trim() || "service";
+  const candidates: [CandidateSeed, CandidateSeed, CandidateSeed] = [
+    {
+      id: "service-explore-offer",
+      objective: `Explore ${offer}`,
+      actionFamily: "evaluate",
+      ctaType: "explore",
+      ctaLabel: "Explore the service"
+    },
+    {
+      id: "service-book-advisor",
+      objective: "Speak with an advisor",
+      actionFamily: "engage",
+      ctaType: "book-meeting",
+      ctaLabel: "Book an advisory conversation"
+    },
+    {
+      id: "service-review-overview",
+      objective: `Review the ${overviewSubject} overview`,
+      actionFamily: "offer-specific",
+      ctaType: "download",
+      ctaLabel: "Download the service overview"
+    }
+  ];
+  return {
+    candidates,
+    recommendedId: "service-book-advisor",
+    reasonCodes: [
+      "campaign-motion",
+      ...(supportingEvidence.length
+        ? ["campaign-offer-evidence" as const]
+        : []),
+      "action-family-engage"
+    ],
+    supportingEvidence,
+    fallback: false
+  };
+}
 
 const actionFamilyReasonCodes: Record<ObjectiveCtaActionFamily, ObjectiveCtaReasonCode> = {
   evaluate: "action-family-evaluate",
@@ -450,6 +514,14 @@ function planFor(input: ObjectiveCtaRecommendationInput): RecommendationPlan {
       }
     }
     return defaultPlan(input.motion);
+  }
+
+  if (input.motion === "campaign" && isProfessionalServicesOffer(input.offerLabel)) {
+    const supportingEvidence = evidenceFor(evidence, "campaign-offer", [
+      "visitor-input",
+      "official-seller-page"
+    ]);
+    return professionalServicesPlan(input.offerLabel, supportingEvidence);
   }
 
   const signalByMotion = {

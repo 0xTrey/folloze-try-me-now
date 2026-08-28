@@ -221,6 +221,20 @@ describe("Try Me Now experience copy", () => {
     expect(patch.objective).toBeUndefined();
   });
 
+  it("routes a professional service offer through the demand path instead of product defaults", () => {
+    const patch = streamingCampaignPatchForIntent(
+      "Audit & Assurance Solutions",
+      "campaign"
+    );
+
+    expect(patch).toMatchObject({
+      campaignType: "demand",
+      promotedOffer: "Audit & Assurance Solutions",
+      promotedOfferConfirmed: true
+    });
+    expect(patch.objective).toBeUndefined();
+  });
+
   it("asks a goal after offer and audience instead of committing an inferred objective", () => {
     const questions = streamingCampaignQuestions(
       "campaign",

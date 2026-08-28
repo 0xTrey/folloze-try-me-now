@@ -107,6 +107,50 @@ describe("audience recommendation strategy", () => {
     expect(artifact.value?.presentation.mode).toBe("recommendations");
   });
 
+  it("maps Aprio Audit & Assurance evidence to finance and accounting roles without technology leakage", () => {
+    const aprio = profile({
+      domain: "aprio.com",
+      companyName: "Aprio",
+      description: "Audit, assurance, tax, and advisory services for growing businesses.",
+      publicTopics: ["Audit", "Assurance", "Accounting", "Finance"]
+    });
+    const artifact = buildAudienceRecommendations({
+      sessionId: "aprio-audit-assurance",
+      revision: 8,
+      activeRevision: 8,
+      route: "generic-campaign",
+      seller: aprio,
+      offerLabel: "Audit & Assurance Services",
+      evidenceItems: [
+        evidence({
+          id: "aprio-audit",
+          text: "Audit and assurance leaders strengthening financial reporting and risk controls",
+          sourceUrl: "https://aprio.com/services/audit-assurance",
+          entityRole: "seller"
+        }),
+        evidence({
+          id: "aprio-finance",
+          text: "Finance and accounting teams preparing for growth and compliance",
+          sourceUrl: "https://aprio.com/industries",
+          entityRole: "seller"
+        })
+      ],
+      generatedAt
+    });
+
+    expect(artifact.status).toBe("complete");
+    expect(artifact.value?.candidates).toHaveLength(3);
+    expect(artifact.value?.candidates.map(({ buyerRole }) => buyerRole)).toEqual([
+      "Audit and assurance leaders",
+      "Finance and accounting teams",
+      "CFOs and finance executives"
+    ]);
+    const audienceText = artifact.value?.candidates
+      .flatMap(({ label, buyerRole, buyerJob, rationale }) => [label, buyerRole, buyerJob, rationale])
+      .join(" ") ?? "";
+    expect(audienceText).not.toMatch(/\b(?:data|ai|platform|it)\b/i);
+  });
+
   it("uses a named account only as sourced ABM context under seller authority", () => {
     const target = profile({
       domain: "cisco.com",

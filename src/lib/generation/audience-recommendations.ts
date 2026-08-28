@@ -82,6 +82,12 @@ export interface BuildAudienceRecommendationsInput {
   seller: BrandProfile;
   target?: BrandProfile;
   offerLabel?: string;
+  verifiedOfferEvidence?: {
+    evidenceRef: string;
+    label: string;
+    sourceUrl: string;
+    confidence: number;
+  };
   evidenceItems?: readonly SessionEvidenceItem[];
   generatedAt?: string;
 }
@@ -537,6 +543,29 @@ function evidenceFor(
   });
 }
 
+function verifiedOfferEvidenceFor(
+  input: BuildAudienceRecommendationsInput
+): UsableEvidence[] {
+  const evidence = input.verifiedOfferEvidence;
+  const label = safeEvidenceText(evidence?.label);
+  if (
+    !evidence ||
+    !label ||
+    evidence.confidence < 0.58 ||
+    !sourceBelongsTo(input.seller, evidence.sourceUrl)
+  ) {
+    return [];
+  }
+  return [{
+    id: evidence.evidenceRef,
+    entityRole: "seller",
+    sourceUrl: evidence.sourceUrl,
+    text: label,
+    signals: optionTokens(label).slice(0, 5),
+    confidence: Math.min(1, evidence.confidence)
+  }];
+}
+
 function sellerAuthorityProvenance(seller: BrandProfile): AudienceCandidateProvenance {
   const official =
     seller.source !== "fallback" && sourceBelongsTo(seller, seller.sourceUrl);
@@ -688,7 +717,10 @@ export function buildAudienceRecommendations(
     };
   }
 
-  const sellerEvidence = evidenceFor(input.evidenceItems ?? [], input.seller, "seller");
+  const sellerEvidence = [
+    ...verifiedOfferEvidenceFor(input),
+    ...evidenceFor(input.evidenceItems ?? [], input.seller, "seller")
+  ];
   const targetAllowed =
     input.route === "named-account" &&
     input.target &&

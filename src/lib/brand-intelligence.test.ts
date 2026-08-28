@@ -93,6 +93,28 @@ describe("company-specific audience intelligence", () => {
     );
   });
 
+  it("keeps Aprio Audit & Assurance audiences in finance and accounting", () => {
+    const aprio = brand({
+      domain: "aprio.com",
+      companyName: "Aprio",
+      description: "Audit, assurance, tax, and advisory services for growing businesses."
+    });
+    const audiences = audienceSuggestionsFor(aprio, undefined, {
+      promotedOffer: "Audit & Assurance Services",
+      campaignType: "demand",
+      objective: "Generate demand"
+    });
+
+    expect(audiences).toEqual([
+      "CFOs and finance executives",
+      "Controllers and accounting leaders",
+      "Business owners and executive teams",
+      "Risk and compliance leaders"
+    ]);
+    expect(audiences.join(" ")).toMatch(/finance|accounting|business owners|risk|compliance/i);
+    expect(audiences.join(" ")).not.toMatch(/\b(?:data|ai|platform|it)\b/i);
+  });
+
   it("keeps untrusted or missing offer text out of audience labels", () => {
     expect(
       audienceSuggestionsFor(jitterbit, undefined, {

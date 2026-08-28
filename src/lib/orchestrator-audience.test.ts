@@ -262,4 +262,85 @@ describe("seller-evidence audience orchestration", () => {
       }
     }
   );
+
+  it("projects Aprio audit evidence into finance audiences and service-specific objectives", async () => {
+    const id = "aprio-audit-assurance-integration";
+    const seller = profile({
+      domain: "aprio.com",
+      companyName: "Aprio",
+      description:
+        "Aprio is a business advisory and accounting firm providing audit, assurance, tax, and advisory services.",
+      publicContext:
+        "Aprio helps organizations with audit and assurance, tax, and business advisory decisions.",
+      publicTopics: ["Audit & Assurance Solutions", "Accounting", "Finance leaders", "Business Advisory"]
+    });
+    const now = new Date().toISOString();
+    await putSession({
+      id,
+      editorTokenHash: "private-editor-hash",
+      useCase: "campaign",
+      companyDomain: seller.domain,
+      status: "collecting",
+      createdAt: now,
+      updatedAt: now,
+      temporaryUrl: `https://example.com/e/${id}`,
+      revision: 1,
+      stages: {
+        brand: { status: "running", startedAt: now },
+        audience: { status: "pending" },
+        story: { status: "pending" }
+      },
+      answers: { promotedOffer: "Audit & Assurance Solutions", promotedOfferConfirmed: true },
+      audienceSuggestions: [],
+      events: []
+    });
+    integrationMocks.harvestBrand.mockResolvedValueOnce(seller);
+    integrationMocks.harvestOfferDiscoveryGraph.mockResolvedValueOnce({
+      origin: "https://aprio.com",
+      pages: [
+        {
+          url: "https://aprio.com/",
+          html: "<html><body><h1>Aprio</h1><p>Business advisory and accounting firm.</p><a href=\"/services/audit-assurance/\">Audit &amp; Assurance Solutions</a><a href=\"/services/business-tax/\">Business Tax Services</a><a href=\"/services/risk-compliance/\">Risk &amp; Compliance Solutions</a></body></html>"
+        },
+        {
+          url: "https://aprio.com/services/audit-assurance/",
+          html: "<html><body><h1>Audit &amp; Assurance Solutions</h1><p>Independent audit and assurance services for finance leaders, controllers, and business owners.</p></body></html>"
+        },
+        {
+          url: "https://aprio.com/services/business-tax/",
+          html: "<html><body><h1>Business Tax Services</h1><p>Tax planning and compliance services for growing businesses.</p></body></html>"
+        },
+        {
+          url: "https://aprio.com/services/risk-compliance/",
+          html: "<html><body><h1>Risk &amp; Compliance Solutions</h1><p>Risk and compliance advisory services.</p></body></html>"
+        }
+      ]
+    });
+
+    try {
+      await runBrandStage(id);
+      const projected = await getSession(id);
+      expect(integrationMocks.harvestOfferDiscoveryGraph).toHaveBeenCalledWith({
+        origin: "https://aprio.com"
+      });
+      expect(projected?.offerRecommendations?.some(({ label, recommendationKind }) =>
+        /Audit.*Assurance/i.test(label) && recommendationKind === "evidence-backed"
+      )).toBe(true);
+      const audienceLabels = projected?.audienceRecommendations?.map(({ label }) => label) ?? [];
+      expect(audienceLabels.length).toBeGreaterThanOrEqual(2);
+      expect(audienceLabels.join(" ")).toMatch(/finance|accounting|controller|business owner/i);
+      expect(audienceLabels.join(" ")).not.toMatch(/data and ai|platform and architecture|it leaders/i);
+      expect(projected?.audienceRecommendations?.some(({ evidenceItemIds, evidenceSummary }) =>
+        evidenceItemIds.length > 0 && /Audit.*Assurance/i.test(evidenceSummary ?? "")
+      )).toBe(true);
+      expect(projected?.objectiveRecommendations).toHaveLength(3);
+      expect(projected?.objectiveRecommendations?.map(({ cta }) => cta?.type)).toEqual(
+        expect.arrayContaining(["explore", "book-meeting", "download"])
+      );
+      expect(projected?.objectiveRecommendations?.filter(({ recommended }) => recommended)).toHaveLength(1);
+      expect(projected?.objectiveRecommendations?.find(({ recommended }) => recommended)?.evidenceItemIds.length).toBeGreaterThan(0);
+    } finally {
+      await deleteSession(id);
+    }
+  });
 });

@@ -33,6 +33,7 @@ import {
 import { buildAudienceRecommendations } from "@/lib/generation/audience-recommendations";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
 import {
+  isProfessionalServicesOffer,
   recommendObjectiveCtas,
   type ObjectiveCtaEvidence,
   type ObjectiveCtaMotion
@@ -89,7 +90,9 @@ import type {
 import { harvestOfferDiscoveryGraph } from "@/lib/research/offer-discovery";
 import { extractOfferEvidence } from "@/lib/research/offer-evidence";
 import {
+  isEvidenceBackedOfferEvidence,
   rankOfferRecommendations,
+  type ExtractedOfferEvidence,
   type OfferCampaignMotion
 } from "@/lib/research/offer-recommendations";
 import type {
@@ -291,7 +294,8 @@ function audienceRecommendationsFor(
   seller: BrandProfile | undefined,
   target: BrandProfile | undefined,
   evidenceItems: SessionEvidenceItem[],
-  answers?: SessionAnswers
+  answers?: SessionAnswers,
+  verifiedOfferEvidence?: ExtractedOfferEvidence
 ) {
   if (!seller) return [];
 
@@ -303,9 +307,22 @@ function audienceRecommendationsFor(
     seller,
     target,
     offerLabel: answers?.promotedOffer,
+    ...(verifiedOfferEvidence
+      ? {
+          verifiedOfferEvidence: {
+            evidenceRef: verifiedOfferEvidence.ref,
+            label: verifiedOfferEvidence.label,
+            sourceUrl: verifiedOfferEvidence.sourceUrl!,
+            confidence: verifiedOfferEvidence.confidence
+          }
+        }
+      : {}),
     evidenceItems
   });
-  const evidenceIds = new Set(evidenceItems.map(({ id }) => id));
+  const evidenceIds = new Set([
+    ...evidenceItems.map(({ id }) => id),
+    ...(verifiedOfferEvidence ? [verifiedOfferEvidence.ref] : [])
+  ]);
   const recommendations = (artifact.value?.candidates ?? []).map((candidate) => {
     const matchedEvidence = candidate.provenance
       .map(({ evidenceRef }) => evidenceRef)
@@ -378,18 +395,43 @@ function offerMotionFor(answers: SessionAnswers): OfferCampaignMotion {
   return /\bindustr(?:y|ies)\b/i.test(answers.promotedOffer ?? "") ? "industry" : "solution";
 }
 
+function offerEvidenceFor(session: TryMeSession): ExtractedOfferEvidence[] {
+  return extractOfferEvidence({
+    brand: session.brand,
+    motion: offerMotionFor(session.answers),
+    evidenceItems: session.evidenceItems,
+    sourceArtifact: session.sourceArtifact,
+    discoveryPages: session.offerDiscoveryGraph
+  });
+}
+
+function normalizedOfferEvidenceLabel(value: string): string {
+  return value
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function selectedEvidenceBackedOfferFor(
+  session: TryMeSession
+): ExtractedOfferEvidence | undefined {
+  const selected = normalizedOfferEvidenceLabel(session.answers.promotedOffer ?? "");
+  if (!selected) return undefined;
+  return offerEvidenceFor(session)
+    .filter((evidence) =>
+      normalizedOfferEvidenceLabel(evidence.label) === selected &&
+      Boolean(evidence.sourceUrl) &&
+      isEvidenceBackedOfferEvidence(evidence)
+    )
+    .sort((left, right) => right.confidence - left.confidence || left.ref.localeCompare(right.ref))[0];
+}
+
 function offerRecommendationsFor(
   session: TryMeSession,
   revision: number
 ): BriefRecommendationOption[] {
   const motion = offerMotionFor(session.answers);
-  const evidence = extractOfferEvidence({
-    brand: session.brand,
-    motion,
-    evidenceItems: session.evidenceItems,
-    sourceArtifact: session.sourceArtifact,
-    discoveryPages: session.offerDiscoveryGraph
-  });
+  const evidence = offerEvidenceFor(session);
   const ranked = rankOfferRecommendations({
     revision,
     motion,
@@ -432,7 +474,10 @@ function objectiveMotionFor(session: TryMeSession): ObjectiveCtaMotion {
   if (session.answers.campaignType === "event") {
     return /webinar/i.test(session.answers.eventSource ?? "") ? "webinar" : "event";
   }
-  if (session.answers.campaignType === "product") return "product";
+  if (
+    session.answers.campaignType === "product" &&
+    !isProfessionalServicesOffer(session.answers.promotedOffer)
+  ) return "product";
   if (/\bindustr(?:y|ies)\b/i.test(session.answers.promotedOffer ?? "")) return "industry";
   return "campaign";
 }
@@ -463,6 +508,14 @@ function objectiveRecommendationsFor(
       provenance: "visitor-input",
       confidence: 0.9
     });
+  } else if (motion === "campaign" && session.answers.promotedOffer) {
+    evidence.push({
+      id: stableId("objective-evidence", session.answers.promotedOffer),
+      revision,
+      signal: "campaign-offer",
+      provenance: "visitor-input",
+      confidence: 0.9
+    });
   } else if (motion === "industry" && session.answers.promotedOffer) {
     evidence.push({
       id: stableId("objective-evidence", session.answers.promotedOffer),
@@ -478,6 +531,7 @@ function objectiveRecommendationsFor(
     revision,
     activeRevision: revision,
     motion,
+    offerLabel: session.answers.promotedOffer,
     evidence,
     startedAt: now,
     completedAt: now
@@ -534,7 +588,8 @@ function syncExperienceFoundation(session: TryMeSession): void {
     session.brand,
     session.targetBrand,
     session.evidenceItems,
-    session.answers
+    session.answers,
+    selectedEvidenceBackedOfferFor(session)
   );
   session.offerRecommendations = offerRecommendationsFor(session, nextRevision);
   session.objectiveRecommendations = objectiveRecommendationsFor(session, nextRevision);
@@ -2478,7 +2533,8 @@ export async function patchSessionWorkspace(
         session.brand,
         session.targetBrand,
         session.evidenceItems,
-        session.answers
+        session.answers,
+        selectedEvidenceBackedOfferFor(session)
       );
       appendEvent(session, "account_evidence_curated", {
         pinned: session.evidenceItems.filter((item) => item.disposition === "pinned").length,

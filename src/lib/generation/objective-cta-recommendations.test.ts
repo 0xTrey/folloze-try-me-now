@@ -127,6 +127,28 @@ describe("objective and CTA recommendations", () => {
     ]);
   });
 
+  it("uses service-specific objectives and all three service CTA paths for Audit & Assurance", () => {
+    const artifact = recommendObjectiveCtas(
+      input("campaign", { offerLabel: "Audit & Assurance Services" })
+    );
+    const value = valueOf(artifact);
+
+    expect(value.candidates.map(({ cta }) => cta.type)).toEqual([
+      "explore",
+      "book-meeting",
+      "download"
+    ]);
+    expect(value.candidates.map(({ objective }) => objective)).toEqual([
+      "Explore Audit & Assurance Services",
+      "Speak with an advisor",
+      "Review the Audit & Assurance overview"
+    ]);
+    expect(recommended(artifact).cta.type).toBe("book-meeting");
+    expect(value.candidates.every(({ objective, cta }) =>
+      !/\b(?:data|AI|platform|IT)\b/i.test(`${objective} ${cta.label}`)
+    )).toBe(true);
+  });
+
   it("uses visitor-backed ABM buying-group evidence for the account working-session exception", () => {
     const artifact = recommendObjectiveCtas(
       input("abm", {
