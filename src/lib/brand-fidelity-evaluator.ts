@@ -10,7 +10,10 @@
  * on the same rules as an existing one.
  */
 
-import type { AssetAllocationPlan } from "@/lib/asset-allocation";
+import {
+  allocationSourceIdentityKey,
+  type AssetAllocationPlan
+} from "@/lib/asset-allocation";
 import type { BrandSemanticSystem } from "@/lib/brand-semantics";
 import { privateAssetAllocationFor, type BrandSystemV2 } from "@/lib/brand-system";
 import type { QualityTrace } from "@/lib/build-trace";
@@ -315,7 +318,9 @@ function scoreImagery(plan: AssetAllocationPlan | undefined): DimensionResult {
   }
 
   const substantive = plan.allocations.filter((allocation) => !allocation.reusable);
-  if (!distinct(substantive.map((allocation) => allocation.assetRef))) {
+  if (
+    !distinct(substantive.map((allocation) => allocationSourceIdentityKey(allocation)))
+  ) {
     // Repeating one photograph across sections is the clearest signal that the
     // experience is padding rather than showing evidence.
     violations.push("substantive_asset_repeated");

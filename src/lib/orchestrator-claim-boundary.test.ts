@@ -407,6 +407,15 @@ describe("anonymous preview and claim publication boundary", () => {
       artifactRevision: final?.experience?.artifactRevision,
       artifactDigest: final?.experience?.artifactDigest
     });
+    expect(final?.buildProgress?.receipts.map(({ phase, status }) => ({ phase, status }))).toEqual(
+      BUILD_PHASE_ORDER.map((phase) => ({ phase, status: "complete" }))
+    );
+    expect(final?.buildProgress?.receipts.find(({ phase }) => phase === "writing")?.evidenceNote).toMatch(
+      /Writing section \d+ of \d+|sections? written/i
+    );
+    expect(final?.buildProgress?.receipts.find(({ phase }) => phase === "checking")?.evidenceNote).toMatch(
+      /sections? checked/i
+    );
     expect(canRevealFinalExperience(toPublicSession(final!))).toBe(true);
     expect(final!.experience!.artifactRevision).toBeGreaterThan(pending.revision);
 

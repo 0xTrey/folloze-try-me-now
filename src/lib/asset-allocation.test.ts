@@ -6,9 +6,15 @@ import {
   rejectAssetCandidate,
   substantiveAssetsAreUnique,
   toAssetRenderPlan,
+  withDeliberateDuplicateAllocation,
   type AssetCandidateInput,
   type AssetSlotRequest
 } from "@/lib/asset-allocation";
+import {
+  brandProfileToBrandSystemEvidence,
+  resolveAssetCandidateDuplicateKey
+} from "@/lib/brand-system";
+import type { BrandProfile } from "@/lib/types";
 
 const hashSourceUrl = (assetRef: string) => `sh_${assetRef.length.toString(16).padStart(20, "0")}`;
 
@@ -356,6 +362,308 @@ describe("duplicate-group ranking", () => {
     });
 
     expect(reversed.allocations).toEqual(forward.allocations);
+  });
+});
+
+const ADVISORY_ASSET_ORIGIN = "https://cdn.advisory-fixture.test";
+const AUDIO_PRODUCT_ORIGIN = "https://cdn.audio-product-fixture.test";
+
+describe("advisory and product-suite allocation fixtures", () => {
+  it("spreads distinct advisory imagery across hero and tab slots without reuse", () => {
+    const plan = allocateExperienceAssets({
+      candidates: [
+        candidate({
+          assetRef: `${ADVISORY_ASSET_ORIGIN}/cfo-advisory-dashboard.png`,
+          purpose: "hero",
+          altText: "CFO advisory dashboard"
+        }),
+        candidate({
+          assetRef: `${ADVISORY_ASSET_ORIGIN}/erp-selection-workflow.png`,
+          purpose: "product",
+          altText: "ERP system selection workflow"
+        }),
+        candidate({
+          assetRef: `${ADVISORY_ASSET_ORIGIN}/client-accounting-team.jpg`,
+          purpose: "people",
+          altText: "Client accounting team portrait"
+        }),
+        candidate({
+          assetRef: `${ADVISORY_ASSET_ORIGIN}/advisory-services-outcomes.png`,
+          purpose: "proof",
+          altText: "Advisory services outcomes"
+        })
+      ],
+      slots: [
+        { sectionId: "hero", semanticRole: "hero", required: true },
+        slot("lens-0", "supporting", "CFO advisory path"),
+        slot("lens-1", "product", "ERP selection path"),
+        slot("lens-2", "process", "Client accounting workflow")
+      ],
+      hashSourceUrl
+    });
+
+    expect(plan.allocations).toHaveLength(4);
+    expect(substantiveAssetsAreUnique(plan)).toBe(true);
+    expect(new Set(plan.allocations.map(({ sourceIdentityKey }) => sourceIdentityKey)).size).toBe(4);
+    expect(plan.allocations.map(({ sectionId }) => sectionId)).toEqual([
+      "hero",
+      "lens-0",
+      "lens-1",
+      "lens-2"
+    ]);
+  });
+
+  it("derives duplicateKey for transformed URL crops and rejects allocator reuse", () => {
+    const origin = "https://cdn.jabra-product-fixture.test";
+    const heroRef = `${origin}/evolve2-65-ms-teams-black.png`;
+    const desktopRef = `${origin}/evolve2-65-ms-teams-black-desktop.png`;
+    const wirelessRef = `${origin}/evolve2-55-wireless.png`;
+    const heroKey = resolveAssetCandidateDuplicateKey({
+      ref: heroRef,
+      kind: "product-ui",
+      width: 1200,
+      height: 800
+    });
+    const desktopKey = resolveAssetCandidateDuplicateKey({
+      ref: desktopRef,
+      kind: "product-ui",
+      width: 2400,
+      height: 1600
+    });
+    expect(desktopKey).toBe(heroKey);
+    expect(
+      resolveAssetCandidateDuplicateKey({
+        ref: wirelessRef,
+        kind: "product-ui"
+      })
+    ).not.toBe(heroKey);
+
+    const harvestProfile: BrandProfile = {
+      domain: "jabra.com",
+      companyName: "Jabra",
+      publicTopics: ["Evolve2 75", "Panacast 50"],
+      imageUrls: [heroRef, desktopRef, wirelessRef],
+      imageMetadata: {
+        [heroRef]: {
+          width: 1200,
+          height: 800,
+          contentHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        [desktopRef]: {
+          width: 2400,
+          height: 1600,
+          contentHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      colors: ["#000000", "#FFFFFF"],
+      primaryColor: "#000000",
+      accentColor: "#FFB500",
+      surfaceColor: "#FFFFFF",
+      sourceUrl: "https://www.jabra.com/",
+      source: "brand-harvester"
+    };
+    const evidence = brandProfileToBrandSystemEvidence(harvestProfile, {
+      revision: 1,
+      observedAt: "2026-08-28T00:00:00.000Z"
+    });
+    const compiledKeys = (evidence.imagery?.candidates ?? []).map(
+      (entry) => entry.value.duplicateKey
+    );
+    expect(compiledKeys[0]).toBe("content:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(compiledKeys[1]).toBe(compiledKeys[0]);
+
+    const plan = allocateExperienceAssets({
+      candidates: [
+        candidate({
+          assetRef: heroRef,
+          purpose: "hero",
+          duplicateKey: heroKey,
+          width: 1200,
+          height: 800
+        }),
+        candidate({
+          assetRef: desktopRef,
+          purpose: "product",
+          duplicateKey: desktopKey,
+          width: 2400,
+          height: 1600
+        }),
+        candidate({
+          assetRef: wirelessRef,
+          purpose: "product",
+          width: 1200,
+          height: 800
+        }),
+        candidate({
+          assetRef: `${origin}/office-headset-workflow.jpg`,
+          purpose: "process",
+          width: 1200,
+          height: 800
+        })
+      ],
+      slots: [
+        { sectionId: "hero", semanticRole: "hero", required: true },
+        slot("lens-0", "product", "Desk collaboration"),
+        slot("lens-1", "product", "Mobile collaboration"),
+        slot("lens-2", "process", "Deployment workflow")
+      ],
+      hashSourceUrl
+    });
+
+    expect(substantiveAssetsAreUnique(plan)).toBe(true);
+    expect(plan.rejections.some(({ code }) => code === "duplicate_crop")).toBe(true);
+    expect(plan.allocations).toHaveLength(3);
+  });
+
+  it("keeps headset product imagery unique even when crops share an upstream digest", () => {
+    const sharedDigest = "phash:evolve2-hero-black";
+    const plan = allocateExperienceAssets({
+      candidates: [
+        candidate({
+          assetRef: `${AUDIO_PRODUCT_ORIGIN}/evolve2-65-ms-teams-black.png`,
+          purpose: "hero",
+          duplicateKey: sharedDigest,
+          altText: "Evolve2 65 MS Teams headset"
+        }),
+        candidate({
+          assetRef: `${AUDIO_PRODUCT_ORIGIN}/evolve2-65-ms-teams-black-desktop.png`,
+          purpose: "product",
+          width: 2400,
+          height: 1600,
+          duplicateKey: sharedDigest,
+          altText: "Evolve2 65 desktop crop"
+        }),
+        candidate({
+          assetRef: `${AUDIO_PRODUCT_ORIGIN}/evolve2-55-wireless.png`,
+          purpose: "product",
+          duplicateKey: "phash:evolve2-wireless",
+          altText: "Evolve2 55 wireless headset"
+        }),
+        candidate({
+          assetRef: `${AUDIO_PRODUCT_ORIGIN}/office-headset-workflow.jpg`,
+          purpose: "process",
+          altText: "Office headset workflow"
+        })
+      ],
+      slots: [
+        { sectionId: "hero", semanticRole: "hero", required: true },
+        slot("lens-0", "product", "Desk collaboration"),
+        slot("lens-1", "product", "Mobile collaboration"),
+        slot("lens-2", "process", "Deployment workflow")
+      ],
+      hashSourceUrl
+    });
+
+    expect(substantiveAssetsAreUnique(plan)).toBe(true);
+    expect(plan.rejections.filter(({ code }) => code === "duplicate_crop")).toHaveLength(1);
+    expect(
+      plan.rejections.some(
+        ({ assetRef, code }) =>
+          code === "duplicate_crop" &&
+          assetRef.includes("evolve2-65-ms-teams-black")
+      )
+    ).toBe(true);
+    expect(plan.allocations).toHaveLength(3);
+    expect(plan.allocations.map(({ sectionId }) => sectionId)).toEqual([
+      "hero",
+      "lens-0",
+      "lens-2"
+    ]);
+    expect(plan.treatments).toEqual([
+      expect.objectContaining({
+        sectionId: "lens-1",
+        semanticRole: "product",
+        treatment: "designed_non_image"
+      })
+    ]);
+    expect(
+      plan.allocations.find(({ sectionId }) => sectionId === "lens-0")?.assetRef
+    ).toContain("evolve2-55-wireless");
+  });
+
+  it("blocks the same upstream digest from occupying two semantic roles", () => {
+    const digest = "content:shared-advisory-hero";
+    const plan = allocateExperienceAssets({
+      candidates: [
+        candidate({
+          assetRef: `${ADVISORY_ASSET_ORIGIN}/path-a/cfo-advisory.jpg`,
+          purpose: "hero",
+          duplicateKey: digest
+        }),
+        candidate({
+          assetRef: `${ADVISORY_ASSET_ORIGIN}/path-b/cfo-advisory.jpg`,
+          purpose: "product",
+          duplicateKey: digest
+        })
+      ],
+      slots: [
+        { sectionId: "hero", semanticRole: "hero", required: true },
+        slot("lens-0", "product", "CFO advisory")
+      ],
+      hashSourceUrl
+    });
+
+    expect(plan.allocations).toHaveLength(1);
+    expect(plan.treatments).toEqual([
+      expect.objectContaining({
+        sectionId: "lens-0",
+        semanticRole: "product",
+        treatment: "designed_non_image",
+        reason: "assets_exhausted"
+      })
+    ]);
+    expect(substantiveAssetsAreUnique(plan)).toBe(true);
+  });
+
+  it("uses designed fallbacks for sparse advisory inventory across tabs", () => {
+    const plan = allocateExperienceAssets({
+      candidates: [
+        candidate({
+          assetRef: `${ADVISORY_ASSET_ORIGIN}/cfo-advisory-dashboard.png`,
+          purpose: "hero",
+          altText: "CFO advisory dashboard"
+        })
+      ],
+      slots: [
+        { sectionId: "hero", semanticRole: "hero", required: true },
+        slot("lens-0", "supporting", "CFO advisory"),
+        slot("lens-1", "product", "ERP selection"),
+        slot("lens-2", "process", "Client accounting")
+      ],
+      hashSourceUrl
+    });
+
+    expect(plan.allocations).toHaveLength(1);
+    expect(plan.treatments).toHaveLength(3);
+    expect(plan.treatments.every(({ treatment }) => treatment === "designed_non_image")).toBe(true);
+    expect(substantiveAssetsAreUnique(plan)).toBe(true);
+  });
+});
+
+describe("allocation benchmark guard", () => {
+  it("fails the deliberate duplicate-allocation mutation used by compiler benchmarks", () => {
+    const plan = allocateExperienceAssets({
+      candidates: [
+        candidate({
+          assetRef: `${ADVISORY_ASSET_ORIGIN}/cfo-advisory-dashboard.png`,
+          purpose: "hero"
+        }),
+        candidate({
+          assetRef: `${ADVISORY_ASSET_ORIGIN}/erp-selection-workflow.png`,
+          purpose: "product"
+        })
+      ],
+      slots: [
+        { sectionId: "hero", semanticRole: "hero", required: true },
+        slot("lens-0", "product", "ERP selection")
+      ],
+      hashSourceUrl
+    });
+
+    expect(substantiveAssetsAreUnique(plan)).toBe(true);
+    const mutated = withDeliberateDuplicateAllocation(plan);
+    expect(substantiveAssetsAreUnique(mutated)).toBe(false);
+    expect(mutated.allocations).toHaveLength(plan.allocations.length + 1);
   });
 });
 

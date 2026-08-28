@@ -247,6 +247,10 @@ export interface GenericProductionEngineDependencies {
   sectionModelClient?: SectionModelClient;
   /** Wall-clock budget for the dedicated section-writing stage. */
   sectionWriterDeadlineMs?: number;
+  /** Receipt-backed progress while retained sections complete. */
+  onWritingProgress?: (completed: number, total: number) => void | Promise<void>;
+  /** Receipt-backed progress before the factuality editor runs. */
+  onCheckingProgress?: (sectionCount: number) => void | Promise<void>;
   factualityEditor?: (
     input: CopyFactualityEditorInput
   ) => CopyFactualityEditorArtifact | Promise<CopyFactualityEditorArtifact>;
@@ -557,7 +561,10 @@ async function applyDedicatedSectionWriters(input: {
     fallback: (contract) => deterministic.get(contract.sectionId)!,
     deadlineMs:
       input.dependencies.sectionWriterDeadlineMs ?? SECTION_WRITER_DEADLINE_MS,
-    ...(input.dependencies.currentTimeMs ? { now: input.dependencies.currentTimeMs } : {})
+    ...(input.dependencies.currentTimeMs ? { now: input.dependencies.currentTimeMs } : {}),
+    ...(input.dependencies.onWritingProgress
+      ? { onSectionWritten: input.dependencies.onWritingProgress }
+      : {})
   });
 
   const accepted = new Map(
@@ -1448,6 +1455,13 @@ export async function compileGenericProductionPage(
         evidence.length
       )
     );
+  }
+
+  const retainedSectionCount = composedWriterArtifacts.filter(
+    (artifact) => USABLE_STATUSES.has(artifact.status)
+  ).length;
+  if (dependencies.onCheckingProgress) {
+    await Promise.resolve(dependencies.onCheckingProgress(retainedSectionCount));
   }
 
   const factualityEditor = dependencies.factualityEditor ?? editCopyForFactuality;

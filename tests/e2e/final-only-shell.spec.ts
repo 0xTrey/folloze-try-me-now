@@ -278,9 +278,91 @@ test.describe("final-only visible shell", () => {
     await expect(frame.locator("section")).toContainText("Fixture experience");
     await expect(page.locator(".revealIntroCopy .sectionKicker")).toHaveCount(0);
     await expect(page.locator("[data-final-only-reveal='true'] .previewReadinessStatus")).toHaveCount(0);
-    await expect(page.getByText(/Save this preview|See live engagement|Preview ready|Temporary URL|Expires 30 minutes|Preview as/i)).toHaveCount(0);
+    await expect(page.getByText(/Save this preview|Preview ready|Temporary URL|Expires 30 minutes|Preview as/i)).toHaveCount(0);
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
     await expect(page.locator(".revealStage")).toHaveCSS("opacity", "1", { timeout: 5_000 });
     await captureReleaseEvidence(page, "final-reveal");
+  });
+
+  test("final-only V2 reveal shows See live engagement and Save by email with honest analytics", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await mockShell(page, "ready");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await startBuild(page);
+
+    await expect(page.locator(".revealStage")).toBeVisible({ timeout: 10_000 });
+    const engagementButton = page.getByRole("button", { name: /See live engagement/i });
+    await expect(engagementButton).toBeVisible();
+    await expect(page.getByText(/Explore the preview to unlock save by email/i)).toBeVisible();
+    await expect(page.getByText(/Preview ready|Temporary URL|Preview as/i)).toHaveCount(0);
+
+    const frame = page.frame({ url: new RegExp(`/e/${SESSION_ID}`) });
+    expect(frame).not.toBeNull();
+    const sectionTitle = "Choose the operating path";
+    const sectionHeadline = "Pick the buyer journey worth proving first.";
+    await frame!.evaluate(({ title, headline }) => {
+      window.parent.postMessage({
+        source: "folloze-experience",
+        action: "section_view",
+        payload: {
+          sectionId: "decision-path",
+          sectionTitle: title,
+          sectionHeadline: headline
+        }
+      }, "*");
+    }, { title: sectionTitle, headline: sectionHeadline });
+
+    await expect(page.getByRole("button", { name: /Save by email/i })).toBeVisible();
+    await engagementButton.click();
+
+    const dialog = page.getByRole("dialog", { name: /See what buyers engage with/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: `Viewed ${sectionTitle}` })).toBeVisible();
+    await expect(dialog.getByLabel("Your activity in this preview").getByText(sectionHeadline)).toBeVisible();
+    await expect(dialog.getByText(/Live signals are captured. Engaged time appears after 15 foreground seconds./)).toBeVisible();
+    await expect(dialog.getByText(/\b\d+s engaged\b/i)).toHaveCount(0);
+
+    await dialog.getByText(/Show a live-campaign example/i).click();
+    await expect(dialog.getByText(/Illustrative examples/i)).toBeVisible();
+    await expect(dialog.getByText(/Simulated activity only/i)).toBeVisible();
+    await expect(dialog.getByText(/Not captured leads/i)).toBeVisible();
+  });
+
+  test("final-only V2 locked Save by email unlocks after section_view and claim dialog closes with Escape", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await mockShell(page, "ready");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await startBuild(page);
+
+    await expect(page.locator(".revealStage")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Explore the preview to unlock save by email/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Save by email/i })).toHaveCount(0);
+
+    const frame = page.frame({ url: new RegExp(`/e/${SESSION_ID}`) });
+    expect(frame).not.toBeNull();
+    await frame!.evaluate(() => {
+      window.parent.postMessage({
+        source: "folloze-experience",
+        action: "section_view",
+        payload: {
+          sectionId: "supporting-resources",
+          sectionTitle: "Proof that earns the next conversation",
+          sectionHeadline: "Three source-backed signals make the case concrete."
+        }
+      }, "*");
+    });
+
+    const saveButton = page.getByRole("button", { name: /Save by email/i });
+    await expect(saveButton).toBeVisible();
+    await saveButton.click();
+
+    const saveDialog = page.getByRole("dialog");
+    await expect(saveDialog).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Save your live experience/i })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))).toBe(true);
+
+    await page.keyboard.press("Escape");
+    await expect(saveDialog).toHaveCount(0);
+    await expect(saveButton).toBeVisible();
   });
 });

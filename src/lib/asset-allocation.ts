@@ -78,6 +78,8 @@ export interface AssetAllocation {
   assetRef: string;
   evidenceRef: string;
   sourceUrlHash: string;
+  /** Canonical URL plus upstream duplicate fingerprint used to enforce one-use. */
+  sourceIdentityKey: string;
   purpose: string;
   reusable: boolean;
   /** Mandatory slot. Its asset may not be reassigned to fill a lesser slot. */
@@ -440,6 +442,7 @@ export function allocateExperienceAssets(
       assetRef: candidate.assetRef,
       evidenceRef: candidate.evidenceRef,
       sourceUrlHash: input.hashSourceUrl(candidate.assetRef),
+      sourceIdentityKey: duplicateKey,
       purpose: candidate.purpose,
       reusable,
       required: slot.required === true,
@@ -505,10 +508,45 @@ export function toAssetRenderPlan(plan: AssetAllocationPlan): AssetRenderPlan {
   };
 }
 
+/** Identity key recorded on an allocation, or derived from its asset ref. */
+export function allocationSourceIdentityKey(
+  allocation: Pick<AssetAllocation, "assetRef" | "sourceIdentityKey">
+): string {
+  if (allocation.sourceIdentityKey?.trim()) return allocation.sourceIdentityKey;
+  return assetDuplicateKey({
+    assetRef: allocation.assetRef,
+    evidenceRef: "",
+    purpose: "supporting",
+    sourceAuthority: "seller_official"
+  });
+}
+
 /** True when no substantive image was placed in more than one slot. */
 export function substantiveAssetsAreUnique(plan: AssetAllocationPlan): boolean {
   const substantive = plan.allocations
     .filter(({ reusable }) => !reusable)
-    .map(({ assetRef }) => assetRef);
+    .map(allocationSourceIdentityKey);
   return new Set(substantive).size === substantive.length;
+}
+
+/**
+ * Deliberately reuses one substantive identity across two slots. Benchmark
+ * mutations use this to prove duplicate allocation is detectable.
+ */
+export function withDeliberateDuplicateAllocation(
+  plan: AssetAllocationPlan
+): AssetAllocationPlan {
+  const donor = plan.allocations.find(({ reusable }) => !reusable);
+  if (!donor) return plan;
+  const duplicate: AssetAllocation = {
+    ...donor,
+    allocationKey: `${donor.sectionId}-${donor.semanticRole}-duplicate`,
+    sectionId: donor.sectionId === "proof" ? "supporting" : "proof",
+    semanticRole: donor.semanticRole === "proof" ? "supporting" : "proof"
+  };
+  return {
+    ...plan,
+    allocations: [...plan.allocations, duplicate],
+    substantiveCount: plan.substantiveCount + 1
+  };
 }

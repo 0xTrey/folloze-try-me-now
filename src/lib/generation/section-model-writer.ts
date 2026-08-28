@@ -104,6 +104,8 @@ export interface SectionWriterRunInput {
   concurrency?: number;
   now?: () => number;
   signal?: AbortSignal;
+  /** Receipt-backed progress for each retained section completion. */
+  onSectionWritten?: (completed: number, total: number) => void | Promise<void>;
 }
 
 export interface SectionWriterResult {
@@ -326,8 +328,15 @@ export async function runSectionWriters(
   });
 
   if (!input.client) {
+    let completed = 0;
+    const results = [];
+    for (const contract of contracts) {
+      results.push(fallbackFor(contract, "provider_unavailable", 0));
+      completed += 1;
+      await input.onSectionWritten?.(completed, contracts.length);
+    }
     return {
-      results: contracts.map((contract) => fallbackFor(contract, "provider_unavailable", 0)),
+      results,
       modelSectionCount: 0,
       fallbackSectionCount: contracts.length,
       durationMs: now() - startedAt,
@@ -351,6 +360,12 @@ export async function runSectionWriters(
     durationMs: number;
   };
 
+  let completedSections = 0;
+  const reportSectionWritten = async () => {
+    completedSections += 1;
+    await input.onSectionWritten?.(completedSections, contracts.length);
+  };
+
   let attempts: Attempt[];
   try {
     attempts = await mapWithConcurrency(
@@ -360,7 +375,9 @@ export async function runSectionWriters(
         const sectionStartedAt = now();
         if (now() >= deadlineAt || signal.aborted) {
           deadlineExceeded = true;
-          return { contract, candidates: [], outcome: "deadline", durationMs: 0 };
+          const attempt = { contract, candidates: [], outcome: "deadline" as const, durationMs: 0 };
+          await reportSectionWritten();
+          return attempt;
         }
         try {
           // Racing the abort signal, not just passing it: a provider that
@@ -377,7 +394,14 @@ export async function runSectionWriters(
             || !Array.isArray(response.candidates)
             || response.candidates.length === 0
           ) {
-            return { contract, candidates: [], outcome: "malformed_response", durationMs };
+            const attempt = {
+              contract,
+              candidates: [],
+              outcome: "malformed_response" as const,
+              durationMs
+            };
+            await reportSectionWritten();
+            return attempt;
           }
           const requested = response.candidates.slice(
             0,
@@ -386,7 +410,7 @@ export async function runSectionWriters(
           const candidates = requested
             .map((candidate) => normalizeModelCandidate(contract, candidate))
             .filter((candidate): candidate is SectionCopyCandidate => Boolean(candidate));
-          return {
+          const attempt = {
             contract,
             candidates,
             // A provider whose candidates were partly discarded still wrote the
@@ -401,18 +425,22 @@ export async function runSectionWriters(
                 ? "model_partial"
                 : "model",
             durationMs
-          };
+          } satisfies Attempt;
+          await reportSectionWritten();
+          return attempt;
         } catch (error) {
           const durationMs = now() - sectionStartedAt;
           const aborted =
             signal.aborted || (error instanceof Error && error.name === "AbortError");
           if (aborted) deadlineExceeded = true;
-          return {
+          const attempt = {
             contract,
             candidates: [],
             outcome: aborted ? "deadline" : "provider_error",
             durationMs
-          };
+          } satisfies Attempt;
+          await reportSectionWritten();
+          return attempt;
         }
       }
     );

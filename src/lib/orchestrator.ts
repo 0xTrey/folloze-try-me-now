@@ -86,9 +86,10 @@ import type {
   WorkerExecution,
   WorkerReceipt
 } from "@/lib/orchestration/worker-types";
+import { harvestOfferDiscoveryGraph } from "@/lib/research/offer-discovery";
+import { extractOfferEvidence } from "@/lib/research/offer-evidence";
 import {
   rankOfferRecommendations,
-  type ExtractedOfferEvidence,
   type OfferCampaignMotion
 } from "@/lib/research/offer-recommendations";
 import type {
@@ -382,29 +383,13 @@ function offerRecommendationsFor(
   revision: number
 ): BriefRecommendationOption[] {
   const motion = offerMotionFor(session.answers);
-  const source = session.brand?.sourceUrl;
-  const evidence: ExtractedOfferEvidence[] = session.brand
-    ? [
-        ...(session.brand.title
-          ? [{
-              ref: stableId("offer-evidence", session.brand.domain, "title"),
-              label: session.brand.title,
-              kind: motion === "event" ? "event" as const : motion,
-              source: "homepage" as const,
-              sourceUrl: source,
-              confidence: session.brand.source === "fallback" ? 0.3 : 0.72
-            }]
-          : []),
-        ...session.brand.publicTopics.slice(0, 4).map((label, index) => ({
-          ref: stableId("offer-evidence", session.brand?.domain, String(index), label),
-          label,
-          kind: motion === "event" ? "topic" as const : motion,
-          source: "homepage" as const,
-          sourceUrl: source,
-          confidence: session.brand?.source === "fallback" ? 0.25 : Math.max(0.42, 0.68 - index * 0.06)
-        }))
-      ]
-    : [];
+  const evidence = extractOfferEvidence({
+    brand: session.brand,
+    motion,
+    evidenceItems: session.evidenceItems,
+    sourceArtifact: session.sourceArtifact,
+    discoveryPages: session.offerDiscoveryGraph
+  });
   const ranked = rankOfferRecommendations({
     revision,
     motion,
@@ -511,6 +496,15 @@ function objectiveRecommendationsFor(
   }));
 }
 
+function syncObjectiveCtaFromSelection(session: TryMeSession, objective?: string): void {
+  const label = objective ?? session.answers.objective;
+  if (!label) return;
+  const match = session.objectiveRecommendations?.find((candidate) => candidate.label === label);
+  if (match?.cta?.type) {
+    session.answers.ctaType = match.cta.type;
+  }
+}
+
 function syncExperienceFoundation(session: TryMeSession): void {
   const nextRevision = session.revision + 1;
   const selectedAssetIds = new Set(session.answers.selectedAssetIds ?? []);
@@ -544,6 +538,7 @@ function syncExperienceFoundation(session: TryMeSession): void {
   );
   session.offerRecommendations = offerRecommendationsFor(session, nextRevision);
   session.objectiveRecommendations = objectiveRecommendationsFor(session, nextRevision);
+  syncObjectiveCtaFromSelection(session);
   const harvestedAssets = assetsFor(session.brand, session.targetBrand);
   // A brand refresh may replace the harvested asset inventory while a curator
   // is working. Explicitly selected, server-approved assets remain part of the
@@ -1009,6 +1004,10 @@ async function assembleExperienceArtifact(input: {
    * but can never push the reveal past the shared deadline.
    */
   budget?: GenerationBudget;
+  expectedFingerprint?: string;
+  onWritingProgress?: (completed: number, total: number) => void | Promise<void>;
+  onCheckingProgress?: (sectionCount: number) => void | Promise<void>;
+  onFinalizingProgress?: () => void | Promise<void>;
 }) {
   syncCampaignContracts(input.session);
   const storyStartedAt = Date.parse(input.session.stages.story.startedAt ?? "");
@@ -1027,7 +1026,9 @@ async function assembleExperienceArtifact(input: {
     ...(sectionWriterDeadlineMs !== undefined && sectionWriterDeadlineMs > 0
       ? { sectionWriterDeadlineMs }
       : {}),
-    ...(sectionWriter ? { sectionModelClient: sectionWriter } : {})
+    ...(sectionWriter ? { sectionModelClient: sectionWriter } : {}),
+    ...(input.onWritingProgress ? { onWritingProgress: input.onWritingProgress } : {}),
+    ...(input.onCheckingProgress ? { onCheckingProgress: input.onCheckingProgress } : {})
   });
   const productionPage =
     productionResult.outcome === "production-page" &&
@@ -1074,6 +1075,9 @@ async function assembleExperienceArtifact(input: {
     productionPage
   );
   const webDraft = draftFromExperienceSpec(experienceSpec);
+  if (input.onFinalizingProgress) {
+    await Promise.resolve(input.onFinalizingProgress());
+  }
   const renderStartedAt = Date.now();
   const html = renderExperienceHtml({
     draft: webDraft,
@@ -1290,23 +1294,6 @@ async function advanceBuildPhase(input: {
   );
 }
 
-/** Phases whose work the production compile owns, derived from its receipts. */
-function compilePhaseNotes(
-  result: GenericProductionEngineResult
-): Partial<Record<LiveBuildPhase, string>> {
-  const sectionCount =
-    result.outcome === "production-page" ? (result.artifact.value?.sections.length ?? 0) : 0;
-  const evidenceCount =
-    result.outcome === "production-page" ? result.artifact.evidenceRefs.length : 0;
-  return {
-    ...(evidenceCount
-      ? { researching: `${evidenceCount} source signals read` }
-      : {}),
-    ...(sectionCount ? { writing: `${sectionCount} sections written` } : {}),
-    ...(sectionCount ? { checking: `${sectionCount} sections checked` } : {})
-  };
-}
-
 function generationEligibleAt(session: TryMeSession): number | undefined {
   const event = [...session.events]
     .reverse()
@@ -1355,8 +1342,12 @@ export function isGenerationReady(useCase: UseCase, answers: SessionAnswers): bo
 }
 
 function normalizedAnswersFor(session: TryMeSession): SessionAnswers {
+  const evidenceBackedAudience = session.audienceRecommendations?.find(
+    ({ recommendationKind, confidence }) =>
+      recommendationKind === "evidence-backed" && confidence !== "hypothesis"
+  )?.label;
   const audience = session.answers.customAudience || session.answers.audience ||
-    session.audienceSuggestions[0] || "Business and revenue leaders";
+    evidenceBackedAudience || "The buyer team evaluating this offer";
   return {
     ...session.answers,
     audience,
@@ -1597,6 +1588,14 @@ async function runBrandStageUnlocked(
     const profile = brandWithSessionLogoDelivery(id, "seller", trusted.profile);
     const harvestedEvidence = trusted.rejectedProfile ?? harvested;
     const readiness = profile.readiness ?? assessBrandReadiness(profile);
+    let offerDiscoveryGraph: Awaited<ReturnType<typeof harvestOfferDiscoveryGraph>>;
+    if (!trusted.usedFallback && readiness.status === "ready") {
+      try {
+        offerDiscoveryGraph = await harvestOfferDiscoveryGraph({ origin: profile.sourceUrl });
+      } catch {
+        offerDiscoveryGraph = undefined;
+      }
+    }
     await updateSession(id, (session) => {
       if (
         session.companyDomain !== expectedDomain ||
@@ -1606,6 +1605,7 @@ async function runBrandStageUnlocked(
         return session;
       }
       session.brand = profile;
+      session.offerDiscoveryGraph = offerDiscoveryGraph;
       session.audienceSuggestions = audienceSuggestionsFor(profile, session.targetBrand, {
         promotedOffer: session.answers.promotedOffer,
         campaignType: session.answers.campaignType,
@@ -1926,11 +1926,24 @@ export async function runSourceIntelligenceStage(
       );
       return session;
     });
-    const sourceArtifact = await fetchSourceArtifactSingleFlight(sourceUrl, {
-      signal: controller.signal,
-      timeoutMs: 12_000,
-      maxBytes: 2_000_000
-    });
+    // Source understanding and offer discovery use the same submitted signal,
+    // so begin both immediately instead of adding their latency in series.
+    // Each branch has its own bounded timeout and the shared URL fence below
+    // prevents stale results from surviving an edited answer.
+    const [sourceArtifact, offerDiscoveryGraph] = await Promise.all([
+      fetchSourceArtifactSingleFlight(sourceUrl, {
+        signal: controller.signal,
+        timeoutMs: 12_000,
+        maxBytes: 2_000_000
+      }),
+      sourceKind === "campaign-offer"
+        ? harvestOfferDiscoveryGraph({
+            origin: preflight.brand?.sourceUrl ?? sourceUrl,
+            sourceUrl,
+            budget: { maxDurationMs: 6_000 }
+          }).catch(() => undefined)
+        : Promise.resolve(undefined)
+    ]);
     await updateSession(id, (session) => {
       const currentUrl = sourceKind === "campaign-offer"
         ? session.answers.offerSourceUrl
@@ -1939,6 +1952,9 @@ export async function runSourceIntelligenceStage(
         return session;
       }
       session.sourceArtifact = sourceArtifact;
+      if (sourceKind === "campaign-offer" && offerDiscoveryGraph) {
+        session.offerDiscoveryGraph = offerDiscoveryGraph;
+      }
       const rejected = sourceArtifact.status === "failed" || sourceArtifact.status === "unreadable";
       if (sourceKind !== "campaign-offer") {
         if (sourceArtifact.content.title) session.answers.sourceTitle = sourceArtifact.content.title;
@@ -2207,6 +2223,9 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   const targetChanged =
     targetAllowed && patch.targetDomain !== session.answers.targetDomain;
   session.answers = { ...session.answers, ...patch };
+  if (patch.objective) {
+    syncObjectiveCtaFromSelection(session, patch.objective);
+  }
   if (brandSourceUrlWasSupplied && !patch.brandSourceUrl) {
     delete session.answers.brandSourceUrl;
   }
@@ -3345,6 +3364,15 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
         fallbackReason: `trust_gate_${trustFallbackReason}`
       };
     }
+    latest = (await advanceBuildPhase({
+      id,
+      attemptId,
+      expectedFingerprint,
+      completed: ["queued", "researching", "planning"],
+      active: "writing",
+      phase: "writing",
+      budget: refinementBudget
+    })) ?? latest;
     const finalArtifact = await assembleExperienceArtifact({
       id,
       session: { ...latest, answers: normalizedAnswersFor(latest) },
@@ -3356,18 +3384,48 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       generationSource: generated.source,
       trustFallbackReason,
       attemptId,
-      budget: refinementBudget
-    });
-    latest = (await advanceBuildPhase({
-      id,
-      attemptId,
-      expectedFingerprint,
-      completed: ["queued", "researching", "planning", "writing", "checking"],
-      active: "finalizing",
-      phase: "finalizing",
       budget: refinementBudget,
-      notes: compilePhaseNotes(finalArtifact.productionResult)
-    })) ?? latest;
+      expectedFingerprint,
+      onWritingProgress: async (completed, total) => {
+        await advanceBuildPhase({
+          id,
+          attemptId,
+          expectedFingerprint,
+          completed: ["queued", "researching", "planning"],
+          active: "writing",
+          phase: "writing",
+          budget: refinementBudget,
+          notes: {
+            writing: `Writing section ${completed} of ${total}`
+          }
+        });
+      },
+      onCheckingProgress: async (sectionCount) => {
+        latest = (await advanceBuildPhase({
+          id,
+          attemptId,
+          expectedFingerprint,
+          completed: ["queued", "researching", "planning", "writing"],
+          active: "checking",
+          phase: "checking",
+          budget: refinementBudget,
+          notes: sectionCount
+            ? { checking: `${sectionCount} sections checked` }
+            : {}
+        })) ?? latest;
+      },
+      onFinalizingProgress: async () => {
+        latest = (await advanceBuildPhase({
+          id,
+          attemptId,
+          expectedFingerprint,
+          completed: ["queued", "researching", "planning", "writing", "checking"],
+          active: "finalizing",
+          phase: "finalizing",
+          budget: refinementBudget
+        })) ?? latest;
+      }
+    });
     const finalSourceRevision = latest.revision;
     // A complete design-DNA pass is valuable enrichment, but it must not erase
     // a usable page after the seller's identity, official logo, source

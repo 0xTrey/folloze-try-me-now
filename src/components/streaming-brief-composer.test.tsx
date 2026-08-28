@@ -88,6 +88,34 @@ describe("StreamingBriefComposer", () => {
     expect(screen.queryByRole("button", { name: /skip to preview/i })).not.toBeInTheDocument();
   });
 
+  it("keeps a sparse audience state free-form instead of showing a generic recommendation", () => {
+    render(
+      <StreamingBriefComposer
+        mode="campaign"
+        questions={[
+          questions[0],
+          {
+            ...questions[1],
+            choices: [],
+            recommendedChoice: undefined,
+            placeholder: "Describe the buyer role most likely to evaluate this offer"
+          },
+          questions[2]
+        ]}
+        currentQuestionId="audience"
+        answers={[{ questionId: "intent", label: "Campaign", value: "A source with limited buyer evidence" }]}
+        onAnswer={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText(/Who should this reach/i)).toHaveAttribute(
+      "placeholder",
+      "Describe the buyer role most likely to evaluate this offer"
+    );
+    expect(screen.queryByText("Recommended")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Enterprise architects|Revenue leaders/i })).not.toBeInTheDocument();
+  });
+
   it("lets sellers edit compact Live Brief fields from the summary", () => {
     const onSummaryEdit = vi.fn();
     render(

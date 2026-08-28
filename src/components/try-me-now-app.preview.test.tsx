@@ -567,7 +567,15 @@ describe("guided campaign workspace", () => {
           status: "collecting",
           experience: undefined,
           answers: { campaignType: "product", promotedOffer: "Jitterbit Harmony" },
-          audienceSuggestions: ["Enterprise architects"],
+          audienceRecommendations: [{
+            id: "enterprise-architects",
+            label: "Enterprise architects",
+            rationale: "Named in public integration evidence.",
+            evidenceItemIds: ["seller-integration-evidence"],
+            confidence: "high",
+            recommendationKind: "evidence-backed",
+            source: "seller-public-evidence"
+          }],
           audienceLens: {
             status: "ready",
             accountDomain: "jitterbit.com",

@@ -196,6 +196,27 @@ async function startBuyerExperience(page: Page, domain = "northpeak.com"): Promi
   await expect(page.getByText(/Live brief/i).first()).toBeVisible({ timeout: 10_000 });
 }
 
+async function expectFirstDoorStable(page: Page): Promise<void> {
+  await expect(page.locator(".unifiedPrimaryCta")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live Brief" })).toHaveCount(0);
+  await expect(page.locator("[data-build-shell]")).toHaveCount(0);
+  await expect(page.locator(".revealStage")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Start over/i })).toHaveCount(0);
+}
+
+async function releaseHeldRoutes(
+  heldRoutes: Route[],
+  body: unknown
+): Promise<void> {
+  for (const route of heldRoutes.splice(0)) {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(body)
+    });
+  }
+}
+
 test.describe("unified guided first-run experience", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "Try Me Now V1 is a desktop-first experience.");
@@ -482,6 +503,356 @@ test.describe("unified guided first-run experience", () => {
     expect(box!.height).toBeGreaterThanOrEqual(36);
     await startOver.click();
     await expect(page.locator(".unifiedPrimaryCta")).toBeVisible();
+  });
+
+  test("late poll response cannot restore session or build shell after Start over (R2)", async ({ page }) => {
+    const sessions = new Map<string, PublicTryMeSession>();
+    const heldPollRoutes: Route[] = [];
+    let holdPollResponses = false;
+
+    await mockSessionApis(page, sessions);
+    await page.route("**/api/sessions/*", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      if (!holdPollResponses) {
+        await route.fallback();
+        return;
+      }
+      heldPollRoutes.push(route);
+    });
+
+    await startBuyerExperience(page, "northpeak.com");
+    holdPollResponses = true;
+
+    await expect.poll(() => heldPollRoutes.length, { timeout: 5_000 }).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: /Start over/i }).first().click();
+    await expect(page.locator(".unifiedPrimaryCta")).toBeVisible();
+
+    const staleSession = publicSession({
+      useCase: "campaign",
+      companyDomain: "northpeak.com",
+      status: "generating",
+      answers: {
+        campaignType: "product",
+        promotedOffer: "Pipeline Command Center",
+        audience: "Revenue leaders",
+        objective: "Generate demand"
+      }
+    });
+    staleSession.buildProgress = {
+      phase: "writing",
+      startedAt: "2026-08-22T12:00:10.000Z",
+      updatedAt: "2026-08-22T12:00:20.000Z",
+      slow: false,
+      receipts: [{ phase: "writing", status: "active", detail: "Writing each step of the buyer journey" }]
+    };
+
+    for (const route of heldPollRoutes.splice(0)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ session: staleSession })
+      });
+    }
+
+    await page.waitForTimeout(1_500);
+    await expect(page.locator(".unifiedPrimaryCta")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Live Brief" })).toHaveCount(0);
+    await expect(page.getByText(/Writing each step of the buyer journey/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Start over/i })).toHaveCount(0);
+  });
+
+  test("deferred POST start session cannot restore state after Start over (R2)", async ({ page }) => {
+    const sessions = new Map<string, PublicTryMeSession>();
+    const heldPostRoutes: Route[] = [];
+    let holdPostResponses = false;
+
+    await mockSessionApis(page, sessions);
+    await page.route("**/api/sessions", async (route) => {
+      if (route.request().method() !== "POST" || !holdPostResponses) {
+        await route.fallback();
+        return;
+      }
+      heldPostRoutes.push(route);
+    });
+
+    await startBuyerExperience(page, "northpeak.com");
+    await page.getByRole("button", { name: /Start over/i }).first().click();
+    await expectFirstDoorStable(page);
+
+    holdPostResponses = true;
+    const primary = page.locator(".unifiedPrimaryCta");
+    await expect(async () => {
+      if (await page.locator(".domainStage").count()) return;
+      await primary.click();
+      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 15_000 });
+    await page.getByLabel("Company domain").fill("jitterbit.com");
+    await expect(page.locator("#domain-help")).toContainText(/matching the public brand|public brand scan|confirm this company|Ready to match/i, {
+      timeout: 5_000
+    });
+    await page.getByRole("button", { name: /Use this company/i }).click();
+    await expect.poll(() => heldPostRoutes.length, { timeout: 5_000 }).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: /Back to start/i }).click();
+    await expectFirstDoorStable(page);
+
+    const staleSession = publicSession({
+      id: "e2e-deferred-post",
+      useCase: "campaign",
+      companyDomain: "jitterbit.com",
+      status: "generating",
+      answers: {
+        campaignType: "product",
+        promotedOffer: "Pipeline Command Center",
+        audience: "Revenue leaders",
+        objective: "Generate demand"
+      }
+    });
+    staleSession.buildProgress = {
+      phase: "writing",
+      startedAt: "2026-08-22T12:00:10.000Z",
+      updatedAt: "2026-08-22T12:00:20.000Z",
+      slow: false,
+      receipts: [{ phase: "writing", status: "active", detail: "Writing each step of the buyer journey" }]
+    };
+
+    await releaseHeldRoutes(heldPostRoutes, { session: staleSession });
+    await page.waitForTimeout(1_500);
+    await expectFirstDoorStable(page);
+  });
+
+  test("deferred PATCH answers cannot restore state after Start over (R2)", async ({ page }) => {
+    const sessions = new Map<string, PublicTryMeSession>();
+    const heldPatchRoutes: Route[] = [];
+    let holdPatchResponses = false;
+
+    await mockSessionApis(page, sessions);
+    await page.route("**/api/sessions/*", async (route) => {
+      if (route.request().method() !== "PATCH" || !holdPatchResponses) {
+        await route.fallback();
+        return;
+      }
+      heldPatchRoutes.push(route);
+    });
+
+    await startBuyerExperience(page, "northpeak.com");
+    holdPatchResponses = true;
+
+    const intent = page.getByLabel(/What are you taking to market/i);
+    await intent.fill("Launch Harmony for operations leaders who need governed automation.");
+    await intent.press("Enter");
+    await expect.poll(() => heldPatchRoutes.length, { timeout: 5_000 }).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: /Start over/i }).first().click();
+    await expectFirstDoorStable(page);
+
+    const staleSession = publicSession({
+      useCase: "campaign",
+      companyDomain: "northpeak.com",
+      status: "generating",
+      answers: {
+        campaignType: "product",
+        promotedOffer: "Pipeline Command Center",
+        audience: "Revenue leaders",
+        objective: "Generate demand"
+      }
+    });
+    staleSession.buildProgress = {
+      phase: "writing",
+      startedAt: "2026-08-22T12:00:10.000Z",
+      updatedAt: "2026-08-22T12:00:20.000Z",
+      slow: false,
+      receipts: [{ phase: "writing", status: "active", detail: "Writing each step of the buyer journey" }]
+    };
+
+    await releaseHeldRoutes(heldPatchRoutes, { session: staleSession });
+    await page.waitForTimeout(1_500);
+    await expectFirstDoorStable(page);
+  });
+
+  test("deferred upload status cannot restore state after Start over (R2)", async ({ page }) => {
+    test.setTimeout(60_000);
+    const sessions = new Map<string, PublicTryMeSession>();
+    const heldUploadStatusRoutes: Route[] = [];
+    let holdUploadStatusResponses = false;
+
+    await mockSessionApis(page, sessions);
+    await page.route("**/api/sessions/*/upload**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (request.method() === "GET" && url.searchParams.has("uploadId")) {
+        if (holdUploadStatusResponses) {
+          heldUploadStatusRoutes.push(route);
+          return;
+        }
+      }
+      await route.fallback();
+    });
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const secondary = page.locator(".unifiedSecondaryCta");
+    await expect(async () => {
+      if (await page.locator(".domainStage").count()) return;
+      await secondary.click({ trial: false });
+      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 15_000 });
+    await page.getByLabel("Company domain").fill("northpeak.com");
+    await page.getByRole("button", { name: /Use this company/i }).click();
+    await expect(page.getByText(/Upload a PDF|Content URL|Live brief/i).first()).toBeVisible({ timeout: 10_000 });
+
+    const sessionId = [...sessions.values()][0]?.id;
+    expect(sessionId).toBeTruthy();
+    holdUploadStatusResponses = true;
+    void page.evaluate((id) => {
+      void fetch(`/api/sessions/${id}/upload?uploadId=held-upload-status`);
+    }, sessionId!);
+    await expect.poll(() => heldUploadStatusRoutes.length, { timeout: 5_000 }).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: /Start over/i }).first().click();
+    await expectFirstDoorStable(page);
+
+    await releaseHeldRoutes(heldUploadStatusRoutes, { upload: { status: "complete" } });
+    await page.waitForTimeout(1_500);
+    await expectFirstDoorStable(page);
+  });
+
+  test("deferred claim POST cannot restore state after Start over (R2)", async ({ page }) => {
+    test.setTimeout(60_000);
+    const sessions = new Map<string, PublicTryMeSession>();
+    const heldClaimRoutes: Route[] = [];
+    let holdClaimResponses = false;
+    let claimFixtureMode: "collecting" | "ready" = "collecting";
+
+    await page.route("**/e/e2e-deferred-claim**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><html><body><main><section>Fixture preview</section></main></body></html>"
+      });
+    });
+    await mockSessionApis(page, sessions, ({ useCase, companyDomain }) => {
+      if (claimFixtureMode !== "ready") {
+        return publicSession({ useCase, companyDomain });
+      }
+      return {
+        ...publicSession({
+          id: "e2e-deferred-claim",
+          useCase,
+          companyDomain,
+          status: "preview_ready_unclaimed",
+          answers: {
+            campaignType: "product",
+            promotedOffer: "Pipeline Command Center",
+            audience: "Revenue leaders",
+            objective: "Generate demand"
+          }
+        }),
+        stages: {
+          brand: { status: "complete" },
+          audience: { status: "complete" },
+          story: { status: "complete" }
+        },
+        experience: {
+          ready: true,
+          title: "Northpeak Pipeline Command Center",
+          headline: "Give revenue teams a governed command center.",
+          readiness: "final",
+          generationSource: "deterministic-fallback",
+          artifactRevision: 2
+        },
+        finalArtifact: {
+          readiness: "final",
+          artifactRevision: 2,
+          structuralGate: "passed",
+          truthGate: "passed",
+          persistedAt: "2026-08-22T12:00:52.000Z",
+          readBackAt: "2026-08-22T12:00:53.000Z"
+        }
+      };
+    });
+    await page.route("**/api/sessions/*/claim", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      if (holdClaimResponses) {
+        heldClaimRoutes.push(route);
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          session: {
+            ...publicSession({
+              id: "e2e-deferred-claim",
+              useCase: "campaign",
+              companyDomain: "northpeak.com",
+              status: "claimed"
+            }),
+            liveUrl: "https://example.test/e/e2e-deferred-claim"
+          }
+        })
+      });
+    });
+
+    claimFixtureMode = "ready";
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const primary = page.locator(".unifiedPrimaryCta");
+    await expect(async () => {
+      if (await page.locator(".domainStage").count()) return;
+      await primary.click();
+      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 15_000 });
+    await page.getByLabel("Company domain").fill("northpeak.com");
+    await page.getByRole("button", { name: /Use this company/i }).click();
+
+    const engagementButton = page.getByRole("button", { name: /See live engagement/i });
+    await expect(engagementButton).toBeVisible({ timeout: 10_000 });
+    const frame = page.frame({ url: /\/e\/e2e-deferred-claim/ });
+    expect(frame).not.toBeNull();
+    await frame!.evaluate(() => {
+      window.parent.postMessage({
+        source: "folloze-experience",
+        action: "section_view",
+        payload: {
+          sectionId: "supporting-resources",
+          sectionTitle: "Proof that earns the next conversation",
+          sectionHeadline: "Three source-backed signals make the case concrete."
+        }
+      }, "*");
+    });
+
+    await page.getByRole("button", { name: /Save by email/i }).click();
+    await page.getByLabel("Business email").fill("buyer@northpeak.com");
+    holdClaimResponses = true;
+    await page.getByRole("button", { name: /Save this experience/i }).click();
+    await expect.poll(() => heldClaimRoutes.length, { timeout: 5_000 }).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: /Start over/i }).first().click();
+    await expectFirstDoorStable(page);
+
+    const staleSession = publicSession({
+      id: "e2e-deferred-claim",
+      useCase: "campaign",
+      companyDomain: "northpeak.com",
+      status: "claimed",
+      answers: {
+        campaignType: "product",
+        promotedOffer: "Pipeline Command Center",
+        audience: "Revenue leaders",
+        objective: "Generate demand"
+      }
+    });
+    staleSession.liveUrl = "https://example.test/e/e2e-deferred-claim";
+
+    await releaseHeldRoutes(heldClaimRoutes, { session: staleSession });
+    await page.waitForTimeout(1_500);
+    await expectFirstDoorStable(page);
   });
 
   test("brand-help accepts an official seller page and resumes the preserved build", async ({

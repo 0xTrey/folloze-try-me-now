@@ -217,12 +217,22 @@ describe("seller-evidence audience orchestration", () => {
             ({ sourceUrl }) => new URL(sourceUrl).hostname === seller.domain
           )
         ).toBe(true);
-        // Seller topics alone do not establish at least two supported buyer-role
-        // options. The product contract suppresses speculative chips instead of
-        // presenting generic role labels as research-backed recommendations.
-        expect(harvested?.audienceRecommendations).toEqual([]);
+        // Integration-platform evidence should surface technical buyer roles, not
+        // generic category fallbacks presented as research-backed chips.
+        expect(harvested?.audienceRecommendations?.length).toBeGreaterThanOrEqual(2);
+        expect(
+          harvested?.audienceRecommendations?.every(
+            ({ recommendationKind, source }) =>
+              recommendationKind === "evidence-backed" && source === "seller-public-evidence"
+          )
+        ).toBe(true);
+        expect(
+          harvested?.audienceRecommendations?.some(({ label }) =>
+            /architect|operations|platform/i.test(label)
+          )
+        ).toBe(true);
         expect([...evidenceIds].length).toBeGreaterThan(0);
-        expect(harvested?.offerRecommendations).toHaveLength(2);
+        expect(harvested?.offerRecommendations?.length).toBeGreaterThanOrEqual(2);
         expect(harvested?.objectiveRecommendations).toHaveLength(3);
         expect(
           harvested?.offerRecommendations?.filter(({ recommended }) => recommended)

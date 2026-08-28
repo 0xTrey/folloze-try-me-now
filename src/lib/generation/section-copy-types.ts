@@ -179,6 +179,7 @@ export const CTA_LIBRARY_V2 = {
   },
   register: { label: "Register", type: "register" },
   explore_use_case: { label: "Explore the use case", type: "explore" },
+  download_resource: { label: "Download the resource", type: "download" },
   review_evidence: { label: "Review the evidence", type: "explore" },
   plan_validation: {
     label: "Plan a validation session",

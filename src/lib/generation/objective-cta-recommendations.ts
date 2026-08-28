@@ -48,6 +48,9 @@ export type ObjectiveCtaReasonCode =
   | "abm-motion"
   | "event-motion"
   | "webinar-motion"
+  | "action-family-evaluate"
+  | "action-family-engage"
+  | "action-family-offer-specific"
   | "campaign-offer-evidence"
   | "product-evaluation-evidence"
   | "industry-priority-evidence"
@@ -58,9 +61,12 @@ export type ObjectiveCtaReasonCode =
   | "webinar-on-demand-evidence"
   | "weak-evidence-book-meeting-fallback";
 
+export type ObjectiveCtaActionFamily = "evaluate" | "engage" | "offer-specific";
+
 export interface ObjectiveCtaCandidate {
   id: string;
   objective: string;
+  actionFamily: ObjectiveCtaActionFamily;
   cta: {
     type: CtaType;
     label: string;
@@ -100,6 +106,7 @@ export interface ObjectiveCtaRecommendationInput {
 type CandidateSeed = {
   id: string;
   objective: string;
+  actionFamily: ObjectiveCtaActionFamily;
   ctaType: CtaType;
   ctaLabel: string;
 };
@@ -119,128 +126,152 @@ const EVIDENCE_THRESHOLD = 0.7;
 const defaultPlans = {
   campaign: [
     {
-      id: "campaign-book-meeting",
-      objective: "Start a sales conversation",
-      ctaType: "book-meeting",
-      ctaLabel: "Book a meeting"
-    },
-    {
       id: "campaign-explore-offer",
-      objective: "Build offer interest",
+      objective: "Learn about the offer",
+      actionFamily: "evaluate",
       ctaType: "explore",
       ctaLabel: "Explore the offer"
     },
     {
-      id: "campaign-contact-sales",
-      objective: "Evaluate fit",
-      ctaType: "contact-sales",
-      ctaLabel: "Contact sales"
+      id: "campaign-book-meeting",
+      objective: "Start a sales conversation",
+      actionFamily: "engage",
+      ctaType: "book-meeting",
+      ctaLabel: "Book a meeting"
+    },
+    {
+      id: "campaign-download-overview",
+      objective: "Review supporting materials",
+      actionFamily: "offer-specific",
+      ctaType: "download",
+      ctaLabel: "Download the overview"
     }
   ],
   product: [
     {
-      id: "product-book-walkthrough",
-      objective: "Evaluate the product",
-      ctaType: "book-meeting",
-      ctaLabel: "Book a product walkthrough"
-    },
-    {
       id: "product-explore-use-case",
       objective: "Explore a product use case",
+      actionFamily: "evaluate",
       ctaType: "explore",
       ctaLabel: "Explore the first use case"
     },
     {
-      id: "product-contact-sales",
-      objective: "Discuss product fit",
-      ctaType: "contact-sales",
-      ctaLabel: "Contact sales"
+      id: "product-book-walkthrough",
+      objective: "Evaluate the product",
+      actionFamily: "engage",
+      ctaType: "book-meeting",
+      ctaLabel: "Book a product walkthrough"
+    },
+    {
+      id: "product-download-brief",
+      objective: "Compare product details",
+      actionFamily: "offer-specific",
+      ctaType: "download",
+      ctaLabel: "Download the product brief"
     }
   ],
   industry: [
     {
-      id: "industry-book-session",
-      objective: "Apply the industry perspective",
-      ctaType: "book-meeting",
-      ctaLabel: "Book an industry working session"
-    },
-    {
       id: "industry-explore-priorities",
       objective: "Explore industry priorities",
+      actionFamily: "evaluate",
       ctaType: "explore",
       ctaLabel: "Explore the industry perspective"
     },
     {
-      id: "industry-contact-sales",
-      objective: "Discuss industry fit",
-      ctaType: "contact-sales",
-      ctaLabel: "Contact sales"
+      id: "industry-book-session",
+      objective: "Apply the industry perspective",
+      actionFamily: "engage",
+      ctaType: "book-meeting",
+      ctaLabel: "Book an industry working session"
+    },
+    {
+      id: "industry-review-playbook",
+      objective: "Review the industry playbook",
+      actionFamily: "offer-specific",
+      ctaType: "download",
+      ctaLabel: "Download the industry brief"
     }
   ],
   abm: [
     {
-      id: "abm-book-meeting",
-      objective: "Discuss account priorities",
-      ctaType: "book-meeting",
-      ctaLabel: "Book an account meeting"
-    },
-    {
       id: "abm-explore-perspective",
       objective: "Share an account perspective",
+      actionFamily: "evaluate",
       ctaType: "explore",
       ctaLabel: "Explore the account perspective"
     },
     {
-      id: "abm-plan-session",
-      objective: "Align the buying group",
+      id: "abm-book-meeting",
+      objective: "Discuss account priorities",
+      actionFamily: "engage",
       ctaType: "book-meeting",
-      ctaLabel: "Plan an account working session"
+      ctaLabel: "Book an account meeting"
+    },
+    {
+      id: "abm-review-account-brief",
+      objective: "Review the account brief",
+      actionFamily: "offer-specific",
+      ctaType: "download",
+      ctaLabel: "Download the account brief"
     }
   ],
   event: [
     {
-      id: "event-book-meeting",
-      objective: "Discuss the event topic",
-      ctaType: "book-meeting",
-      ctaLabel: "Book a meeting"
-    },
-    {
       id: "event-explore-topic",
       objective: "Explore the event topic",
+      actionFamily: "evaluate",
       ctaType: "explore",
       ctaLabel: "Explore the topic"
     },
     {
-      id: "event-contact-team",
-      objective: "Ask about the event",
-      ctaType: "contact-sales",
-      ctaLabel: "Contact the team"
+      id: "event-book-meeting",
+      objective: "Discuss the event topic",
+      actionFamily: "engage",
+      ctaType: "book-meeting",
+      ctaLabel: "Book a meeting"
+    },
+    {
+      id: "event-register",
+      objective: "Reserve a seat",
+      actionFamily: "offer-specific",
+      ctaType: "register",
+      ctaLabel: "Register for the event"
     }
   ],
   webinar: [
     {
-      id: "webinar-book-meeting",
-      objective: "Discuss the webinar topic",
-      ctaType: "book-meeting",
-      ctaLabel: "Book a meeting"
-    },
-    {
       id: "webinar-explore-topic",
       objective: "Explore the webinar topic",
+      actionFamily: "evaluate",
       ctaType: "explore",
       ctaLabel: "Explore the topic"
     },
     {
-      id: "webinar-contact-team",
-      objective: "Ask about the webinar",
-      ctaType: "contact-sales",
-      ctaLabel: "Contact the team"
+      id: "webinar-book-meeting",
+      objective: "Discuss the webinar topic",
+      actionFamily: "engage",
+      ctaType: "book-meeting",
+      ctaLabel: "Book a meeting"
+    },
+    {
+      id: "webinar-watch",
+      objective: "Increase webinar viewing",
+      actionFamily: "offer-specific",
+      ctaType: "explore",
+      ctaLabel: "Watch the webinar"
     }
   ]
 } as const satisfies Record<
   ObjectiveCtaMotion,
   readonly [CandidateSeed, CandidateSeed, CandidateSeed]
 >;
+
+const actionFamilyReasonCodes: Record<ObjectiveCtaActionFamily, ObjectiveCtaReasonCode> = {
+  evaluate: "action-family-evaluate",
+  engage: "action-family-engage",
+  "offer-specific": "action-family-offer-specific"
+};
 
 const motionReasonCodes: Record<ObjectiveCtaMotion, ObjectiveCtaReasonCode> = {
   campaign: "campaign-motion",
@@ -274,6 +305,12 @@ function evidenceFor(
   );
 }
 
+function engageCandidate(motion: ObjectiveCtaMotion): CandidateSeed {
+  const candidate = defaultPlans[motion].find((item) => item.actionFamily === "engage");
+  if (!candidate) throw new Error(`Missing engage candidate for ${motion}`);
+  return candidate;
+}
+
 function defaultPlan(
   motion: ObjectiveCtaMotion,
   supportingEvidence: readonly ObjectiveCtaEvidence[] = [],
@@ -282,12 +319,14 @@ function defaultPlan(
   const weakExceptionEvidence =
     (motion === "abm" || motion === "event" || motion === "webinar") &&
     supportingEvidence.length === 0;
+  const recommended = engageCandidate(motion);
   return {
     candidates: defaultPlans[motion],
-    recommendedId: defaultPlans[motion][0].id,
+    recommendedId: recommended.id,
     reasonCodes: [
       "generic-book-meeting-default",
       motionReasonCodes[motion],
+      actionFamilyReasonCodes[recommended.actionFamily],
       ...(evidenceCode ? [evidenceCode] : []),
       ...(weakExceptionEvidence ? ["weak-evidence-book-meeting-fallback" as const] : [])
     ],
@@ -307,14 +346,19 @@ function planFor(input: ObjectiveCtaRecommendationInput): RecommendationPlan {
           {
             id: "abm-active-evaluation",
             objective: "Support the active evaluation",
+            actionFamily: "engage",
             ctaType: "book-meeting",
             ctaLabel: "Plan a decision working session"
           },
-          defaultPlans.abm[2],
-          defaultPlans.abm[1]
+          defaultPlans.abm[0],
+          defaultPlans.abm[2]
         ],
         recommendedId: "abm-active-evaluation",
-        reasonCodes: ["abm-motion", "abm-active-evaluation-evidence"],
+        reasonCodes: [
+          "abm-motion",
+          "abm-active-evaluation-evidence",
+          "action-family-engage"
+        ],
         supportingEvidence: activeEvaluation,
         fallback: false
       };
@@ -323,12 +367,22 @@ function planFor(input: ObjectiveCtaRecommendationInput): RecommendationPlan {
     if (buyingGroup.length > 0) {
       return {
         candidates: [
-          defaultPlans.abm[2],
+          {
+            id: "abm-plan-session",
+            objective: "Align the buying group",
+            actionFamily: "engage",
+            ctaType: "book-meeting",
+            ctaLabel: "Plan an account working session"
+          },
           defaultPlans.abm[0],
-          defaultPlans.abm[1]
+          defaultPlans.abm[2]
         ],
-        recommendedId: defaultPlans.abm[2].id,
-        reasonCodes: ["abm-motion", "abm-buying-group-evidence"],
+        recommendedId: "abm-plan-session",
+        reasonCodes: [
+          "abm-motion",
+          "abm-buying-group-evidence",
+          "action-family-engage"
+        ],
         supportingEvidence: buyingGroup,
         fallback: false
       };
@@ -352,6 +406,7 @@ function planFor(input: ObjectiveCtaRecommendationInput): RecommendationPlan {
           {
             id,
             objective: "Drive registrations",
+            actionFamily: "offer-specific",
             ctaType: "register",
             ctaLabel: label
           },
@@ -363,7 +418,8 @@ function planFor(input: ObjectiveCtaRecommendationInput): RecommendationPlan {
           motionReasonCodes[input.motion],
           input.motion === "event"
             ? "event-registration-evidence"
-            : "webinar-registration-evidence"
+            : "webinar-registration-evidence",
+          "action-family-offer-specific"
         ],
         supportingEvidence: registration,
         fallback: false
@@ -378,17 +434,16 @@ function planFor(input: ObjectiveCtaRecommendationInput): RecommendationPlan {
       if (onDemand.length > 0) {
         return {
           candidates: [
-            {
-              id: "webinar-watch",
-              objective: "Increase webinar viewing",
-              ctaType: "explore",
-              ctaLabel: "Watch the webinar"
-            },
+            defaultPlans.webinar[2],
             defaultPlans.webinar[0],
-            defaultPlans.webinar[2]
+            defaultPlans.webinar[1]
           ],
-          recommendedId: "webinar-watch",
-          reasonCodes: ["webinar-motion", "webinar-on-demand-evidence"],
+          recommendedId: defaultPlans.webinar[2].id,
+          reasonCodes: [
+            "webinar-motion",
+            "webinar-on-demand-evidence",
+            "action-family-offer-specific"
+          ],
           supportingEvidence: onDemand,
           fallback: false
         };
@@ -429,12 +484,19 @@ function candidateFor(input: {
   evidenceRefs: readonly string[];
 }): ObjectiveCtaCandidate {
   const recommended = input.seed.id === input.plan.recommendedId;
+  const reasonCodes = recommended
+    ? input.plan.reasonCodes
+    : [
+        motionReasonCodes[input.motion],
+        actionFamilyReasonCodes[input.seed.actionFamily]
+      ];
   return {
     id: input.seed.id,
     objective: input.seed.objective,
+    actionFamily: input.seed.actionFamily,
     cta: { type: input.seed.ctaType, label: input.seed.ctaLabel },
     recommended,
-    reasonCodes: recommended ? input.plan.reasonCodes : [motionReasonCodes[input.motion]],
+    reasonCodes,
     provenance: {
       strategy:
         recommended && input.evidenceRefs.length > 0

@@ -28,7 +28,12 @@ import {
   portableBrandLogoFromSvg
 } from "@/lib/portable-brand-logo";
 import { fetchPinnedPublicBytes, fetchPinnedPublicText } from "@/lib/safe-fetch";
-import type { BrandDesignDNA, BrandProfile, IntelligenceConfidence } from "@/lib/types";
+import type {
+  BrandDesignDNA,
+  BrandImageMetadata,
+  BrandProfile,
+  IntelligenceConfidence
+} from "@/lib/types";
 import { normalizeDomain } from "@/lib/validation";
 import {
   brandDesignDNAFor,
@@ -2129,6 +2134,33 @@ function designFidelityFromRemoteReceipt(
   };
 }
 
+function imageMetadataFromRemoteRecord(
+  record: Record<string, unknown>
+): BrandProfile["imageMetadata"] | undefined {
+  const raw = recordOf(record.designDna ?? record.designDNA);
+  const images = records(recordOf(raw?.assets)?.images, 12);
+  if (!images.length) return undefined;
+  const metadata: Record<string, BrandImageMetadata> = {};
+  for (const item of images) {
+    const url = typeof item.url === "string" ? item.url.trim() : undefined;
+    if (!url) continue;
+    const width = boundedNumber(item.width, 96, 10_000);
+    const height = boundedNumber(item.height, 96, 10_000);
+    const contentHash =
+      typeof item.contentHash === "string" && item.contentHash.trim()
+        ? item.contentHash.trim().toLowerCase()
+        : typeof item.sha256 === "string" && /^[a-f0-9]{64}$/i.test(item.sha256)
+          ? item.sha256.toLowerCase()
+          : undefined;
+    metadata[url] = {
+      ...(width !== undefined ? { width } : {}),
+      ...(height !== undefined ? { height } : {}),
+      ...(contentHash ? { contentHash } : {})
+    };
+  }
+  return Object.keys(metadata).length ? metadata : undefined;
+}
+
 export function normalizeRemoteBrandProfile(value: unknown, domain: string): BrandProfile | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
@@ -2155,6 +2187,7 @@ export function normalizeRemoteBrandProfile(value: unknown, domain: string): Bra
     ?? designDnaFromServiceContract(serviceDesignDna, designFidelity)
     ?? designDnaFromLegacyPresentation(profile.presentation)
     ?? designDnaFromBrainPool(pool, { primary: primaryColor, accent: accentColor, surface: surfaceColor });
+  const imageMetadata = imageMetadataFromRemoteRecord(record);
   return {
     domain,
     companyName: typeof profile.companyName === "string"
@@ -2169,6 +2202,7 @@ export function normalizeRemoteBrandProfile(value: unknown, domain: string): Bra
     logoUrl,
     logoSourceUrl: logoUrl,
     imageUrls: strings(profile.imageUrls, 6),
+    ...(imageMetadata ? { imageMetadata } : {}),
     colors,
     primaryColor,
     accentColor,

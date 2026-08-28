@@ -27,6 +27,7 @@ import {
   previewBoundaryScrollDelta,
   previewUpdateState,
   recommendedObjectiveFor,
+  shouldApplyResetFencedUpdate,
   shouldShowBuildShell,
   shouldAutoConfirmSource,
   streamingCampaignPatchForIntent,
@@ -364,7 +365,15 @@ describe("Try Me Now experience copy", () => {
   it("fills inferred Live Brief rows instead of leaving them waiting", () => {
     const rows = overviewRowsFor(session("campaign", {
       answers: { campaignType: "product", promotedOffer: "Harmony" },
-      audienceSuggestions: ["Data and AI platform leaders"]
+      audienceRecommendations: [{
+        id: "data-ai",
+        label: "Data and AI platform leaders",
+        rationale: "Named in public product evidence.",
+        evidenceItemIds: ["seller-product-evidence"],
+        confidence: "high",
+        recommendationKind: "evidence-backed",
+        source: "seller-public-evidence"
+      }]
     }));
     expect(rows.find((row) => row.key === "offer")?.value).toBe("Harmony");
     expect(rows.find((row) => row.key === "audience")?.value).toBe("Data and AI platform leaders");
@@ -760,5 +769,17 @@ describe("Try Me Now experience copy", () => {
       "account_industry_persona_b"
     ]);
     expect(defaultPersonalizationVariantFor(withVariants)).toBe("account");
+  });
+});
+
+describe("reset fencing", () => {
+  it("ignores stale poll updates after reset generation bumps", () => {
+    let resetGeneration = 1;
+    const pollStartedAt = resetGeneration;
+
+    resetGeneration += 1;
+
+    expect(shouldApplyResetFencedUpdate(pollStartedAt, resetGeneration)).toBe(false);
+    expect(shouldApplyResetFencedUpdate(resetGeneration, resetGeneration)).toBe(true);
   });
 });

@@ -68,6 +68,7 @@ function allocation(
     assetRef,
     evidenceRef: `ev_asset_${semanticRole}`,
     sourceUrlHash: `sh_${semanticRole}`,
+    sourceIdentityKey: assetRef,
     purpose: semanticRole,
     reusable: false,
     required: semanticRole === "hero",

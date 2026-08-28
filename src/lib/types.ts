@@ -1,4 +1,5 @@
 import type { SourceArtifact } from "@/lib/content-intelligence";
+import type { OfferDiscoveryPageGraph } from "@/lib/research/offer-discovery";
 import type {
   WireframeSectionRole,
   WireframeSelectionV1
@@ -292,6 +293,14 @@ export interface BrandDesignDNA {
   };
 }
 
+/** Bounded harvester metadata for one seller image URL. No raw page text. */
+export interface BrandImageMetadata {
+  width?: number;
+  height?: number;
+  /** Upstream content or perceptual digest when already computed safely. */
+  contentHash?: string;
+}
+
 export interface BrandProfile {
   domain: string;
   /** Canonical public hostname after a verified first-party redirect or provider match. */
@@ -311,6 +320,8 @@ export interface BrandProfile {
   /** Validated logo bytes retained only in the server-side session record. */
   portableLogo?: PortableBrandLogo;
   imageUrls: string[];
+  /** Optional harvester metadata keyed by the same HTTPS URLs in `imageUrls`. */
+  imageMetadata?: Record<string, BrandImageMetadata>;
   colors: string[];
   primaryColor: string;
   accentColor: string;
@@ -1086,6 +1097,8 @@ export interface TryMeSession {
   campaignBrief?: CampaignBrief;
   audienceLens?: AudienceLensArtifact;
   campaignOfferSource?: CampaignOfferSource;
+  /** Server-only bounded HTML graph harvested during brand stage for offer discovery. */
+  offerDiscoveryGraph?: OfferDiscoveryPageGraph;
   curatedSections?: CuratedSectionControl[];
   experienceSpecRevision?: number;
   experienceSpec?: ExperienceSpec;
@@ -1124,6 +1137,7 @@ export type PublicTryMeSession = Omit<
   | "sourceFingerprint"
   | "sourceArtifact"
   | "finalArtifact"
+  | "offerDiscoveryGraph"
 > & {
   supportRef: string;
   answers: PublicSessionAnswers;

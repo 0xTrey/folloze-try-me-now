@@ -598,7 +598,6 @@ export function streamingCampaignQuestions(
       choices: audienceSuggestions.slice(0, 3),
       recommendedChoice: recommended.audience,
       placeholder: recommended.audience
-        || audienceSuggestions[0]
         || (mode === "event"
           ? "Describe the people most likely to attend this event"
           : "Describe the buyer role most likely to evaluate this offer"),
@@ -1216,6 +1215,13 @@ export function preservePreviewDuringRegeneration(
   return { ...next, experience: current.experience };
 }
 
+export function shouldApplyResetFencedUpdate(
+  requestGeneration: number,
+  currentGeneration: number
+): boolean {
+  return requestGeneration === currentGeneration;
+}
+
 export function canClaimPreview(
   session: Pick<PublicTryMeSession, "experience" | "status"> | undefined
 ): boolean {
@@ -1423,7 +1429,13 @@ export function briefProvenanceLabel(provenance: BriefFieldProvenance): string {
 
 function inferredAudienceFor(session: PublicTryMeSession): string | undefined {
   if (session.answers.audience) return audienceFor(session);
-  return session.audienceRecommendations?.[0]?.label || session.audienceSuggestions[0];
+  return (
+    session.audienceRecommendations?.find(
+      ({ recommendationKind, confidence }) =>
+        recommendationKind === "evidence-backed" && confidence !== "hypothesis"
+    )?.label
+    ?? session.audienceRecommendations?.[0]?.label
+  );
 }
 
 export function overviewRowsFor(session: PublicTryMeSession): OverviewRow[] {
@@ -2690,8 +2702,6 @@ export function ProgressiveQuestions({
         </div>
       );
     }
-    const recommendedAudience = session.audienceSuggestions[0] ?? "Other";
-    const chosenAudience = selectedAudience ?? recommendedAudience;
     return (
       <div className="questionSequence">
         {sourceInsight}
@@ -2699,11 +2709,23 @@ export function ProgressiveQuestions({
           <span className="questionCount">Next choice · audience</span>
           <h2>{questionCopy.audienceTitle}</h2>
           <p>{questionCopy.audienceBody}</p>
-          <ChipGroup label="Choose an audience" options={[...session.audienceSuggestions, "Other"]} value={chosenAudience} disabled={isSaving} onChange={setSelectedAudience} />
-          {chosenAudience === "Other" && (
-            <label className="lineInput"><span>Audience</span><div><Users size={19} /><input value={customAudience} onChange={(event) => setCustomAudience(event.target.value)} placeholder="Regional field marketing leaders" /></div></label>
-          )}
-          <button className="buttonPrimary" type="button" disabled={isSaving || (chosenAudience === "Other" && customAudience.trim().length < 3)} onClick={() => void onPatch({ audience: chosenAudience, customAudience: chosenAudience === "Other" ? customAudience.trim() : undefined })}>
+          <label className="lineInput">
+            <span>Audience</span>
+            <div>
+              <Users size={19} />
+              <input
+                value={customAudience}
+                onChange={(event) => setCustomAudience(event.target.value)}
+                placeholder="Finance leaders evaluating advisory support"
+              />
+            </div>
+          </label>
+          <button
+            className="buttonPrimary"
+            type="button"
+            disabled={isSaving || customAudience.trim().length < 3}
+            onClick={() => void onPatch({ audience: "Other", customAudience: customAudience.trim() })}
+          >
             Use this audience<ArrowRight size={17} />
           </button>
         </div>
@@ -3073,9 +3095,9 @@ export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSe
 }
 
 /**
- * V2 is a final-only, app-hosted reveal. Keep the older claim, analytics, and
- * variant controls available for the legacy renderer, but never put them in
- * front of the finished V2 experience.
+ * V2 is a final-only, app-hosted reveal. Legacy temporary URL, personalization,
+ * and countdown controls stay hidden, but final-only V2 still exposes live
+ * engagement and email-save actions at reveal.
  */
 export function isUnifiedFinalOnlyV2(session: Pick<PublicTryMeSession, "experienceSpec"> | undefined): boolean {
   return session?.experienceSpec?.schemaVersion === "2.0";
@@ -3250,6 +3272,33 @@ export function TryMeNowApp() {
   const activePreflightKey = useRef<string | undefined>(undefined);
   const finalRenderTracked = useRef<string | undefined>(undefined);
   const supportRefTracked = useRef<string | undefined>(undefined);
+  const resetGeneration = useRef(0);
+  const [resetFenceEpoch, setResetFenceEpoch] = useState(0);
+  const bumpResetGeneration = useCallback(() => {
+    resetGeneration.current += 1;
+    setResetFenceEpoch(resetGeneration.current);
+    return resetGeneration.current;
+  }, []);
+  const isResetGenerationStale = useCallback(
+    (requestGeneration: number) => !shouldApplyResetFencedUpdate(requestGeneration, resetGeneration.current),
+    []
+  );
+  const resetSessionScopedRefs = useCallback(() => {
+    patchRequestRef.current = 0;
+    startedDomain.current = undefined;
+    stabilizedSellerDomain.current = undefined;
+    activePreflightKey.current = undefined;
+    revealTracked.current = false;
+    initialPreviewScrolled.current = false;
+    buildShellScrolled.current = undefined;
+    persistedSectionSignals.current.clear();
+    journeyCompleteAnalyticsOpened.current = undefined;
+    lastTrackedStatus.current = undefined;
+    buildTrackedSession.current = undefined;
+    previewScrolledSession.current = undefined;
+    finalRenderTracked.current = undefined;
+    supportRefTracked.current = undefined;
+  }, []);
   const [preflightCoordinator] = useState(() => (
     new SellerBrandPreflightCoordinator(
       async (selectedUseCase, companyDomain) => {
@@ -3298,6 +3347,8 @@ export function TryMeNowApp() {
   }, [session]);
 
   const selectUseCase = useCallback((selected: UseCase, selectedCampaignMode?: CampaignEntryMode) => {
+    bumpResetGeneration();
+    resetSessionScopedRefs();
     setUseCase(selected);
     setCampaignEntryMode(selectedCampaignMode ?? "campaign");
     setStreamingAnswers([]);
@@ -3305,6 +3356,8 @@ export function TryMeNowApp() {
     setDomain("");
     setSession(undefined);
     setAnswers({});
+    setIsStarting(false);
+    setIsSaving(false);
     setError("");
     setPreflightStatus("idle");
     setConnectionError("");
@@ -3316,23 +3369,15 @@ export function TryMeNowApp() {
     setClaimEmail("");
     setClaimStatus("idle");
     setClaimError("");
-    startedDomain.current = undefined;
-    stabilizedSellerDomain.current = undefined;
-    activePreflightKey.current = undefined;
-    revealTracked.current = false;
-    initialPreviewScrolled.current = false;
-    persistedSectionSignals.current.clear();
-    buildTrackedSession.current = undefined;
-    previewScrolledSession.current = undefined;
-    finalRenderTracked.current = undefined;
-    supportRefTracked.current = undefined;
     setPersonalizationSelection({ key: "", variantId: "generic" });
     track("path_selected", { useCase: selected });
     track("use_case_selected", { useCase: selected });
-  }, []);
+  }, [bumpResetGeneration, resetSessionScopedRefs]);
 
   const resetExperience = useCallback(() => {
     resetProductAnalyticsVisitor();
+    bumpResetGeneration();
+    resetSessionScopedRefs();
     setUseCase(undefined);
     setCampaignEntryMode("campaign");
     setStreamingAnswers([]);
@@ -3340,6 +3385,8 @@ export function TryMeNowApp() {
     setDomain("");
     setSession(undefined);
     setAnswers({});
+    setIsStarting(false);
+    setIsSaving(false);
     setError("");
     setPreflightStatus("idle");
     setConnectionError("");
@@ -3352,18 +3399,8 @@ export function TryMeNowApp() {
     setClaimError("");
     setClientEvents([]);
     setRevealedAt(undefined);
-    startedDomain.current = undefined;
-    stabilizedSellerDomain.current = undefined;
-    activePreflightKey.current = undefined;
-    revealTracked.current = false;
-    initialPreviewScrolled.current = false;
-    persistedSectionSignals.current.clear();
-    buildTrackedSession.current = undefined;
-    previewScrolledSession.current = undefined;
-    finalRenderTracked.current = undefined;
-    supportRefTracked.current = undefined;
     setPersonalizationSelection({ key: "", variantId: "generic" });
-  }, []);
+  }, [bumpResetGeneration, resetSessionScopedRefs]);
 
   const closeAnalyticsPanel = useCallback(() => setShowAnalyticsPanel(false), []);
 
@@ -3398,25 +3435,29 @@ export function TryMeNowApp() {
 
     const key = sellerBrandPreflightKey(useCase, normalized);
     activePreflightKey.current = key;
+    const requestGeneration = resetGeneration.current;
     const cancelScheduledPreflight = scheduleSellerBrandPreflight(() => {
-      if (activePreflightKey.current !== key) return;
+      if (activePreflightKey.current !== key || isResetGenerationStale(requestGeneration)) return;
       setPreflightStatus("starting");
       void preflightCoordinator.warm(useCase, normalized).then(
         () => {
-          if (activePreflightKey.current === key) setPreflightStatus("started");
+          if (activePreflightKey.current !== key || isResetGenerationStale(requestGeneration)) return;
+          setPreflightStatus("started");
         },
         () => {
-          if (activePreflightKey.current === key) setPreflightStatus("failed");
+          if (activePreflightKey.current !== key || isResetGenerationStale(requestGeneration)) return;
+          setPreflightStatus("failed");
         }
       );
     }, SELLER_BRAND_PREFLIGHT_DELAY_MS);
     return cancelScheduledPreflight;
-  }, [domain, preflightCoordinator, session, useCase]);
+  }, [domain, isResetGenerationStale, preflightCoordinator, resetFenceEpoch, session, useCase]);
 
   const startSession = useCallback(async (
     selectedUseCase: UseCase,
     companyDomain: string
   ) => {
+    const requestGeneration = resetGeneration.current;
     const normalized = companyDomain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
     if (startedDomain.current === normalized || !likelyDomain.test(normalized)) return;
     startedDomain.current = normalized;
@@ -3424,12 +3465,14 @@ export function TryMeNowApp() {
     setError("");
     try {
       const confirmedSession = await preflightCoordinator.confirm(selectedUseCase, normalized);
+      if (isResetGenerationStale(requestGeneration)) return;
       const seededSession = selectedUseCase === "campaign" && campaignEntryMode === "event"
         ? (await api<{ session: PublicTryMeSession }>(`/api/sessions/${confirmedSession.id}`, {
             method: "PATCH",
             body: JSON.stringify({ campaignType: "event", objective: "Drive registrations" })
           })).session
         : confirmedSession;
+      if (isResetGenerationStale(requestGeneration)) return;
       setSession(seededSession);
       setAnswers(seededSession.answers);
       setProductAnalyticsSessionId(seededSession.id);
@@ -3442,27 +3485,31 @@ export function TryMeNowApp() {
       track("domain_confirmed", { useCase: selectedUseCase, entryMode: campaignEntryMode });
       track("domain_submitted", { useCase: selectedUseCase, entryMode: campaignEntryMode });
     } catch (startError) {
+      if (isResetGenerationStale(requestGeneration)) return;
       startedDomain.current = undefined;
       setError(startError instanceof Error ? startError.message : "We could not start the build.");
     } finally {
-      setIsStarting(false);
+      if (!isResetGenerationStale(requestGeneration)) setIsStarting(false);
     }
-  }, [campaignEntryMode, preflightCoordinator]);
+  }, [campaignEntryMode, isResetGenerationStale, preflightCoordinator]);
 
   const pollSessionId = session?.id;
   const pollSessionStatus = session?.status;
   useEffect(() => {
     if (!pollSessionId || !pollSessionStatus || ["claimed", "preview_ready_unclaimed", "generation_failed"].includes(pollSessionStatus)) return;
+    const requestGeneration = resetGeneration.current;
     let cancelled = false;
     let timer: number | undefined;
     let failures = 0;
     const poll = async () => {
+      if (cancelled || isResetGenerationStale(requestGeneration)) return;
       try {
         const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${pollSessionId}`);
-        if (cancelled) return;
+        if (cancelled || isResetGenerationStale(requestGeneration)) return;
         failures = 0;
         setConnectionError("");
         const nextSession = await confirmHighConfidenceSource(result.session);
+        if (cancelled || isResetGenerationStale(requestGeneration)) return;
         setSession((current) => preservePreviewDuringRegeneration(current, nextSession));
         setAnswers(nextSession.answers);
         if (nextSession.answers.sourceName) {
@@ -3475,18 +3522,20 @@ export function TryMeNowApp() {
             : current);
         }
       } catch {
-        if (cancelled) return;
+        if (cancelled || isResetGenerationStale(requestGeneration)) return;
         failures += 1;
         setConnectionError("Connection interrupted. Reconnecting without losing your brief…");
       }
-      if (!cancelled) timer = window.setTimeout(poll, Math.min(900 * 2 ** failures, 8_000));
+      if (!cancelled && !isResetGenerationStale(requestGeneration)) {
+        timer = window.setTimeout(poll, Math.min(900 * 2 ** failures, 8_000));
+      }
     };
     timer = window.setTimeout(poll, 900);
     return () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [pollSessionId, pollSessionStatus]);
+  }, [isResetGenerationStale, pollSessionId, pollSessionStatus, resetFenceEpoch]);
 
   useEffect(() => {
     if (!buildShellSessionId || buildShellScrolled.current === buildShellSessionId) return;
@@ -3537,9 +3586,11 @@ export function TryMeNowApp() {
   useEffect(() => {
     if (!session || !canRevealFinalExperience(session) || revealTracked.current) return;
     revealTracked.current = true;
+    const requestGeneration = resetGeneration.current;
     const sessionId = session.id;
     const sessionUseCase = session.useCase;
     const timer = window.setTimeout(() => {
+      if (isResetGenerationStale(requestGeneration)) return;
       const revealTime = Date.now();
       setRevealedAt(revealTime);
       track("experience_revealed", { useCase: sessionUseCase });
@@ -3554,7 +3605,7 @@ export function TryMeNowApp() {
       void recordPreviewSignal(sessionId, "preview-opened", "experience-preview").catch(() => undefined);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [session]);
+  }, [isResetGenerationStale, resetFenceEpoch, session]);
 
   const personalizationSourceKey = session?.experienceSpec?.personalizationVariantIds?.length
     ? `${session.id}:${session.experienceSpec.artifactDigest ?? session.revision}`
@@ -3734,6 +3785,7 @@ export function TryMeNowApp() {
 
   const patchAnswers = async (patch: SessionAnswers) => {
     if (!session) return;
+    const requestGeneration = resetGeneration.current;
     const requestNumber = ++patchRequestRef.current;
     setIsSaving(true);
     setError("");
@@ -3747,8 +3799,9 @@ export function TryMeNowApp() {
         method: "PATCH",
         body: JSON.stringify(patch)
       });
-      if (requestNumber !== patchRequestRef.current) return;
+      if (requestNumber !== patchRequestRef.current || isResetGenerationStale(requestGeneration)) return;
       const nextSession = await confirmHighConfidenceSource(result.session);
+      if (isResetGenerationStale(requestGeneration)) return;
       setSession((current) => preservePreviewDuringRegeneration(current, nextSession));
       setAnswers(nextSession.answers);
       if (typeof patch.audience === "string" && patch.audience.trim()) {
@@ -3758,15 +3811,19 @@ export function TryMeNowApp() {
         track("goal_confirmed", { useCase: session.useCase });
       }
     } catch (patchError) {
+      if (isResetGenerationStale(requestGeneration)) return;
       setError(patchError instanceof Error ? patchError.message : "We could not save that answer.");
     } finally {
-      if (requestNumber === patchRequestRef.current) setIsSaving(false);
+      if (requestNumber === patchRequestRef.current && !isResetGenerationStale(requestGeneration)) {
+        setIsSaving(false);
+      }
     }
   };
 
   const backgroundSessionId = session?.id;
   const patchAnswersInBackground = useCallback(async (patch: SessionAnswers) => {
     if (!backgroundSessionId) return;
+    const requestGeneration = resetGeneration.current;
     try {
       if (patch.offerSourceUrl || patch.sourceUrl) {
         track("research_started", {
@@ -3777,16 +3834,19 @@ export function TryMeNowApp() {
         method: "PATCH",
         body: JSON.stringify(patch)
       });
+      if (isResetGenerationStale(requestGeneration)) return;
       setConnectionError("");
     } catch {
+      if (isResetGenerationStale(requestGeneration)) return;
       // Keep the visitor's in-progress form untouched. Polling or a later
       // Continue click can retry the same bounded research mutation.
       setConnectionError("Product research paused. We’ll retry without losing your brief…");
     }
-  }, [backgroundSessionId]);
+  }, [backgroundSessionId, isResetGenerationStale]);
 
   const patchWorkspace = async (patch: WorkspacePatch) => {
     if (!session) return;
+    const requestGeneration = resetGeneration.current;
     const requestNumber = ++patchRequestRef.current;
     setIsSaving(true);
     setError("");
@@ -3795,18 +3855,22 @@ export function TryMeNowApp() {
         method: "PATCH",
         body: JSON.stringify({ operation: "update-workspace", ...patch })
       });
-      if (requestNumber !== patchRequestRef.current) return;
+      if (requestNumber !== patchRequestRef.current || isResetGenerationStale(requestGeneration)) return;
       setSession((current) => preservePreviewDuringRegeneration(current, result.session));
       setAnswers(result.session.answers);
     } catch (patchError) {
+      if (isResetGenerationStale(requestGeneration)) return;
       setError(patchError instanceof Error ? patchError.message : "We could not update the live brief.");
     } finally {
-      if (requestNumber === patchRequestRef.current) setIsSaving(false);
+      if (requestNumber === patchRequestRef.current && !isResetGenerationStale(requestGeneration)) {
+        setIsSaving(false);
+      }
     }
   };
 
   const uploadPdf = async (file: File) => {
     if (!session) return;
+    const requestGeneration = resetGeneration.current;
     const activeSession = session;
     setIsSaving(true);
     setError("");
@@ -3817,6 +3881,7 @@ export function TryMeNowApp() {
     });
     try {
       await validatePdfFile(file);
+      if (isResetGenerationStale(requestGeneration)) return;
       const uploadId = crypto.randomUUID();
       const pathname = `try-me/uploads/${activeSession.id}/${uploadId}.pdf`;
       track("pdf_upload_started", {
@@ -3834,13 +3899,18 @@ export function TryMeNowApp() {
           originalName: file.name
         })
       });
+      if (isResetGenerationStale(requestGeneration)) return;
 
       setPdfUpload({ status: "processing", fileName: file.name, message: pdfUploadProcessingCopy(0) });
 
       const statusResult = await pollPdfUploadStatus({
-        onProgress: (message) => setPdfUpload((current) => ({ ...current, status: "processing", message })),
+        onProgress: (message) => {
+          if (isResetGenerationStale(requestGeneration)) return;
+          setPdfUpload((current) => ({ ...current, status: "processing", message }));
+        },
         getStatus: () => api<{ upload: { status: "pending" | "processing" | "complete" | "failed"; errorCode?: string; requestId?: string } }>(`/api/sessions/${activeSession.id}/upload?uploadId=${encodeURIComponent(uploadId)}`).then((result) => result.upload)
       });
+      if (isResetGenerationStale(requestGeneration)) return;
       if (statusResult.status === "failed") {
         throw new ApiResponseError("We could not process that PDF. Try again or choose another file.", {
           status: 422,
@@ -3853,9 +3923,11 @@ export function TryMeNowApp() {
         return;
       }
       const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${activeSession.id}`);
+      if (isResetGenerationStale(requestGeneration)) return;
       const processedSession = result.session;
 
       const nextSession = await confirmHighConfidenceSource(processedSession);
+      if (isResetGenerationStale(requestGeneration)) return;
       setSession(nextSession);
       setAnswers(nextSession.answers);
       setPdfUpload({
@@ -3868,6 +3940,7 @@ export function TryMeNowApp() {
         sizeBucket: uploadSizeBucket(file.size)
       });
     } catch (uploadError) {
+      if (isResetGenerationStale(requestGeneration)) return;
       await reportClientUploadFailure(activeSession.id, file, uploadError);
       const message = friendlyUploadError(uploadError);
       setPdfUpload({
@@ -3883,7 +3956,7 @@ export function TryMeNowApp() {
         sizeBucket: uploadSizeBucket(file.size)
       });
     } finally {
-      setIsSaving(false);
+      if (!isResetGenerationStale(requestGeneration)) setIsSaving(false);
     }
   };
 
@@ -3916,7 +3989,7 @@ export function TryMeNowApp() {
       offerChoices,
       {
         offer: evidenceBackedOffers.find(({ recommended }) => recommended)?.label,
-        audience: evidenceBackedAudiences[0]?.label ?? session.audienceSuggestions[0],
+        audience: evidenceBackedAudiences[0]?.label,
         objective: session.objectiveRecommendations?.find(({ recommended }) => recommended)?.label
           ?? recommendedObjective
       }
@@ -3994,7 +4067,13 @@ export function TryMeNowApp() {
       return;
     }
     if (answer.questionId === "goal") {
-      void patchAnswers({ objective: answer.value });
+      const selected = session.objectiveRecommendations?.find(
+        (candidate) => candidate.label === answer.value
+      );
+      void patchAnswers({
+        objective: answer.value,
+        ...(selected?.cta?.type ? { ctaType: selected.cta.type } : {})
+      });
       return;
     }
     const patch = streamingCampaignPatchForIntent(answer.value, streamingMode);
@@ -4019,6 +4098,7 @@ export function TryMeNowApp() {
 
   const claim = async (email: string) => {
     if (!session) return;
+    const requestGeneration = resetGeneration.current;
     setClaimStatus("saving");
     setClaimError("");
     track("claim_started", { useCase: session.useCase });
@@ -4031,6 +4111,7 @@ export function TryMeNowApp() {
         method: "POST",
         body: JSON.stringify({ email })
       });
+      if (isResetGenerationStale(requestGeneration)) return;
       setSession(result.session);
       setClaimStatus("saved");
       setShowSavePrompt(false);
@@ -4039,6 +4120,7 @@ export function TryMeNowApp() {
       track("save_completed", { useCase: result.session.useCase });
       track("experience_claimed", { useCase: result.session.useCase });
     } catch (claimFailure) {
+      if (isResetGenerationStale(requestGeneration)) return;
       const message = claimFailure instanceof Error ? claimFailure.message : "We could not save this experience.";
       setClaimStatus("error");
       setClaimError(message);
@@ -4061,6 +4143,7 @@ export function TryMeNowApp() {
 
   const retryFailedStage = async (stage: StageKey) => {
     if (!session) return;
+    const requestGeneration = resetGeneration.current;
     captureUnifiedProductEvent("retry_requested", {
       sessionId: session.id,
       properties: {
@@ -4071,11 +4154,14 @@ export function TryMeNowApp() {
     if (stage === "brand") {
       try {
         const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}`);
+        if (isResetGenerationStale(requestGeneration)) return;
         setSession((current) => preservePreviewDuringRegeneration(current, result.session));
         setAnswers(result.session.answers);
       } catch {
+        if (isResetGenerationStale(requestGeneration)) return;
         // Recover path is best-effort; fall through to a soft brief re-touch.
       }
+      if (isResetGenerationStale(requestGeneration)) return;
       const style = session.answers.styleVariant || "brand-led";
       await patchWorkspace({ answers: { styleVariant: style } });
       return;
@@ -4112,7 +4198,7 @@ export function TryMeNowApp() {
     events: clientEvents,
     previewOpened: Boolean(revealedAt)
   });
-  const saveDialogOpen = !isFinalOnlyV2 && Boolean(showSavePrompt && session && canSaveExperience);
+  const saveDialogOpen = Boolean(showSavePrompt && session && canSaveExperience);
   const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
   const revealCopy = session ? getRevealCopy(session) : undefined;
   const analyticsSignals: AnalyticsSignal[] = clientEvents.map((event, index) => ({
@@ -4147,16 +4233,16 @@ export function TryMeNowApp() {
 
   return (
     <>
+    <header className="siteHeader">
+      <Link href="/" aria-label="Folloze Try Me Now home"><Image src="/brand/folloze-logo.svg" width={101} height={25} alt="Folloze" priority /><span>Try Me Now</span></Link>
+      <div className="headerPromise" role="status" aria-live="polite"><span className="liveDot" />{headerStatus}</div>
+      {session && <button className="resetButton resetButtonProminent" type="button" onClick={resetExperience}><RefreshCw size={16} />Start over</button>}
+    </header>
     <main
       className={`appShell ${isReveal ? "revealMode" : ""}`}
       aria-hidden={showProcess || saveDialogOpen || showAnalyticsPanel ? true : undefined}
       inert={showProcess || saveDialogOpen || showAnalyticsPanel ? true : undefined}
     >
-      <header className="siteHeader">
-        <Link href="/" aria-label="Folloze Try Me Now home"><Image src="/brand/folloze-logo.svg" width={101} height={25} alt="Folloze" priority /><span>Try Me Now</span></Link>
-        <div className="headerPromise" role="status" aria-live="polite"><span className="liveDot" />{headerStatus}</div>
-        {session && <button className="resetButton resetButtonProminent" type="button" onClick={resetExperience}><RefreshCw size={16} />Start over</button>}
-      </header>
 
       {!useCase && (
         <section className="entryStage">
@@ -4184,8 +4270,14 @@ export function TryMeNowApp() {
           domain={domain}
           onDomain={updateDomain}
           onBack={() => {
+            bumpResetGeneration();
+            resetSessionScopedRefs();
             setUseCase(undefined);
             setCampaignEntryMode("campaign");
+            setDomain("");
+            setIsStarting(false);
+            setError("");
+            startedDomain.current = undefined;
           }}
           onContinue={() => void startSession(useCase, domain)}
           isStarting={isStarting}
@@ -4354,17 +4446,17 @@ export function TryMeNowApp() {
               </div>
             </div>
             <div className="revealActions">
-              {!isFinalOnlyV2 && session.status === "claimed" ? (
+              {session.status === "claimed" ? (
                 <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
-              ) : !isFinalOnlyV2 && canSaveExperience ? (
+              ) : canSaveExperience ? (
                 <button className="buttonPrimary" type="button" onClick={openSavePrompt}>
-                  <Mail size={16} />Save this preview
+                  <Mail size={16} />Save by email
                 </button>
-              ) : !isFinalOnlyV2 ? (
+              ) : (
                 <span className="buttonSecondary" role="status">
-                  Explore the preview to unlock save
+                  Explore the preview to unlock save by email
                 </span>
-              ) : null}
+              )}
               <a className="buttonSecondary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
             </div>
           </div>
@@ -4379,8 +4471,8 @@ export function TryMeNowApp() {
                   <Globe2 size={16} aria-hidden="true" />
                   <span><strong>Live preview</strong><small>Scroll inside to explore the full experience.</small></span>
                 </div>
-                {!isFinalOnlyV2 && <div className="previewToolbarActions">
-                  {lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed" ? (
+                <div className="previewToolbarActions">
+                  {!isFinalOnlyV2 && (lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed" ? (
                     <span className="previewReadinessStatus isSaved" data-lifecycle-phase={lifecyclePhase}>
                       <Check size={14} />{lifecycleCopy.statusLabel}
                     </span>
@@ -4391,7 +4483,7 @@ export function TryMeNowApp() {
                     >
                       <Clock3 size={14} />Preview ready · {previewCountdown}
                     </span>
-                  )}
+                  ))}
                   <button
                     className="previewAnalyticsButton"
                     type="button"
@@ -4403,7 +4495,7 @@ export function TryMeNowApp() {
                   >
                     <Gauge size={16} />See live engagement<span aria-hidden="true">{Math.max(analyticsSignals.length, 1)}</span>
                   </button>
-                </div>}
+                </div>
               </div>
               {!isFinalOnlyV2 && <PersonalizationVariantBar
                 options={personalizationOptions}
@@ -4455,7 +4547,7 @@ export function TryMeNowApp() {
       />
     )}
     <AnalyticsSignalPanel
-      open={!isFinalOnlyV2 && showAnalyticsPanel}
+      open={showAnalyticsPanel}
       signals={analyticsSignals}
       engagedSeconds={engagementSeconds}
       sessionId={session?.id}

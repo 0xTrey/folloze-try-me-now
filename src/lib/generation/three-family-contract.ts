@@ -21,6 +21,7 @@ export const ctaIdsV2 = [
   "book_working_session",
   "register",
   "explore_use_case",
+  "download_resource",
   "review_evidence",
   "plan_validation"
 ] as const;
@@ -178,7 +179,7 @@ const defaultPlans: Record<WireframeFamilyV2, readonly SectionSlotV2[]> = {
     }),
     slot("launch", 5, "proof", "Evidence", "Judge reasons to believe", "fact", ["proof"], "proof-artifact"),
     slot("launch", 6, "next-move", "Next step", "Take one bounded next action", "instruction", ["visitor_input"], "cta-panel", {
-      allowedCtas: ["book_meeting", "register", "explore_use_case", "review_evidence"]
+      allowedCtas: ["book_meeting", "register", "explore_use_case", "download_resource", "review_evidence"]
     })
   ],
   guide: [
@@ -192,12 +193,12 @@ const defaultPlans: Record<WireframeFamilyV2, readonly SectionSlotV2[]> = {
       interaction: "select-path"
     }),
     slot("guide", 6, "evaluation-close", "Continue", "Continue with evidence and a working session", "instruction", ["visitor_input"], "cta-panel", {
-      allowedCtas: ["book_working_session", "review_evidence"]
+      allowedCtas: ["book_working_session", "download_resource", "review_evidence"]
     })
   ],
   align: [
     slot("align", 1, "shared-priority", "Shared priority", "Understand the account-specific hypothesis", "hypothesis", ["target_fact", "offer"], "hero-image-or-type", {
-      allowedCtas: ["book_working_session", "plan_validation"]
+      allowedCtas: ["book_working_session", "download_resource", "plan_validation"]
     }),
     slot("align", 2, "account-relevance", "Why it matters here", "Separate public observation from implication", "implication", ["target_fact", "offer"], "account-observations"),
     slot("align", 3, "shared-opportunity", "Opportunity", "See practical workstreams and outputs", "hypothesis", ["target_fact", "offer"], "workflow"),

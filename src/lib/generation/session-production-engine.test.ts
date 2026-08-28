@@ -181,6 +181,68 @@ function renderPage(
 }
 
 describe("compileSessionProductionPage", () => {
+  it.each([
+    {
+      objective: "Explore a product use case",
+      ctaType: "explore" as const,
+      ctaLabel: "Explore the first use case",
+      expectedId: "explore_use_case",
+      expectedLabel: "Explore the use case"
+    },
+    {
+      objective: "Evaluate the product",
+      ctaType: "book-meeting" as const,
+      ctaLabel: "Book a product walkthrough",
+      expectedId: "book_meeting",
+      expectedLabel: "Book a meeting"
+    },
+    {
+      objective: "Compare product details",
+      ctaType: "download" as const,
+      ctaLabel: "Download the product brief",
+      expectedId: "download_resource",
+      expectedLabel: "Download the resource"
+    }
+  ])(
+    "carries the selected $ctaType action into the compiled spine and final HTML",
+    async ({ objective, ctaType, ctaLabel, expectedId, expectedLabel }) => {
+      const profile = brand();
+      const currentSession = session(profile);
+      currentSession.answers.objective = objective;
+      currentSession.answers.ctaType = ctaType;
+      currentSession.objectiveRecommendations = [
+        {
+          id: `selected-${ctaType}`,
+          label: objective,
+          rationale: "Selected visitor action",
+          recommended: true,
+          evidenceItemIds: ["visitor:objective"],
+          confidence: "high",
+          recommendationKind: "evidence-backed",
+          revision: currentSession.revision,
+          cta: { type: ctaType, label: ctaLabel }
+        }
+      ];
+
+      const result = await compileSessionProductionPage({
+        session: currentSession,
+        brand: profile,
+        providerStartedAtMs: 0,
+        currentTimeMs: 10_000
+      });
+
+      expect(result.outcome).toBe("production-page");
+      if (result.outcome !== "production-page") return;
+      expect(result.artifact.value?.familyMessageSpine?.cta).toMatchObject({
+        id: expectedId,
+        label: expectedLabel,
+        type: ctaType
+      });
+      const html = renderPage(currentSession, profile, result.artifact.value!);
+      expect(html).toContain(`>${expectedLabel}</a>`);
+    }
+  );
+
   it("adapts a current material session into a bounded production page", async () => {
     const profile = brand();
     const result = await compileSessionProductionPage({

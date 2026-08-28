@@ -67,9 +67,9 @@ import {
   reconcileLiveBriefEvidence,
   type VisitorLiveBriefEdits
 } from "@/lib/research/evidence-reconciler";
+import { extractOfferEvidence } from "@/lib/research/offer-evidence";
 import {
   rankOfferRecommendations,
-  type ExtractedOfferEvidence,
   type OfferCampaignMotion,
   type OfferRecommendationSet
 } from "@/lib/research/offer-recommendations";
@@ -140,15 +140,21 @@ function selectedAudience(session: TryMeSession): {
   const label =
     session.answers.customAudience ||
     session.answers.audience ||
-    session.audienceRecommendations?.[0]?.label ||
-    session.audienceSuggestions[0] ||
+    session.audienceRecommendations?.find(
+      ({ recommendationKind, confidence }) =>
+        recommendationKind === "evidence-backed" && confidence !== "hypothesis"
+    )?.label ||
+    session.audienceRecommendations?.find(
+      ({ recommendationKind, confidence }) =>
+        recommendationKind === "evidence-backed" && confidence !== "hypothesis"
+    )?.label ||
     "Buyer team";
   const recommendation = session.audienceRecommendations?.find(
     (candidate) => candidate.label === label
   );
   return {
     label,
-    buyerRole: label,
+    buyerRole: recommendation?.label ?? label,
     buyerJob:
       recommendation?.rationale ||
       "evaluate fit, evidence, implementation risk, and the next useful decision"
@@ -156,36 +162,32 @@ function selectedAudience(session: TryMeSession): {
 }
 
 function selectedCta(session: TryMeSession): { type: CtaType; label: string } {
-  const recommendation = session.objectiveRecommendations?.find(({ recommended }) => recommended);
+  const objectiveLabel = session.answers.objective;
+  const selected = objectiveLabel
+    ? session.objectiveRecommendations?.find((candidate) => candidate.label === objectiveLabel)
+    : undefined;
+  const recommended = session.objectiveRecommendations?.find(({ recommended }) => recommended);
+  const resolved = selected ?? recommended;
   return {
-    type: session.answers.ctaType ?? recommendation?.cta?.type ?? "book-meeting",
+    type: session.answers.ctaType ?? resolved?.cta?.type ?? "book-meeting",
     label:
-      recommendation?.cta?.label ||
+      resolved?.cta?.label ||
       (session.answers.campaignType === "event" ? "Register now" : "Book a meeting")
   };
 }
 
-function offerEvidence(brand: BrandProfile, motion: OfferCampaignMotion): ExtractedOfferEvidence[] {
-  return [
-    ...(brand.title
-      ? [{
-          ref: `official:offer:title:${brand.domain}`,
-          label: brand.title,
-          kind: motion === "event" ? "event" as const : motion,
-          source: "homepage" as const,
-          sourceUrl: brand.sourceUrl,
-          confidence: brand.source === "fallback" ? 0.3 : 0.72
-        }]
-      : []),
-    ...brand.publicTopics.slice(0, 4).map((label, index) => ({
-      ref: `official:offer:topic:${index}`,
-      label,
-      kind: motion === "event" ? "topic" as const : motion,
-      source: "homepage" as const,
-      sourceUrl: brand.sourceUrl,
-      confidence: brand.source === "fallback" ? 0.25 : Math.max(0.42, 0.68 - index * 0.06)
-    }))
-  ];
+function offerEvidence(
+  session: TryMeSession,
+  brand: BrandProfile,
+  motion: OfferCampaignMotion
+) {
+  return extractOfferEvidence({
+    brand,
+    motion,
+    evidenceItems: session.evidenceItems,
+    sourceArtifact: session.sourceArtifact,
+    discoveryPages: session.offerDiscoveryGraph
+  });
 }
 
 function companyEvidence(
@@ -381,6 +383,33 @@ function familyCtaId(
     return "register";
   }
   return "book_meeting";
+}
+
+/** Resolve the visitor's selected objective CTA into the bounded V2 CTA
+ * vocabulary. The family is only a fallback when the selected action cannot
+ * be represented or is not permitted by the locked section plan. */
+function selectedFamilyCtaId(
+  session: TryMeSession,
+  family: ReturnType<typeof selectThreeFamilyDecision>
+): CtaIdV2 {
+  const fallback = familyCtaId(family);
+  const selectedType = selectedCta(session).type;
+  const candidate: CtaIdV2 | undefined =
+    selectedType === "register"
+      ? "register"
+      : selectedType === "explore"
+        ? "explore_use_case"
+        : selectedType === "download"
+          ? "download_resource"
+        : selectedType === "book-meeting" || selectedType === "contact-sales"
+          ? family.family === "align"
+            ? "plan_validation"
+            : family.family === "guide"
+              ? "book_working_session"
+              : "book_meeting"
+          : undefined;
+  const allowed = new Set(family.sectionPlan.flatMap((slot) => slot.allowedCtas ?? []));
+  return candidate && allowed.has(candidate) ? candidate : fallback;
 }
 
 function familyArgument(input: {
@@ -656,6 +685,10 @@ export async function compileSessionProductionPage(input: {
   currentRevision?: () => number;
   /** Story attempt this compile belongs to. Fences the private trace. */
   attemptId?: string;
+  /** Receipt-backed writing progress for the public build shell. */
+  onWritingProgress?: (completed: number, total: number) => void | Promise<void>;
+  /** Receipt-backed checking progress before factuality review. */
+  onCheckingProgress?: (sectionCount: number) => void | Promise<void>;
   /**
    * The session's operational trace id. Passing it keeps the support reference
    * a visitor is given resolvable to this private trace; without it the trace
@@ -719,7 +752,7 @@ export async function compileSessionProductionPage(input: {
           confidence: 1
         }
       : undefined,
-    evidence: offerEvidence(brand, campaignMotion(session))
+    evidence: offerEvidence(session, brand, campaignMotion(session))
   });
   const offerArtifact = productionArtifact<OfferRecommendationSet>({
     worker: "offer-researcher",
@@ -946,7 +979,7 @@ export async function compileSessionProductionPage(input: {
     completedAt
   });
   const targetName = targetNameFor(session, input.targetBrand);
-  const ctaId = familyCtaId(selectedFamilyDecision);
+  const ctaId = selectedFamilyCtaId(session, selectedFamilyDecision);
   const baseFamilyArgument = (base: RequiredProductionArgument) =>
     familyArgument({
       base,
@@ -1096,6 +1129,8 @@ export async function compileSessionProductionPage(input: {
     ...(input.sectionModelClient ? { sectionModelClient: input.sectionModelClient } : {}),
     ...(input.sectionWriterDeadlineMs !== undefined
       ? { sectionWriterDeadlineMs: input.sectionWriterDeadlineMs }
-      : {})
+      : {}),
+    ...(input.onWritingProgress ? { onWritingProgress: input.onWritingProgress } : {}),
+    ...(input.onCheckingProgress ? { onCheckingProgress: input.onCheckingProgress } : {})
   });
 }

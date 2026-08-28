@@ -70,6 +70,8 @@ export interface AssetCandidate {
   transparent?: boolean;
   utility?: boolean;
   promotional?: boolean;
+  /** Strongest upstream content or perceptual digest when already available. */
+  contentHash?: string;
   duplicateKey?: string;
 }
 
@@ -393,17 +395,29 @@ function publicHttpsAsset(ref: string): URL | undefined {
   }
 }
 
-function assetDuplicateKey(candidate: AssetCandidate): string {
-  if (candidate.duplicateKey?.trim()) return candidate.duplicateKey.trim().toLowerCase();
-  const url = publicHttpsAsset(candidate.ref);
-  if (!url) return candidate.ref.trim().toLowerCase();
+function normalizedAssetPathKey(url: URL): string {
   const path = url.pathname
     .toLowerCase()
     .replace(
-      /[-_](?:\d+x\d+|\d+[wh]|small|medium|large|thumb(?:nail)?|desktop|mobile|crop)(?=[-_.])/g,
+      /[-_](?:\d+x\d+|\d+[wh]|small|medium|large|thumb(?:nail)?|desktop|mobile|retina|crop|@\dx)(?=[-_.]|$)/g,
       ""
     );
   return `${url.origin.toLowerCase()}${path}`;
+}
+
+/** Collapses responsive crops and upstream digests onto one allocator identity. */
+export function resolveAssetCandidateDuplicateKey(candidate: AssetCandidate): string {
+  if (candidate.duplicateKey?.trim()) return candidate.duplicateKey.trim().toLowerCase();
+  if (candidate.contentHash?.trim()) {
+    return `content:${candidate.contentHash.trim().toLowerCase()}`;
+  }
+  const url = publicHttpsAsset(candidate.ref);
+  if (!url) return candidate.ref.trim().toLowerCase();
+  return normalizedAssetPathKey(url);
+}
+
+function assetDuplicateKey(candidate: AssetCandidate): string {
+  return resolveAssetCandidateDuplicateKey(candidate);
 }
 
 function assetIsEligible(
@@ -668,8 +682,9 @@ export function brandProfileToBrandSystemEvidence(
       })
     : undefined;
   const density = profileDensity(profile);
-  const assets = profile.imageUrls.map((imageRef) =>
-    make<AssetCandidate>({
+  const assets = profile.imageUrls.map((imageRef) => {
+    const imageMeta = profile.imageMetadata?.[imageRef];
+    const candidate: AssetCandidate = {
       ref: imageRef,
       kind: /\b(?:dashboard|interface|product-ui|platform|console|workspace)\b/i.test(imageRef)
         ? "product-ui"
@@ -681,9 +696,21 @@ export function brandProfileToBrandSystemEvidence(
       sourcePage: profile.sourceUrl,
       sourceAuthority: "seller_official",
       safetyStatus: "safe",
-      renderStatus: "unknown"
-    }, sourceConfidence * 0.85)
-  );
+      renderStatus: "unknown",
+      ...(imageMeta?.width !== undefined ? { width: imageMeta.width } : {}),
+      ...(imageMeta?.height !== undefined ? { height: imageMeta.height } : {}),
+      ...(imageMeta?.contentHash?.trim()
+        ? { contentHash: imageMeta.contentHash.trim().toLowerCase() }
+        : {})
+    };
+    return make<AssetCandidate>(
+      {
+        ...candidate,
+        duplicateKey: resolveAssetCandidateDuplicateKey(candidate)
+      },
+      sourceConfidence * 0.85
+    );
+  });
 
   return {
     ref,
@@ -1291,17 +1318,28 @@ export function compileBrandSystemV2(
       ? "diagram-led"
       : "type-led";
   const allocation = allocateExperienceAssets({
-    candidates: assets.map(
-      (asset): AssetCandidateInput => ({
-        assetRef: asset.value,
-        evidenceRef: asset.source,
-        purpose: allocationRoleFor(asset.purpose, asset.kind),
+    candidates: rankedAssets.map(
+      ({ candidate, purpose, duplicateKey }): AssetCandidateInput => ({
+        assetRef: candidate.value.ref,
+        evidenceRef: evidence(
+          candidate.value.ref,
+          candidate.source,
+          candidate.confidence,
+          candidate.observedAt,
+          input.revision
+        ).source,
+        purpose: allocationRoleFor(purpose, candidate.value.kind),
         sourceAuthority: "seller_official",
-        confidence: asset.confidence,
+        confidence: candidate.confidence,
         renderStatus: "unknown",
-        ...(asset.sourcePage ? { sourcePage: asset.sourcePage } : {}),
-        ...(asset.width !== undefined ? { width: asset.width } : {}),
-        ...(asset.height !== undefined ? { height: asset.height } : {})
+        ...(candidate.value.duplicateKey?.trim()
+          ? { duplicateKey: candidate.value.duplicateKey }
+          : duplicateKey
+            ? { duplicateKey }
+            : {}),
+        ...(candidate.value.sourcePage ? { sourcePage: candidate.value.sourcePage } : {}),
+        ...(candidate.value.width !== undefined ? { width: candidate.value.width } : {}),
+        ...(candidate.value.height !== undefined ? { height: candidate.value.height } : {})
       })
     ),
     slots: BRAND_ASSET_SLOTS,

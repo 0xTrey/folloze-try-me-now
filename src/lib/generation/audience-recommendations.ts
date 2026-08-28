@@ -120,9 +120,33 @@ const unsafeEvidence =
 
 const roleDefinitions: Array<{ pattern: RegExp; definition: RoleDefinition }> = [
   {
-    pattern: /\b(?:finops|finance|financial|cost|spend|economics)\b/i,
+    pattern: /\b(?:cfo|chief financial|controller|controllership)\b/i,
+    definition: {
+      family: "cfo",
+      buyerRole: "CFOs and finance executives",
+      buyerJob: "align financial strategy, reporting, and growth or transition decisions"
+    }
+  },
+  {
+    pattern: /\b(?:accounting|bookkeeping|tax|audit|assurance|advisory services?|client accounting)\b/i,
+    definition: {
+      family: "accounting",
+      buyerRole: "Accounting and advisory leaders",
+      buyerJob: "evaluate outsourced accounting, advisory support, and financial operations fit"
+    }
+  },
+  {
+    pattern: /\b(?:finance|financial|payroll|workforce|hr|human resources|business owner|owner-led)\b/i,
     definition: {
       family: "finance",
+      buyerRole: "Finance and business decision makers",
+      buyerJob: "govern financial reporting, payroll, and operating decisions tied to the offer"
+    }
+  },
+  {
+    pattern: /\b(?:finops|cost|spend|economics)\b/i,
+    definition: {
+      family: "finops",
       buyerRole: "Finance and FinOps leaders",
       buyerJob: "govern investment, usage, and measurable economic tradeoffs"
     }
@@ -314,14 +338,18 @@ function isSpecificAudienceLabel(value: string): boolean {
   const tokens = optionTokens(value);
   return (
     /\b[A-Z]{2,}\b/.test(value) ||
-    tokens.length > 0 &&
-    tokens.some((token) => !genericAudienceTokens.has(token))
+    (tokens.length > 0 &&
+      tokens.some((token) => !genericAudienceTokens.has(token)))
   );
+}
+
+function isFallbackTaxonomyRole(role: RoleDefinition): boolean {
+  return fallbackRoles.some((fallback) => fallback.family === role.family);
 }
 
 function evidenceAudienceLabels(evidence: readonly UsableEvidence[]): string[] {
   const rolePattern =
-    /\b((?:[a-z][a-z0-9&/-]*\s+){0,4}(?:leaders?|managers?|directors?|administrators?|scientists?|owners?|architects?|executives?|officers?|teams?))\b/i;
+    /\b((?:[a-z][a-z0-9&/-]*\s+){0,4}(?:leaders?|managers?|directors?|administrators?|scientists?|owners\b|architects?|executives?|officers?|teams?))\b/i;
   return dedupeNearIdenticalAudienceOptions(
     evidence.flatMap((item) => {
       const match = rolePattern.exec(item.text);
@@ -330,7 +358,7 @@ function evidenceAudienceLabels(evidence: readonly UsableEvidence[]): string[] {
         match[1].replace(/^(?:and|for|the|with)\s+/i, ""),
         90
       );
-      if (!isSpecificAudienceLabel(role)) return [];
+      if (!isSpecificAudienceLabel(role) || role.split(/\s+/).length < 2) return [];
       const startsWithRole =
         item.text.toLocaleLowerCase().startsWith(match[1].toLocaleLowerCase());
       return [startsWithRole ? cleanText(item.text, 120) : role];
@@ -362,8 +390,49 @@ export function dedupeNearIdenticalAudienceOptions(options: readonly string[]): 
   return result;
 }
 
-function roleFor(label: string): RoleDefinition {
-  const explicitRole = /\b((?:[a-z][a-z0-9&/-]*\s+){0,4}(?:leaders?|managers?|directors?|administrators?|scientists?|owners?|architects?|executives?|officers?|teams?))\b/i.exec(
+function offerContextText(offerLabel: string | undefined, evidence: readonly UsableEvidence[]): string {
+  return [
+    offerLabel ?? "",
+    ...evidence.map(({ text }) => text),
+    ...evidence.flatMap(({ signals }) => signals)
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isAccountingFinanceOfferContext(offerLabel: string | undefined, evidence: readonly UsableEvidence[]): boolean {
+  return /\b(?:accounting|advisory|tax|audit|cfo|controller|finance|financial|bookkeeping|payroll|business owner|owner-led)\b/i.test(
+    offerContextText(offerLabel, evidence)
+  );
+}
+
+function supportsTechnologyAdvisoryAudience(
+  offerLabel: string | undefined,
+  evidence: readonly UsableEvidence[]
+): boolean {
+  return /\b(?:erp|technology advisory|digital transformation|business applications?|system selection|platform|data|analytics|ai|intelligence)\b/i.test(
+    offerContextText(offerLabel, evidence)
+  );
+}
+
+function shouldSuppressGenericTechRole(
+  role: RoleDefinition,
+  offerLabel: string | undefined,
+  evidence: readonly UsableEvidence[]
+): boolean {
+  if (role.family !== "data" && role.family !== "technical") return false;
+  if (!isAccountingFinanceOfferContext(offerLabel, evidence)) return false;
+  return !supportsTechnologyAdvisoryAudience(offerLabel, evidence);
+}
+
+function offerAwareBuyerJob(role: RoleDefinition, offerLabel: string): string {
+  const offer = cleanText(offerLabel, 96);
+  if (!offer || role.buyerJob.includes(offer)) return role.buyerJob;
+  return `${role.buyerJob} while evaluating ${offer}`;
+}
+
+function roleFor(label: string, offerLabel?: string): RoleDefinition {
+  const explicitRole = /\b((?:[a-z][a-z0-9&/-]*\s+){0,4}(?:leaders?|managers?|directors?|administrators?|scientists?|owners\b|architects?|executives?|officers?|teams?))\b/i.exec(
     label
   );
   if (explicitRole?.[1]) {
@@ -375,21 +444,26 @@ function roleFor(label: string): RoleDefinition {
       label.slice((explicitRole.index ?? 0) + explicitRole[0].length),
       120
     ).replace(/^(?:who|that|responsible for)\s+/i, "");
-    return {
+    const role = {
       family: `named:${optionTokens(buyerRole).slice(0, 3).join("-")}`,
       buyerRole,
       buyerJob: trailingJob
         ? trailingJob.replace(/^./, (character) => character.toLocaleLowerCase())
         : "evaluate the offer against the team's operating priorities and next decision"
     };
+    return offerLabel
+      ? { ...role, buyerJob: offerAwareBuyerJob(role, offerLabel) }
+      : role;
   }
-  return (
+  const matched =
     roleDefinitions.find(({ pattern }) => pattern.test(label))?.definition ?? {
       family: "business",
       buyerRole: cleanText(label, 90),
       buyerJob: "evaluate the offer against the team's operating priorities and next decision"
-    }
-  );
+    };
+  return offerLabel
+    ? { ...matched, buyerJob: offerAwareBuyerJob(matched, offerLabel) }
+    : matched;
 }
 
 function profileEvidence(
@@ -479,8 +553,15 @@ function sellerAuthorityProvenance(seller: BrandProfile): AudienceCandidateProve
   };
 }
 
-function evidenceScore(label: string, role: RoleDefinition, evidence: UsableEvidence): number {
-  const candidateTokens = new Set(optionTokens(`${label} ${role.buyerRole} ${role.buyerJob}`));
+function evidenceScore(
+  label: string,
+  role: RoleDefinition,
+  evidence: UsableEvidence,
+  offerLabel?: string
+): number {
+  const candidateTokens = new Set(
+    optionTokens(`${label} ${role.buyerRole} ${role.buyerJob} ${offerLabel ?? ""}`)
+  );
   const evidenceTokens = new Set([
     ...optionTokens(evidence.text),
     ...evidence.signals.flatMap(optionTokens)
@@ -492,13 +573,14 @@ function rankedEvidence(
   label: string,
   role: RoleDefinition,
   evidence: UsableEvidence[],
-  candidateIndex: number
+  candidateIndex: number,
+  offerLabel?: string
 ): UsableEvidence | undefined {
   const ranked = evidence
     .map((item, index) => ({
       item,
       index,
-      score: evidenceScore(label, role, item)
+      score: evidenceScore(label, role, item, offerLabel)
     }))
     .sort(
       (left, right) =>
@@ -528,7 +610,11 @@ function confidenceBand(value: number): AudienceCandidateConfidence {
   return "hypothesis";
 }
 
-function distinctRoleOptions(suggestions: readonly string[]): Array<{
+function distinctRoleOptions(
+  suggestions: readonly string[],
+  offerLabel: string | undefined,
+  evidence: readonly UsableEvidence[]
+): Array<{
   label: string;
   role: RoleDefinition;
 }> {
@@ -537,16 +623,24 @@ function distinctRoleOptions(suggestions: readonly string[]): Array<{
   const usedFamilies = new Set<string>();
 
   for (const label of deduped) {
-    const role = roleFor(label);
+    const role = roleFor(label, offerLabel);
+    if (shouldSuppressGenericTechRole(role, offerLabel, evidence)) continue;
     if (usedFamilies.has(role.family)) continue;
-    selected.push({ label, role });
+    const resolvedRole = offerLabel
+      ? { ...role, buyerJob: offerAwareBuyerJob(role, offerLabel) }
+      : role;
+    selected.push({ label, role: resolvedRole });
     usedFamilies.add(role.family);
     if (selected.length === 3) return selected;
   }
 
   for (const fallback of fallbackRoles) {
+    if (shouldSuppressGenericTechRole(fallback, offerLabel, evidence)) continue;
     if (usedFamilies.has(fallback.family)) continue;
-    selected.push({ label: fallback.buyerRole, role: fallback });
+    const role = offerLabel
+      ? { ...fallback, buyerJob: offerAwareBuyerJob(fallback, offerLabel) }
+      : fallback;
+    selected.push({ label: role.buyerRole, role });
     usedFamilies.add(fallback.family);
     if (selected.length === 3) return selected;
   }
@@ -621,13 +715,14 @@ export function buildAudienceRecommendations(
     promotedOffer: input.offerLabel,
     objective: "Evaluate the next step"
   });
-  const options = distinctRoleOptions([
-    ...evidenceAudienceLabels(contextEvidence),
-    ...suggestions
-  ]);
   const offerLabel =
     cleanText(input.offerLabel ?? narrativeProfileFor(input.seller).offerLabel, 96) ||
     `${input.seller.companyName}'s offering`;
+  const options = distinctRoleOptions(
+    [...evidenceAudienceLabels(contextEvidence), ...suggestions],
+    input.offerLabel ?? offerLabel,
+    [...sellerEvidence, ...contextEvidence]
+  );
   const authorityProvenance = sellerAuthorityProvenance(input.seller);
   const targetUse =
     input.route === "named-account" && input.target
@@ -635,7 +730,7 @@ export function buildAudienceRecommendations(
       : "none" as const;
 
   const candidates = options.map(({ label, role }, index): AudienceAccountCandidate => {
-    const evidence = rankedEvidence(label, role, contextEvidence, index);
+    const evidence = rankedEvidence(label, role, contextEvidence, index, offerLabel);
     const contextualProvenance = evidence ? evidenceProvenance(evidence) : undefined;
     const provenance = contextualProvenance &&
       contextualProvenance.evidenceRef !== authorityProvenance.evidenceRef
@@ -656,7 +751,7 @@ export function buildAudienceRecommendations(
       ),
       label,
       buyerRole: role.buyerRole,
-      buyerJob: role.buyerJob,
+      buyerJob: offerAwareBuyerJob(role, offerLabel),
       rationale: rationaleFor({
         role,
         offerLabel,
@@ -671,7 +766,9 @@ export function buildAudienceRecommendations(
         evidence &&
         band !== "hypothesis" &&
         authorityProvenance.kind !== "deterministic-fallback" &&
-        isSpecificAudienceLabel(label)
+        isSpecificAudienceLabel(label) &&
+        isSpecificAudienceLabel(evidence.text) &&
+        !isFallbackTaxonomyRole(role)
           ? "evidence-backed"
           : "fallback",
       provenance,

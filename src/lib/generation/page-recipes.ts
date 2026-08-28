@@ -188,7 +188,7 @@ const PRODUCT_SOLUTION_PROGRESSION: readonly RecipeSectionSpec[] = [
     "cta-panel",
     true,
     ["nextAction", "desiredOutcome", "audienceJob"],
-    ["book_meeting", "explore_use_case", "review_evidence"]
+    ["book_meeting", "explore_use_case", "download_resource", "review_evidence"]
   )
 ];
 
@@ -279,7 +279,7 @@ const RECIPES: Record<PageRecipeId, PageRecipeContract> = {
         "cta-panel",
         true,
         ["nextAction", "desiredOutcome"],
-        ["book_working_session", "review_evidence"]
+        ["book_working_session", "download_resource", "review_evidence"]
       )
     ],
     visibility: "internal"
@@ -355,7 +355,7 @@ const RECIPES: Record<PageRecipeId, PageRecipeContract> = {
         "cta-panel",
         true,
         ["nextAction", "desiredOutcome"],
-        ["explore_use_case", "book_meeting"]
+        ["explore_use_case", "book_meeting", "download_resource"]
       )
     ],
     visibility: "internal"
@@ -416,7 +416,7 @@ const RECIPES: Record<PageRecipeId, PageRecipeContract> = {
         "cta-panel",
         true,
         ["nextAction", "audienceJob"],
-        ["review_evidence", "book_working_session"]
+        ["review_evidence", "book_working_session", "download_resource"]
       )
     ],
     visibility: "internal"
@@ -553,7 +553,7 @@ const RECIPES: Record<PageRecipeId, PageRecipeContract> = {
         "cta-panel",
         true,
         ["nextAction", "desiredOutcome"],
-        ["book_meeting", "plan_validation"]
+        ["book_meeting", "plan_validation", "download_resource"]
       )
     ],
     visibility: "internal"

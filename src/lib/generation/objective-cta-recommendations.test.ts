@@ -74,8 +74,13 @@ describe("objective and CTA recommendations", () => {
     expect(recommended(artifact)).toMatchObject({
       id: value.recommendedCandidateId,
       objective: "Start a sales conversation",
+      actionFamily: "engage",
       cta: { type: "book-meeting", label: "Book a meeting" },
-      reasonCodes: ["generic-book-meeting-default", "campaign-motion"],
+      reasonCodes: [
+        "generic-book-meeting-default",
+        "campaign-motion",
+        "action-family-engage"
+      ],
       provenance: { strategy: "deterministic-policy", evidenceRefs: [] },
       revision: 4
     });
@@ -99,14 +104,28 @@ describe("objective and CTA recommendations", () => {
       expect(valueOf(artifact).candidates).toHaveLength(3);
       expect(choice).toMatchObject({
         objective,
+        actionFamily: "engage",
         cta: { type: "book-meeting", label },
         reasonCodes: expect.arrayContaining([
           "generic-book-meeting-default",
-          reasonCode
+          reasonCode,
+          "action-family-engage"
         ])
       });
     }
   );
+
+  it("exposes three distinct action families for default campaign candidates", () => {
+    const artifact = recommendObjectiveCtas(input("campaign"));
+    const families = valueOf(artifact).candidates.map(({ actionFamily }) => actionFamily);
+
+    expect(new Set(families)).toEqual(new Set(["evaluate", "engage", "offer-specific"]));
+    expect(valueOf(artifact).candidates.map(({ cta }) => cta.type)).toEqual([
+      "explore",
+      "book-meeting",
+      "download"
+    ]);
+  });
 
   it("uses visitor-backed ABM buying-group evidence for the account working-session exception", () => {
     const artifact = recommendObjectiveCtas(
@@ -123,8 +142,9 @@ describe("objective and CTA recommendations", () => {
     });
     expect(choice).toMatchObject({
       objective: "Align the buying group",
+      actionFamily: "engage",
       cta: { type: "book-meeting", label: "Plan an account working session" },
-      reasonCodes: ["abm-motion", "abm-buying-group-evidence"],
+      reasonCodes: ["abm-motion", "abm-buying-group-evidence", "action-family-engage"],
       provenance: {
         strategy: "evidence-backed",
         evidenceRefs: ["brief-buying-group"]
@@ -149,8 +169,9 @@ describe("objective and CTA recommendations", () => {
 
     expect(recommended(artifact)).toMatchObject({
       objective: "Drive registrations",
+      actionFamily: "offer-specific",
       cta: { type: "register", label: "Register for the event" },
-      reasonCodes: ["event-motion", "event-registration-evidence"],
+      reasonCodes: ["event-motion", "event-registration-evidence", "action-family-offer-specific"],
       provenance: {
         strategy: "evidence-backed",
         evidenceRefs: ["official-event-registration"]
@@ -178,8 +199,9 @@ describe("objective and CTA recommendations", () => {
       );
 
       expect(recommended(artifact)).toMatchObject({
+        actionFamily: signal === "webinar-on-demand" ? "offer-specific" : "offer-specific",
         cta: { label: ctaLabel },
-        reasonCodes: ["webinar-motion", reasonCode]
+        reasonCodes: ["webinar-motion", reasonCode, "action-family-offer-specific"]
       });
       expect(artifact.status).toBe("complete");
     }
@@ -207,9 +229,11 @@ describe("objective and CTA recommendations", () => {
     });
     expect(recommended(artifact)).toMatchObject({
       cta: { type: "book-meeting", label: "Book a meeting" },
+      actionFamily: "engage",
       reasonCodes: [
         "generic-book-meeting-default",
         "event-motion",
+        "action-family-engage",
         "weak-evidence-book-meeting-fallback"
       ],
       provenance: { strategy: "deterministic-policy", evidenceRefs: [] }

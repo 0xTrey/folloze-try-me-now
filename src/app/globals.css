@@ -33,7 +33,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .appShell { min-height: 100vh; overflow-x: clip; background: var(--fz-canvas); }
-.siteHeader { height: 72px; padding: 0 clamp(22px, 4vw, 64px); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; background: rgba(255,255,255,.92); border-bottom: 1px solid var(--fz-border); position: relative; z-index: 30; backdrop-filter: blur(14px); }
+.siteHeader { height: 72px; padding: 0 clamp(22px, 4vw, 64px); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; background: rgba(255,255,255,.92); border-bottom: 1px solid var(--fz-border); position: relative; z-index: 110; backdrop-filter: blur(14px); }
 .siteHeader > a { min-height: 44px; display: flex; align-items: center; gap: 17px; text-decoration: none; color: var(--fz-ink); width: max-content; }
 .siteHeader > a span { padding-left: 17px; border-left: 1px solid var(--fz-border); font-size: 14px; font-weight: 650; }
 .headerPromise { display: flex; align-items: center; gap: 9px; color: var(--fz-muted-strong); font-size: 12px; letter-spacing: .02em; }
