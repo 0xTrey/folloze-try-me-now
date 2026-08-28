@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicTryMeSession } from "@/lib/types";
 
-import { canRevealFinalExperience } from "@/lib/preview-lifecycle";
+import { buildPhaseRows, canRevealFinalExperience } from "@/lib/preview-lifecycle";
 
 import { FinalBuildShell } from "./final-build-shell";
 import {
@@ -195,6 +195,41 @@ describe("final-only shell", () => {
     expect(container.querySelector("iframe")).toBeNull();
     expect(container.querySelector(".assembly")).toBeNull();
     expect(container.textContent).not.toMatch(/%/);
+  });
+
+  it("keeps intake visible while background research runs before the brief is complete", () => {
+    const collecting = {
+      ...building,
+      status: "collecting" as const,
+      answers: {},
+      stages: { brand: { status: "complete" as const }, audience: { status: "running" as const }, story: { status: "pending" as const } },
+      buildProgress: undefined
+    };
+
+    expect(shouldShowBuildShell(collecting)).toBe(false);
+    expect(buildPhaseRows(collecting)).toEqual([]);
+  });
+
+  it("ignores stale build receipts after the visitor changes the brief", () => {
+    const collecting = {
+      ...building,
+      status: "collecting" as const
+    };
+
+    expect(shouldShowBuildShell(collecting)).toBe(false);
+  });
+
+  it("does not claim a final build has started before a receipt exists", () => {
+    const unreceipted = {
+      ...building,
+      buildProgress: {
+        ...building.buildProgress!,
+        receipts: []
+      }
+    };
+
+    expect(shouldShowBuildShell(unreceipted)).toBe(false);
+    expect(buildPhaseRows(unreceipted)).toEqual([]);
   });
 
   it("hands the frame over only once the persisted final receipt lands", () => {

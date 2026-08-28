@@ -112,13 +112,16 @@ export function isBuildInProgress(
 ): boolean {
   if (!session) return false;
   if (canRevealFinalExperience(session)) return false;
-  if (session.buildProgress) {
-    return session.buildProgress.phase !== "failed";
-  }
-  return (
-    session.status === "generating" ||
-    Object.values(session.stages).some((stage) => stage.status === "running")
-  );
+  // Background research stages can run while the visitor is still answering
+  // the brief. They are not the final build and must not replace the intake.
+  // A build shell is credible only after the orchestrator has accepted a
+  // material brief, moved the session into generation, and persisted at least
+  // one phase receipt. Recoverable failures are handled by
+  // shouldShowBuildShell.
+  if (session.status !== "generating") return false;
+  if (!isSessionGenerationEligible(session)) return false;
+  if (!session.buildProgress?.receipts.length) return false;
+  return session.buildProgress.phase !== "failed";
 }
 
 /**
@@ -279,8 +282,9 @@ export const BUILD_PHASE_ORDER: ReadonlyArray<Exclude<BuildPhase, "ready" | "fai
 export function buildPhaseRows(
   session: Pick<PublicTryMeSession, "buildProgress"> | undefined
 ): Array<BuildPhaseReceipt & { label: string }> {
+  if (!session?.buildProgress?.receipts.length) return [];
   const receipts = new Map(
-    (session?.buildProgress?.receipts ?? []).map((receipt) => [receipt.phase, receipt])
+    session.buildProgress.receipts.map((receipt) => [receipt.phase, receipt])
   );
   return BUILD_PHASE_ORDER.map((phase) => {
     const receipt = receipts.get(phase);

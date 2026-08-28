@@ -1555,7 +1555,7 @@ export function shouldShowBuildShell(
   if (!session) return false;
   if (canRevealFinalExperience(session)) return false;
   if (session.status === "brand_help_required") return false;
-  if (session.buildProgress?.failure) return true;
+  if (session.status === "generation_failed" && session.buildProgress?.failure) return true;
   return isBuildInProgress(session);
 }
 
@@ -3949,7 +3949,7 @@ export function TryMeNowApp() {
   ))?.id;
   const streamingBuildAudience = canonicalStreamingAnswers.find(
     (answer) => answer.questionId === "audience"
-  )?.value || session?.audienceSuggestions[0] || "the selected buyer group";
+  )?.value || (session ? audienceFor(session) : "the selected buyer group");
   const streamingCurrentQuestionId = streamingFocusId && streamingQuestions.some((question) => question.id === streamingFocusId)
     ? streamingFocusId
     : nextStreamingQuestionId;

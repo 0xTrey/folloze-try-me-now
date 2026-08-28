@@ -79,8 +79,22 @@ const workingProgress: BuildProgressState = {
   ]
 };
 
-function sessionFor(state: "working" | "slow" | "failed" | "ready"): PublicTryMeSession {
+function sessionFor(state: "collecting" | "working" | "slow" | "failed" | "ready"): PublicTryMeSession {
   const base = baseSession();
+  if (state === "collecting") {
+    return {
+      ...base,
+      status: "collecting",
+      answers: {},
+      stages: {
+        brand: { status: "complete", detail: "Brand matched" },
+        audience: { status: "running", detail: "Building audience recommendations" },
+        story: { status: "pending", detail: "Waiting for the audience and objective" }
+      },
+      buildProgress: undefined,
+      audienceSuggestions: ["Data and AI platform leaders"]
+    };
+  }
   if (state === "working") return { ...base, buildProgress: workingProgress };
   if (state === "slow") return { ...base, buildProgress: { ...workingProgress, slow: true } };
   if (state === "failed") {
@@ -128,7 +142,10 @@ function sessionFor(state: "working" | "slow" | "failed" | "ready"): PublicTryMe
   };
 }
 
-async function mockShell(page: Page, state: "working" | "slow" | "failed" | "ready"): Promise<void> {
+async function mockShell(
+  page: Page,
+  state: "collecting" | "working" | "slow" | "failed" | "ready"
+): Promise<void> {
   const session = sessionFor(state);
   await page.route(`**/e/${SESSION_ID}**`, async (route) => {
     await route.fulfill({
@@ -192,6 +209,19 @@ test.describe("final-only visible shell", () => {
       if (width === 1440) await captureReleaseEvidence(page, "active-build");
     });
   }
+
+  test("background research keeps the guided conversation visible", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await mockShell(page, "collecting");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await startBuild(page);
+
+    await expect(page.locator("[data-build-shell]")).toHaveCount(0);
+    await expect(page.getByText("Live brief").first()).toBeVisible();
+    await expect(page.getByRole("textbox", { name: /What are you taking to market/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Edit Audience/i })).toContainText("Waiting");
+    await expect(page.getByText("Queued", { exact: true })).toHaveCount(0);
+  });
 
   test("slow state names the current work and preserves the brief", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });

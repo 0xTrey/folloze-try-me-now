@@ -68,7 +68,9 @@ function buildProgress(
     startedAt: "2026-08-22T10:00:01.000Z",
     updatedAt: "2026-08-22T10:00:09.000Z",
     slow: false,
-    receipts: []
+    receipts: phase === "ready" || phase === "failed"
+      ? []
+      : [{ phase, status: "active", detail: `${phase} is in progress` }]
   };
 }
 
