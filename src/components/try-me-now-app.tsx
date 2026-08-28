@@ -118,7 +118,9 @@ import {
   resetProductAnalyticsVisitor,
   setProductAnalyticsSessionId
 } from "@/lib/product-analytics-client";
-import type { ProductEventName } from "@/lib/product-analytics";
+import type { ProductEventName, UnifiedProductEventName } from "@/lib/product-analytics";
+
+type LegacyProductEventName = Exclude<ProductEventName, UnifiedProductEventName>;
 
 type AnalyticsEventContext = {
   sectionId?: string;
@@ -1132,7 +1134,7 @@ function getWhyCopy(session: PublicTryMeSession): { key: string; title: string; 
   };
 }
 
-function track(action: ProductEventName, detail: Record<string, string | number | boolean> = {}) {
+function track(action: LegacyProductEventName, detail: Record<string, string | number | boolean> = {}) {
   if (typeof window === "undefined") return;
   captureProductEvent(action, {
     category: ["domain_submitted", "domain_confirmed", "field_interacted", "campaign_type_selected", "audience_confirmed", "goal_confirmed"].includes(action)
@@ -3346,7 +3348,10 @@ export function TryMeNowApp() {
     if (!session || buildTrackedSession.current === session.id) return;
     if (session.stages.story.status !== "running" && session.status !== "generating") return;
     buildTrackedSession.current = session.id;
-    track("build_started", { useCase: session.useCase });
+    captureUnifiedProductEvent("build_started", {
+      sessionId: session.id,
+      properties: { route_family: session.useCase }
+    });
   }, [session]);
 
   const selectUseCase = useCallback((selected: UseCase, selectedCampaignMode?: CampaignEntryMode) => {
@@ -3734,7 +3739,10 @@ export function TryMeNowApp() {
       if (event.data.action === "journey_complete") {
         journeyCompleteAnalyticsOpened.current = session.id;
         setShowAnalyticsPanel(true);
-        track("analytics_panel_opened", { useCase: session.useCase, source: "journey-complete" });
+        captureUnifiedProductEvent("analytics_panel_opened", {
+          sessionId: session.id,
+          properties: { trigger: "journey_complete" }
+        });
       }
       const semanticKey = [next.action, context.ctaId, context.lensId, context.sectionId, context.targetId, context.area]
         .filter(Boolean)
@@ -3794,8 +3802,12 @@ export function TryMeNowApp() {
     setError("");
     try {
       if (patch.sourceUrl || patch.offerSourceUrl) {
-        track("research_started", {
-          sourceType: patch.offerSourceUrl ? "offer-url" : "content-url"
+        captureUnifiedProductEvent("research_started", {
+          sessionId: session.id,
+          properties: {
+            research_scope: patch.offerSourceUrl ? "offer_url" : "content_url",
+            source_count: 1
+          }
         });
       }
       const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}`, {
@@ -3829,8 +3841,12 @@ export function TryMeNowApp() {
     const requestGeneration = resetGeneration.current;
     try {
       if (patch.offerSourceUrl || patch.sourceUrl) {
-        track("research_started", {
-          sourceType: patch.offerSourceUrl ? "offer-url" : "content-url"
+        captureUnifiedProductEvent("research_started", {
+          sessionId: backgroundSessionId,
+          properties: {
+            research_scope: patch.offerSourceUrl ? "offer_url" : "content_url",
+            source_count: 1
+          }
         });
       }
       await api<{ session: PublicTryMeSession }>(`/api/sessions/${backgroundSessionId}`, {
@@ -4104,7 +4120,10 @@ export function TryMeNowApp() {
     const requestGeneration = resetGeneration.current;
     setClaimStatus("saving");
     setClaimError("");
-    track("claim_started", { useCase: session.useCase });
+    captureUnifiedProductEvent("claim_started", {
+      sessionId: session.id,
+      properties: { claim_step: "email", trigger: "save_cta" }
+    });
     captureUnifiedProductEvent("claim_attempted", {
       sessionId: session.id,
       properties: { claim_step: "submit", has_value: Boolean(email.trim()) }
@@ -4119,7 +4138,10 @@ export function TryMeNowApp() {
       setClaimStatus("saved");
       setShowSavePrompt(false);
       identifyProductVisitor(email);
-      track("claim_completed", { useCase: result.session.useCase });
+      captureUnifiedProductEvent("claim_completed", {
+        sessionId: result.session.id,
+        properties: { claim_step: "email" }
+      });
       track("save_completed", { useCase: result.session.useCase });
       track("experience_claimed", { useCase: result.session.useCase });
     } catch (claimFailure) {
@@ -4493,7 +4515,10 @@ export function TryMeNowApp() {
                     aria-label={`See live engagement, ${Math.max(analyticsSignals.length, 1)} ${Math.max(analyticsSignals.length, 1) === 1 ? "signal" : "signals"}`}
                     onClick={() => {
                       setShowAnalyticsPanel(true);
-                      track("analytics_panel_opened", { useCase: session.useCase, source: "preview-toolbar" });
+                      captureUnifiedProductEvent("analytics_panel_opened", {
+                        sessionId: session.id,
+                        properties: { trigger: "preview_toolbar" }
+                      });
                     }}
                   >
                     <Gauge size={16} />See live engagement<span aria-hidden="true">{Math.max(analyticsSignals.length, 1)}</span>

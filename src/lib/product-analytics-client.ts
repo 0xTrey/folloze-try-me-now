@@ -181,13 +181,30 @@ export function captureProductEvent(
   const identity = productAnalyticsIdentity();
   if (!identity) return;
   const eventId = opaqueId("tme");
-  const properties = safeProperties(options.properties);
+  let properties = safeProperties(options.properties);
+  const isUnifiedEvent = (UNIFIED_PRODUCT_EVENT_NAMES as readonly string[]).includes(event);
+  if (isUnifiedEvent) {
+    try {
+      properties = assertUnifiedProductEventProperties(
+        event as UnifiedProductEventName,
+        properties
+      );
+    } catch {
+      // The first-party endpoint rejects an entire batch when one unified
+      // payload violates its allowlist. Drop only that invalid event here so
+      // unrelated behavior signals remain deliverable.
+      return;
+    }
+  }
+  const category = isUnifiedEvent
+    ? productEventCategoryFor(event)
+    : options.category ?? productEventCategoryFor(event);
   queue.push({
     eventId,
     ...identity,
     sessionId: options.sessionId ?? activeSessionId,
     event,
-    category: options.category ?? productEventCategoryFor(event),
+    category,
     path: window.location.pathname,
     outcome: options.outcome,
     durationMs: options.durationMs,
@@ -203,7 +220,7 @@ export function captureProductEvent(
         `try_me_${event}`,
         postHogEventPayload(properties, {
           insertId: eventId,
-          category: options.category ?? productEventCategoryFor(event),
+          category,
           ...(options.outcome ? { outcome: options.outcome } : {}),
           ...(options.durationMs !== undefined ? { durationMs: options.durationMs } : {})
         })
@@ -274,8 +291,15 @@ export async function flushProductAnalytics(useBeacon = false): Promise<void> {
       return;
     }
   } catch {
-    queue.unshift(...batch);
-    if (queue.length > maxQueueSize) queue.splice(maxQueueSize);
+    const identity = productAnalyticsIdentity();
+    const batchStillOwnsCurrentIdentity = Boolean(identity) && batch.every((event) =>
+      event.visitorId === identity?.visitorId
+      && event.browserSessionId === identity.browserSessionId
+    );
+    if (batchStillOwnsCurrentIdentity) {
+      queue.unshift(...batch);
+      if (queue.length > maxQueueSize) queue.splice(maxQueueSize);
+    }
   }
 }
 
@@ -321,6 +345,10 @@ function elementDescription(element: Element): ProductProperties {
 export function resetProductAnalyticsVisitor(): void {
   if (typeof window === "undefined") return;
   void flushProductAnalytics(true);
+  if (flushTimer !== undefined) {
+    window.clearTimeout(flushTimer);
+    flushTimer = undefined;
+  }
   queue.length = 0;
   activeSessionId = undefined;
   window.localStorage.removeItem(visitorStorageKey);

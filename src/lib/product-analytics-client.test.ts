@@ -116,6 +116,29 @@ describe("product analytics browser queue", () => {
     expect(JSON.stringify(events)).not.toContain("secret");
   });
 
+  it("drops invalid direct unified events before they can poison a batch", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(acceptedResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    captureProductEvent("build_started", {
+      category: "interaction",
+      properties: { use_case: "campaign" }
+    });
+    captureProductEvent("build_started", {
+      category: "interaction",
+      properties: { route_family: "campaign" }
+    });
+    await flushProductAnalytics();
+
+    const events = capturedBodies(fetchMock).flatMap((body) => body.events);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      event: "build_started",
+      category: "workflow",
+      properties: { route_family: "campaign" }
+    });
+  });
+
   it("drops a non-retryable rejected batch so later events can flow", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(acceptedResponse(400))
@@ -140,5 +163,47 @@ describe("product analytics browser queue", () => {
 
     expect(after?.visitorId).not.toBe(before?.visitorId);
     expect(after?.browserSessionId).not.toBe(before?.browserSessionId);
+  });
+
+  it("does not requeue a failed old-identity batch after start over", async () => {
+    let rejectOldBatch: ((error: Error) => void) | undefined;
+    const oldBatchResponse = new Promise<Response>((_resolve, reject) => {
+      rejectOldBatch = reject;
+    });
+    const fetchMock = vi.fn()
+      .mockReturnValueOnce(oldBatchResponse)
+      .mockResolvedValueOnce(acceptedResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    captureProductEvent("ui_click", { properties: { element_id: "before_reset" } });
+    const oldFlush = flushProductAnalytics();
+    resetProductAnalyticsVisitor();
+    captureProductEvent("page_viewed", { category: "navigation" });
+    rejectOldBatch?.(new Error("temporary analytics outage"));
+    await oldFlush;
+    await flushProductAnalytics();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [oldBatch, newBatch] = capturedBodies(fetchMock);
+    expect(oldBatch.events).toHaveLength(1);
+    expect(newBatch.events).toHaveLength(1);
+    expect(newBatch.events[0].event).toBe("page_viewed");
+    expect(newBatch.events[0].visitorId).not.toBe(oldBatch.events[0].visitorId);
+    expect(newBatch.events[0].browserSessionId).not.toBe(oldBatch.events[0].browserSessionId);
+  });
+
+  it("retries a failed batch when the browser identity has not changed", async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error("temporary analytics outage"))
+      .mockResolvedValueOnce(acceptedResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    captureProductEvent("ui_click", { properties: { element_id: "retry_same_identity" } });
+    await flushProductAnalytics();
+    await flushProductAnalytics();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [first, second] = capturedBodies(fetchMock);
+    expect(second.events).toEqual(first.events);
   });
 });
