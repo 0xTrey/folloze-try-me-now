@@ -58,7 +58,9 @@ Each result resolves to an official Aprio service page and carries an evidence r
 
 Final implementation commit: `018b44c`
 
-Production deployment: `dpl_AnDc4BJndax6ncfc8LSV3sTAAo8c`
+Acceptance receipt commit: `9b89f8d`
+
+Final production deployment: `dpl_EtBF7RWYbKZJM9R3pug4X5wEKPXh`
 
 Production alias: `https://folloze-try-me-now.vercel.app`
 
@@ -91,5 +93,8 @@ Final correction gates:
 - Typecheck: passed.
 - Webpack production build: passed.
 - Vercel production health: production-capable with no blockers.
+- Final-alias analytics smoke: two accepted HTTP 202 batches and zero failures.
+
+A repeated full-generation canary against the code-identical receipt deployment did not reveal within 150 seconds after the prior run passed in 59 seconds. Health and first-party analytics remained green. Treat this as a provider-latency observation for reliability monitoring, not an analytics-contract regression.
 
 Final verdict: accept the ten-point production repair at 100 out of 100. No hard blocker remains.
