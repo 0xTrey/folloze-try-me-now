@@ -1,6 +1,6 @@
 # Folloze Try Me Now Decision Log
 
-Last updated: 2026-08-12
+Last updated: 2026-08-27
 
 Product requirements: [`product-requirements.md`](./product-requirements.md)
 
@@ -81,6 +81,9 @@ the newer recorded decision wins.
 | D-035 | Brand delivery is progressive: a minimum-safe bundle of verified identity, official logo, and semantic color roles may power an unclaimable provisional preview; browser-derived typography, components, layout, and imagery enrich the final preview within the same 60-second deadline. | This makes D-026 and D-027 operationally compatible. A partial state is labeled honestly and never uses generic brand values, while optional desktop DesignDNA work can upgrade the preview without holding it hostage. Final save/share still requires the full final readiness and quality contract. | Accepted 2026-08-09 |
 | D-036 | Generated-experience visual direction is evidence-derived and bounded: message, composition, brand authority, and visual direction remain separate; semantic color roles, typography, imagery, density, section cadence, and motion follow the shared design contract. Visual quality review is advisory and repair-oriented, never a render, preview, claim, save, or publication gate. | An imperfect but honest experience is more useful than no experience. The system always renders the best evidence-backed artifact available, keeps the current preview visible, records safe reason codes, and may run one bounded repair or rerun when time remains. “Fail closed” in D-027 applies to falsely claiming brand evidence, not to withholding output. Source safety, valid artifact structure, stale-result protection, and lifecycle rules remain independent gates. | Accepted 2026-08-12; clarifies D-027 and D-035 |
 | D-037 | Vercel is the authoritative application host. GitHub's default branch remains `codex/visual-v1`; the protected-by-process `production` branch is the sole production release ref. Cloudflare migration work stays closed and deferred unless Trey explicitly changes the hosting decision. | Production currently resolves to commit `3508192dd9b939f361b554daf787d068249ee8f6` and Vercel deployment `dpl_A2yXTCjzShZN5w4jaxDCCEoBX9DD`. Because private-repo branch protection is unavailable on the current GitHub plan, releases require explicit operator discipline: avoid casual pushes, pin the active and rollback deployment identifiers, verify the immutable deployment before alias promotion, and never make the repo public or change billing as a workaround. Closed Cloudflare PR #8 was never activated. | Accepted and operationally verified 2026-08-12 |
+| D-038 | V2 exposes only one persisted, quality-gated final HTML artifact. Internal drafts may exist, but the visitor sees a stable build state until the final artifact is saved and read back. | A weak early page damages confidence more than a transparent wait. This supersedes the customer-facing provisional behavior in D-026, D-030, and D-035 while preserving the 60-second deadline, stale-result protection, truthful progress receipts, and deterministic final fallback. | Accepted for implementation 2026-08-27 |
+| D-039 | V2 treats the first output as a specific base experience, not a generic preview. Evidence Graph, Campaign Thesis, strategy selection, page recipe, section writing, composition, brand system, and rendering remain separate authorities. | The first page must be specific to the seller, offer, actual buyer, objective, evidence, and brand before account or persona variants are added. Six recipe contracts are defined, Product/Solution is activated first, and Launch, Guide, and Align remain strategic or composition metadata during migration. | Accepted for implementation 2026-08-27 |
+| D-040 | The V2 visible flow is one central conversational intake, one stable build shell with honest active-verb receipts, and one full-frame final reveal. | The compatible storyboard patterns improve comprehension without expanding scope. Analytics demonstrations, personalization, save, publish, and Content Magic remain outside this release. | Accepted for implementation 2026-08-27 |
 
 On 2026-08-04, Trey explicitly superseded D-014. On 2026-08-07, he clarified
 that the complete Try Me Now result must fit inside 60 seconds. D-026 is the
@@ -107,6 +110,13 @@ GitHub default branch remains `codex/visual-v1`; `production` is the intentional
 release boundary. A future Cloudflare edge or browser service is a separate
 explicitly approved capability, not an implicit application migration or
 cutover.
+
+On 2026-08-27, D-038 superseded only the customer-facing provisional portion of
+D-026, D-030, and D-035. The system may still use internal drafts, bounded
+fallback, and progressive work receipts. It may not expose HTML until the
+current-revision artifact is final, persisted, read back, and structurally and
+factually valid. D-039 and D-040 define the matching compiler and interface
+architecture for the first V2 base-experience release.
 
 ## Superseded June 1 directions
 
