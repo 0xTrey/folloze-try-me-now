@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, test, type Frame, type Page, type Route } from "@playwright/test";
 import { renderExperienceHtml } from "../../src/lib/generation/experience-template";
 import type { ExperienceDraft } from "../../src/lib/generation/experience-schema";
 import type { BrandProfile, PublicTryMeSession, UseCase } from "../../src/lib/types";
@@ -161,6 +161,25 @@ async function mockReadySession(page: Page): Promise<RecordedPreviewOperation[]>
   return previewOperations;
 }
 
+async function openReadyPreview(page: Page): Promise<Frame> {
+  const primary = page.getByRole("button", { name: /Build a personalized campaign/i });
+  await expect(primary).toBeVisible();
+  await expect(async () => {
+    if (await page.locator(".domainStage").count()) return;
+    await primary.click();
+    await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
+  }).toPass({ timeout: 15_000 });
+  await page.getByLabel("Company domain").fill("northpeak.com");
+  await page.getByRole("button", { name: /Use this company/i }).click();
+
+  await expect(page.getByRole("button", { name: /See live engagement/i })).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator("iframe")).toHaveCount(1);
+  await expect.poll(() => page.frames().some((candidate) => candidate.url().includes("/e/analytics-contract-session"))).toBe(true);
+  const previewFrame = page.frames().find((candidate) => candidate.url().includes("/e/analytics-contract-session"));
+  expect(previewFrame).toBeDefined();
+  return previewFrame!;
+}
+
 test.describe("analytics experience completion contract", () => {
   let previewOperations: RecordedPreviewOperation[];
   test.beforeEach(async ({ page }, testInfo) => {
@@ -174,31 +193,17 @@ test.describe("analytics experience completion contract", () => {
     const consoleErrors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
-    const primary = page.getByRole("button", { name: /Build a buyer experience/i });
-    await expect(primary).toBeVisible();
-    await expect(async () => {
-      if (await page.locator(".domainStage").count()) return;
-      await primary.click();
-      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
-    }).toPass({ timeout: 15_000 });
-    await page.getByLabel("Company domain").fill("northpeak.com");
-    await page.getByRole("button", { name: /Use this company/i }).click();
-
+    const previewFrame = await openReadyPreview(page);
     const engagement = page.getByRole("button", { name: /See live engagement/i });
-    await expect(engagement).toBeVisible({ timeout: 10_000 });
-    const frame = page.locator("iframe");
-    await expect(frame).toHaveCount(1);
-    const previewFrame = page.frames().find((candidate) => candidate.url().includes("/e/analytics-contract-session"));
-    expect(previewFrame).toBeDefined();
     const dialog = page.getByRole("dialog", { name: /See what buyers engage with/i });
     await expect(dialog).toHaveCount(0);
 
-    const selectedLens = previewFrame!.getByRole("tab").nth(1);
+    const selectedLens = previewFrame.getByRole("tab").nth(1);
     const selectedLensTitle = (await selectedLens.innerText()).trim();
     await selectedLens.click();
-    const finalSection = previewFrame!.locator("[data-journey-section]").last();
+    const finalSection = previewFrame.locator("[data-journey-section]").last();
     const finalSectionTitle = (await finalSection.locator("h1,h2,h3").first().innerText()).trim();
-    await previewFrame!.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await previewFrame.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await expect(dialog).toBeVisible({ timeout: 5_000 });
     await expect(dialog).toContainText(finalSectionTitle);
     await expect(dialog).toContainText(selectedLensTitle);
@@ -212,7 +217,7 @@ test.describe("analytics experience completion contract", () => {
     await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))).toBe(true);
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
-    await previewFrame!.evaluate(({ sectionTitle, lensTitle }) => window.parent.postMessage({
+    await previewFrame.evaluate(({ sectionTitle, lensTitle }) => window.parent.postMessage({
       source: "folloze-experience",
       action: "journey_complete",
       payload: {
@@ -235,5 +240,37 @@ test.describe("analytics experience completion contract", () => {
     expect(await page.locator("body").evaluate((body) => body.scrollWidth <= window.innerWidth)).toBe(true);
     expect(errors).toEqual([]);
     expect(consoleErrors).toEqual([]);
+  });
+
+  test("moves from analytics to one business-email capture dialog", async ({ page }) => {
+    const previewFrame = await openReadyPreview(page);
+    const engagement = page.getByRole("button", { name: /See live engagement/i });
+    await previewFrame.getByRole("tab").nth(1).click();
+    await engagement.click();
+    const analytics = page.getByRole("dialog", { name: /See what buyers engage with/i });
+    await expect(analytics).toBeVisible();
+    await analytics.getByRole("button", { name: "Save by email" }).click();
+
+    await expect(analytics).toHaveCount(0);
+    const save = page.getByRole("dialog", { name: "Save your live experience." });
+    await expect(save).toBeVisible();
+    await expect(save.getByRole("textbox", { name: "Business email" })).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(save).toHaveCount(0);
+  });
+
+  test("turns the closing CTA into business-email capture inside the embedded preview", async ({ page }) => {
+    const previewFrame = await openReadyPreview(page);
+    const pageCount = page.context().pages().length;
+    const closingCta = previewFrame.locator(".close [data-experience-action]");
+    await expect(closingCta).toBeVisible();
+    await closingCta.click();
+
+    const save = page.getByRole("dialog", { name: "Save your live experience." });
+    await expect(save).toBeVisible();
+    await expect(save.getByRole("textbox", { name: "Business email" })).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    expect(page.context().pages().length).toBe(pageCount);
   });
 });

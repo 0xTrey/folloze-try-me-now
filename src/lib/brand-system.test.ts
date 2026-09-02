@@ -468,6 +468,17 @@ describe("BrandSystemV2 compiler", () => {
             safetyStatus: "safe"
           }),
           asset({
+            ref: "https://www.servicetitan.com/blog/contributors/s/spark-team_774935.png",
+            kind: "photography",
+            sourcePage: sourceUrl,
+            sourceAuthority: "seller_official",
+            altText: "Spark Team author profile",
+            width: 300,
+            height: 300,
+            safetyStatus: "safe",
+            renderStatus: "verified"
+          }),
+          asset({
             ref: "https://www.servicetitan.com/images/tiny-product.webp",
             kind: "product-ui",
             sourcePage: sourceUrl,
@@ -543,7 +554,7 @@ describe("BrandSystemV2 compiler", () => {
     )).toBe(true);
     expect(substantiveAssetsAreUnique(privateAssetAllocationFor(result.value)!)).toBe(true);
     expect(result.value?.imagery.candidates.map(({ value }) => value).join(" ")).not.toMatch(
-      /registration|navigation-icon|tiny-product|broken-product|transparent-product|stock\.example/
+      /registration|navigation-icon|contributors|tiny-product|broken-product|transparent-product|stock\.example/
     );
     expect(new Set(result.value?.imagery.selected.map(({ ref }) => ref)).size).toBe(
       result.value?.imagery.selected.length

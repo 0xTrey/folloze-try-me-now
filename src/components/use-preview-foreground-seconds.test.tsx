@@ -7,8 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { usePreviewForegroundSeconds } from "./use-preview-foreground-seconds";
 
-function Harness({ sessionId }: { sessionId?: string }) {
-  const seconds = usePreviewForegroundSeconds(sessionId);
+function Harness({ sessionId, paused = false }: { sessionId?: string; paused?: boolean }) {
+  const seconds = usePreviewForegroundSeconds(sessionId, paused);
   return <output aria-label="Foreground seconds">{seconds}</output>;
 }
 
@@ -46,5 +46,19 @@ describe("usePreviewForegroundSeconds", () => {
 
     rerender(<Harness sessionId="session-b" />);
     expect(screen.getByLabelText("Foreground seconds")).toHaveTextContent("0");
+  });
+
+  it("pauses while a modal is open without resetting the session clock", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-22T18:00:00.000Z"));
+    setVisibility("visible");
+    const { rerender } = render(<Harness sessionId="session-a" />);
+    act(() => vi.advanceTimersByTime(4_000));
+    rerender(<Harness sessionId="session-a" paused />);
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(screen.getByLabelText("Foreground seconds")).toHaveTextContent("4");
+    rerender(<Harness sessionId="session-a" />);
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(screen.getByLabelText("Foreground seconds")).toHaveTextContent("5");
   });
 });

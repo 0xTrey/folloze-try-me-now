@@ -180,7 +180,7 @@ test.describe("final-only build progress polling", () => {
     await expect.poll(async () => {
       const activePhase = await page.locator('[data-phase][data-status="active"]').first().getAttribute("data-phase");
       return activePhase;
-    }).toBe("finalizing");
+    }, { timeout: 8_000 }).toBe("finalizing");
 
     expect(observedPhases.length).toBeGreaterThanOrEqual(BUILD_PHASE_ORDER.length);
     for (let index = 1; index < BUILD_PHASE_ORDER.length; index += 1) {

@@ -327,13 +327,23 @@ export async function runSectionWriters(
     durationMs
   });
 
+  // Progress is telemetry. A rejected observer must never turn a valid
+  // section result into a failed writing run.
+  const report = async (completed: number) => {
+    try {
+      await input.onSectionWritten?.(completed, contracts.length);
+    } catch {
+      // The orchestrator owns generation failures; observers are best effort.
+    }
+  };
+
   if (!input.client) {
     let completed = 0;
     const results = [];
     for (const contract of contracts) {
       results.push(fallbackFor(contract, "provider_unavailable", 0));
       completed += 1;
-      await input.onSectionWritten?.(completed, contracts.length);
+      await report(completed);
     }
     return {
       results,
@@ -363,7 +373,7 @@ export async function runSectionWriters(
   let completedSections = 0;
   const reportSectionWritten = async () => {
     completedSections += 1;
-    await input.onSectionWritten?.(completedSections, contracts.length);
+    await report(completedSections);
   };
 
   let attempts: Attempt[];

@@ -441,7 +441,7 @@ function assetIsEligible(
   ) return false;
   const descriptor = assetDescriptor(candidate);
   if (
-    /\b(nav(?:igation)?|footer|social|accessibility|cookie|captcha|spinner|utility|icon|logo|wordmark|avatar|badge|rating|stars?)\b/.test(
+    /\b(nav(?:igation)?|footer|social|accessibility|cookie|captcha|spinner|utility|icon|logo|wordmark|avatar|author|contributors?|profile|headshot|team[- ]?bio|badge|rating|stars?)\b/.test(
       descriptor
     ) ||
     /\b(sale|promo(?:tion)?|register|registration|roadshow|webinar|conference|summit|speaker|event-banner)\b/.test(

@@ -1000,6 +1000,7 @@ export interface AnalyticsSignalPanelProps {
   exampleSignals?: AnalyticsSignal[];
   /** Set only after the visitor saves; it never gates the initial build. */
   isSaved?: boolean;
+  onOpenSave?: () => void;
   onClose: () => void;
 }
 
@@ -1012,6 +1013,7 @@ export function AnalyticsSignalPanel({
   audienceLabel,
   exampleSignals,
   isSaved = false,
+  onOpenSave,
   onClose
 }: AnalyticsSignalPanelProps) {
   const ref = useModalAccess(open, onClose);
@@ -1094,6 +1096,7 @@ export function AnalyticsSignalPanel({
           </section>
         </details>
         <div className={styles.signalValue}><BarChart3 size={20} /><p>In a live campaign, these signals can route to campaign and sales systems so the next move starts with context.</p></div>
+        {onOpenSave && <button type="button" className={styles.primaryAction} onClick={onOpenSave}><Mail size={16} />Save by email</button>}
         {shouldShowEngagementFinale({ eventCount: liveSignals.length, isSaved }) && (
           <EngagementFeedFinale eventCount={liveSignals.length} isSaved={isSaved} />
         )}
@@ -1188,7 +1191,6 @@ export function PersonalizationQualityReceipt({ score, companyName, layers }: { 
 
 export interface ExpirySaveValuePanelProps {
   expiresLabel: string;
-  url: string;
   sellerName: string;
   targetName?: string;
   headline: string;
@@ -1201,7 +1203,7 @@ export interface ExpirySaveValuePanelProps {
   onSave: () => void;
 }
 
-export function ExpirySaveValuePanel({ expiresLabel, url, sellerName, targetName, headline, email, status = "idle", error, benefits = ["Permanent app-hosted URL", "Copy-and-share access", "Engagement-ready experience"], remainingSeconds, onEmailChange, onSave }: ExpirySaveValuePanelProps) {
+export function ExpirySaveValuePanel({ expiresLabel, sellerName, targetName, headline, email, status = "idle", error, benefits = ["Permanent app-hosted URL", "Ready for engagement analytics", "Private saved experience"], remainingSeconds, onEmailChange, onSave }: ExpirySaveValuePanelProps) {
   const submit = (event: FormEvent) => { event.preventDefault(); onSave(); };
   return (
     <section className={classes(styles.savePanel, status === "saved" && styles.isSaved)} aria-labelledby="save-value-title">
@@ -1209,7 +1211,6 @@ export function ExpirySaveValuePanel({ expiresLabel, url, sellerName, targetName
       <div className={styles.saveExperiencePreview} aria-label={`Preview of ${headline}`}>
         <div><span className={styles.saveBrandLine}><i aria-hidden="true" />{targetName ? `${sellerName} for ${targetName}` : sellerName}</span><strong>{headline}</strong></div>
       </div>
-      <div className={styles.saveUrlRow}><code title={url}>{url}</code><button type="button" className={styles.tertiaryAction} onClick={() => void navigator.clipboard?.writeText(url)} aria-label="Copy preview URL"><Copy size={14} />Copy</button></div>
       <div className={styles.expiryClock}><Clock size={16} /><span>{status === "saved" ? "Saved" : `Private preview · expires in ${expiresLabel}`}</span></div>
       {status !== "saved" && <ExpiryNudge remainingSeconds={remainingSeconds} />}
       {status !== "saved" && <form className={styles.saveForm} onSubmit={submit}><label><span>Business email</span><div><Mail size={16} /><input type="email" required value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@company.com" /></div></label><button type="submit" className={styles.primaryAction} disabled={status === "saving"}>{status === "saving" ? "Saving…" : "Save this experience"}</button>{error && <small role="alert">{error}</small>}<p>No newsletter signup. Your business email records this request and saves the app-hosted experience.</p></form>}

@@ -426,7 +426,6 @@ describe("SaveExperienceDialog", () => {
       <SaveExperienceDialog
         open
         expiresLabel="24:00"
-        url="https://experience.example/jitterbit-for-cisco"
         sellerName="Jitterbit"
         targetName="Cisco"
         headline="Connect Cisco workflows without losing control."
@@ -440,7 +439,8 @@ describe("SaveExperienceDialog", () => {
 
     expect(screen.getByRole("dialog")).toHaveAccessibleName("Save your live experience.");
     expect(screen.getByText("Jitterbit for Cisco")).toBeInTheDocument();
-    expect(screen.getByText("https://experience.example/jitterbit-for-cisco")).toBeInTheDocument();
+    expect(screen.queryByText("https://experience.example/jitterbit-for-cisco")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Copy preview URL/i })).not.toBeInTheDocument();
     expect(screen.getByText("Private preview · expires in 24:00")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Business email" })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
@@ -453,7 +453,6 @@ describe("SaveExperienceDialog", () => {
       <SaveExperienceDialog
         open
         expiresLabel="24:00"
-        url="https://experience.example/jitterbit-for-cisco"
         sellerName="Jitterbit"
         targetName="Cisco"
         headline="Connect Cisco workflows without losing control."
@@ -466,7 +465,7 @@ describe("SaveExperienceDialog", () => {
     );
 
     expect(screen.getByText("Permanent app-hosted URL")).toBeInTheDocument();
-    expect(screen.getByText("Copy-and-share access")).toBeInTheDocument();
+    expect(screen.getByText("Ready for engagement analytics")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save this experience" })).toBeInTheDocument();
     expect(screen.getByText("No newsletter signup. Your business email records this request and saves the app-hosted experience.")).toBeInTheDocument();
     expect(screen.queryByText(/email delivery/i)).not.toBeInTheDocument();
@@ -620,23 +619,16 @@ describe("guided campaign workspace", () => {
     ]);
   });
 
-  it("offers one dominant buyer-experience entry with Content Magic secondary and Northpeak worked states", () => {
+  it("offers one dominant personalized-campaign entry with Content Magic secondary and no unverified examples", () => {
     const onSelect = vi.fn();
     render(<UseCasePortals onSelect={onSelect} />);
 
-    expect(screen.getByRole("button", { name: /Build a buyer experience/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Build a personalized campaign/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Watch one build/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Aprio|ServiceNow|Cisco Hybrid Mesh/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Northpeak account experience/i })).toHaveAttribute(
-      "href",
-      "https://experience.folloze.com/northpeak--folloze"
-    );
-    expect(screen.getByRole("link", { name: /Northpeak personalized campaign/i })).toHaveAttribute(
-      "href",
-      "https://engage.folloze.com/120367"
-    );
+    expect(screen.queryByRole("link", { name: /Northpeak/i })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Build a buyer experience/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Build a personalized campaign/i }));
     expect(onSelect).toHaveBeenCalledWith("campaign", "campaign");
   });
 

@@ -757,6 +757,9 @@ function resetGeneratedExperience(session: TryMeSession, detail: string): void {
     });
   }
   session.status = "collecting";
+  // A changed brief or explicit retry starts a new customer-visible attempt.
+  // Do not let terminal receipts from the superseded attempt contaminate it.
+  session.buildProgress = undefined;
   session.stages.story = {
     status: "pending",
     detail: session.experience
@@ -1255,7 +1258,7 @@ function recordProductionEngineResult(
  * from what the orchestrator has actually finished, so a phase can never read
  * as done before its work is.
  */
-function advanceBuildProgress(
+export function advanceBuildProgress(
   session: TryMeSession,
   input: {
     completed: readonly LiveBuildPhase[];
@@ -1272,16 +1275,42 @@ function advanceBuildProgress(
     (session.buildProgress?.receipts ?? []).map((receipt) => [receipt.phase, receipt])
   );
   const completed = new Set(input.completed);
+  const indexOf = (phase: LiveBuildPhase) => BUILD_PHASE_ORDER.indexOf(phase);
+  const priorFurthest = Math.max(
+    -1,
+    ...[...previous.values()]
+      .filter((receipt) => receipt.status !== "queued")
+      .map((receipt) => indexOf(receipt.phase))
+  );
+  const requestedFurthest = Math.max(
+    -1,
+    ...[...completed, ...(input.active ? [input.active] : [])]
+      .map(indexOf)
+  );
+  const furthest = Math.max(priorFurthest, requestedFurthest);
   const receipts: BuildPhaseReceipt[] = BUILD_PHASE_ORDER.map((phase) => {
     const prior = previous.get(phase);
     const note = input.notes?.[phase] ?? prior?.evidenceNote;
-    const status: BuildPhaseReceipt["status"] = completed.has(phase)
-      ? "complete"
-      : phase === input.active
-        ? "active"
-        : prior?.status === "complete"
-          ? "complete"
-          : "queued";
+    const phaseIndex = indexOf(phase);
+    let status: BuildPhaseReceipt["status"] = "queued";
+    if (input.failure && phaseIndex === furthest) {
+      status = "failed";
+    } else if (
+      prior?.status === "complete" ||
+      completed.has(phase) ||
+      (phaseIndex >= 0 && phaseIndex < furthest)
+    ) {
+      // Reaching a later phase is itself evidence that every earlier phase
+      // finished. This also neutralizes stale, out-of-order callbacks.
+      status = "complete";
+    } else if (
+      phaseIndex === furthest &&
+      (phase === input.active || prior?.status === "active")
+    ) {
+      status = "active";
+    } else if (prior?.status === "failed") {
+      status = "failed";
+    }
     return {
       phase,
       status,
@@ -1296,8 +1325,21 @@ function advanceBuildProgress(
     };
   });
   const elapsedMs = Math.max(0, Date.now() - Date.parse(startedAt));
+  const previousPhase = session.buildProgress?.phase;
+  const livePhaseRank = (phase: BuildPhase | undefined): number => {
+    if (!phase) return -1;
+    if (phase === "ready" || phase === "failed") return BUILD_PHASE_ORDER.length;
+    return BUILD_PHASE_ORDER.indexOf(phase);
+  };
+  const phase = input.phase === "ready" || input.phase === "failed"
+    ? input.phase
+    : previousPhase === "ready" || previousPhase === "failed"
+      ? previousPhase
+      : livePhaseRank(previousPhase) > livePhaseRank(input.phase)
+        ? previousPhase!
+        : input.phase;
   session.buildProgress = {
-    phase: input.phase,
+    phase,
     startedAt,
     updatedAt: now,
     slow:
@@ -4045,13 +4087,6 @@ async function claimSessionUnlocked(
       409,
       "claim_not_ready",
       "This experience is still being built. Save it once the finished experience is ready."
-    );
-  }
-  if (current.qualityReceipt?.artifactRevision !== current.experience.artifactRevision) {
-    throw new HttpError(
-      409,
-      "claim_not_ready",
-      "This experience is waiting for its final quality receipt."
     );
   }
   if (current.claim?.email && current.claim.email !== email) {

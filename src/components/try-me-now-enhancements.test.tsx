@@ -491,6 +491,7 @@ describe("Try Me Now prospect enhancement components", () => {
     const dismiss = vi.fn();
     const openPanel = vi.fn();
     const closePanel = vi.fn();
+    const openSave = vi.fn();
     const signal = { id: "s1", label: "Integration boundary explored", detail: "Cisco architect selected the first decision lens.", atLabel: "Just now" };
     render(
       <>
@@ -501,6 +502,7 @@ describe("Try Me Now prospect enhancement components", () => {
           engagedSeconds={18}
           sessionId="analytics-session"
           audienceLabel="Enterprise architects and platform owners"
+          onOpenSave={openSave}
           onClose={closePanel}
         />
       </>
@@ -520,9 +522,11 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByText(/John Smith spent/)).toBeInTheDocument();
     expect(screen.getAllByText(/VP Enterprise Architecture/)).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: /See the journey/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save by email" }));
     fireEvent.click(screen.getByRole("button", { name: "Dismiss signal" }));
     fireEvent.click(screen.getByRole("button", { name: "Close analytics signals" }));
     expect(openPanel).toHaveBeenCalledOnce();
+    expect(openSave).toHaveBeenCalledOnce();
     expect(dismiss).toHaveBeenCalledOnce();
     expect(closePanel).toHaveBeenCalledOnce();
   });
@@ -605,7 +609,6 @@ describe("Try Me Now prospect enhancement components", () => {
         ]} />
         <ExpirySaveValuePanel
           expiresLabel="24:00"
-          url="https://experience.example/jitterbit-for-cisco"
           sellerName="Jitterbit"
           targetName="Cisco"
           headline="Connect Cisco workflows without losing control."
@@ -621,7 +624,8 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByText("Not required for this path")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Save your live experience." })).toBeInTheDocument();
     expect(screen.getByLabelText("Preview of Connect Cisco workflows without losing control.")).toHaveTextContent("Jitterbit for Cisco");
-    expect(screen.getByText("https://experience.example/jitterbit-for-cisco")).toBeInTheDocument();
+    expect(screen.queryByText("https://experience.example/jitterbit-for-cisco")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Copy preview URL/i })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Business email"), { target: { value: "buyer@company.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Save this experience" }).closest("form")!);
     fireEvent.click(screen.getByRole("button", { name: "Open experience" }));
@@ -648,7 +652,7 @@ describe("Try Me Now prospect enhancement components", () => {
     const onEmailChange = vi.fn();
     const onRequestFreshLink = vi.fn();
     const { rerender } = render(
-      <ExpirySaveValuePanel expiresLabel="5:00" remainingSeconds={300} url="https://experience.example/preview" sellerName="Folloze" headline="Buyer journey" email="" onEmailChange={onEmailChange} onSave={vi.fn()} />
+      <ExpirySaveValuePanel expiresLabel="5:00" remainingSeconds={300} sellerName="Folloze" headline="Buyer journey" email="" onEmailChange={onEmailChange} onSave={vi.fn()} />
     );
     expect(screen.getByText("5:00")).toBeInTheDocument();
     expect(screen.getByText("left to save this preview.")).toBeInTheDocument();

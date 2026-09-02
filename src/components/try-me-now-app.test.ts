@@ -10,7 +10,6 @@ import {
   defaultPersonalizationVariantFor,
   describePreviewAnalyticsEvent,
   entryPathOptions,
-  northpeakWorkedStates,
   getAssemblyPreviewKey,
   getBuildPanelCopy,
   getGuidedQuestionCopy,
@@ -179,21 +178,6 @@ describe("Try Me Now experience copy", () => {
       previewImage: "/entry/content-preview.webp"
     });
     expect(JSON.stringify(entryPathOptions)).not.toMatch(/Aprio|ServiceNow|Cisco|aprio-for-georgia-pacific|servicenow-ai-platform|cisco-hmf/i);
-  });
-
-  it("exposes optional Northpeak worked states without making them the primary entry", () => {
-    expect(northpeakWorkedStates).toEqual([
-      {
-        id: "account",
-        label: "See a Northpeak account experience",
-        href: "https://experience.folloze.com/northpeak--folloze"
-      },
-      {
-        id: "campaign",
-        label: "See a Northpeak personalized campaign",
-        href: "https://engage.folloze.com/120367"
-      }
-    ]);
   });
 
   it("turns one event sentence into the existing event campaign contract", () => {

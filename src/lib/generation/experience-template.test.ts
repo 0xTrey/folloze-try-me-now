@@ -135,7 +135,7 @@ describe("renderExperienceHtml", () => {
     });
 
     expect(withoutImages).toContain('data-fallback-kind="editorial-evidence"');
-    expect(withoutImages).toContain("A considered point of view");
+    expect(withoutImages).not.toContain("A considered point of view");
     expect(withoutImages).toContain("The signal is clear.<br>The next move<br>should be too.");
     expect(withoutImages).toContain(".media.media .media-fallback:before,.media.media .media-fallback:after{display:none}");
     expect(withoutImages).not.toContain("<div class=\"media-fallback\" aria-hidden=\"true\"><span></span><span></span><span></span></div>");
@@ -874,7 +874,7 @@ describe("renderExperienceHtml", () => {
       sectionOrder: ["experience-thesis", "decision-path", "supporting-resources"]
     });
     expect(abm).toContain("Jitterbit × Cisco");
-    expect(abm).toContain("Executive account narrative for Cisco");
+    expect(abm).not.toContain("Executive account narrative for Cisco");
     expect(html).toContain("Product introduction");
     expect(content).toContain("Executive report");
     expect(content).toContain("How should buyers explore the enterprise automation guide?");
@@ -1215,6 +1215,31 @@ describe("compiled asset plan authority", () => {
     const rendered = renderedImages(html);
 
     expect(new Set(rendered).size).toBe(rendered.length);
+  });
+
+  it("suppresses decorative labels and ordinal marker elements", () => {
+    const html = renderExperienceHtml({ draft, brand, useCase: "campaign", answers: {}, assetPlan: { ...plan, placements: [] } });
+    expect(html).not.toMatch(/class="(?:eyebrow|media-fallback-kicker|lens-number|journey-index|signature-index|step-index|role-index)"[^>]*>[^<]*</);
+    expect(html).not.toMatch(/(?:^|>)0[1-3](?:<|\s)/);
+    expect(html).not.toContain("counter-reset:chapter");
+    expect(html).not.toContain("counter-increment:chapter");
+    expect(html).not.toContain("counter(chapter)");
+    expect(html).not.toContain("grid-template-columns:90px 1fr");
+    expect(html).not.toContain("grid-template-columns:40px 1fr");
+    expect(html).toContain("target.closest('.close [data-experience-action]')");
+    expect(html).toContain("if(area==='close'&&window.parent&&window.parent!==window)event.preventDefault()");
+  });
+
+  it("does not render a duplicate substantive source in distinct planned slots", () => {
+    const duplicatePlan: AssetRenderPlan = {
+      ...plan,
+      placements: [
+        ...plan.placements,
+        { ...plan.placements[0]!, sectionId: "mechanism", semanticRole: "process" }
+      ]
+    };
+    const html = renderExperienceHtml({ draft, brand, useCase: "campaign", answers: {}, assetPlan: duplicatePlan });
+    expect((html.match(/planned-hero\.png/g) ?? []).length).toBe(1);
   });
 
   it("renders a designed treatment rather than an eyebrow stack when no asset is planned", () => {

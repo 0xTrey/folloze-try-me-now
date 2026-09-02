@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const TICK_INTERVAL_MS = 250;
 
@@ -10,46 +10,61 @@ const TICK_INTERVAL_MS = 250;
  * events or server timestamps.
  */
 export function usePreviewForegroundSeconds(
-  revealedSessionId: string | undefined
+  revealedSessionId: string | undefined,
+  paused = false
 ): number {
   const [clock, setClock] = useState<{
     sessionId: string | undefined;
     seconds: number;
   }>({ sessionId: undefined, seconds: 0 });
+  const timing = useRef<{
+    sessionId: string | undefined;
+    accumulatedMs: number;
+    runningStartedAt?: number;
+  }>({ sessionId: undefined, accumulatedMs: 0 });
 
   useEffect(() => {
     if (!revealedSessionId) return;
+    if (timing.current.sessionId !== revealedSessionId) {
+      timing.current = { sessionId: revealedSessionId, accumulatedMs: 0 };
+    }
 
-    let accumulatedMs = 0;
-    let visibleStartedAt =
-      document.visibilityState === "visible" ? Date.now() : undefined;
-
+    const stop = () => {
+      if (timing.current.runningStartedAt === undefined) return;
+      timing.current.accumulatedMs += Math.max(0, Date.now() - timing.current.runningStartedAt);
+      timing.current.runningStartedAt = undefined;
+    };
+    const reconcile = () => {
+      if (paused || document.visibilityState !== "visible") {
+        stop();
+      } else if (timing.current.runningStartedAt === undefined) {
+        timing.current.runningStartedAt = Date.now();
+      }
+    };
     const elapsedMs = () =>
-      accumulatedMs +
-      (visibleStartedAt === undefined ? 0 : Math.max(0, Date.now() - visibleStartedAt));
+      timing.current.accumulatedMs +
+      (timing.current.runningStartedAt === undefined
+        ? 0
+        : Math.max(0, Date.now() - timing.current.runningStartedAt));
     const update = () => setClock({
       sessionId: revealedSessionId,
       seconds: Math.floor(elapsedMs() / 1_000)
     });
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        if (visibleStartedAt !== undefined) {
-          accumulatedMs += Math.max(0, Date.now() - visibleStartedAt);
-          visibleStartedAt = undefined;
-        }
-      } else if (visibleStartedAt === undefined) {
-        visibleStartedAt = Date.now();
-      }
+      reconcile();
       update();
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    reconcile();
+    update();
     const timer = window.setInterval(update, TICK_INTERVAL_MS);
     return () => {
+      stop();
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [revealedSessionId]);
+  }, [revealedSessionId, paused]);
 
   return clock.sessionId === revealedSessionId ? clock.seconds : 0;
 }

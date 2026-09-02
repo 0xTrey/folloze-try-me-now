@@ -197,7 +197,7 @@ export function describePreviewAnalyticsEvent(
     detail: "The visitor opened a guided question for the next conversation."
   };
   if (action === "cta_click") {
-    const closingCta = context.ctaId === "close-primary";
+    const closingCta = context.area === "close" || context.ctaId === "close-primary";
     return {
       label: closingCta ? "Tested the closing CTA" : "Tested the primary CTA",
       detail: "This preview captured next-step intent without leaving or losing the experience."
@@ -312,20 +312,6 @@ export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCa
 
 const NORTHPEAK_ACCOUNT_EXAMPLE_URL = "https://experience.folloze.com/northpeak--folloze";
 const NORTHPEAK_CAMPAIGN_EXAMPLE_URL = "https://engage.folloze.com/120367";
-
-/** Optional Northpeak worked states for the unified entry, never primary CTAs. */
-export const northpeakWorkedStates = [
-  {
-    id: "account",
-    label: "See a Northpeak account experience",
-    href: NORTHPEAK_ACCOUNT_EXAMPLE_URL
-  },
-  {
-    id: "campaign",
-    label: "See a Northpeak personalized campaign",
-    href: NORTHPEAK_CAMPAIGN_EXAMPLE_URL
-  }
-] as const;
 
 export const entryPathOptions: Record<UseCase, EntryPathOption> = {
   abm: {
@@ -1716,8 +1702,8 @@ export function UseCasePortals({
           onSelect("campaign", "campaign");
         }}
       >
-        <strong>Build a buyer experience</strong>
-        <small>Add your company and a few signals. Folloze infers the experience type and assembles the page.</small>
+        <strong>Build a personalized campaign</strong>
+        <small>Start with your company and a few focused answers. Folloze researches, writes, and designs the finished buyer experience.</small>
         <ArrowRight size={18} aria-hidden="true" />
       </button>
 
@@ -1734,25 +1720,6 @@ export function UseCasePortals({
       >
         Or open Content Magic to make a URL or PDF interactive
       </button>
-
-      <aside className="northpeakWorkedStates" aria-label="Optional Northpeak worked states">
-        <span className="sectionKicker">Optional examples</span>
-        <ul>
-          {northpeakWorkedStates.map((example) => (
-            <li key={example.id}>
-              <a
-                href={example.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => track("example_opened", { useCase: example.id === "account" ? "abm" : "campaign" })}
-              >
-                <ExternalLink size={14} aria-hidden="true" />
-                {example.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </aside>
     </div>
   );
 }
@@ -3148,7 +3115,6 @@ function useDialogBehavior(onClose: () => void) {
 export function SaveExperienceDialog({
   open,
   expiresLabel,
-  url,
   sellerName,
   targetName,
   headline,
@@ -3162,7 +3128,6 @@ export function SaveExperienceDialog({
 }: {
   open: boolean;
   expiresLabel: string;
-  url: string;
   sellerName: string;
   targetName?: string;
   headline: string;
@@ -3182,7 +3147,6 @@ export function SaveExperienceDialog({
         <button className="drawerClose" type="button" onClick={onClose} disabled={status === "saving"} aria-label="Close save experience"><X size={20} /></button>
         <ExpirySaveValuePanel
           expiresLabel={expiresLabel}
-          url={url}
           sellerName={sellerName}
           targetName={targetName}
           headline={headline}
@@ -3192,7 +3156,7 @@ export function SaveExperienceDialog({
           error={error}
           onEmailChange={onEmailChange}
           onSave={onSave}
-          benefits={["Permanent app-hosted URL", "Copy-and-share access", "Engagement-ready experience"]}
+          benefits={["Permanent app-hosted URL", "Ready for engagement analytics", "Private saved experience"]}
         />
       </section>
     </div>,
@@ -3271,6 +3235,7 @@ export function TryMeNowApp() {
   const patchRequestRef = useRef(0);
   const persistedSectionSignals = useRef(new Set<string>());
   const journeyCompleteAnalyticsOpened = useRef<string | undefined>(undefined);
+  const journeyCompleteAnalyticsTimer = useRef<number | undefined>(undefined);
   const lastTrackedStatus = useRef<string | undefined>(undefined);
   const buildTrackedSession = useRef<string | undefined>(undefined);
   const previewScrolledSession = useRef<string | undefined>(undefined);
@@ -3298,11 +3263,20 @@ export function TryMeNowApp() {
     buildShellScrolled.current = undefined;
     persistedSectionSignals.current.clear();
     journeyCompleteAnalyticsOpened.current = undefined;
+    if (journeyCompleteAnalyticsTimer.current !== undefined) {
+      window.clearTimeout(journeyCompleteAnalyticsTimer.current);
+      journeyCompleteAnalyticsTimer.current = undefined;
+    }
     lastTrackedStatus.current = undefined;
     buildTrackedSession.current = undefined;
     previewScrolledSession.current = undefined;
     finalRenderTracked.current = undefined;
     supportRefTracked.current = undefined;
+  }, []);
+  useEffect(() => () => {
+    if (journeyCompleteAnalyticsTimer.current !== undefined) {
+      window.clearTimeout(journeyCompleteAnalyticsTimer.current);
+    }
   }, []);
   const [preflightCoordinator] = useState(() => (
     new SellerBrandPreflightCoordinator(
@@ -3736,13 +3710,36 @@ export function TryMeNowApp() {
         context,
         at: Date.now()
       };
+      const closingCtaRequestedSave = event.data.action === "cta_click" && context.area === "close";
+      if (
+        closingCtaRequestedSave
+        && canOfferClaimModal(session, { events: [next], previewOpened: true })
+      ) {
+        if (journeyCompleteAnalyticsTimer.current !== undefined) {
+          window.clearTimeout(journeyCompleteAnalyticsTimer.current);
+          journeyCompleteAnalyticsTimer.current = undefined;
+        }
+        track("save_opened", { useCase: session.useCase, trigger: "closing_cta" });
+        captureUnifiedProductEvent("modal_displayed", {
+          sessionId: session.id,
+          properties: { modal_kind: "claim", trigger: "closing_cta" }
+        });
+        setShowAnalyticsPanel(false);
+        setShowSavePrompt(true);
+      }
       if (event.data.action === "journey_complete") {
         journeyCompleteAnalyticsOpened.current = session.id;
-        setShowAnalyticsPanel(true);
-        captureUnifiedProductEvent("analytics_panel_opened", {
-          sessionId: session.id,
-          properties: { trigger: "journey_complete" }
-        });
+        if (journeyCompleteAnalyticsTimer.current !== undefined) {
+          window.clearTimeout(journeyCompleteAnalyticsTimer.current);
+        }
+        journeyCompleteAnalyticsTimer.current = window.setTimeout(() => {
+          journeyCompleteAnalyticsTimer.current = undefined;
+          setShowAnalyticsPanel(true);
+          captureUnifiedProductEvent("analytics_panel_opened", {
+            sessionId: session.id,
+            properties: { trigger: "journey_complete" }
+          });
+        }, 1_500);
       }
       const semanticKey = [next.action, context.ctaId, context.lensId, context.sectionId, context.targetId, context.area]
         .filter(Boolean)
@@ -4208,22 +4205,24 @@ export function TryMeNowApp() {
       sessionId: session.id,
       properties: { modal_kind: "claim", trigger: "save_cta" }
     });
+    setShowAnalyticsPanel(false);
     setShowSavePrompt(true);
   };
 
   const generationEligible = isSessionGenerationEligible(session);
-  const engagementSeconds = usePreviewForegroundSeconds(
-    isReveal && revealedAt && session ? session.id : undefined
-  );
-  const lifecyclePhase = previewLifecyclePhase(session);
-  const isFinalOnlyV2 = isUnifiedFinalOnlyV2(session);
-  const lifecycleCopy = previewLifecycleCopy(lifecyclePhase);
-  const personalizationOptions = session ? personalizationVariantOptionsFor(session) : [];
   const canSaveExperience = canOfferClaimModal(session, {
     events: clientEvents,
     previewOpened: Boolean(revealedAt)
   });
   const saveDialogOpen = Boolean(showSavePrompt && session && canSaveExperience);
+  const engagementSeconds = usePreviewForegroundSeconds(
+    isReveal && revealedAt && session ? session.id : undefined,
+    showAnalyticsPanel || saveDialogOpen
+  );
+  const lifecyclePhase = previewLifecyclePhase(session);
+  const isFinalOnlyV2 = isUnifiedFinalOnlyV2(session);
+  const lifecycleCopy = previewLifecycleCopy(lifecyclePhase);
+  const personalizationOptions = session ? personalizationVariantOptionsFor(session) : [];
   const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
   const revealCopy = session ? getRevealCopy(session) : undefined;
   const analyticsSignals: AnalyticsSignal[] = clientEvents.map((event, index) => ({
@@ -4241,7 +4240,7 @@ export function TryMeNowApp() {
     : 30 * 60;
   const previewCountdown = `${String(Math.floor(previewSecondsRemaining / 60)).padStart(2, "0")}:${String(previewSecondsRemaining % 60).padStart(2, "0")}`;
   const headerStatus = !useCase
-    ? "Build a buyer experience in about a minute"
+    ? "Start with a prompt. End with a personalized campaign."
     : !session
       ? useCase === "content"
         ? "Content Magic selected"
@@ -4272,19 +4271,19 @@ export function TryMeNowApp() {
       {!useCase && (
         <section className="entryStage">
           <div className="entryHero">
-            <h1>Build a buyer experience.</h1>
-            <p>Start with your company. Answer one missing signal at a time. Folloze assembles a branded buyer experience you can explore before you save.</p>
+            <h1>Build a personalized campaign.</h1>
+            <p>Add your company and answer a few focused questions. Folloze researches the brand, sharpens the message, and builds the finished campaign experience.</p>
             <div className="entryPromise" aria-label="Try Me Now experience promise">
-              <span><CircleCheck size={14} />One guided conversation</span>
-              <span><Clock3 size={14} />First preview in about a minute</span>
-              <span><ShieldCheck size={14} />Preview first. Save when ready.</span>
+              <span><CircleCheck size={14} />Start with a prompt</span>
+              <span><Sparkles size={14} />Research, message, and design</span>
+              <span><ShieldCheck size={14} />Finish with a campaign</span>
             </div>
           </div>
           <UseCasePortals
             onSelect={selectUseCase}
             disabled={!interactionReady}
           />
-          <div className="entryFooter">Start with a company domain. Explore the result before sharing your email.</div>
+          <div className="entryFooter">Start with a company domain. Share your email only when you want to keep the result.</div>
         </section>
       )}
 
@@ -4561,7 +4560,6 @@ export function TryMeNowApp() {
       <SaveExperienceDialog
         open
         expiresLabel={previewCountdown}
-        url={session.liveUrl || session.temporaryUrl}
         sellerName={brandNameFor(session)}
         targetName={session.useCase === "abm" ? targetNameFor(session) : undefined}
         headline={session.experience?.headline || `${brandNameFor(session)} experience`}
@@ -4581,6 +4579,7 @@ export function TryMeNowApp() {
       sessionId={session?.id}
       audienceLabel={answers.customAudience || answers.audience}
       isSaved={session?.status === "claimed"}
+      onOpenSave={canSaveExperience ? openSavePrompt : undefined}
       onClose={closeAnalyticsPanel}
     />
     </>

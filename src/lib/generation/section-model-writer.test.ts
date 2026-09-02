@@ -139,6 +139,23 @@ function goodResponse(contract: SectionWritingContract): SectionModelResponse {
 }
 
 describe("bounded parallel section writing", () => {
+  it("treats rejected progress observers as best effort", async () => {
+    const result = await runSectionWriters({
+      contracts: contracts(2),
+      fallback: (contract) => ({
+        sectionId: contract.sectionId,
+        role: contract.slot.role,
+        status: "omitted",
+        omissionReason: "unsupported_optional_slot",
+        wordCount: 0,
+        evidenceRefs: []
+      }),
+      deadlineMs: 1000,
+      onSectionWritten: () => { throw new Error("observer rejected"); }
+    });
+    expect(result.results).toHaveLength(2);
+    expect(result.deadlineExceeded).toBe(false);
+  });
   it("falls back to deterministic copy for every section when no provider is configured", async () => {
     const result = await runSectionWriters({
       contracts: contracts(3),

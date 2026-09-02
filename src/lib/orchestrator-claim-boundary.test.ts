@@ -158,7 +158,9 @@ function experience(): ExperienceModel {
 /**
  * Under the final-only lifecycle an artifact is not claimable on its own. Save
  * reuses the reveal gate, so a fixture that stands for an already-revealed
- * experience needs the read-back receipt and a matching quality receipt.
+ * experience needs the read-back receipt. The asynchronous quality receipt is
+ * useful operational evidence, but it cannot block an email capture after the
+ * visitor has already received the final artifact.
  */
 function finalReceiptFor(model: ExperienceModel): FinalArtifactReceipt {
   return {
@@ -445,6 +447,28 @@ describe("anonymous preview and claim publication boundary", () => {
     });
     expect(canRevealFinalExperience(toPublicSession(persisted))).toBe(false);
     expect(recordLeadCapture).not.toHaveBeenCalled();
+  });
+
+  it("captures the email after final read-back while the quality receipt is pending", async () => {
+    const ready = session({
+      id: "claim-before-quality-receipt",
+      status: "preview_ready_unclaimed",
+      includeExperience: true
+    });
+    ready.qualityReceipt = undefined;
+    await putSession(ready);
+
+    const result = await claimSession(ready.id, "buyer@acme.test");
+
+    expect(recordLeadCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ id: ready.id }),
+      "buyer@acme.test"
+    );
+    expect(result).toMatchObject({
+      publishMode: "preview-only",
+      emailDelivery: "skipped",
+      session: { status: "claimed" }
+    });
   });
 
   it("keeps a verified brand with incomplete design DNA on the build path", async () => {

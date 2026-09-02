@@ -223,12 +223,13 @@ test.describe("unified guided first-run experience", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
   });
 
-  test("shows one dominant buyer-experience door, Northpeak examples, and no legacy paths (U01-U04)", async ({
+  test("shows one dominant personalized-campaign door with no unverified examples or legacy paths (U01-U04)", async ({
     page
   }, testInfo) => {
-    await expect(page.getByRole("heading", { name: "Build a buyer experience." })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Build a buyer experience/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Build a personalized campaign." })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Build a personalized campaign/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Content Magic/i })).toBeVisible();
+    await expect(page.getByText(/about a minute/i)).toHaveCount(0);
 
     await expect(page.getByRole("button", { name: "Build a 1:1 account experience" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Launch a campaign landing page" })).toHaveCount(0);
@@ -237,15 +238,8 @@ test.describe("unified guided first-run experience", () => {
     await expect(page.locator('input[type="email"]')).toHaveCount(0);
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
-    const northpeak = page.locator('aside[aria-label="Optional Northpeak worked states"] a');
-    await expect(northpeak).toHaveCount(2);
-    await expect(northpeak.nth(0)).toHaveAttribute(
-      "href",
-      "https://experience.folloze.com/northpeak--folloze"
-    );
-    await expect(northpeak.nth(1)).toHaveAttribute("href", "https://engage.folloze.com/120367");
-    await expect(northpeak.nth(0)).toHaveText(/Northpeak account experience/i);
-    await expect(northpeak.nth(1)).toHaveText(/Northpeak personalized campaign/i);
+    await expect(page.getByRole("link", { name: /Northpeak/i })).toHaveCount(0);
+    await expect(page.getByText(/Optional examples/i)).toHaveCount(0);
 
     await page.screenshot({
       path: testInfo.outputPath("unified-entry-u01.png"),
