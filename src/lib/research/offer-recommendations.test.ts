@@ -145,6 +145,45 @@ describe("rankOfferRecommendations", () => {
     ).toHaveLength(0);
   });
 
+  it("accepts homepage use cases but rejects technical implementation fragments", () => {
+    const result = rankOfferRecommendations({
+      revision: 9,
+      motion: "solution",
+      evidence: [
+        evidence({ ref: "home:runtime", label: "All of this on a hosted runtime", kind: "solution", confidence: 0.98 }),
+        evidence({ ref: "home:audit", label: "Audit log", kind: "solution", confidence: 0.97 }),
+        evidence({ ref: "home:compliance", label: "Built to compliance standards", kind: "solution", confidence: 0.96 }),
+        evidence({ ref: "home:capture", label: "Capture knowledge", kind: "solution", confidence: 0.88 }),
+        evidence({ ref: "home:answers", label: "Find answers", kind: "solution", confidence: 0.87 }),
+        evidence({ ref: "home:busy-work", label: "Automate busy work", kind: "solution", confidence: 0.86 })
+      ]
+    });
+
+    expect(result.candidates.map(({ label }) => label)).toEqual([
+      "Capture knowledge",
+      "Find answers",
+      "Automate busy work"
+    ]);
+    expect(result.candidates.every(({ recommendationKind }) => recommendationKind === "evidence-backed")).toBe(true);
+  });
+
+  it("ranks three homepage categories above official feature fragments", () => {
+    const result = rankOfferRecommendations({
+      revision: 10,
+      motion: "solution",
+      evidence: [
+        evidence({ ref: "home:one", label: "Capture knowledge", kind: "solution", confidence: 0.92 }),
+        evidence({ ref: "home:two", label: "Find answers", kind: "solution", confidence: 0.91 }),
+        evidence({ ref: "home:three", label: "Automate busy work", kind: "solution", confidence: 0.9 }),
+        evidence({ ref: "official:notes", label: "AI Meeting Notes Perfectly written by AI", kind: "solution", source: "official-page", confidence: 0.99 }),
+        evidence({ ref: "official:tours", label: "Product tours", kind: "solution", source: "official-page", confidence: 0.98 })
+      ]
+    });
+    expect(result.candidates.slice(0, 3).map(({ label }) => label)).toEqual([
+      "Capture knowledge", "Find answers", "Automate busy work"
+    ]);
+  });
+
   it("keeps named offers from product and solution pages while rejecting editorial-path topics", () => {
     const result = rankOfferRecommendations({
       revision: 7,

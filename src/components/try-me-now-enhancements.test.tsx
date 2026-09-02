@@ -149,6 +149,9 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(screen.getByText("#032D42")).toBeInTheDocument();
     expect(screen.getByText("#63DF4E")).toBeInTheDocument();
     expect(screen.getByText("#FFFFFF")).toBeInTheDocument();
+    expect(screen.getByLabelText("Primary color #032D42")).toHaveTextContent("Primary");
+    expect(screen.getByLabelText("Accent color #63DF4E")).toHaveTextContent("Accent");
+    expect(screen.getByLabelText("Surface color #FFFFFF")).toHaveTextContent("Surface");
     expect(screen.queryByText("#00718F")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Inspect ServiceNow brand signals" }));
     expect(inspect).toHaveBeenCalledOnce();

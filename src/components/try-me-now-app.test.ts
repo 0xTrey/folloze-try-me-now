@@ -27,6 +27,7 @@ import {
   previewBoundaryScrollDelta,
   previewUpdateState,
   recommendedObjectiveFor,
+  shouldGateCampaignIntakeForBrandResearch,
   shouldApplyResetFencedUpdate,
   shouldShowBuildShell,
   shouldAutoConfirmSource,
@@ -263,6 +264,27 @@ describe("Try Me Now experience copy", () => {
     const questions = streamingCampaignQuestions("campaign", []);
     expect(questions[1]?.placeholder).toBe("Describe the buyer role most likely to evaluate this offer");
     expect(questions[1]?.placeholder).not.toBe("Enterprise marketing leaders");
+  });
+
+  it("holds campaign intake until seller brand research reaches a terminal state", () => {
+    expect(shouldGateCampaignIntakeForBrandResearch(
+      session("campaign", {}, { brand: "pending" })
+    )).toBe(true);
+    expect(shouldGateCampaignIntakeForBrandResearch(
+      session("campaign", {}, { brand: "running" })
+    )).toBe(true);
+    expect(shouldGateCampaignIntakeForBrandResearch(
+      session("campaign", {}, { brand: "complete" })
+    )).toBe(false);
+    expect(shouldGateCampaignIntakeForBrandResearch(
+      session("campaign", {}, { brand: "fallback" })
+    )).toBe(false);
+    expect(shouldGateCampaignIntakeForBrandResearch(
+      session("campaign", {}, { brand: "failed" })
+    )).toBe(false);
+    expect(shouldGateCampaignIntakeForBrandResearch(
+      session("abm", {}, { brand: "running" })
+    )).toBe(false);
   });
 
   it("lets the selected offer outrank a broad homepage theme when suggesting buyers", () => {

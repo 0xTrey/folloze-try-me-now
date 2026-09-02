@@ -175,7 +175,11 @@ async function mockSessionApis(
   });
 }
 
-async function startBuyerExperience(page: Page, domain = "northpeak.com"): Promise<void> {
+async function startBuyerExperience(
+  page: Page,
+  domain = "northpeak.com",
+  options: { waitForBrief?: boolean } = {}
+): Promise<void> {
   const primary = page.locator(".unifiedPrimaryCta");
   await expect(primary).toBeVisible();
   // SSR markup is clickable before React hydrates; retry until the domain stage mounts.
@@ -193,7 +197,9 @@ async function startBuyerExperience(page: Page, domain = "northpeak.com"): Promi
   });
   await expect(page.getByText(/Ready to match|Public brand scan/i).first()).toBeVisible();
   await page.getByRole("button", { name: /Use this company/i }).click();
-  await expect(page.getByText(/Live brief/i).first()).toBeVisible({ timeout: 10_000 });
+  if (options.waitForBrief !== false) {
+    await expect(page.getByText(/Live brief/i).first()).toBeVisible({ timeout: 10_000 });
+  }
 }
 
 async function expectFirstDoorStable(page: Page): Promise<void> {
@@ -297,6 +303,61 @@ test.describe("unified guided first-run experience", () => {
       await expect(page.getByLabel(/What are you taking to market/i)).toBeVisible();
     }
     await expect(page.locator('input[type="email"]')).toHaveCount(0);
+  });
+
+  test("campaign intake waits for seller research before showing grounded recommendations", async ({
+    page
+  }) => {
+    const sessions = new Map<string, PublicTryMeSession>();
+    await mockSessionApis(page, sessions, ({ useCase, companyDomain }) => {
+      const pending = publicSession({ useCase, companyDomain });
+      return {
+        ...pending,
+        brand: undefined,
+        stages: {
+          brand: { status: "running", detail: "Reading public product and brand signals." },
+          audience: { status: "pending" },
+          story: { status: "pending" }
+        },
+        offerRecommendations: []
+      };
+    });
+
+    await startBuyerExperience(page, "northpeak.com", { waitForBrief: false });
+
+    await expect(page.getByRole("heading", { level: 1, name: "Researching Northpeak" })).toBeVisible();
+    await expect(page.locator("[data-brand-research-gate]")).toHaveAttribute("aria-busy", "true");
+    await expect(page.getByLabel(/What are you taking to market/i)).toHaveCount(0);
+
+    const current = [...sessions.values()][0]!;
+    const researched = publicSession({
+      id: current.id,
+      useCase: current.useCase,
+      companyDomain: current.companyDomain,
+      evidenceBackedRecommendations: true
+    });
+    sessions.set(current.id, {
+      ...researched,
+      revision: current.revision + 1,
+      updatedAt: new Date().toISOString()
+    });
+
+    await expect(page.getByRole("heading", { name: "Live Brief" })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole("button", { name: /Pipeline Command Center/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Governed Revenue Automation/i })).toBeVisible();
+
+    await page.getByText("View brand details", { exact: true }).click();
+    const paletteTokens = page.locator("[aria-label^='Primary color'], [aria-label^='Accent color'], [aria-label^='Surface color']");
+    await expect(paletteTokens).toHaveCount(3);
+    await expect(page.getByLabel("Primary color #0B1F33")).toBeVisible();
+    await expect(page.getByLabel("Accent color #2F6FED")).toBeVisible();
+    await expect(page.getByLabel("Surface color #FFFFFF")).toBeVisible();
+    const tokenRows = await paletteTokens.evaluateAll((tokens) => tokens.map((token) => {
+      const rect = token.getBoundingClientRect();
+      return { width: rect.width, top: rect.top };
+    }));
+    expect(tokenRows.every(({ width }) => width > 120)).toBe(true);
+    expect(Math.max(...tokenRows.map(({ top }) => top)) - Math.min(...tokenRows.map(({ top }) => top))).toBeLessThan(2);
   });
 
   test("product-owner remediation keeps recommendations grounded and engagement manual on a full-width preview", async ({

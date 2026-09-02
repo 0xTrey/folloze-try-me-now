@@ -172,6 +172,13 @@ const homepageEditorialOfferOverridePattern =
 const editorialSourcePathPattern =
   /\/(?:insights?|research|trends?|blog|articles?|stories|news|updates?|resources?|podcasts?|videos?|reports?|guides?|case-stud(?:y|ies)|events?)(?:\/|$)/i;
 
+// Keep technical implementation copy out of the marketable offer lane, while
+// allowing concise homepage use-case headings to qualify as evidence.
+const technicalHomepageLabelPattern =
+  /\b(?:hosted runtime|runtime|audit log|compliance standards?|implementation details?|architecture|api reference|developer docs?|release notes?|security controls?)\b/i;
+const homepageUseCasePattern =
+  /^(?:capture|find|automate|manage|connect|secure|analyze|analyse|improve|streamline|reduce|scale|share|organize|organise|build|create|discover|protect|simplify)\b/i;
+
 function isStrongHomepageOfferLabel(value: string): boolean {
   const clean = cleanLabel(value);
   if (/^[\s\d.,+$€£¥%]+$/.test(clean)) return false;
@@ -179,11 +186,17 @@ function isStrongHomepageOfferLabel(value: string): boolean {
   if (homepageEditorialPattern.test(clean) && !homepageEditorialOfferOverridePattern.test(clean)) {
     return false;
   }
+  if (technicalHomepageLabelPattern.test(clean)) return false;
+  if (homepageUseCasePattern.test(clean)) return true;
   return (
     strongHomepageOfferPattern.test(clean) ||
     /\b[A-Za-z][A-Za-z-]*\d+[A-Za-z\d-]*\b/.test(clean) ||
     /\b\d+[A-Za-z][A-Za-z\d-]*\b/.test(clean)
   );
+}
+
+function isHomepageUseCaseLabel(evidence: ExtractedOfferEvidence): boolean {
+  return evidence.source === "homepage" && homepageUseCasePattern.test(cleanLabel(evidence.label));
 }
 
 function sourcePathname(value: string | undefined): string | undefined {
@@ -294,6 +307,7 @@ function evidenceScore(
     evidence.kind === input.eventSubtype
       ? 50
       : 0) +
+    (isHomepageUseCaseLabel(evidence) ? 140 : 0) +
     evidence.confidence * 100
   );
 }

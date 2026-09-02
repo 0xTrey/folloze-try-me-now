@@ -318,12 +318,9 @@ export function InstantBrandLockStrip({ brand, status, onInspect }: InstantBrand
             </p>
           ) : (
             <>
-              <span className={styles.brandPaletteRail} aria-hidden="true">
-                {palette.colors.slice(0, 3).map((color) => <i key={color} style={{ backgroundColor: color }} />)}
-              </span>
               <ul className={styles.brandTokenList}>
                 {palette.tokens.slice(0, 3).map(([label, color]) => (
-                  <li key={`${label}-${color}`} data-color={color}>
+                  <li key={`${label}-${color}`} data-color={color} aria-label={`${label} color ${color}`}>
                     <i style={{ backgroundColor: color }} aria-hidden="true" />
                     <span><small>{label}</small><code>{color}</code></span>
                   </li>

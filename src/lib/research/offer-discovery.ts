@@ -70,6 +70,9 @@ const editorialLabelPattern =
 const editorialOfferOverridePattern =
   /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application)\b/i;
 
+const technicalLabelPattern =
+  /\b(?:hosted runtime|runtime|audit log|compliance standards?|implementation details?|architecture|api reference|developer docs?|release notes?|security controls?)\b/i;
+
 const navigationOnlyLabel =
   /^(?:(?:explore|view|see|browse|learn more|read more|skip to)\s+)?(?:(?:all|our|featured|latest|the latest from)\s+)?(?:products?(?:\s+(?:and|&)\s+services?)?|services?|solutions?|resources?|support|partners?|customers?|customer stories|company|about(?:\s+us)?|contact(?:\s+us)?|news|events?|careers?|industries|use cases?|why\s+[\p{L}\p{N}.&'-]+|take your next steps?|quick links?|resources and legal)$/iu;
 
@@ -325,6 +328,11 @@ function inferKind(label: string, motion: OfferCampaignMotion): OfferEvidenceKin
 function looksLikeMarketingTagline(label: string): boolean {
   const clean = cleanLabel(label);
   if (!clean || offerHeadingPattern.test(clean)) return false;
+  // Homepage use-case headings are valuable offer evidence even when they do
+  // not contain a product taxonomy noun (for example, "Capture knowledge").
+  if (/^(?:capture|find|automate|manage|connect|secure|analyze|analyse|improve|streamline|reduce|scale|share|organize|organise|build|create|discover|protect|simplify)\b/i.test(clean)) {
+    return false;
+  }
   if (/\b(?:services?|solutions?|advisory|accounting|payroll|erp)\b/i.test(clean)) return false;
   const tokens = clean.split(/\s+/).filter(Boolean);
   return tokens.length <= 6 && /^[A-Z]/.test(clean);
@@ -333,6 +341,7 @@ function looksLikeMarketingTagline(label: string): boolean {
 function acceptDiscoveredLabel(label: string, sourceUrl?: string): string | undefined {
   const phrase = offerLikePhrase(label) ?? (isBoundedOfferLabel(label) ? cleanLabel(label) : undefined);
   if (!phrase) return undefined;
+  if (technicalLabelPattern.test(phrase)) return undefined;
   if (isNavigationOnlyOfferLabel(phrase)) return undefined;
   if (isStatOnlyLabel(phrase) || isEditorialLabel(phrase)) return undefined;
   if (sourceUrl) {
@@ -360,6 +369,18 @@ function extractHeadings(html: string): Array<{ level: number; text: string }> {
     if (text.length >= 3) headings.push({ level, text });
   }
   return headings;
+}
+
+function extractSemanticLabels(html: string): string[] {
+  const labels: string[] = [];
+  // Put the semantic class constraint inside the expression. Matching every
+  // container first can consume an outer element and skip the nested label
+  // that carries the actual product or use-case taxonomy.
+  for (const match of html.matchAll(/<([a-z][\w:-]*)\b[^>]*\bclass\s*=\s*(["'])[^"']*(?:eyebrow|kicker|category|use[-_]?case)[^"']*\2[^>]*>([\s\S]*?)<\/\1>/gi)) {
+    const text = stripTags(match[3] ?? "");
+    if (text.length >= 3 && text.length <= 72) labels.push(text);
+  }
+  return labels;
 }
 
 function extractAnchors(
@@ -484,6 +505,19 @@ export function discoverOfferEvidenceFromPages(
           source
         })
       });
+    }
+
+    if (source === "homepage") {
+      for (const label of extractSemanticLabels(page.html)) {
+        push({
+          ref: stableId("offer-discovery", page.url, "semantic-label", label),
+          label,
+          kind: inferKind(label, input.motion),
+          source,
+          sourceUrl: page.url,
+          confidence: 0.92
+        });
+      }
     }
 
     for (const anchor of extractAnchors(page.html, base)) {

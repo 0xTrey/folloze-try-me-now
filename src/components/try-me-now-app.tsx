@@ -1576,6 +1576,13 @@ export function shouldShowBuildShell(
   return isBuildInProgress(session);
 }
 
+export function shouldGateCampaignIntakeForBrandResearch(
+  session: Pick<PublicTryMeSession, "useCase" | "stages"> | undefined
+): boolean {
+  if (session?.useCase !== "campaign") return false;
+  return session.stages.brand.status === "pending" || session.stages.brand.status === "running";
+}
+
 export function audienceHubFindingsFor(session: PublicTryMeSession): StreamingAudienceFinding[] {
   if (session.audienceLens?.findings.length) {
     return session.audienceLens.findings.slice(0, 3).map((finding) => ({
@@ -3234,6 +3241,33 @@ export function BrandHelpRecoveryPanel({
   );
 }
 
+export function BrandResearchGate({ companyName }: { companyName: string }) {
+  return (
+    <section
+      className="brandResearchGate"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      data-brand-research-gate
+    >
+      <div className="brandResearchScanner" aria-hidden="true">
+        <Search size={30} strokeWidth={1.8} />
+        <i />
+      </div>
+      <h1>Researching {companyName}</h1>
+      <p>
+        We are reading the public product, use-case, and brand signals that should
+        shape your recommendations. The brief opens as soon as that evidence is ready.
+      </p>
+      <div className="brandResearchSignals" aria-hidden="true">
+        <span><i />Products</span>
+        <span><i />Use cases</span>
+        <span><i />Brand system</span>
+      </div>
+    </section>
+  );
+}
+
 export function TryMeNowApp() {
   const interactionReady = true;
   const [useCase, setUseCase] = useState<UseCase>();
@@ -3321,6 +3355,7 @@ export function TryMeNowApp() {
   ));
   const isReveal = Boolean(session && canRevealFinalExperience(session));
   const showBuildShell = shouldShowBuildShell(session);
+  const isWaitingForBrandResearch = shouldGateCampaignIntakeForBrandResearch(session);
   const buildShellSessionId = showBuildShell ? session?.id : undefined;
 
   useEffect(() => {
@@ -4000,7 +4035,7 @@ export function TryMeNowApp() {
     : [];
   const objectiveChoices = session?.objectiveRecommendations?.map(({ label }) => label)
     ?? [recommendedObjective, ...objectives.campaign.filter((objective) => objective !== recommendedObjective)];
-  const streamingQuestions = session?.useCase === "campaign"
+  const streamingQuestions = session?.useCase === "campaign" && !isWaitingForBrandResearch
     ? streamingCampaignQuestions(
       streamingMode,
       audienceChoices,
@@ -4322,7 +4357,13 @@ export function TryMeNowApp() {
         />
       )}
 
-      {session && !isReveal && buildPanelCopy && !showBuildShell && (
+      {session && !isReveal && !showBuildShell && isWaitingForBrandResearch && (
+        <section className="brandResearchStage">
+          <BrandResearchGate companyName={brandNameFor(session)} />
+        </section>
+      )}
+
+      {session && !isReveal && buildPanelCopy && !showBuildShell && !isWaitingForBrandResearch && (
         <section className={`workbench ${session.useCase === "campaign" ? "streamingWorkbench" : ""}`}>
           <div className="mobileStatus"><button type="button" aria-expanded={showProcess} aria-controls="mobile-process-dialog" onClick={() => setShowProcess(true)}><span className="liveDot" /><strong>{buildPanelCopy.mobileLabel}</strong><span>{buildPanelCopy.mobileStep}</span><ChevronDown size={15} /></button></div>
           <div className="briefPanel">

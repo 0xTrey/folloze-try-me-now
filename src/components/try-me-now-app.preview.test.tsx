@@ -12,6 +12,7 @@ import { buildPhaseRows, canRevealFinalExperience } from "@/lib/preview-lifecycl
 import { FinalBuildShell } from "./final-build-shell";
 import {
   AssemblyPreview,
+  BrandResearchGate,
   buildMoments,
   canClaimPreview,
   CampaignOverviewRail,
@@ -107,6 +108,17 @@ const readyProductInsight: NonNullable<PublicTryMeSession["sourceInsight"]> = {
   assetCount: 0,
   citationCount: 1
 };
+
+describe("BrandResearchGate", () => {
+  it("announces the blocking research state before campaign intake opens", () => {
+    render(<BrandResearchGate companyName="Notion" />);
+
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("heading", { level: 1, name: "Researching Notion" })).toBeInTheDocument();
+    expect(screen.getByText(/brief opens as soon as that evidence is ready/i)).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+});
 
 describe("AssemblyPreview", () => {
   it("keeps the generated desktop page as a focusable native scroll region", () => {

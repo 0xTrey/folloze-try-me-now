@@ -185,6 +185,49 @@ describe("discoverOfferEvidenceFromPages", () => {
       expect.arrayContaining(["Advisory Services", "CFO Advisory Services"])
     );
   });
+
+  it("keeps homepage use-case headings and drops technical copy", () => {
+    const evidence = discoverOfferEvidenceFromPages({
+      motion: "solution",
+      graph: {
+        origin: ORIGIN,
+        pages: [page("/", `<main>
+          <h2>All of this on a hosted runtime</h2>
+          <h2>Audit log</h2>
+          <h2>Built to compliance standards</h2>
+          <h2>Capture knowledge</h2>
+          <h2>Find answers</h2>
+          <h2>Automate busy work</h2>
+        </main>`)]
+      }
+    });
+
+    expect(evidence.map(({ label }) => label)).toEqual(expect.arrayContaining([
+      "Capture knowledge",
+      "Find answers",
+      "Automate busy work"
+    ]));
+    expect(evidence).toHaveLength(3);
+  });
+
+  it("extracts semantic homepage category labels without scanning all text", () => {
+    const evidence = discoverOfferEvidenceFromPages({
+      motion: "solution",
+      graph: {
+        origin: ORIGIN,
+        pages: [page("/", `<main>
+          <div class="bentoEyebrow">Capture knowledge</div>
+          <div class="card_category">Find answers</div>
+          <span class="use-case-label">Automate busy work</span>
+          <p>AI Meeting Notes Perfectly written by AI</p>
+        </main>`)]
+      }
+    });
+    expect(evidence.map(({ label }) => label)).toEqual(expect.arrayContaining([
+      "Capture knowledge", "Find answers", "Automate busy work"
+    ]));
+    expect(evidence.map(({ label }) => label)).not.toContain("AI Meeting Notes Perfectly written by AI");
+  });
 });
 
 describe("harvestOfferDiscoveryGraph", () => {
