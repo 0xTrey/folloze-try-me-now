@@ -285,7 +285,7 @@ export const UNIFIED_PRODUCT_EVENT_CONTRACTS: Record<
   },
   personalization_targets_submitted: {
     category: "conversion",
-    allowedProperties: ["target_count"]
+    allowedProperties: ["target_count", "selection_mode"]
   },
   personalization_batch_status_changed: {
     category: "workflow",

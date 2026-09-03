@@ -11,6 +11,7 @@ import {
   createPersonalizationRequest,
   getPersonalizationRequest
 } from "@/lib/personalization-request-store";
+import { selectDefaultPersonalizationTargets } from "@/lib/personalization-default-targets";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { getSession, updateSession } from "@/lib/session-store";
 
@@ -36,6 +37,13 @@ vi.mock("@/lib/personalization-request-store", () => ({
     status: value.status
   }))
 }));
+vi.mock("@/lib/personalization-default-targets", () => ({
+  selectDefaultPersonalizationTargets: vi.fn(() => [
+    { domain: "one.com", role: "Finance leader" },
+    { domain: "two.com", role: "Finance leader" },
+    { domain: "three.com", role: "Finance leader" }
+  ])
+}));
 vi.mock("@/lib/rate-limit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/rate-limit")>()),
   anonymousClientKey: vi.fn(() => "test-client"),
@@ -58,6 +66,7 @@ const context = { params: Promise.resolve({ id }) };
 const baseline = {
   id,
   companyDomain: "seller.com",
+  answers: { customAudience: "Finance leaders" },
   status: "preview_ready_unclaimed",
   experience: { readiness: "final", artifactRevision: 4, artifactDigest: digest },
   finalArtifact: { readiness: "final", artifactRevision: 4, artifactDigest: digest }
@@ -128,12 +137,34 @@ describe("personalization request API", () => {
     ];
     const response = await PATCH(request("PATCH", { targets }), context);
     expect(response.status).toBe(202);
-    expect(addPersonalizationTargets).toHaveBeenCalledWith(id, targets, "seller.com");
+    expect(addPersonalizationTargets).toHaveBeenCalledWith(id, targets, "seller.com", {
+      selectionMode: "manual"
+    });
     expect(enforceRateLimit).toHaveBeenCalled();
     const callback = vi.mocked(after).mock.calls[0]?.[0];
     expect(callback).toBeTypeOf("function");
     await (callback as () => Promise<void>)();
     expect(runPersonalizationFulfillment).toHaveBeenCalledWith(id);
+  });
+
+  it("selects representative accounts without requiring target input", async () => {
+    const response = await PATCH(request("PATCH", { autoSelect: true }), context);
+    expect(response.status).toBe(202);
+    expect(selectDefaultPersonalizationTargets).toHaveBeenCalledWith({
+      requestId: privateRequest.id,
+      sellerDomain: "seller.com",
+      audience: "Finance leaders"
+    });
+    expect(addPersonalizationTargets).toHaveBeenCalledWith(
+      id,
+      [
+        { domain: "one.com", role: "Finance leader" },
+        { domain: "two.com", role: "Finance leader" },
+        { domain: "three.com", role: "Finance leader" }
+      ],
+      "seller.com",
+      { selectionMode: "representative" }
+    );
   });
 
   it("recovers queued work during status polling and keeps the response private", async () => {

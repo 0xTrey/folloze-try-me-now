@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicPersonalizationRequest } from "@/lib/personalization-request-store";
@@ -12,7 +12,10 @@ import { ThreeAccountConversion } from "./three-account-conversion";
 afterEach(cleanup);
 beforeEach(() => vi.clearAllMocks());
 
-const request = (status: PublicPersonalizationRequest["status"]): PublicPersonalizationRequest => ({
+const request = (
+  status: PublicPersonalizationRequest["status"],
+  selectionMode?: PublicPersonalizationRequest["selectionMode"]
+): PublicPersonalizationRequest => ({
   id: "request-id",
   sessionId: "session-id",
   emailMasked: "b***@example.com",
@@ -24,6 +27,7 @@ const request = (status: PublicPersonalizationRequest["status"]): PublicPersonal
   ],
   baselineArtifactRevision: 4,
   status,
+  ...(selectionMode ? { selectionMode } : {}),
   variantCount: 3,
   createdAt: "2026-09-03T10:00:00.000Z",
   updatedAt: "2026-09-03T10:00:01.000Z",
@@ -47,7 +51,7 @@ describe("ThreeAccountConversion", () => {
     });
     expect(baseProps.onEmailChange).toHaveBeenCalledWith("buyer@example.com");
     rerender(<ThreeAccountConversion {...baseProps} email="buyer@example.com" />);
-    fireEvent.click(screen.getByRole("button", { name: /Choose my 3 accounts/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Continue/i }));
     expect(baseProps.onSubmitEmail).toHaveBeenCalledOnce();
 
     rerender(
@@ -83,6 +87,33 @@ describe("ThreeAccountConversion", () => {
       { domain: "two.com", role: "CFO" },
       { domain: "three.com" }
     ]);
+  });
+
+  it("keeps manual entry and offers account selection with a busy state", async () => {
+    let resolveSelection!: () => void;
+    const onAutoSelectTargets = vi.fn(() => new Promise<void>((resolve) => { resolveSelection = resolve; }));
+    render(<ThreeAccountConversion {...baseProps} email="buyer@example.com" request={request("awaiting_targets")} onAutoSelectTargets={onAutoSelectTargets} />);
+    expect(screen.getAllByLabelText("Company domain")).toHaveLength(3);
+    expect(screen.getByText("Account details optional")).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Pick 3 accounts for me" });
+    fireEvent.click(button);
+    expect(onAutoSelectTargets).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: /Choosing accounts/i })).toBeDisabled();
+    expect(screen.getAllByLabelText("Company domain")).toHaveLength(3);
+    await act(async () => resolveSelection());
+  });
+
+  it("labels system-selected accounts as illustrative after refresh", () => {
+    render(
+      <ThreeAccountConversion
+        {...baseProps}
+        email="buyer@example.com"
+        request={request("generating", "representative")}
+        status="polling"
+      />
+    );
+    expect(screen.getByText(/representative companies were selected for this demo/i)).toBeInTheDocument();
+    expect(screen.getByText(/not account-fit recommendations/i)).toBeInTheDocument();
   });
 
   it("shows honest parallel progress without promising email delivery", () => {

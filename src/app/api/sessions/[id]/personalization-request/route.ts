@@ -12,6 +12,7 @@ import {
   getPersonalizationRequest,
   toPublicPersonalizationRequest
 } from "@/lib/personalization-request-store";
+import { selectDefaultPersonalizationTargets } from "@/lib/personalization-default-targets";
 import { canRevealFinalExperience } from "@/lib/preview-lifecycle";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { getSession, toPublicSession, updateSession } from "@/lib/session-store";
@@ -147,11 +148,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         "The standard experience changed after this request started. Start a new request."
       );
     }
-    const body = (await request.json()) as { targets?: unknown };
+    const body = (await request.json()) as { targets?: unknown; autoSelect?: boolean };
+    // Auto-selection is explicit and uses bounded demo accounts. It does not
+    // infer visitor intent from private data or imply account qualification.
+    const targets = body.autoSelect === true
+      ? selectDefaultPersonalizationTargets({
+          requestId: existingRequest.id,
+          sellerDomain: baseline.companyDomain,
+          audience: baseline.answers.customAudience || baseline.answers.audience
+        })
+      : body.targets;
     const personalizationRequest = await addPersonalizationTargets(
       id,
-      body.targets,
-      baseline.companyDomain
+      targets,
+      baseline.companyDomain,
+      { selectionMode: body.autoSelect === true ? "representative" : "manual" }
     );
     after(() => runPersonalizationFulfillment(id));
     return NextResponse.json(

@@ -24,6 +24,8 @@ export type PersonalizationRequestStatus =
   | "needs_review"
   | "failed";
 
+export type PersonalizationTargetSelectionMode = "manual" | "representative";
+
 export interface PersonalizationTarget {
   id: string;
   position: number;
@@ -47,6 +49,7 @@ export interface PersonalizationRequest {
   baselineArtifactRevision: number;
   baselineArtifactDigest: string;
   status: PersonalizationRequestStatus;
+  selectionMode?: PersonalizationTargetSelectionMode;
   variantCount: typeof PERSONALIZATION_TARGET_COUNT;
   consentScope: "transactional_experience_delivery";
   executionAttemptId?: string;
@@ -75,6 +78,7 @@ export interface PublicPersonalizationRequest {
   targets: PublicPersonalizationTarget[];
   baselineArtifactRevision: number;
   status: PersonalizationRequestStatus;
+  selectionMode?: PersonalizationTargetSelectionMode;
   variantCount: typeof PERSONALIZATION_TARGET_COUNT;
   createdAt: string;
   updatedAt: string;
@@ -442,9 +446,11 @@ export async function createPersonalizationRequest(input: {
 export async function addPersonalizationTargets(
   sessionId: string,
   value: unknown,
-  sellerDomain: string
+  sellerDomain: string,
+  options: { selectionMode?: PersonalizationTargetSelectionMode } = {}
 ): Promise<PersonalizationRequest> {
   return mutateRequest(sessionId, (current) => {
+    const selectionMode = options.selectionMode ?? "manual";
     const targets = normalizePersonalizationTargets(value, {
       requestId: current.id,
       sellerDomain
@@ -454,7 +460,7 @@ export async function addPersonalizationTargets(
         (target, index) =>
           target.domain === targets[index]?.domain &&
           (target.role ?? "") === (targets[index]?.role ?? "")
-      );
+      ) && (current.selectionMode ?? "manual") === selectionMode;
       if (unchanged) return undefined;
       throw new HttpError(
         409,
@@ -465,6 +471,7 @@ export async function addPersonalizationTargets(
     return {
       ...current,
       targets,
+      selectionMode,
       status: "queued"
     };
   });
@@ -642,6 +649,7 @@ export function toPublicPersonalizationRequest(
     ),
     baselineArtifactRevision: request.baselineArtifactRevision,
     status: request.status,
+    ...(request.selectionMode ? { selectionMode: request.selectionMode } : {}),
     variantCount: PERSONALIZATION_TARGET_COUNT,
     createdAt: request.createdAt,
     updatedAt: request.updatedAt,

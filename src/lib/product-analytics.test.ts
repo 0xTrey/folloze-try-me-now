@@ -65,6 +65,15 @@ describe("first-party product analytics", () => {
         }
       }]
     })).not.toThrow();
+    expect(() => parseProductEventBatch({
+      events: [{
+        eventId: "tme_personalize234567",
+        ...identity,
+        event: "personalization_targets_submitted",
+        category: "conversion",
+        properties: { target_count: 3, selection_mode: "representative" }
+      }]
+    })).not.toThrow();
   });
 
   it("rejects unknown events, arbitrary nested data, contact data, and raw domains", () => {

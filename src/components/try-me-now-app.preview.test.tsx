@@ -467,7 +467,7 @@ describe("SaveExperienceDialog", () => {
     );
 
     expect(screen.getByText("Only final-gated links are shown")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Choose my 3 accounts/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Continue/i })).toBeInTheDocument();
     expect(screen.getByText(/Nothing is emailed or published to Folloze in this test phase/)).toBeInTheDocument();
     expect(screen.queryByText(/we will send|delivered as live links/i)).not.toBeInTheDocument();
   });

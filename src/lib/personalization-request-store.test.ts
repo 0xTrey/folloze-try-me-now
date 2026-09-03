@@ -130,16 +130,24 @@ describe("personalization request contract", () => {
     const queued = await addPersonalizationTargets(
       request.sessionId,
       targets,
-      "seller.com"
+      "seller.com",
+      { selectionMode: "representative" }
     );
     const repeated = await addPersonalizationTargets(
       request.sessionId,
       targets,
-      "seller.com"
+      "seller.com",
+      { selectionMode: "representative" }
     );
+    expect(queued.selectionMode).toBe("representative");
     expect(repeated.targets.map((target) => target.generatedSessionId)).toEqual(
       queued.targets.map((target) => target.generatedSessionId)
     );
+    await expect(
+      addPersonalizationTargets(request.sessionId, targets, "seller.com", {
+        selectionMode: "manual"
+      })
+    ).rejects.toThrow("already being built");
     expect(new Set(queued.targets.map((target) => target.generatedSessionId)).size).toBe(3);
 
     const lease = await acquirePersonalizationExecution(request.sessionId);
@@ -213,6 +221,7 @@ describe("personalization request contract", () => {
     expect(projection).not.toHaveProperty("baselineArtifactDigest");
     expect(projection.targets[0]).not.toHaveProperty("generatedSessionId");
     expect(projection.targets[0]).not.toHaveProperty("artifactDigest");
+    expect(projection.selectionMode).toBe("manual");
     expect(await getPersonalizationRequest(request.sessionId)).toBeDefined();
   });
 });

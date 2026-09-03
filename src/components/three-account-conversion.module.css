@@ -141,6 +141,85 @@
   color: #075fbf;
 }
 
+.autoChoice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  margin-top: 14px;
+  padding: 18px;
+  border: 1px solid #b9daf8;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #eef7ff 0%, #f8fcff 100%);
+}
+
+.autoChoice > div {
+  display: grid;
+  gap: 5px;
+}
+
+.autoChoice strong {
+  color: #102847;
+  font-size: 14px;
+}
+
+.autoChoice span {
+  max-width: 470px;
+  color: #516784;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.autoButton {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 17px;
+  border: 1px solid #0877ff;
+  border-radius: 999px;
+  background: #0877ff;
+  color: #fff;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.autoButton:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.choiceDivider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 0;
+  color: #71839a;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.choiceDivider::before,
+.choiceDivider::after {
+  height: 1px;
+  flex: 1;
+  background: #e2ebf3;
+  content: "";
+}
+
+.representativeNotice {
+  margin: 18px 0 0;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: #eef7ff;
+  color: #47617e;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .targetFields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -297,8 +376,10 @@
   .valueGrid span { min-height: auto; }
 
   .stepStatus,
-  .actions {
+  .actions,
+  .autoChoice {
     align-items: stretch;
+    grid-template-columns: 1fr;
     flex-direction: column;
   }
 
@@ -307,6 +388,8 @@
   .primaryButton {
     width: 100%;
   }
+
+  .autoButton { width: 100%; }
 
   .targetProgressRow {
     grid-template-columns: 32px minmax(0, 1fr) auto;

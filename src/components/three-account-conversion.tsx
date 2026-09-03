@@ -25,6 +25,7 @@ export type ThreeAccountConversionProps = {
   onEmailChange: (value: string) => void;
   onSubmitEmail: () => void | Promise<void>;
   onSubmitTargets: (targets: PersonalizationTargetInput[]) => void | Promise<void>;
+  onAutoSelectTargets?: () => void | Promise<void>;
   onOpenLink?: (position: number) => void;
 };
 
@@ -57,14 +58,17 @@ export function ThreeAccountConversion({
   onEmailChange,
   onSubmitEmail,
   onSubmitTargets,
+  onAutoSelectTargets,
   onOpenLink
 }: ThreeAccountConversionProps) {
   const [targets, setTargets] = useState<PersonalizationTargetInput[]>(emptyTargets);
+  const [autoSelecting, setAutoSelecting] = useState(false);
   const requestIsWorking = Boolean(
     request && ["queued", "generating"].includes(request.status)
   );
   const requestIsTerminal = Boolean(request && isTerminal(request.status));
   const busy = ["saving_email", "saving_targets", "polling"].includes(status);
+  const autoBusy = autoSelecting || busy;
 
   const readyTargets = useMemo(
     () => request?.targets.filter((target) => target.status === "ready" && target.link) ?? [],
@@ -86,6 +90,16 @@ export function ThreeAccountConversion({
         ...(role?.trim() ? { role: role.trim() } : {})
       }))
     );
+  };
+
+  const autoSelectTargets = async () => {
+    if (!onAutoSelectTargets || autoBusy) return;
+    setAutoSelecting(true);
+    try {
+      await onAutoSelectTargets();
+    } finally {
+      setAutoSelecting(false);
+    }
   };
 
   const updateTarget = (
@@ -118,6 +132,12 @@ export function ThreeAccountConversion({
               ? "Open each finished version below. Targets without a link were withheld because they did not pass the evidence or final quality gate."
               : "No generic account page was released. The targets below show where the evidence or final quality gate stopped the build."}
         </p>
+
+        {request?.selectionMode === "representative" && (
+          <p className={styles.representativeNotice}>
+            These representative companies were selected for this demo. They are illustrative examples, not account-fit recommendations.
+          </p>
+        )}
 
         <div className={styles.targetProgress} aria-live="polite">
           {request?.targets.map((target) => (
@@ -176,7 +196,7 @@ export function ThreeAccountConversion({
           Build three account versions from this experience.
         </h2>
         <p className={styles.intro}>
-          Enter your work email. Next, choose three target companies. We will create account-specific messaging, proof, imagery, resources, and next steps.
+          Enter your work email. Next, add three target companies or let us choose representative examples. We will create account-specific messaging, proof, imagery, resources, and next steps.
         </p>
         <div className={styles.valueGrid} aria-label="What will be created">
           <span><Check size={15} />One focused version per account</span>
@@ -198,7 +218,7 @@ export function ThreeAccountConversion({
           />
           {error && <p id="personalization-form-error" className={styles.error} role="alert">{error}</p>}
           <button className={styles.primaryButton} type="submit" disabled={busy}>
-            {status === "saving_email" ? "Saving your request" : "Choose my 3 accounts"}
+            {status === "saving_email" ? "Saving your request" : "Continue"}
             {status === "saving_email" ? (
               <LoaderCircle className={styles.spinner} size={17} />
             ) : (
@@ -215,14 +235,38 @@ export function ThreeAccountConversion({
 
   return (
     <div className={styles.panel}>
-      <h2 id="personalization-dialog-title">Choose the three accounts.</h2>
+      <h2 id="personalization-dialog-title">Choose your accounts, or let us.</h2>
       <p className={styles.intro}>
-        Add exactly three public company domains. A buyer role is optional and helps focus each account’s story.
+        Enter three public company domains. If you would rather skip this step, we can select three representative companies for the demo.
       </p>
       <div className={styles.stepStatus} aria-label="Step 2 of 2">
         <span>Work email saved as {request?.emailMasked || "your business email"}</span>
-        <strong>3 accounts required</strong>
+        <strong>Account details optional</strong>
       </div>
+      {onAutoSelectTargets && (
+        <div className={styles.autoChoice}>
+          <div>
+            <strong>Skip the account details.</strong>
+            <span id="representative-account-explanation">
+              We will choose three public companies and build all three versions now. These are illustrative examples, not account recommendations.
+            </span>
+          </div>
+          <button
+            className={styles.autoButton}
+            type="button"
+            onClick={() => void autoSelectTargets()}
+            disabled={autoBusy}
+            aria-busy={autoSelecting}
+            aria-describedby="representative-account-explanation"
+          >
+            {autoSelecting ? "Choosing accounts" : "Pick 3 accounts for me"}
+            {autoSelecting ? <LoaderCircle className={styles.spinner} size={17} /> : <ArrowRight size={17} />}
+          </button>
+        </div>
+      )}
+      {onAutoSelectTargets && (
+        <div className={styles.choiceDivider}><span>Or choose your own</span></div>
+      )}
       <form className={styles.form} onSubmit={submitTargets}>
         <div className={styles.targetFields}>
           {targets.map((target, index) => (
@@ -256,7 +300,7 @@ export function ThreeAccountConversion({
         </div>
         {error && <p id="personalization-form-error" className={styles.error} role="alert">{error}</p>}
         <div className={styles.actions}>
-          <button className={styles.primaryButton} type="submit" disabled={busy}>
+          <button className={styles.primaryButton} type="submit" disabled={autoBusy}>
             {status === "saving_targets" ? "Starting all three" : "Build 3 account versions"}
             {status === "saving_targets" ? (
               <LoaderCircle className={styles.spinner} size={17} />

@@ -3163,6 +3163,7 @@ export function SaveExperienceDialog({
   onEmailChange,
   onSubmitEmail,
   onSubmitTargets,
+  onAutoSelectTargets,
   onOpenLink,
   onClose
 }: {
@@ -3174,6 +3175,7 @@ export function SaveExperienceDialog({
   onEmailChange: (email: string) => void;
   onSubmitEmail: () => void | Promise<void>;
   onSubmitTargets: (targets: PersonalizationTargetInput[]) => void | Promise<void>;
+  onAutoSelectTargets?: () => void | Promise<void>;
   onOpenLink?: (position: number) => void;
   onClose: () => void;
 }) {
@@ -3191,6 +3193,7 @@ export function SaveExperienceDialog({
           onEmailChange={onEmailChange}
           onSubmitEmail={onSubmitEmail}
           onSubmitTargets={onSubmitTargets}
+          onAutoSelectTargets={onAutoSelectTargets}
           onOpenLink={onOpenLink}
         />
       </section>
@@ -4222,7 +4225,7 @@ export function TryMeNowApp() {
       setPersonalizationStatus("polling");
       captureUnifiedProductEvent("personalization_targets_submitted", {
         sessionId: session.id,
-        properties: { target_count: 3 }
+        properties: { target_count: 3, selection_mode: "manual" }
       });
       recordPersonalizationStatus(result.request, session.id);
     } catch (requestError) {
@@ -4232,6 +4235,35 @@ export function TryMeNowApp() {
         requestError instanceof Error
           ? requestError.message
           : "We could not start the three account builds."
+      );
+    }
+  };
+
+  const autoSelectPersonalizationTargets = async () => {
+    if (!session) return;
+    const requestGeneration = resetGeneration.current;
+    setPersonalizationStatus("saving_targets");
+    setPersonalizationError("");
+    try {
+      const result = await api<{ request: PublicPersonalizationRequest }>(
+        `/api/sessions/${session.id}/personalization-request`,
+        { method: "PATCH", body: JSON.stringify({ autoSelect: true }) }
+      );
+      if (isResetGenerationStale(requestGeneration)) return;
+      setPersonalizationRequest(result.request);
+      setPersonalizationStatus("polling");
+      captureUnifiedProductEvent("personalization_targets_submitted", {
+        sessionId: session.id,
+        properties: { target_count: 3, selection_mode: "representative" }
+      });
+      recordPersonalizationStatus(result.request, session.id);
+    } catch (requestError) {
+      if (isResetGenerationStale(requestGeneration)) return;
+      setPersonalizationStatus("error");
+      setPersonalizationError(
+        requestError instanceof Error
+          ? requestError.message
+          : "We could not choose the three account builds."
       );
     }
   };
@@ -4715,6 +4747,7 @@ export function TryMeNowApp() {
         onEmailChange={setPersonalizationEmail}
         onSubmitEmail={startPersonalizationRequest}
         onSubmitTargets={submitPersonalizationTargets}
+        onAutoSelectTargets={autoSelectPersonalizationTargets}
         onOpenLink={(position) => {
           captureUnifiedProductEvent("personalization_variant_link_opened", {
             sessionId: session.id,

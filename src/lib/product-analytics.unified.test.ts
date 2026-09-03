@@ -257,7 +257,7 @@ describe("unified product analytics contracts", () => {
             eventId: "tme_personaltargets01",
             event: "personalization_targets_submitted",
             category: "conversion",
-            properties: { target_count: 3 }
+            properties: { target_count: 3, selection_mode: "representative" }
           })
         },
         {
