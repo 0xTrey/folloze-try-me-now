@@ -361,9 +361,24 @@ export async function runSectionWriters(
   };
 
   let completedSections = 0;
+  let progressWrites = Promise.resolve();
   const reportSectionWritten = async () => {
     completedSections += 1;
-    await input.onSectionWritten?.(completedSections, contracts.length);
+    const completed = completedSections;
+    // Provider work finishes concurrently, but a progress receipt commonly
+    // updates one shared session record. Serialize those writes so successful
+    // section work cannot be rejected by progress-only CAS contention. A
+    // progress callback is advisory and must never turn usable copy into a
+    // provider failure or prevent the final artifact from being assembled.
+    progressWrites = progressWrites.then(async () => {
+      try {
+        await input.onSectionWritten?.(completed, contracts.length);
+      } catch {
+        // The caller can observe missing intermediate receipts on its next
+        // durable update. Final compilation and readback remain authoritative.
+      }
+    });
+    await progressWrites;
   };
 
   let attempts: Attempt[];

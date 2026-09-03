@@ -470,6 +470,41 @@ describe("bounded parallel section writing", () => {
     );
   });
 
+  it("serializes progress receipts and keeps callback failures out of provider outcomes", async () => {
+    let activeProgressWrites = 0;
+    let peakProgressWrites = 0;
+    const observed: number[] = [];
+    const client: SectionModelClient = {
+      async writeSection(contract) {
+        return goodResponse(contract);
+      }
+    };
+
+    const result = await runSectionWriters({
+      contracts: contracts(4),
+      client,
+      fallback,
+      deadlineMs: 5_000,
+      onSectionWritten: async (completed) => {
+        activeProgressWrites += 1;
+        peakProgressWrites = Math.max(peakProgressWrites, activeProgressWrites);
+        observed.push(completed);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        activeProgressWrites -= 1;
+        if (completed === 2) throw new Error("progress store conflict");
+      }
+    });
+
+    expect(peakProgressWrites).toBe(1);
+    expect(observed).toEqual([1, 2, 3, 4]);
+    expect(result.results.map(({ outcome }) => outcome)).toEqual([
+      "model",
+      "model",
+      "model",
+      "model"
+    ]);
+  });
+
   it("accepts a candidate that stays inside its evidence contract", () => {
     const [contract] = contracts(1);
     const normalized = normalizeModelCandidate(contract!, {

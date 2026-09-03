@@ -3444,43 +3444,78 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       budget: refinementBudget,
       expectedFingerprint,
       onWritingProgress: async (completed, total) => {
-        await advanceBuildPhase({
-          id,
-          attemptId,
-          expectedFingerprint,
-          completed: ["queued", "researching", "planning"],
-          active: "writing",
-          phase: "writing",
-          budget: refinementBudget,
-          notes: {
-            writing: `Writing section ${completed} of ${total}`
-          }
-        });
+        try {
+          latest = (await advanceBuildPhase({
+            id,
+            attemptId,
+            expectedFingerprint,
+            completed: ["queued", "researching", "planning"],
+            active: "writing",
+            phase: "writing",
+            budget: refinementBudget,
+            notes: {
+              writing: `Writing section ${completed} of ${total}`
+            }
+          })) ?? latest;
+        } catch (error) {
+          logServerError(error, {
+            sessionId: id,
+            traceId: traceIdForSession(latest),
+            operation: "generation_progress",
+            stage: "writing",
+            code: "generation_progress_write_failed",
+            details: { completed, total }
+          });
+          latest = (await getSession(id)) ?? latest;
+        }
       },
       onCheckingProgress: async (sectionCount) => {
-        latest = (await advanceBuildPhase({
-          id,
-          attemptId,
-          expectedFingerprint,
-          completed: ["queued", "researching", "planning", "writing"],
-          active: "checking",
-          phase: "checking",
-          budget: refinementBudget,
-          notes: sectionCount
-            ? { checking: `${sectionCount} sections checked` }
-            : {}
-        })) ?? latest;
+        try {
+          latest = (await advanceBuildPhase({
+            id,
+            attemptId,
+            expectedFingerprint,
+            completed: ["queued", "researching", "planning", "writing"],
+            active: "checking",
+            phase: "checking",
+            budget: refinementBudget,
+            notes: sectionCount
+              ? { checking: `${sectionCount} sections checked` }
+              : {}
+          })) ?? latest;
+        } catch (error) {
+          logServerError(error, {
+            sessionId: id,
+            traceId: traceIdForSession(latest),
+            operation: "generation_progress",
+            stage: "checking",
+            code: "generation_progress_write_failed",
+            details: { sectionCount }
+          });
+          latest = (await getSession(id)) ?? latest;
+        }
       },
       onFinalizingProgress: async () => {
-        latest = (await advanceBuildPhase({
-          id,
-          attemptId,
-          expectedFingerprint,
-          completed: ["queued", "researching", "planning", "writing", "checking"],
-          active: "finalizing",
-          phase: "finalizing",
-          budget: refinementBudget
-        })) ?? latest;
+        try {
+          latest = (await advanceBuildPhase({
+            id,
+            attemptId,
+            expectedFingerprint,
+            completed: ["queued", "researching", "planning", "writing", "checking"],
+            active: "finalizing",
+            phase: "finalizing",
+            budget: refinementBudget
+          })) ?? latest;
+        } catch (error) {
+          logServerError(error, {
+            sessionId: id,
+            traceId: traceIdForSession(latest),
+            operation: "generation_progress",
+            stage: "finalizing",
+            code: "generation_progress_write_failed"
+          });
+          latest = (await getSession(id)) ?? latest;
+        }
       }
     });
     const finalSourceRevision = latest.revision;

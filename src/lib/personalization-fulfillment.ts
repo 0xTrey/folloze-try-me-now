@@ -10,6 +10,7 @@ import {
   acquirePersonalizationExecution,
   finishPersonalizationExecution,
   getPersonalizationRequest,
+  markPersonalizationTargetsResearching,
   updatePersonalizationTarget,
   type PersonalizationRequest,
   type PersonalizationTarget
@@ -24,6 +25,7 @@ type FulfillmentDependencies = {
   patchSessionAnswers: typeof patchSessionAnswers;
   runPreviewEnrichmentWave: typeof runPreviewEnrichmentWave;
   updateSession: typeof updateSession;
+  updatePersonalizationTarget: typeof updatePersonalizationTarget;
   canRevealSession: (session: TryMeSession) => boolean;
   targetEvidenceCount: (session: TryMeSession) => number;
 };
@@ -34,9 +36,43 @@ const defaultDependencies: FulfillmentDependencies = {
   patchSessionAnswers,
   runPreviewEnrichmentWave,
   updateSession,
+  updatePersonalizationTarget,
   canRevealSession: (session) => canRevealFinalExperience(toPublicSession(session)),
   targetEvidenceCount: (session) => targetAccountEvidenceFor(session.targetBrand).length
 };
+
+type TargetStatusUpdate = Omit<
+  Parameters<typeof updatePersonalizationTarget>[0],
+  "sessionId" | "attemptId"
+>;
+
+type TargetStatusWriter = (
+  input: TargetStatusUpdate
+) => ReturnType<typeof updatePersonalizationTarget>;
+
+/**
+ * Target research and generation run in parallel. Their small status writes
+ * share one request record, so they must be serialized to avoid Blob CAS
+ * contention without slowing the expensive work.
+ */
+function targetStatusWriter(
+  sessionId: string,
+  attemptId: string,
+  dependencies: FulfillmentDependencies
+): TargetStatusWriter {
+  let tail = Promise.resolve<unknown>(undefined);
+  return (input) => {
+    const scheduled = tail.then(() =>
+      dependencies.updatePersonalizationTarget({
+        sessionId,
+        attemptId,
+        ...input
+      })
+    );
+    tail = scheduled.catch(() => undefined);
+    return scheduled;
+  };
+}
 
 function childAnswersFor(
   baseline: TryMeSession,
@@ -229,16 +265,10 @@ async function fulfillTarget(input: {
   target: PersonalizationTarget;
   attemptId: string;
   dependencies: FulfillmentDependencies;
+  writeTargetStatus: TargetStatusWriter;
 }): Promise<void> {
-  const { baseline, request, target, attemptId, dependencies } = input;
+  const { baseline, request, target, dependencies, writeTargetStatus } = input;
   if (["ready", "needs_review", "failed"].includes(target.status)) return;
-
-  await updatePersonalizationTarget({
-    sessionId: request.sessionId,
-    attemptId,
-    targetId: target.id,
-    status: "researching"
-  });
 
   try {
     let child = await prepareChildSession(
@@ -266,9 +296,7 @@ async function fulfillTarget(input: {
       if (dependencies.canRevealSession(child)) {
         await quarantineEvidenceFreeChild(target.generatedSessionId, dependencies);
       }
-      await updatePersonalizationTarget({
-        sessionId: request.sessionId,
-        attemptId,
+      await writeTargetStatus({
         targetId: target.id,
         status: "needs_review",
         evidenceCount,
@@ -283,9 +311,7 @@ async function fulfillTarget(input: {
         (child.status === "brand_help_required"
           ? "target_brand_help_required"
           : "personalization_final_gate_failed");
-      await updatePersonalizationTarget({
-        sessionId: request.sessionId,
-        attemptId,
+      await writeTargetStatus({
         targetId: target.id,
         status: child.status === "brand_help_required" ? "needs_review" : "failed",
         evidenceCount,
@@ -295,9 +321,7 @@ async function fulfillTarget(input: {
     }
 
     child = await makeChildPermanent(target.generatedSessionId, dependencies);
-    await updatePersonalizationTarget({
-      sessionId: request.sessionId,
-      attemptId,
+    await writeTargetStatus({
       targetId: target.id,
       status: "ready",
       link: `/e/${target.generatedSessionId}`,
@@ -311,9 +335,7 @@ async function fulfillTarget(input: {
       code: error instanceof HttpError ? error.code : "personalization_variant_failed",
       details: { position: target.position }
     });
-    await updatePersonalizationTarget({
-      sessionId: request.sessionId,
-      attemptId,
+    await writeTargetStatus({
       targetId: target.id,
       status: "failed",
       errorCode:
@@ -336,25 +358,33 @@ export async function runPersonalizationFulfillment(
   if (!lease.acquired) return lease.request;
   const { request, attemptId } = lease;
   const baseline = await dependencies.getSession(sessionId);
+  const writeTargetStatus = targetStatusWriter(sessionId, attemptId, dependencies);
 
   if (!baseline || !baselineMatchesRequest(baseline, request, dependencies)) {
-    await Promise.all(
-      request.targets.map((target) =>
-        updatePersonalizationTarget({
-          sessionId,
-          attemptId,
-          targetId: target.id,
-          status: "failed",
-          errorCode: baseline ? "personalization_baseline_changed" : "personalization_baseline_missing"
-        })
-      )
-    );
+    for (const target of request.targets) {
+      await writeTargetStatus({
+        targetId: target.id,
+        status: "failed",
+        errorCode: baseline ? "personalization_baseline_changed" : "personalization_baseline_missing"
+      });
+    }
     return finishPersonalizationExecution(sessionId, attemptId);
   }
 
+  const startedRequest = await markPersonalizationTargetsResearching(
+    sessionId,
+    attemptId
+  );
   await Promise.allSettled(
-    request.targets.map((target) =>
-      fulfillTarget({ baseline, request, target, attemptId, dependencies })
+    startedRequest.targets.map((target) =>
+      fulfillTarget({
+        baseline,
+        request,
+        target,
+        attemptId,
+        dependencies,
+        writeTargetStatus
+      })
     )
   );
   return finishPersonalizationExecution(sessionId, attemptId);

@@ -5,7 +5,8 @@ import {
   addPersonalizationTargets,
   clearMemoryPersonalizationRequestsForTest,
   createPersonalizationRequest,
-  getPersonalizationRequest
+  getPersonalizationRequest,
+  updatePersonalizationTarget
 } from "@/lib/personalization-request-store";
 import type { BrandProfile, PublicTryMeSession, TryMeSession } from "@/lib/types";
 
@@ -81,6 +82,9 @@ function dependenciesFor(
   const persistentIds: string[] = [];
   let active = 0;
   let peak = 0;
+  let statusesAtFirstRun: string[] | undefined;
+  let activeStatusWrites = 0;
+  let peakStatusWrites = 0;
   const create = vi.fn(async (input, options) => {
     const id = options?.sessionId ?? "random";
     const now = new Date().toISOString();
@@ -126,6 +130,10 @@ function dependenciesFor(
     };
   });
   const run = vi.fn(async (id: string) => {
+    if (!statusesAtFirstRun) {
+      const request = await getPersonalizationRequest(baseline.id);
+      statusesAtFirstRun = request?.targets.map((target) => target.status) ?? [];
+    }
     const session = sessions.get(id)!;
     const domain = session.answers.targetDomain!;
     active += 1;
@@ -155,6 +163,16 @@ function dependenciesFor(
     if (options.persist) persistentIds.push(id);
     return structuredClone(next);
   });
+  const updateTarget = vi.fn(async (input) => {
+    activeStatusWrites += 1;
+    peakStatusWrites = Math.max(peakStatusWrites, activeStatusWrites);
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    try {
+      return await updatePersonalizationTarget(input);
+    } finally {
+      activeStatusWrites -= 1;
+    }
+  });
   return {
     dependencies: {
       getSession: async (id: string) => structuredClone(sessions.get(id) ?? null),
@@ -162,6 +180,7 @@ function dependenciesFor(
       patchSessionAnswers: patch,
       runPreviewEnrichmentWave: run,
       updateSession: update,
+      updatePersonalizationTarget: updateTarget,
       canRevealSession: (session: TryMeSession) =>
         session.status === "preview_ready_unclaimed" &&
         session.finalArtifact?.artifactDigest === session.experience?.artifactDigest,
@@ -173,6 +192,8 @@ function dependenciesFor(
     run,
     persistentIds,
     peak: () => peak,
+    peakStatusWrites: () => peakStatusWrites,
+    statusesAtFirstRun: () => statusesAtFirstRun,
     sessions
   };
 }
@@ -211,7 +232,13 @@ describe("personalization fulfillment", () => {
     expect(harness.create).toHaveBeenCalledTimes(3);
     expect(harness.patch).toHaveBeenCalledTimes(3);
     expect(harness.run).toHaveBeenCalledTimes(3);
+    expect(harness.statusesAtFirstRun()).toEqual([
+      "researching",
+      "researching",
+      "researching"
+    ]);
     expect(harness.peak()).toBe(3);
+    expect(harness.peakStatusWrites()).toBe(1);
     expect(new Set(harness.persistentIds).size).toBe(3);
     expect(result?.targets.every((target) => target.link === `/e/${target.generatedSessionId}`)).toBe(true);
     expect(result?.targets.every((target) => target.evidenceCount === 2)).toBe(true);

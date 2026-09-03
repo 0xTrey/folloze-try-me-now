@@ -7,6 +7,7 @@ import {
   createPersonalizationRequest,
   finishPersonalizationExecution,
   getPersonalizationRequest,
+  markPersonalizationTargetsResearching,
   toPublicPersonalizationRequest,
   updatePersonalizationTarget,
   validateTargetDomains
@@ -146,6 +147,17 @@ describe("personalization request contract", () => {
     if (!lease.acquired) throw new Error("Expected execution lease.");
     const duplicateLease = await acquirePersonalizationExecution(request.sessionId);
     expect(duplicateLease.acquired).toBe(false);
+
+    const researching = await markPersonalizationTargetsResearching(
+      request.sessionId,
+      lease.attemptId
+    );
+    expect(researching.targets.map((target) => target.status)).toEqual([
+      "researching",
+      "researching",
+      "researching"
+    ]);
+    expect(researching.targets.every((target) => Boolean(target.startedAt))).toBe(true);
 
     await updatePersonalizationTarget({
       sessionId: request.sessionId,

@@ -512,6 +512,34 @@ export async function acquirePersonalizationExecution(
     : { acquired: false, request };
 }
 
+/**
+ * Moves every queued target into the visible research phase with one
+ * conditional write. The generation work can then fan out without three
+ * workers contending on the same request record just to announce startup.
+ */
+export async function markPersonalizationTargetsResearching(
+  sessionId: string,
+  attemptId: string
+): Promise<PersonalizationRequest> {
+  return mutateRequest(sessionId, (current) => {
+    if (current.executionAttemptId !== attemptId) return undefined;
+    const now = new Date().toISOString();
+    let changed = false;
+    const targets = current.targets.map((target) => {
+      if (TERMINAL_TARGET_STATUSES.has(target.status) || target.status === "researching") {
+        return target;
+      }
+      changed = true;
+      return {
+        ...target,
+        status: "researching" as const,
+        startedAt: target.startedAt ?? now
+      };
+    });
+    return changed ? { ...current, targets } : undefined;
+  });
+}
+
 export async function updatePersonalizationTarget(input: {
   sessionId: string;
   attemptId: string;
