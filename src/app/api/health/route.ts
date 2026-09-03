@@ -9,7 +9,7 @@ import {
   hasRemoteBrandHarvester,
   hasRemoteFolloze,
   publicRuntimeCapabilities,
-  hasResend
+  hasTransactionalEmail
 } from "@/lib/config";
 import { isDurableLeadStoreMode, leadStoreMode } from "@/lib/lead-store";
 import { productAnalyticsStoreMode } from "@/lib/product-analytics";
@@ -33,7 +33,7 @@ export function GET() {
     openAIConnected: hasOpenAI,
     distributedRateLimits,
     follozePublishReady: canPublishFolloze,
-    resendConnected: hasResend
+    resendConnected: hasTransactionalEmail
   });
   const readiness = productionReadiness({
     sessionStoreMode,
@@ -41,7 +41,7 @@ export function GET() {
     openAIConnected: hasOpenAI,
     distributedRateLimits,
     follozePublishReady: canPublishFolloze,
-    resendConnected: hasResend
+    resendConnected: hasTransactionalEmail
   });
   return NextResponse.json({
     ok: true,
@@ -79,7 +79,10 @@ export function GET() {
         connected: hasRemoteFolloze,
         publishReady: canPublishFolloze
       },
-      transactionalEmail: { mode: config.emailMode, connected: hasResend }
+      transactionalEmail: {
+        mode: config.emailMode,
+        connected: hasTransactionalEmail
+      }
     }
   }, { headers: noStoreHeaders });
 }

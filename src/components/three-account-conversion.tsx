@@ -50,6 +50,26 @@ function isTerminal(status: PublicPersonalizationRequest["status"]): boolean {
   return ["completed", "partial", "needs_review", "failed"].includes(status);
 }
 
+function deliveryCopy(request: PublicPersonalizationRequest): string {
+  switch (request.delivery.status) {
+    case "accepted":
+      return `AgentMail accepted the email to ${request.emailMasked} for delivery.`;
+    case "delivered":
+      return `The email was delivered to ${request.emailMasked}.`;
+    case "bounced":
+      return `The email to ${request.emailMasked} bounced. The verified links remain available here.`;
+    case "failed":
+      return `The links are ready here, but the email to ${request.emailMasked} could not be sent.`;
+    case "uncertain":
+      return `AgentMail has not confirmed the email outcome. The verified links remain available here.`;
+    case "not_configured":
+      return "Email delivery is not connected in this environment. The verified links remain available here.";
+    case "pending":
+    case "sending":
+      return `Preparing one email with the verified links for ${request.emailMasked}.`;
+  }
+}
+
 export function ThreeAccountConversion({
   email,
   request,
@@ -178,12 +198,22 @@ export function ThreeAccountConversion({
         {requestIsWorking && (
           <div className={styles.workingNote} role="status">
             <LoaderCircle className={styles.spinner} size={17} />
-            This dialog will update as each final link is verified.
+            This dialog will update as each final link is verified. We will email the links that pass.
+          </div>
+        )}
+        {requestIsTerminal && request && (
+          <div className={styles.workingNote} role="status">
+            {["pending", "sending"].includes(request.delivery.status) ? (
+              <LoaderCircle className={styles.spinner} size={17} />
+            ) : ["accepted", "delivered"].includes(request.delivery.status) ? (
+              <Check size={17} />
+            ) : null}
+            {deliveryCopy(request)}
           </div>
         )}
         {error && <p className={styles.error} role="alert">{error}</p>}
         <p className={styles.testBoundary}>
-          Test delivery happens here. Email delivery and Folloze publishing stay off until production.
+          These versions stay app-hosted for testing. Nothing is published to Folloze.
         </p>
       </div>
     );
@@ -227,7 +257,7 @@ export function ThreeAccountConversion({
           </button>
         </form>
         <p className={styles.testBoundary}>
-          We save this request to your finished app experience. Nothing is emailed or published to Folloze in this test phase.
+          We use your work email only to send the final links you requested. No newsletter signup, and nothing is published to Folloze.
         </p>
       </div>
     );

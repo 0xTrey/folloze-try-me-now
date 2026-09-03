@@ -3158,6 +3158,15 @@ function useDialogBehavior(
   return { dialogRef, onKeyDown };
 }
 
+function personalizationRequestNeedsPolling(
+  request: PublicPersonalizationRequest
+): boolean {
+  return (
+    ["queued", "generating"].includes(request.status) ||
+    ["pending", "sending"].includes(request.delivery.status)
+  );
+}
+
 export function SaveExperienceDialog({
   open,
   email,
@@ -4285,7 +4294,7 @@ export function TryMeNowApp() {
       if (cancelled || isResetGenerationStale(requestGeneration)) return;
       setPersonalizationRequest(result.request);
       recordPersonalizationStatus(result.request, session.id);
-      if (["queued", "generating"].includes(result.request.status)) {
+      if (personalizationRequestNeedsPolling(result.request)) {
         setPersonalizationStatus("polling");
       }
     }).catch((requestError) => {
@@ -4314,7 +4323,7 @@ export function TryMeNowApp() {
       !showSavePrompt ||
       !session ||
       !personalizationRequest ||
-      !["queued", "generating"].includes(personalizationRequest.status)
+      !personalizationRequestNeedsPolling(personalizationRequest)
     ) return;
     const requestGeneration = resetGeneration.current;
     let cancelled = false;
@@ -4326,7 +4335,7 @@ export function TryMeNowApp() {
         setPersonalizationRequest(result.request);
         recordPersonalizationStatus(result.request, session.id);
         setPersonalizationStatus(
-          ["queued", "generating"].includes(result.request.status)
+          personalizationRequestNeedsPolling(result.request)
             ? "polling"
             : "idle"
         );

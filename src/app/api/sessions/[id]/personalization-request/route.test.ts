@@ -6,6 +6,7 @@ import {
   recoverPersonalizationFulfillment,
   runPersonalizationFulfillment
 } from "@/lib/personalization-fulfillment";
+import { recoverPersonalizationDelivery } from "@/lib/personalization-delivery";
 import {
   addPersonalizationTargets,
   createPersonalizationRequest,
@@ -25,6 +26,9 @@ vi.mock("@/lib/personalization-fulfillment", () => ({
   recoverPersonalizationFulfillment: vi.fn(),
   runPersonalizationFulfillment: vi.fn()
 }));
+vi.mock("@/lib/personalization-delivery", () => ({
+  recoverPersonalizationDelivery: vi.fn()
+}));
 vi.mock("@/lib/personalization-request-store", () => ({
   addPersonalizationTargets: vi.fn(),
   createPersonalizationRequest: vi.fn(),
@@ -34,7 +38,8 @@ vi.mock("@/lib/personalization-request-store", () => ({
     sessionId: value.sessionId,
     emailMasked: "b***@example.com",
     targets: value.targets,
-    status: value.status
+    status: value.status,
+    delivery: value.delivery ?? { status: "pending", attemptCount: 0 }
   }))
 }));
 vi.mock("@/lib/personalization-default-targets", () => ({
@@ -180,6 +185,31 @@ describe("personalization request API", () => {
     const body = await response.json();
     expect(JSON.stringify(body)).not.toContain("buyer@example.com");
     expect(JSON.stringify(body)).not.toContain(digest);
+  });
+
+  it("recovers pending email delivery for an already-finished request", async () => {
+    vi.mocked(getPersonalizationRequest).mockResolvedValue({
+      ...privateRequest,
+      status: "completed",
+      targets: [
+        {
+          id: "target-1",
+          position: 1,
+          domain: "one.com",
+          generatedSessionId: "child-1",
+          status: "ready",
+          link: "/e/child-1"
+        }
+      ],
+      delivery: { status: "pending", attemptCount: 0 }
+    } as never);
+
+    const response = await GET(request("GET"), context);
+    expect(response.status).toBe(200);
+    const callback = vi.mocked(after).mock.calls[0]?.[0];
+    await (callback as () => Promise<void>)();
+    expect(recoverPersonalizationDelivery).toHaveBeenCalledWith(id);
+    expect(recoverPersonalizationFulfillment).not.toHaveBeenCalled();
   });
 
   it("does not queue targets when the frozen standard artifact changed", async () => {

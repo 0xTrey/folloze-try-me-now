@@ -29,6 +29,12 @@ const request = (
   status,
   ...(selectionMode ? { selectionMode } : {}),
   variantCount: 3,
+  delivery: {
+    status: status === "completed" ? "accepted" : "pending",
+    ...(status === "completed"
+      ? { acceptedAt: "2026-09-03T10:00:02.000Z" }
+      : {})
+  },
   createdAt: "2026-09-03T10:00:00.000Z",
   updatedAt: "2026-09-03T10:00:01.000Z",
   expiresAt: "2026-10-03T10:00:00.000Z"
@@ -116,7 +122,7 @@ describe("ThreeAccountConversion", () => {
     expect(screen.getByText(/not account-fit recommendations/i)).toBeInTheDocument();
   });
 
-  it("shows honest parallel progress without promising email delivery", () => {
+  it("shows honest parallel progress and promises only final-gated email links", () => {
     render(
       <ThreeAccountConversion
         {...baseProps}
@@ -127,7 +133,8 @@ describe("ThreeAccountConversion", () => {
     );
     expect(screen.getByRole("heading", { name: "We are building all three versions in parallel." })).toBeInTheDocument();
     expect(screen.getByText("Building")).toBeInTheDocument();
-    expect(screen.getByText(/Email delivery and Folloze publishing stay off until production/)).toBeInTheDocument();
+    expect(screen.getByText(/We will email the links that pass/)).toBeInTheDocument();
+    expect(screen.getByText(/Nothing is published to Folloze/)).toBeInTheDocument();
   });
 
   it("shows only final ready links and records which position opened", () => {
@@ -141,6 +148,7 @@ describe("ThreeAccountConversion", () => {
       />
     );
     expect(screen.getAllByRole("link", { name: /Open/i })).toHaveLength(3);
+    expect(screen.getByText(/AgentMail accepted the email/)).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("link", { name: /Open/i })[1]!);
     expect(onOpenLink).toHaveBeenCalledWith(2);
   });

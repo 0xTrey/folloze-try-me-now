@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   acquirePersonalizationExecution,
+  acquirePersonalizationDelivery,
   addPersonalizationTargets,
   clearMemoryPersonalizationRequestsForTest,
   createPersonalizationRequest,
   finishPersonalizationExecution,
   getPersonalizationRequest,
   markPersonalizationTargetsResearching,
+  markPersonalizationDeliveryNotConfigured,
+  recordPersonalizationDeliveryAccepted,
+  recordPersonalizationDeliveryFailure,
   toPublicPersonalizationRequest,
   updatePersonalizationTarget,
   validateTargetDomains
@@ -203,6 +207,106 @@ describe("personalization request contract", () => {
     ]);
   });
 
+  it("leases one delivery attempt and never lets a stale result downgrade acceptance", async () => {
+    const request = await createPersonalizationRequest({
+      sessionId: "session-delivery",
+      email: "buyer@example.com",
+      artifactRevision: 4,
+      artifactDigest: digest
+    });
+    const queued = await addPersonalizationTargets(
+      request.sessionId,
+      targets,
+      "seller.com"
+    );
+    const execution = await acquirePersonalizationExecution(request.sessionId);
+    if (!execution.acquired) throw new Error("Expected generation lease.");
+    await markPersonalizationTargetsResearching(
+      request.sessionId,
+      execution.attemptId
+    );
+    for (const target of queued.targets) {
+      await updatePersonalizationTarget({
+        sessionId: request.sessionId,
+        attemptId: execution.attemptId,
+        targetId: target.id,
+        status: "ready",
+        link: `/e/${target.generatedSessionId}`,
+        artifactDigest: "c".repeat(64),
+        evidenceCount: 2
+      });
+    }
+    await finishPersonalizationExecution(request.sessionId, execution.attemptId);
+
+    const delivery = await acquirePersonalizationDelivery(request.sessionId);
+    expect(delivery.acquired).toBe(true);
+    if (!delivery.acquired) throw new Error("Expected delivery lease.");
+    const duplicate = await acquirePersonalizationDelivery(request.sessionId);
+    expect(duplicate.acquired).toBe(false);
+
+    const accepted = await recordPersonalizationDeliveryAccepted({
+      sessionId: request.sessionId,
+      attemptId: delivery.attemptId,
+      messageId: "message-1",
+      threadId: "thread-1"
+    });
+    expect(accepted.delivery?.status).toBe("accepted");
+    expect(accepted.delivery?.messageId).toBe("message-1");
+
+    const staleFailure = await recordPersonalizationDeliveryFailure({
+      sessionId: request.sessionId,
+      attemptId: delivery.attemptId,
+      status: "failed",
+      errorCode: "late failure"
+    });
+    expect(staleFailure.delivery?.status).toBe("accepted");
+    expect(toPublicPersonalizationRequest(staleFailure).delivery).toEqual({
+      status: "accepted",
+      acceptedAt: accepted.delivery?.acceptedAt
+    });
+  });
+
+  it("records an honest unconfigured state without consuming a delivery attempt", async () => {
+    const request = await createPersonalizationRequest({
+      sessionId: "session-unconfigured",
+      email: "buyer@example.com",
+      artifactRevision: 4,
+      artifactDigest: digest
+    });
+    const queued = await addPersonalizationTargets(
+      request.sessionId,
+      targets,
+      "seller.com"
+    );
+    const execution = await acquirePersonalizationExecution(request.sessionId);
+    if (!execution.acquired) throw new Error("Expected generation lease.");
+    await updatePersonalizationTarget({
+      sessionId: request.sessionId,
+      attemptId: execution.attemptId,
+      targetId: queued.targets[0]!.id,
+      status: "ready",
+      link: `/e/${queued.targets[0]!.generatedSessionId}`,
+      artifactDigest: "c".repeat(64),
+      evidenceCount: 2
+    });
+    for (const target of queued.targets.slice(1)) {
+      await updatePersonalizationTarget({
+        sessionId: request.sessionId,
+        attemptId: execution.attemptId,
+        targetId: target.id,
+        status: "failed",
+        errorCode: "provider_failed"
+      });
+    }
+    await finishPersonalizationExecution(request.sessionId, execution.attemptId);
+    const result = await markPersonalizationDeliveryNotConfigured(request.sessionId);
+    expect(result.delivery).toEqual({
+      status: "not_configured",
+      attemptCount: 0,
+      errorCode: "transactional_email_not_configured"
+    });
+  });
+
   it("publishes only a masked, bounded browser projection", async () => {
     const request = await createPersonalizationRequest({
       sessionId: "session-public",
@@ -217,7 +321,9 @@ describe("personalization request contract", () => {
     );
     const projection = toPublicPersonalizationRequest(queued);
     expect(projection.emailMasked).toBe("b***@example.com");
+    expect(projection.delivery).toEqual({ status: "pending" });
     expect(projection).not.toHaveProperty("email");
+    expect(projection.delivery).not.toHaveProperty("messageId");
     expect(projection).not.toHaveProperty("baselineArtifactDigest");
     expect(projection.targets[0]).not.toHaveProperty("generatedSessionId");
     expect(projection.targets[0]).not.toHaveProperty("artifactDigest");

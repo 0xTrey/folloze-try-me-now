@@ -26,6 +26,40 @@ export type PersonalizationRequestStatus =
 
 export type PersonalizationTargetSelectionMode = "manual" | "representative";
 
+export type PersonalizationDeliveryStatus =
+  | "pending"
+  | "sending"
+  | "accepted"
+  | "delivered"
+  | "bounced"
+  | "failed"
+  | "uncertain"
+  | "not_configured";
+
+export interface PersonalizationDelivery {
+  status: PersonalizationDeliveryStatus;
+  attemptCount: number;
+  provider?: "agentmail";
+  attemptId?: string;
+  leaseExpiresAt?: string;
+  firstAttemptAt?: string;
+  lastAttemptAt?: string;
+  acceptedAt?: string;
+  deliveredAt?: string;
+  bouncedAt?: string;
+  messageId?: string;
+  threadId?: string;
+  errorCode?: string;
+}
+
+export interface PublicPersonalizationDelivery {
+  status: PersonalizationDeliveryStatus;
+  acceptedAt?: string;
+  deliveredAt?: string;
+  bouncedAt?: string;
+  errorCode?: string;
+}
+
 export interface PersonalizationTarget {
   id: string;
   position: number;
@@ -52,6 +86,7 @@ export interface PersonalizationRequest {
   selectionMode?: PersonalizationTargetSelectionMode;
   variantCount: typeof PERSONALIZATION_TARGET_COUNT;
   consentScope: "transactional_experience_delivery";
+  delivery?: PersonalizationDelivery;
   executionAttemptId?: string;
   executionLeaseExpiresAt?: string;
   createdAt: string;
@@ -80,6 +115,7 @@ export interface PublicPersonalizationRequest {
   status: PersonalizationRequestStatus;
   selectionMode?: PersonalizationTargetSelectionMode;
   variantCount: typeof PERSONALIZATION_TARGET_COUNT;
+  delivery: PublicPersonalizationDelivery;
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
@@ -121,6 +157,19 @@ type RequestSnapshot = {
   record: PersonalizationRequest;
   etag?: string;
 };
+
+const defaultDelivery = (): PersonalizationDelivery => ({
+  status: "pending",
+  attemptCount: 0
+});
+
+function deliveryFor(
+  request: Pick<PersonalizationRequest, "delivery">
+): PersonalizationDelivery {
+  return request.delivery
+    ? structuredClone(request.delivery)
+    : defaultDelivery();
+}
 
 function assertDurableRequestStore(): void {
   if (process.env.NODE_ENV === "production" && !hasBlob) {
@@ -380,6 +429,7 @@ export async function createPersonalizationRequest(input: {
           status: "awaiting_targets",
           variantCount: PERSONALIZATION_TARGET_COUNT,
           consentScope: "transactional_experience_delivery",
+          delivery: defaultDelivery(),
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
           expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000).toISOString()
@@ -423,6 +473,7 @@ export async function createPersonalizationRequest(input: {
       status: "awaiting_targets",
       variantCount: PERSONALIZATION_TARGET_COUNT,
       consentScope: "transactional_experience_delivery",
+      delivery: defaultDelivery(),
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000).toISOString()
@@ -627,9 +678,157 @@ export async function finishPersonalizationExecution(
   });
 }
 
+export async function markPersonalizationDeliveryNotConfigured(
+  sessionId: string
+): Promise<PersonalizationRequest> {
+  return mutateRequest(sessionId, (current) => {
+    if (!TERMINAL_REQUEST_STATUSES.has(current.status)) return undefined;
+    if (!current.targets.some((target) => target.status === "ready" && target.link)) {
+      return undefined;
+    }
+    const delivery = deliveryFor(current);
+    if (!["pending", "not_configured"].includes(delivery.status)) return undefined;
+    if (delivery.status === "not_configured") return undefined;
+    return {
+      ...current,
+      delivery: {
+        ...delivery,
+        status: "not_configured",
+        errorCode: "transactional_email_not_configured"
+      }
+    };
+  });
+}
+
+export async function acquirePersonalizationDelivery(
+  sessionId: string,
+  leaseSeconds = 90
+): Promise<
+  | { acquired: false; request: PersonalizationRequest }
+  | { acquired: true; request: PersonalizationRequest; attemptId: string }
+> {
+  let acquiredAttemptId: string | undefined;
+  const request = await mutateRequest(sessionId, (current) => {
+    if (!TERMINAL_REQUEST_STATUSES.has(current.status)) return undefined;
+    if (!current.targets.some((target) => target.status === "ready" && target.link)) {
+      return undefined;
+    }
+    const delivery = deliveryFor(current);
+    const leaseExpiresAt = Date.parse(delivery.leaseExpiresAt ?? "");
+    if (
+      delivery.status === "sending" &&
+      Number.isFinite(leaseExpiresAt) &&
+      leaseExpiresAt > Date.now()
+    ) {
+      return undefined;
+    }
+    if (
+      !["pending", "not_configured", "sending"].includes(delivery.status)
+    ) {
+      return undefined;
+    }
+    const now = new Date();
+    acquiredAttemptId = randomUUID();
+    return {
+      ...current,
+      delivery: {
+        ...delivery,
+        status: "sending",
+        provider: "agentmail",
+        attemptCount: delivery.attemptCount + 1,
+        attemptId: acquiredAttemptId,
+        leaseExpiresAt: new Date(
+          now.getTime() + Math.max(30, Math.min(300, leaseSeconds)) * 1_000
+        ).toISOString(),
+        firstAttemptAt: delivery.firstAttemptAt ?? now.toISOString(),
+        lastAttemptAt: now.toISOString(),
+        errorCode: undefined
+      }
+    };
+  });
+  return acquiredAttemptId
+    ? { acquired: true, request, attemptId: acquiredAttemptId }
+    : { acquired: false, request };
+}
+
+function boundedProviderId(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 240);
+}
+
+export async function recordPersonalizationDeliveryAccepted(input: {
+  sessionId: string;
+  attemptId: string;
+  messageId: string;
+  threadId: string;
+}): Promise<PersonalizationRequest> {
+  return mutateRequest(input.sessionId, (current) => {
+    const delivery = deliveryFor(current);
+    if (
+      delivery.status !== "sending" ||
+      delivery.attemptId !== input.attemptId
+    ) {
+      return undefined;
+    }
+    const messageId = boundedProviderId(input.messageId);
+    const threadId = boundedProviderId(input.threadId);
+    if (!messageId || !threadId) {
+      throw new HttpError(
+        502,
+        "personalization_email_response_invalid",
+        "The email provider returned an invalid acceptance receipt."
+      );
+    }
+    const acceptedAt = new Date().toISOString();
+    return {
+      ...current,
+      delivery: {
+        ...delivery,
+        status: "accepted",
+        provider: "agentmail",
+        messageId,
+        threadId,
+        acceptedAt,
+        attemptId: undefined,
+        leaseExpiresAt: undefined,
+        errorCode: undefined
+      }
+    };
+  });
+}
+
+export async function recordPersonalizationDeliveryFailure(input: {
+  sessionId: string;
+  attemptId: string;
+  status: "failed" | "uncertain";
+  errorCode: string;
+}): Promise<PersonalizationRequest> {
+  return mutateRequest(input.sessionId, (current) => {
+    const delivery = deliveryFor(current);
+    if (
+      delivery.status !== "sending" ||
+      delivery.attemptId !== input.attemptId
+    ) {
+      return undefined;
+    }
+    return {
+      ...current,
+      delivery: {
+        ...delivery,
+        status: input.status,
+        attemptId: undefined,
+        leaseExpiresAt: undefined,
+        errorCode:
+          boundedErrorCode(input.errorCode) ??
+          "personalization_email_delivery_failed"
+      }
+    };
+  });
+}
+
 export function toPublicPersonalizationRequest(
   request: PersonalizationRequest
 ): PublicPersonalizationRequest {
+  const delivery = deliveryFor(request);
   return {
     id: request.id,
     sessionId: request.sessionId,
@@ -651,6 +850,13 @@ export function toPublicPersonalizationRequest(
     status: request.status,
     ...(request.selectionMode ? { selectionMode: request.selectionMode } : {}),
     variantCount: PERSONALIZATION_TARGET_COUNT,
+    delivery: {
+      status: delivery.status,
+      ...(delivery.acceptedAt ? { acceptedAt: delivery.acceptedAt } : {}),
+      ...(delivery.deliveredAt ? { deliveredAt: delivery.deliveredAt } : {}),
+      ...(delivery.bouncedAt ? { bouncedAt: delivery.bouncedAt } : {}),
+      ...(delivery.errorCode ? { errorCode: delivery.errorCode } : {})
+    },
     createdAt: request.createdAt,
     updatedAt: request.updatedAt,
     expiresAt: request.expiresAt

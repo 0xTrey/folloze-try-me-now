@@ -6,6 +6,7 @@ import {
   recoverPersonalizationFulfillment,
   runPersonalizationFulfillment
 } from "@/lib/personalization-fulfillment";
+import { recoverPersonalizationDelivery } from "@/lib/personalization-delivery";
 import {
   addPersonalizationTargets,
   createPersonalizationRequest,
@@ -197,6 +198,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
     if (["queued", "generating"].includes(personalizationRequest.status)) {
       after(() => recoverPersonalizationFulfillment(id));
+    } else if (
+      ["pending", "not_configured", "sending"].includes(
+        personalizationRequest.delivery?.status ?? "pending"
+      )
+    ) {
+      after(() => recoverPersonalizationDelivery(id));
     }
     return NextResponse.json(
       { request: toPublicPersonalizationRequest(personalizationRequest) },

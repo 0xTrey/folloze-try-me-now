@@ -33,7 +33,11 @@ export const config = {
     "disabled"
   ),
   follozeMode: oneOf(process.env.FOLLOZE_MODE, ["disabled", "draft", "publish"] as const, "disabled"),
-  emailMode: oneOf(process.env.EMAIL_MODE, ["console", "resend"] as const, "console"),
+  emailMode: oneOf(
+    process.env.EMAIL_MODE,
+    ["console", "resend", "agentmail"] as const,
+    "console"
+  ),
   marketoMode: oneOf(process.env.MARKETO_MODE, ["disabled", "sync"] as const, "disabled"),
   marketoEndpoint: nonEmptyFromEnv(process.env.MARKETO_REST_ENDPOINT, "").replace(/\/$/, ""),
   marketoMunchkinId: /^\d{3}-[A-Za-z0-9]{3}-\d{3}$/.test(marketoMunchkinId)
@@ -109,6 +113,13 @@ export const publicRuntimeCapabilities = Object.freeze({
 export const hasRemoteFolloze = false;
 export const canPublishFolloze = false;
 export const hasResend = config.emailMode === "resend" && Boolean(process.env.RESEND_API_KEY);
+export const hasAgentMail =
+  config.emailMode === "agentmail" &&
+  Boolean(process.env.AGENTMAIL_API_KEY?.trim()) &&
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    process.env.AGENTMAIL_INBOX_ID?.trim() ?? ""
+  );
+export const hasTransactionalEmail = hasResend || hasAgentMail;
 export const hasMarketo =
   config.marketoMode === "sync" &&
   /^https:\/\/[a-z0-9-]+\.mktorest\.com$/i.test(config.marketoEndpoint) &&

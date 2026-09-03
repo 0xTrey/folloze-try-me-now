@@ -1,6 +1,7 @@
 import { brandWithSessionLogoDelivery } from "@/lib/image-delivery";
 import { targetAccountEvidenceFor } from "@/lib/generation/campaign-context";
 import { HttpError, logServerError } from "@/lib/http";
+import { runPersonalizationDelivery } from "@/lib/personalization-delivery";
 import {
   createSession,
   patchSessionAnswers,
@@ -28,6 +29,7 @@ type FulfillmentDependencies = {
   updatePersonalizationTarget: typeof updatePersonalizationTarget;
   canRevealSession: (session: TryMeSession) => boolean;
   targetEvidenceCount: (session: TryMeSession) => number;
+  deliverPersonalizationRequest?: typeof runPersonalizationDelivery;
 };
 
 const defaultDependencies: FulfillmentDependencies = {
@@ -37,6 +39,7 @@ const defaultDependencies: FulfillmentDependencies = {
   runPreviewEnrichmentWave,
   updateSession,
   updatePersonalizationTarget,
+  deliverPersonalizationRequest: runPersonalizationDelivery,
   canRevealSession: (session) => canRevealFinalExperience(toPublicSession(session)),
   targetEvidenceCount: (session) => targetAccountEvidenceFor(session.targetBrand).length
 };
@@ -387,7 +390,13 @@ export async function runPersonalizationFulfillment(
       })
     )
   );
-  return finishPersonalizationExecution(sessionId, attemptId);
+  const settled = await finishPersonalizationExecution(sessionId, attemptId);
+  if (!settled.targets.some((target) => target.status === "ready" && target.link)) {
+    return settled;
+  }
+  return (
+    (await dependencies.deliverPersonalizationRequest?.(sessionId)) ?? settled
+  );
 }
 
 export async function recoverPersonalizationFulfillment(

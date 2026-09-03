@@ -173,6 +173,7 @@ function dependenciesFor(
       activeStatusWrites -= 1;
     }
   });
+  const deliver = vi.fn(async () => getPersonalizationRequest(baseline.id));
   return {
     dependencies: {
       getSession: async (id: string) => structuredClone(sessions.get(id) ?? null),
@@ -181,6 +182,7 @@ function dependenciesFor(
       runPreviewEnrichmentWave: run,
       updateSession: update,
       updatePersonalizationTarget: updateTarget,
+      deliverPersonalizationRequest: deliver,
       canRevealSession: (session: TryMeSession) =>
         session.status === "preview_ready_unclaimed" &&
         session.finalArtifact?.artifactDigest === session.experience?.artifactDigest,
@@ -190,6 +192,7 @@ function dependenciesFor(
     create,
     patch,
     run,
+    deliver,
     persistentIds,
     peak: () => peak,
     peakStatusWrites: () => peakStatusWrites,
@@ -242,6 +245,7 @@ describe("personalization fulfillment", () => {
     expect(new Set(harness.persistentIds).size).toBe(3);
     expect(result?.targets.every((target) => target.link === `/e/${target.generatedSessionId}`)).toBe(true);
     expect(result?.targets.every((target) => target.evidenceCount === 2)).toBe(true);
+    expect(harness.deliver).toHaveBeenCalledOnce();
   });
 
   it("keeps evidence-free and failed targets from exposing links", async () => {
@@ -273,6 +277,7 @@ describe("personalization fulfillment", () => {
 
     await runPersonalizationFulfillment(baseline.id, harness.dependencies as never);
     expect(harness.create).toHaveBeenCalledTimes(3);
+    expect(harness.deliver).toHaveBeenCalledOnce();
   });
 
   it("fails closed when the standard artifact no longer matches", async () => {
@@ -287,6 +292,7 @@ describe("personalization fulfillment", () => {
     expect(result?.status).toBe("failed");
     expect(result?.targets.every((target) => target.errorCode === "personalization_baseline_changed")).toBe(true);
     expect(harness.create).not.toHaveBeenCalled();
+    expect(harness.deliver).not.toHaveBeenCalled();
     expect((await getPersonalizationRequest(baseline.id))?.status).toBe("failed");
   });
 });
