@@ -128,6 +128,45 @@ describe("writeOpeningSections", () => {
     expect(JSON.stringify(result)).not.toMatch(/<img|<style|className=|https?:\/\//i);
   });
 
+  it("uses the account argument for the shared-priority body without repeating raw evidence", () => {
+    const targetEvidence: SectionEvidenceClaim = {
+      id: "target-focus",
+      text: "Cisco describes secure networking across hybrid infrastructure and observability programs.",
+      confidence: 0.9,
+      revision,
+      sourceRole: "target",
+      kind: "target_fact"
+    };
+    const source = input({
+      slots: [heroSlot({
+        family: "align",
+        v2Role: "shared-priority",
+        claimType: "hypothesis",
+        headlineWordBudget: { min: 5, max: 12 },
+        evidenceRefs: ["offer-1", "target-focus"],
+        wordBudget: { min: 25, max: 72 }
+      })],
+      evidence: [richEvidence[1]!, targetEvidence],
+      brief: {
+        ...input().brief,
+        promise: "Evaluate Acme Workflow Cloud for Cisco's secure networking focus.",
+        whyNow:
+          "Cisco's public focus gives operations leaders a concrete lens for the evaluation while timing and ownership remain open questions."
+      }
+    });
+    const result = writeOpeningSections(source);
+    const candidate = result.value?.[0];
+
+    expect(result.status).toBe("complete");
+    expect(candidate?.headline).toMatch(/Cisco's secure networking/i);
+    expect(candidate?.body).toMatch(/^Cisco's public focus/);
+    expect(candidate?.body).not.toContain("Cisco describes secure networking");
+    expect(candidate?.evidenceRefs).toEqual(["offer-1", "target-focus"]);
+    expect(
+      validateSectionCopyCandidate(candidate!, source.slots[0]!, revision, source.evidence)
+    ).toEqual([]);
+  });
+
   it("uses a non-factual decision prompt to meet the budget with sparse evidence", () => {
     const sparseEvidence = [richEvidence[1]!];
     const source = input({

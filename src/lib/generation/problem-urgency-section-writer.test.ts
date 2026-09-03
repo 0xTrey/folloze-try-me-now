@@ -219,4 +219,44 @@ describe("writeProblemUrgencySections", () => {
       )
     ).toEqual([]);
   });
+
+  it("derives concise account-relevance copy from cited target evidence", () => {
+    const accountSlot: SectionWriterSlot = {
+      ...contextSlot,
+      id: "account-relevance",
+      v2Role: "account-relevance",
+      headlineWordBudget: { min: 4, max: 11 },
+      evidenceRefs: ["target:focus"],
+      required: true
+    };
+    const result = writeProblemUrgencySections(
+      input({
+        slots: [accountSlot],
+        evidence: [
+          {
+            id: "target:focus",
+            text: "Cisco describes secure networking across hybrid infrastructure and observability programs.",
+            confidence: 0.9,
+            revision,
+            sourceRole: "target",
+            kind: "target_fact"
+          }
+        ],
+        brief: {
+          ...input().brief,
+          tension:
+            "Cisco's public materials emphasize secure networking across hybrid infrastructure; the conversation should start there.",
+          whyNow:
+            "That public focus gives operations leaders a concrete lens for the evaluation."
+        }
+      })
+    );
+
+    expect(result.value?.[0]?.headline).toBe(
+      "What secure networking changes for this decision"
+    );
+    expect(result.value?.[0]?.body).toContain("secure networking");
+    expect(result.value?.[0]?.body?.match(/Cisco describes/g)).toBeNull();
+    expect(result.value?.[0]?.evidenceRefs).toEqual(["target:focus"]);
+  });
 });

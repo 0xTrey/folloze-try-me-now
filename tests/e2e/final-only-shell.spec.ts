@@ -284,7 +284,7 @@ test.describe("final-only visible shell", () => {
     await captureReleaseEvidence(page, "final-reveal");
   });
 
-  test("final-only V2 reveal shows See live engagement and Save by email with honest analytics", async ({ page }) => {
+  test("final-only V2 reveal shows live engagement and account personalization with honest analytics", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await mockShell(page, "ready");
     await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -293,7 +293,7 @@ test.describe("final-only visible shell", () => {
     await expect(page.locator(".revealStage")).toBeVisible({ timeout: 10_000 });
     const engagementButton = page.getByRole("button", { name: /See live engagement/i });
     await expect(engagementButton).toBeVisible();
-    await expect(page.getByText(/Explore the preview to unlock save by email/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Personalize for 3 accounts/i })).toBeVisible();
     await expect(page.getByText(/Preview ready|Temporary URL|Preview as/i)).toHaveCount(0);
 
     const frame = page.frame({ url: new RegExp(`/e/${SESSION_ID}`) });
@@ -312,7 +312,7 @@ test.describe("final-only visible shell", () => {
       }, "*");
     }, { title: sectionTitle, headline: sectionHeadline });
 
-    await expect(page.getByRole("button", { name: /Save by email/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Personalize for 3 accounts/i })).toBeVisible();
     await engagementButton.click();
 
     const dialog = page.getByRole("dialog", { name: /See what buyers engage with/i });
@@ -328,41 +328,25 @@ test.describe("final-only visible shell", () => {
     await expect(dialog.getByText(/Not captured leads/i)).toBeVisible();
   });
 
-  test("final-only V2 locked Save by email unlocks after section_view and claim dialog closes with Escape", async ({ page }) => {
+  test("final-only V2 personalization dialog closes with Escape and returns focus", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await mockShell(page, "ready");
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await startBuild(page);
 
     await expect(page.locator(".revealStage")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/Explore the preview to unlock save by email/i)).toBeVisible();
-    await expect(page.getByRole("button", { name: /Save by email/i })).toHaveCount(0);
-
-    const frame = page.frame({ url: new RegExp(`/e/${SESSION_ID}`) });
-    expect(frame).not.toBeNull();
-    await frame!.evaluate(() => {
-      window.parent.postMessage({
-        source: "folloze-experience",
-        action: "section_view",
-        payload: {
-          sectionId: "supporting-resources",
-          sectionTitle: "Proof that earns the next conversation",
-          sectionHeadline: "Three source-backed signals make the case concrete."
-        }
-      }, "*");
-    });
-
-    const saveButton = page.getByRole("button", { name: /Save by email/i });
-    await expect(saveButton).toBeVisible();
-    await saveButton.click();
+    const personalizeButton = page.getByRole("button", { name: /Personalize for 3 accounts/i });
+    await expect(personalizeButton).toBeVisible();
+    await personalizeButton.click();
 
     const saveDialog = page.getByRole("dialog");
     await expect(saveDialog).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Save your live experience/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Build three account versions/i })).toBeVisible();
+    await expect(page.getByLabel("Work email")).toBeVisible();
     await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))).toBe(true);
 
     await page.keyboard.press("Escape");
     await expect(saveDialog).toHaveCount(0);
-    await expect(saveButton).toBeVisible();
+    await expect(personalizeButton).toBeFocused();
   });
 });

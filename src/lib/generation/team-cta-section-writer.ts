@@ -57,6 +57,14 @@ function words(value: string): string[] {
   return value.trim() ? value.trim().split(/\s+/) : [];
 }
 
+function fitHeadline(value: string, slot: SectionWriterSlot): string {
+  const max = slot.headlineWordBudget?.max ?? 12;
+  return words(value)
+    .slice(0, max)
+    .join(" ")
+    .replace(/[,;:]+$/, "");
+}
+
 function fitBody(
   body: string,
   fixedWordCount: number,
@@ -193,11 +201,24 @@ function nextActionCandidate(
   slot: SectionWriterSlot
 ): SectionCopyCandidate | undefined {
   const objective = plainText(input.objective);
-  const body =
-    `${CTA_ACTION_COPY[input.cta.type]}: ${objective}. ` +
-    "Bring the current evidence and open questions into the next step.";
+  const objectiveAction = objective
+    ? `${objective[0]!.toLocaleLowerCase()}${objective.slice(1)}`
+    : "evaluate the selected objective";
+  const targetClaims = currentClaimsForSlot(input, slot).filter(
+    ({ sourceRole }) => sourceRole === "target"
+  );
+  const accountNextAction =
+    slot.v2Role === "first-decision" && targetClaims.length > 0
+      ? plainText(input.brief.nextAction)
+      : "";
+  const body = accountNextAction
+    ? `Use that session to ${objectiveAction} against the cited public context. Keep internal priorities, timing, and results as validation questions.`
+    : `${CTA_ACTION_COPY[input.cta.type]}: ${objective}. ` +
+      "Bring the current evidence and open questions into the next step.";
   const headline =
-    slot.v2Role === "next-move"
+    accountNextAction
+      ? fitHeadline(accountNextAction, slot)
+      : slot.v2Role === "next-move"
       ? "Take the next useful step toward this outcome"
       : slot.v2Role === "evaluation-close"
         ? "Continue the evaluation with a focused working session"
@@ -215,7 +236,7 @@ function nextActionCandidate(
         label: input.cta.label,
         ...(input.cta.id ? { id: input.cta.id } : {})
       },
-      evidenceRefs: []
+      evidenceRefs: targetClaims.map(({ id }) => id)
     },
     CTA_PADDING
   );

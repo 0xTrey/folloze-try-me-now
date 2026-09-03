@@ -167,8 +167,11 @@ function buildCandidate(
           text.toLocaleLowerCase() !== audience?.toLocaleLowerCase()
       )
   ).join(" ");
-  const body =
-    claimText ||
+  const accountWhyNow =
+    slot.v2Role === "shared-priority"
+      ? normalizeCopy(input.brief.whyNow ?? "")
+      : undefined;
+  const body = accountWhyNow || claimText ||
     "Assess the evidence against your priorities, then decide what needs validation next.";
   const ctaLabel = normalizeCopy(input.cta.label);
   const evidenceRefs = unique(safeClaims.map(({ claim }) => claim.id));

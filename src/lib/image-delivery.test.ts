@@ -8,7 +8,8 @@ import {
   isImageDeliveryPath,
   parseImageSlot,
   renderPlanWithFirstPartyImages,
-  sourceImageUrlForSlot
+  sourceImageUrlForSlot,
+  withTargetSupportingImage
 } from "@/lib/image-delivery";
 import type { AssetRenderPlan } from "@/lib/asset-allocation";
 import type { BrandProfile } from "@/lib/types";
@@ -196,5 +197,40 @@ describe("compiled asset plans deliver through first-party routes", () => {
       required: true,
       reusable: false
     });
+  });
+
+  it("keeps the seller hero and gives a named account one supporting image", () => {
+    const target = profile("target.example", "target");
+    const sources = imageDeliverySources({
+      answers: {},
+      brand: seller,
+      targetBrand: target
+    });
+    const accountPlan = withTargetSupportingImage(
+      plan(
+        "https://cdn.example/seller/hero.jpg",
+        "https://cdn.example/seller/platform.png"
+      ),
+      target.imageUrls
+    );
+    const delivered = renderPlanWithFirstPartyImages(
+      "session_plan_delivery",
+      accountPlan,
+      sources,
+      4
+    );
+
+    expect(delivered.placements).toEqual([
+      expect.objectContaining({
+        sectionId: "section-0",
+        semanticRole: "hero",
+        assetRef: "/api/sessions/session_plan_delivery/image/seller-image-0?v=4"
+      }),
+      expect.objectContaining({
+        sectionId: "supporting",
+        semanticRole: "supporting",
+        assetRef: "/api/sessions/session_plan_delivery/image/target-image-0?v=4"
+      })
+    ]);
   });
 });

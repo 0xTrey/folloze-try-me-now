@@ -209,6 +209,40 @@ export function renderPlanWithFirstPartyImages(
 }
 
 /**
+ * Keeps seller imagery authoritative in the hero and product slots while
+ * reserving one supporting slot for the named account. The selected account
+ * image still has to pass through the session-bound delivery route before the
+ * renderer can emit it.
+ */
+export function withTargetSupportingImage(
+  plan: AssetRenderPlan,
+  targetImageUrls: readonly string[]
+): AssetRenderPlan {
+  const targetImage = targetImageUrls.find((value) => /^https:\/\//i.test(value));
+  if (!targetImage) return plan;
+  const supportingIndex = plan.placements.findIndex(
+    ({ semanticRole }) => semanticRole === "supporting"
+  );
+  const placement = {
+    sectionId: "supporting",
+    semanticRole: "supporting" as const,
+    assetRef: targetImage,
+    reusable: false,
+    required: false
+  };
+  const placements = [...plan.placements];
+  if (supportingIndex >= 0) placements.splice(supportingIndex, 1, placement);
+  else placements.push(placement);
+  return {
+    ...plan,
+    placements,
+    treatments: plan.treatments.filter(
+      ({ semanticRole }) => semanticRole !== "supporting"
+    )
+  };
+}
+
+/**
  * Preserve harvested source URLs in the session, but hand the HTML renderer a
  * cloned profile containing only slot-scoped first-party delivery paths.
  */

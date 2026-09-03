@@ -280,6 +280,44 @@ function choicesForSlot(
   claims: readonly SectionEvidenceClaim[]
 ): [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice] {
   const technical = isTechnical(input);
+  if (slot.v2Role === "priority-paths") {
+    const targetClaims = claims.filter(({ sourceRole }) => sourceRole === "target");
+    const primary = targetClaims[0];
+    if (primary) {
+      const topic = (claim: SectionEvidenceClaim): string => {
+        const selected = safeClaimText(claim)!
+          .replace(
+            /^[A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*)?\s+(?:is|are|has|have|describes?|emphasizes?|focuses? on|operates?)\s+/i,
+            ""
+          )
+          .replace(/[.!?].*$/, "")
+          .split(/\s+/)
+          .slice(0, 6);
+        while (selected.length > 2 && /^(?:and|or|with|for|to)$/i.test(selected.at(-1)!)) {
+          selected.pop();
+        }
+        return selected.join(" ");
+      };
+      const secondary = targetClaims[1] ?? primary;
+      return [
+        {
+          label: "Public focus",
+          body: `Test ${topic(primary)} against the selected objective.`,
+          evidenceRefs: [primary.id]
+        },
+        {
+          label: "Operating fit",
+          body: `Compare the supported approach with ${topic(secondary)}.`,
+          evidenceRefs: [secondary.id]
+        },
+        {
+          label: "First decision",
+          body: `Define what ${input.brief.targetName ?? "the account team"} must validate before choosing a path.`,
+          evidenceRefs: [...new Set([primary.id, secondary.id])]
+        }
+      ];
+    }
+  }
   if (slot.v2Role === "applications") {
     const definitions = [
       [
@@ -362,7 +400,7 @@ function candidateForSlot(
       headline: headlineForSlot(slot, input),
       body:
         slot.v2Role === "priority-paths" && input.brief.targetName
-          ? `For ${input.brief.targetName}, compare the current evidence and choose the priority that should be validated first.`
+          ? `${input.brief.sellerName ?? "The seller"} and ${input.brief.targetName} can compare the current evidence, then choose the first priority to validate together.`
           : sectionBodies[role],
       choices,
       evidenceRefs,

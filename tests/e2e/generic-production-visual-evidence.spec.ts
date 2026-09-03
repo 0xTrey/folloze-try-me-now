@@ -30,7 +30,10 @@ const bannedBuyerFacingPhrases = [
 function contrastRatio(foreground: string, background: string): number {
   const luminance = (color: string) => {
     const channels = color.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
-    const [red, green, blue] = channels.map((channel) => {
+    const normalizedChannels = color.startsWith("color(srgb")
+      ? channels.map((channel) => channel * 255)
+      : channels;
+    const [red, green, blue] = normalizedChannels.map((channel) => {
       const normalized = channel / 255;
       return normalized <= 0.03928
         ? normalized / 12.92
@@ -84,8 +87,12 @@ async function mockBrandHelpSession(
   await route.fulfill({ status: 404, body: JSON.stringify({ error: "missing" }) });
 }
 
-test("proves runtime family production and truthful brand recovery", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 1000 });
+test("proves runtime family production and truthful brand recovery", async ({ page }, testInfo) => {
+  const viewport = testInfo.project.name === "mobile"
+    ? { width: 390, height: 844 }
+    : { width: 1440, height: 1000 };
+  const evidenceRunDirectory = resolve(evidenceDirectory, testInfo.project.name);
+  await page.setViewportSize(viewport);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await fulfillRuntimeAssets(page);
   const manifest: Array<Record<string, unknown>> = [];
@@ -155,6 +162,27 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
         };
       });
       const bodyText = document.body.innerText;
+      const darkRegions = [
+        ...document.querySelectorAll<HTMLElement>(
+          ".urgency-section, .composition-evidence-lead .credibility-anchor, .composition-chapter-journey .framework-starting-points"
+        )
+      ];
+      const darkTextContrast = darkRegions.flatMap((region) => {
+        const background = getComputedStyle(region).backgroundColor;
+        return [...region.querySelectorAll<HTMLElement>("h1,h2,h3,p,li,dd")]
+          .filter((element) => element.innerText.trim() && element.getClientRects().length > 0)
+          .map((element) => ({
+            text: element.innerText.trim().slice(0, 80),
+            foreground: getComputedStyle(element).color,
+            background
+          }));
+      });
+      const compactDarkRegionHeights = darkRegions
+        .filter((region) =>
+          region.classList.contains("urgency-section") &&
+          !region.querySelector(".argument-sequence")
+        )
+        .map((region) => region.getBoundingClientRect().height);
       const journeySectionIds = [...document.querySelectorAll<HTMLElement>(
         "[data-journey-section]"
       )].map((section) => section.dataset.journeySection ?? "");
@@ -167,6 +195,8 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
         buttonRadius: primary.borderRadius,
         buttonContrast: { foreground: primary.color, background: primary.backgroundColor },
         bodyContrast: { foreground: body.color, background: body.backgroundColor },
+        darkTextContrast,
+        compactDarkRegionHeights,
         logoImageVisible: Boolean(logo && logo.complete && logo.naturalWidth > 0),
         logoContained: Boolean(
           logoBox &&
@@ -200,6 +230,15 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
     expect(
       contrastRatio(metrics.bodyContrast.foreground, metrics.bodyContrast.background)
     ).toBeGreaterThanOrEqual(4.5);
+    expect(metrics.darkTextContrast.length).toBeGreaterThan(0);
+    expect(
+      metrics.darkTextContrast.every(({ foreground, background }) =>
+        contrastRatio(foreground, background) >= 4.5
+      )
+    ).toBe(true);
+    for (const height of metrics.compactDarkRegionHeights) {
+      expect(height, `${fixture.id} compact dark-region height`).toBeLessThanOrEqual(520);
+    }
     expect(metrics.logoImageVisible).toBe(true);
     expect(metrics.logoContained).toBe(true);
     expect(metrics.media.length).toBeGreaterThan(0);
@@ -233,18 +272,18 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
     expect(selectedImages.every(({ ref }) => fixture.brand.imageUrls.includes(ref))).toBe(true);
 
     if (process.env.CAPTURE_PRODUCTION_EVIDENCE === "1") {
-      mkdirSync(evidenceDirectory, { recursive: true });
+      mkdirSync(evidenceRunDirectory, { recursive: true });
       await page.evaluate(() => {
         window.scrollTo(0, 0);
         const journeyLinks = document.querySelector<HTMLElement>(".journey-links");
         if (journeyLinks) journeyLinks.scrollLeft = 0;
       });
       await page.screenshot({
-        path: resolve(evidenceDirectory, `${fixture.id}-first-viewport.png`),
+        path: resolve(evidenceRunDirectory, `${fixture.id}-first-viewport.png`),
         fullPage: false
       });
       await page.screenshot({
-        path: resolve(evidenceDirectory, `${fixture.id}-full-page.png`),
+        path: resolve(evidenceRunDirectory, `${fixture.id}-full-page.png`),
         fullPage: true
       });
     }
@@ -276,7 +315,7 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
         density: fixture.brand.designDna?.spacing?.sectionBlockPx
       },
       selectedImages,
-      viewport: { width: 1440, height: 1000 },
+      viewport,
       source: "deterministic local first-party-style fixture; no live provider request",
       ...metrics
     });
@@ -325,12 +364,13 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
   await expect(page.getByText(/research is preserved/i)).toBeVisible();
 
   if (process.env.CAPTURE_PRODUCTION_EVIDENCE === "1") {
+    mkdirSync(evidenceRunDirectory, { recursive: true });
     await page.screenshot({
-      path: resolve(evidenceDirectory, "brand-help-recovery-first-viewport.png"),
+      path: resolve(evidenceRunDirectory, "brand-help-recovery-first-viewport.png"),
       fullPage: false
     });
     await page.screenshot({
-      path: resolve(evidenceDirectory, "brand-help-recovery-full-page.png"),
+      path: resolve(evidenceRunDirectory, "brand-help-recovery-full-page.png"),
       fullPage: true
     });
   }
@@ -342,12 +382,12 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
     recoveryVisible: true,
     advertisedKinds: ["source_url"],
     providerWorkAllowed: false,
-    viewport: { width: 1440, height: 1000 }
+    viewport
   });
 
   if (process.env.CAPTURE_PRODUCTION_EVIDENCE === "1") {
     writeFileSync(
-      resolve(evidenceDirectory, "visual-evidence-manifest.json"),
+      resolve(evidenceRunDirectory, "visual-evidence-manifest.json"),
       `${JSON.stringify(manifest, null, 2)}\n`
     );
   }

@@ -53,6 +53,43 @@ function normalizedSentence(value: string): string {
   return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
 }
 
+function evidenceTopic(value: string, maxWords: number): string | undefined {
+  const normalized = value
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(
+      /^[A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*)?\s+(?:is|are|has|have|describes?|emphasizes?|focuses? on|operates?)\s+/i,
+      ""
+    )
+    .replace(
+      /^(?:advancing|evaluating|expanding|investing in|prioritizing|publishing|scaling)\s+/i,
+      ""
+    )
+    .replace(/[.!?].*$/, "")
+    .replace(/[,:;]$/, "");
+  const selected = normalized.split(/\s+/).slice(0, Math.max(2, maxWords));
+  const qualifierAt = selected.findIndex(
+    (word, index) => index >= 2 && /^(?:across|for|in|on|through|with)$/i.test(word)
+  );
+  if (qualifierAt >= 2) selected.splice(qualifierAt);
+  while (selected.length > 2 && /^(?:across|and|for|in|on|or|through|to|with)$/i.test(selected.at(-1)!)) {
+    selected.pop();
+  }
+  return selected.length >= 2 ? selected.join(" ") : undefined;
+}
+
+function targetHeadline(
+  slot: SectionWriterSlot,
+  claims: readonly SectionEvidenceClaim[]
+): string | undefined {
+  if (slot.v2Role !== "shared-opportunity") return undefined;
+  const claim = claims.find(({ sourceRole }) => sourceRole === "target");
+  if (!claim) return undefined;
+  const maxHeadlineWords = slot.headlineWordBudget?.max ?? 11;
+  const topic = evidenceTopic(claim.text, Math.min(4, maxHeadlineWords - 6));
+  return topic ? `Turn ${topic} into a testable workstream` : undefined;
+}
+
 function safeClaim(claim: SectionEvidenceClaim): boolean {
   return (
     claim.text.trim().length > 0 &&
@@ -61,6 +98,23 @@ function safeClaim(claim: SectionEvidenceClaim): boolean {
     claim.confidence <= 1 &&
     !UNSAFE_COPY_PATTERN.test(claim.text)
   );
+}
+
+function leadUsesClaimTopic(lead: string, claim: string): boolean {
+  const ignored = new Set([
+    "about", "across", "against", "and", "for", "from", "into", "the", "then", "through", "to", "with"
+  ]);
+  const terms = (value: string): Set<string> =>
+    new Set(
+      value
+        .toLocaleLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, " ")
+        .trim()
+        .split(/\s+/)
+        .filter((term) => term.length > 1 && !ignored.has(term))
+    );
+  const leadTerms = terms(lead);
+  return [...terms(claim)].filter((term) => leadTerms.has(term)).length >= 2;
 }
 
 function currentClaimsForSlot(
@@ -111,9 +165,12 @@ function supportedBody(
   role: "mechanism" | "proof",
   claims: readonly SectionEvidenceClaim[],
   headlineWords: number,
-  slot: SectionWriterSlot
+  slot: SectionWriterSlot,
+  directLead?: string
 ): { body: string; claims: SectionEvidenceClaim[] } | undefined {
-  const prefix =
+  const prefix = directLead
+    ? normalizedSentence(directLead)
+    :
     role === "mechanism"
       ? "Current evidence describes the operating mechanism:"
       : "Current evidence supports these points:";
@@ -121,6 +178,10 @@ function supportedBody(
   const selected: SectionEvidenceClaim[] = [];
 
   for (const claim of claims) {
+    if (directLead && leadUsesClaimTopic(directLead, claim.text)) {
+      selected.push(claim);
+      continue;
+    }
     const appended = appendWithinBudget(
       body,
       normalizedSentence(claim.text),
@@ -203,9 +264,10 @@ function completeCandidate(
   slot: SectionWriterSlot,
   role: "mechanism" | "proof",
   body: string,
-  evidenceRefs: readonly string[]
+  evidenceRefs: readonly string[],
+  headlineOverride?: string
 ): SectionCopyCandidate {
-  const headline = headlineForSlot(slot, role);
+  const headline = headlineOverride ?? headlineForSlot(slot, role);
   const candidate: SectionCopyCandidate = {
     sectionId: slot.id,
     role,
@@ -278,30 +340,24 @@ export function writeMechanismProofSections(
 
   for (const slot of slots) {
     const role = slot.role as "mechanism" | "proof";
-    const headline = headlineForSlot(slot, role);
     const claims = currentClaimsForSlot(input, slot);
-    const targetPrefix =
-      slot.v2Role === "shared-opportunity" && input.brief.targetName
-        ? `For ${input.brief.targetName}, `
-        : "";
+    const headline = targetHeadline(slot, claims) ?? headlineForSlot(slot, role);
     const supported = supportedBody(
       role,
       claims,
-      words(headline) + words(targetPrefix),
-      slot
+      words(headline),
+      slot,
+      slot.v2Role === "shared-opportunity" ? input.brief.mechanism : undefined
     );
 
     if (supported) {
-      const body =
-        targetPrefix
-          ? `${targetPrefix}${supported.body.charAt(0).toLocaleLowerCase()}${supported.body.slice(1)}`
-          : supported.body;
       candidates.push(
         completeCandidate(
           slot,
           role,
-          body,
-          supported.claims.map(({ id }) => id)
+          supported.body,
+          supported.claims.map(({ id }) => id),
+          headline
         )
       );
       usedClaims.push(...supported.claims);

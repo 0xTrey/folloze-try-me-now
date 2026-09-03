@@ -43,6 +43,29 @@ function words(value: string): string[] {
   return value.trim() ? value.trim().split(/\s+/) : [];
 }
 
+function evidenceTopic(value: string, maxWords: number): string | undefined {
+  const normalized = plainText(value)
+    .replace(
+      /^[A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*)?\s+(?:is|are|has|have|describes?|emphasizes?|focuses? on|operates?)\s+/i,
+      ""
+    )
+    .replace(
+      /^(?:advancing|evaluating|expanding|investing in|prioritizing|publishing|scaling)\s+/i,
+      ""
+    )
+    .replace(/[.!?].*$/, "")
+    .replace(/[,:;]$/, "");
+  const selected = words(normalized).slice(0, Math.max(2, maxWords));
+  const qualifierAt = selected.findIndex(
+    (word, index) => index >= 2 && /^(?:across|for|in|on|through|with)$/i.test(word)
+  );
+  if (qualifierAt >= 2) selected.splice(qualifierAt);
+  while (selected.length > 2 && /^(?:across|and|for|in|on|or|through|to|with)$/i.test(selected.at(-1)!)) {
+    selected.pop();
+  }
+  return selected.length >= 2 ? selected.join(" ") : undefined;
+}
+
 function failedArtifact(
   input: SectionWriterInput,
   status: "failed" | "stale",
@@ -89,7 +112,8 @@ function headlineFor(
 function headlineForSlot(
   slot: SectionWriterSlot,
   hasTension: boolean,
-  hasWhyNow: boolean
+  hasWhyNow: boolean,
+  targetEvidence?: readonly string[]
 ): string {
   if (slot.v2Role === "current-friction") {
     return "Why the current approach creates avoidable friction";
@@ -98,6 +122,11 @@ function headlineForSlot(
     return "What is at stake in this decision";
   }
   if (slot.v2Role === "account-relevance") {
+    if (targetEvidence?.length) {
+      const maxHeadlineWords = slot.headlineWordBudget?.max ?? 11;
+      const topic = evidenceTopic(targetEvidence[0]!, Math.min(4, maxHeadlineWords - 5));
+      if (topic) return `What ${topic} changes for this decision`;
+    }
     return "Why this priority matters for your team";
   }
   return headlineFor(hasTension, hasWhyNow, slot.wordBudget.max - 1);
@@ -122,15 +151,21 @@ function completeCandidate(
   slot: SectionWriterSlot,
   input: SectionWriterInput,
   evidenceRefs: readonly string[],
-  supportedContext: boolean
+  supportedContext: boolean,
+  targetEvidence: readonly string[] = []
 ): SectionCopyCandidate {
   const tension = supportedContext ? plainText(input.brief.tension) : "";
   const whyNow = supportedContext ? plainText(input.brief.whyNow) : "";
-  const headline = headlineForSlot(slot, Boolean(tension), Boolean(whyNow));
+  const headline = headlineForSlot(slot, Boolean(tension), Boolean(whyNow), targetEvidence);
   const headlineWords = words(headline).length;
   const bodyCapacity = slot.wordBudget.max - headlineWords;
+  const contextualSeed = unique([tension, whyNow]);
   const seed = supportedContext
-    ? unique([tension, whyNow]).join(" ")
+    ? contextualSeed.length > 0
+      ? contextualSeed.join(" ")
+      : slot.v2Role === "account-relevance"
+        ? unique(targetEvidence).join(" ")
+        : ""
     : neutralReviewLanguage;
   const seedWordCount = words(seed).length;
   const bodyWordCount = Math.min(
@@ -178,6 +213,11 @@ export function writeProblemUrgencySections(
       .filter((claim) => claim.revision === input.revision)
       .map((claim) => [claim.id, claim] as const)
   );
+  const targetEvidenceFor = (slot: SectionWriterSlot): string[] =>
+    slot.evidenceRefs
+      .map((ref) => currentEvidence.get(ref))
+      .filter((claim): claim is SectionEvidenceClaim => claim?.sourceRole === "target")
+      .map((claim) => plainText(claim.text));
   const hasContextBrief = Boolean(
     plainText(input.brief.tension) || plainText(input.brief.whyNow)
   );
@@ -186,7 +226,9 @@ export function writeProblemUrgencySections(
     const validRefs = unique(
       slot.evidenceRefs.filter((evidenceRef) => currentEvidence.has(evidenceRef))
     );
-    const supportedContext = hasContextBrief && validRefs.length > 0;
+    const targetEvidence = targetEvidenceFor(slot);
+    const supportedContext =
+      validRefs.length > 0 && (hasContextBrief || targetEvidence.length > 0);
 
     if (!supportedContext && !slot.required) {
       return {
@@ -207,7 +249,8 @@ export function writeProblemUrgencySections(
       slot,
       input,
       supportedContext ? validRefs : [],
-      supportedContext
+      supportedContext,
+      targetEvidence
     );
   });
 

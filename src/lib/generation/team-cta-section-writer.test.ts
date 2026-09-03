@@ -186,6 +186,43 @@ describe("writeTeamCtaSections", () => {
     expectValidCandidates(input, result);
   });
 
+  it("uses cited account context to personalize the first decision", () => {
+    const targetEvidence: SectionEvidenceClaim = {
+      id: "target-focus",
+      text: "Cisco describes secure networking across hybrid infrastructure.",
+      confidence: 0.9,
+      revision,
+      sourceRole: "target",
+      kind: "target_fact"
+    };
+    const firstDecisionSlot: SectionWriterSlot = {
+      ...nextActionSlot,
+      family: "align",
+      v2Role: "first-decision",
+      claimType: "instruction",
+      headlineWordBudget: { min: 5, max: 12 },
+      evidenceRefs: ["objective-selection", "cta-selection", "target-focus"],
+      wordBudget: { min: 30, max: 72 }
+    };
+    const input = writerInput({
+      slots: [firstDecisionSlot],
+      evidence: [...evidence, targetEvidence],
+      brief: {
+        ...writerInput().brief,
+        nextAction: "Plan a working session around secure networking"
+      },
+      objective: "Evaluate workflow fit"
+    });
+    const result = writeTeamCtaSections(input);
+    const candidate = result.value?.[0];
+
+    expect(result.status).toBe("complete");
+    expect(candidate?.headline).toBe("Plan a working session around secure networking");
+    expect(candidate?.body).toMatch(/evaluate workflow fit against the cited public context/i);
+    expect(candidate?.evidenceRefs).toEqual(["target-focus"]);
+    expectValidCandidates(input, result);
+  });
+
   it("uses a validation plan instead of role or seller claims when evidence is sparse", () => {
     const input = writerInput({ evidence: [] });
     const result = writeTeamCtaSections(input);

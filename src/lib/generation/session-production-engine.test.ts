@@ -10,7 +10,7 @@ import {
   copySimilarity,
   NEAR_DUPLICATE_THRESHOLD
 } from "@/lib/generation/section-candidate-review";
-import type { BrandProfile, TryMeSession } from "@/lib/types";
+import type { BrandProfile, SessionEvidenceItem, TryMeSession } from "@/lib/types";
 
 import { compileSessionProductionPage } from "./session-production-engine";
 
@@ -143,6 +143,58 @@ function targetBrand(): BrandProfile {
   };
 }
 
+function namedTarget(input: {
+  domain: string;
+  name: string;
+  description: string;
+  publicContext: string;
+  publicTopics: string[];
+}): BrandProfile {
+  return {
+    ...targetBrand(),
+    domain: input.domain,
+    canonicalDomain: input.domain,
+    companyName: input.name,
+    title: `${input.name} public company profile`,
+    description: input.description,
+    publicContext: input.publicContext,
+    publicTopics: input.publicTopics,
+    logoUrl: `https://${input.domain}/logo.svg`,
+    sourceUrl: `https://${input.domain}/`
+  };
+}
+
+function accountEvidence(
+  domain: string,
+  focus: string,
+  operatingContext: string
+): SessionEvidenceItem[] {
+  return [
+    {
+      id: `${domain}:focus`,
+      type: "public-focus-area",
+      label: "Public focus area",
+      text: focus,
+      sourceUrl: `https://${domain}/`,
+      signals: [focus.split(/\s+/).slice(0, 5).join(" ")],
+      disposition: "available",
+      entityRole: "target",
+      confidence: "high"
+    },
+    {
+      id: `${domain}:operations`,
+      type: "public-operating-context",
+      label: "Public operating context",
+      text: operatingContext,
+      sourceUrl: `https://${domain}/company`,
+      signals: [operatingContext.split(/\s+/).slice(0, 5).join(" ")],
+      disposition: "available",
+      entityRole: "target",
+      confidence: "high"
+    }
+  ];
+}
+
 function renderPage(
   currentSession: TryMeSession,
   profile: BrandProfile,
@@ -242,6 +294,160 @@ describe("compileSessionProductionPage", () => {
       expect(html).toContain(`>${expectedLabel}</a>`);
     }
   );
+
+  it("builds account variants from distinct cited target signals instead of name substitution", async () => {
+    const profile = brand();
+    const cisco = namedTarget({
+      domain: "cisco.example",
+      name: "Cisco",
+      description: "Cisco connects and protects distributed organizations.",
+      publicContext: "Cisco describes secure networking and observability across hybrid infrastructure.",
+      publicTopics: ["Secure networking", "Hybrid infrastructure"]
+    });
+    const google = namedTarget({
+      domain: "google.example",
+      name: "Google",
+      description: "Google develops cloud and AI platforms.",
+      publicContext: "Google describes responsible AI and cloud security for enterprise platforms.",
+      publicTopics: ["Responsible AI", "Cloud security"]
+    });
+    const compileFor = async (
+      target: BrandProfile,
+      evidenceItems: SessionEvidenceItem[]
+    ) => {
+      const currentSession = session(profile, "align");
+      currentSession.answers.targetDomain = target.domain;
+      currentSession.answers.messageBelief = undefined;
+      currentSession.evidenceItems = evidenceItems;
+      const result = await compileSessionProductionPage({
+        session: currentSession,
+        brand: profile,
+        targetBrand: target,
+        providerStartedAtMs: 0,
+        currentTimeMs: 10_000
+      });
+      expect(result.outcome).toBe("production-page");
+      if (result.outcome !== "production-page" || !result.artifact.value) {
+        throw new Error("account_variant_not_compiled");
+      }
+      return result.artifact.value;
+    };
+
+    const ciscoPage = await compileFor(
+      cisco,
+      accountEvidence(
+        cisco.domain,
+        "Secure networking across hybrid infrastructure",
+        "Observability programs connect network, security, and operations teams"
+      )
+    );
+    const googlePage = await compileFor(
+      google,
+      accountEvidence(
+        google.domain,
+        "Responsible AI across enterprise platforms",
+        "Cloud security programs connect governance, models, and data teams"
+      )
+    );
+    const byRole = (page: typeof ciscoPage) =>
+      new Map(
+        page.sections.map((section) => [
+          section.v2Role,
+          `${section.headline ?? ""} ${section.body ?? ""}`.replace(/\s+/g, " ").trim()
+        ])
+      );
+    const ciscoCopy = byRole(ciscoPage);
+    const googleCopy = byRole(googlePage);
+    const differingRoles = [...ciscoCopy].filter(
+      ([role, copy]) => copy !== googleCopy.get(role)
+    );
+
+    expect([...ciscoCopy.keys()]).toEqual([
+      "shared-priority",
+      "account-relevance",
+      "shared-opportunity",
+      "priority-paths",
+      "validation-plan",
+      "first-decision"
+    ]);
+    expect([...googleCopy.keys()]).toEqual([...ciscoCopy.keys()]);
+    expect(differingRoles.length).toBeGreaterThanOrEqual(5);
+    expect([...ciscoCopy.values()].join(" ")).toMatch(/secure networking|hybrid infrastructure/i);
+    expect([...googleCopy.values()].join(" ")).toMatch(/responsible AI|cloud security/i);
+    expect(JSON.stringify(ciscoPage)).not.toMatch(/has a current priority/i);
+    expect(JSON.stringify(googlePage)).not.toMatch(/has a current priority/i);
+    const adaptedCisco = applyProductionPageToDraft(
+      deterministicDraft({
+        brand: profile,
+        targetBrand: cisco,
+        useCase: "abm",
+        answers: {
+          ...session(profile, "align").answers,
+          targetDomain: cisco.domain
+        }
+      }),
+      ciscoPage
+    );
+    expect(adaptedCisco.persuasionFramework?.urgency.change).toMatch(
+      /Cisco|secure networking/i
+    );
+    expect(
+      ciscoPage.sections
+        .filter(({ v2Role }) =>
+          ["account-relevance", "shared-opportunity", "priority-paths"].includes(v2Role ?? "")
+        )
+        .some(({ evidenceRefs }) =>
+          evidenceRefs.some((ref) => ref.startsWith("cisco.example:"))
+        )
+    ).toBe(true);
+    expect(
+      googlePage.sections
+        .filter(({ v2Role }) =>
+          ["account-relevance", "shared-opportunity", "priority-paths"].includes(v2Role ?? "")
+        )
+        .some(({ evidenceRefs }) =>
+          evidenceRefs.some((ref) => ref.startsWith("google.example:"))
+        )
+    ).toBe(true);
+  });
+
+  it("keeps event campaigns on the Launch argument when a target domain is present", async () => {
+    const profile = brand();
+    const target = namedTarget({
+      domain: "cisco.example",
+      name: "Cisco",
+      description: "Cisco connects and protects distributed organizations.",
+      publicContext: "Cisco describes secure networking across hybrid infrastructure.",
+      publicTopics: ["Secure networking", "Hybrid infrastructure"]
+    });
+    const currentSession = session(profile, "launch");
+    currentSession.answers.targetDomain = target.domain;
+    currentSession.answers.campaignType = "event";
+    currentSession.answers.promotedOffer = "Acme Operations Summit";
+    currentSession.answers.objective = "Register for the summit";
+    currentSession.answers.ctaType = "register";
+    currentSession.evidenceItems = accountEvidence(
+      target.domain,
+      "Secure networking across hybrid infrastructure",
+      "Observability programs connect network, security, and operations teams"
+    );
+
+    const result = await compileSessionProductionPage({
+      session: currentSession,
+      brand: profile,
+      targetBrand: target,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000
+    });
+
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page" || !result.artifact.value) return;
+    expect(result.artifact.value.familyDecision?.family).toBe("launch");
+    expect(
+      result.artifact.value.sections.flatMap(({ evidenceRefs }) => evidenceRefs)
+    ).not.toContain("cisco.example:focus");
+    expect(JSON.stringify(result.artifact.value.sections)).not.toMatch(/secure networking/i);
+  });
 
   it("adapts a current material session into a bounded production page", async () => {
     const profile = brand();

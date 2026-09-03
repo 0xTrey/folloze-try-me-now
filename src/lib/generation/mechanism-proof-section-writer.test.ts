@@ -242,4 +242,38 @@ describe("writeMechanismProofSections", () => {
     });
     expect(result.value).toBeUndefined();
   });
+
+  it("turns cited target context into a concise shared-opportunity section", () => {
+    const accountSlot: SectionWriterSlot = {
+      ...mechanismSlot,
+      id: "shared-opportunity",
+      v2Role: "shared-opportunity",
+      headlineWordBudget: { min: 4, max: 11 },
+      evidenceRefs: ["target:focus"]
+    };
+    const targetClaim = claim(
+      "target:focus",
+      "Google describes responsible AI across enterprise platforms and cloud security programs.",
+      { sourceRole: "target", kind: "target_fact" }
+    );
+    const result = writeMechanismProofSections(
+      input({
+        slots: [accountSlot],
+        evidence: [targetClaim],
+        brief: {
+          ...input().brief,
+          mechanism:
+            "Connect responsible AI governance to one supported workflow, then validate ownership and outputs."
+        }
+      })
+    );
+
+    expect(result.value?.[0]?.headline).toBe(
+      "Turn responsible AI into a testable workstream"
+    );
+    expect(result.value?.[0]?.body).toMatch(/^Connect responsible AI governance/);
+    expect(result.value?.[0]?.body).not.toContain("Google describes responsible AI");
+    expect(result.value?.[0]?.body).not.toMatch(/^Current evidence describes/);
+    expect(result.value?.[0]?.evidenceRefs).toEqual(["target:focus"]);
+  });
 });

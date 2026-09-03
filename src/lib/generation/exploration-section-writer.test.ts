@@ -174,6 +174,48 @@ describe("writeExplorationSections", () => {
     expect(JSON.stringify(choices)).not.toMatch(/\buse case\b/i);
   });
 
+  it("turns cited target context into three distinct account validation paths", () => {
+    const evidence = [
+      claim(
+        "target-focus",
+        "Cisco describes secure networking across hybrid infrastructure and observability programs.",
+        { sourceRole: "target", kind: "target_fact" }
+      ),
+      claim(
+        "target-context",
+        "Cisco emphasizes cross-team operations across network and security programs.",
+        { sourceRole: "target", kind: "target_fact" }
+      )
+    ];
+    const prioritySlot = slot("pathways", evidence.map(({ id }) => id), {
+      family: "align",
+      v2Role: "priority-paths",
+      claimType: "hypothesis",
+      headlineWordBudget: { min: 5, max: 12 },
+      wordBudget: { min: 30, max: 72 }
+    });
+    const result = writeExplorationSections(
+      input([prioritySlot], evidence, {
+        brief: {
+          ...input([], []).brief,
+          sellerName: "Acme",
+          targetName: "Cisco"
+        }
+      })
+    );
+    const candidate = result.value?.[0];
+
+    expect(result.status).toBe("fallback");
+    expect(candidate?.body).toContain("Acme and Cisco");
+    expect(candidate?.choices).toEqual([
+      expect.objectContaining({ label: "Public focus", body: expect.stringMatching(/secure networking/i) }),
+      expect.objectContaining({ label: "Operating fit", body: expect.stringMatching(/cross-team operations/i) }),
+      expect.objectContaining({ label: "First decision", body: expect.stringContaining("Cisco") })
+    ]);
+    expect(candidate?.wordCount).toBeGreaterThanOrEqual(prioritySlot.wordBudget.min);
+    expect(candidate?.wordCount).toBeLessThanOrEqual(prioritySlot.wordBudget.max);
+  });
+
   it("prevents duplicate evidence from producing duplicate choices", () => {
     const evidence = [
       claim("duplicate-a", "The source confirms one supported point"),

@@ -781,11 +781,11 @@ test.describe("unified guided first-run experience", () => {
     await expectFirstDoorStable(page);
   });
 
-  test("deferred claim POST cannot restore state after Start over (R2)", async ({ page }) => {
+  test("deferred personalization POST cannot restore state after Start over (R2)", async ({ page }) => {
     test.setTimeout(60_000);
     const sessions = new Map<string, PublicTryMeSession>();
-    const heldClaimRoutes: Route[] = [];
-    let holdClaimResponses = false;
+    const heldPersonalizationRoutes: Route[] = [];
+    let holdPersonalizationResponses = false;
     let claimFixtureMode: "collecting" | "ready" = "collecting";
 
     await page.route("**/e/e2e-deferred-claim**", async (route) => {
@@ -835,28 +835,20 @@ test.describe("unified guided first-run experience", () => {
         }
       };
     });
-    await page.route("**/api/sessions/*/claim", async (route) => {
+    await page.route("**/api/sessions/*/personalization-request", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
       }
-      if (holdClaimResponses) {
-        heldClaimRoutes.push(route);
+      if (holdPersonalizationResponses) {
+        heldPersonalizationRoutes.push(route);
         return;
       }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          session: {
-            ...publicSession({
-              id: "e2e-deferred-claim",
-              useCase: "campaign",
-              companyDomain: "northpeak.com",
-              status: "claimed"
-            }),
-            liveUrl: "https://example.test/e/e2e-deferred-claim"
-          }
+          request: { id: "request-e2e", status: "awaiting_targets", targets: [] }
         })
       });
     });
@@ -872,46 +864,20 @@ test.describe("unified guided first-run experience", () => {
     await page.getByLabel("Company domain").fill("northpeak.com");
     await page.getByRole("button", { name: /Use this company/i }).click();
 
-    const engagementButton = page.getByRole("button", { name: /See live engagement/i });
-    await expect(engagementButton).toBeVisible({ timeout: 10_000 });
-    const frame = page.frame({ url: /\/e\/e2e-deferred-claim/ });
-    expect(frame).not.toBeNull();
-    await frame!.evaluate(() => {
-      window.parent.postMessage({
-        source: "folloze-experience",
-        action: "section_view",
-        payload: {
-          sectionId: "supporting-resources",
-          sectionTitle: "Proof that earns the next conversation",
-          sectionHeadline: "Three source-backed signals make the case concrete."
-        }
-      }, "*");
-    });
-
-    await page.getByRole("button", { name: /Save by email/i }).click();
-    await page.getByLabel("Business email").fill("buyer@northpeak.com");
-    holdClaimResponses = true;
-    await page.getByRole("button", { name: /Save this experience/i }).click();
-    await expect.poll(() => heldClaimRoutes.length, { timeout: 5_000 }).toBeGreaterThan(0);
+    const personalizeButton = page.getByRole("button", { name: /Personalize for 3 accounts/i });
+    await expect(personalizeButton).toBeVisible({ timeout: 10_000 });
+    await personalizeButton.click();
+    await page.getByLabel("Work email").fill("buyer@northpeak.com");
+    holdPersonalizationResponses = true;
+    await page.getByRole("button", { name: /^Continue$/i }).click();
+    await expect.poll(() => heldPersonalizationRoutes.length, { timeout: 5_000 }).toBeGreaterThan(0);
 
     await page.getByRole("button", { name: /Start over/i }).first().click();
     await expectFirstDoorStable(page);
 
-    const staleSession = publicSession({
-      id: "e2e-deferred-claim",
-      useCase: "campaign",
-      companyDomain: "northpeak.com",
-      status: "claimed",
-      answers: {
-        campaignType: "product",
-        promotedOffer: "Pipeline Command Center",
-        audience: "Revenue leaders",
-        objective: "Generate demand"
-      }
+    await releaseHeldRoutes(heldPersonalizationRoutes, {
+      request: { id: "request-e2e", status: "awaiting_targets", targets: [] }
     });
-    staleSession.liveUrl = "https://example.test/e/e2e-deferred-claim";
-
-    await releaseHeldRoutes(heldClaimRoutes, { session: staleSession });
     await page.waitForTimeout(1_500);
     await expectFirstDoorStable(page);
   });

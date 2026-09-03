@@ -1217,6 +1217,15 @@ describe("compiled asset plan authority", () => {
     expect(new Set(rendered).size).toBe(rendered.length);
   });
 
+  it("suppresses duplicate substantive asset identities across compiled slots", () => {
+    const duplicatePlan: AssetRenderPlan = {
+      ...plan,
+      placements: plan.placements.map((placement) => ({ ...placement, assetRef: plan.placements[0]!.assetRef }))
+    };
+    const html = renderExperienceHtml({ draft, brand, useCase: "campaign", answers: {}, assetPlan: duplicatePlan });
+    expect(renderedImages(html)).toEqual([plan.placements[0]!.assetRef]);
+  });
+
   it("renders a designed treatment rather than an eyebrow stack when no asset is planned", () => {
     const html = renderExperienceHtml({
       draft,
@@ -1228,6 +1237,7 @@ describe("compiled asset plan authority", () => {
 
     expect(renderedImages(html)).toEqual([]);
     expect(html).toContain("no-asset-treatment");
+    expect(html).toContain("min-height:clamp(220px,28vw,360px)");
     expect(html).toMatch(/<figure class="media[^"]*no-asset-treatment/);
     // A designed treatment is a composed figure, not a third stacked text block.
     expect(html).not.toMatch(/<p class="eyebrow">[\s\S]{0,200}?<h2>[\s\S]{0,200}?<p class="dek">/);

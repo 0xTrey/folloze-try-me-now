@@ -12,6 +12,11 @@ import {
   type GenericProductionEngineResult
 } from "@/lib/generation/generic-production-engine";
 import {
+  compileAccountPersonalization,
+  type AccountPersonalizationCompilerResult,
+  type AccountPersonalizationField
+} from "@/lib/generation/account-personalization-compiler";
+import {
   rankMessageFrameworks,
   type MessageMotion
 } from "@/lib/generation/message-spine";
@@ -422,6 +427,7 @@ function familyArgument(input: {
   objective: string;
   publicContext?: string;
   ctaId: CtaIdV2;
+  accountPersonalization?: AccountPersonalizationCompilerResult;
 }): RequiredProductionArgument {
   const {
     base,
@@ -432,31 +438,45 @@ function familyArgument(input: {
     audience,
     objective,
     publicContext,
-    ctaId
+    ctaId,
+    accountPersonalization
   } = input;
   const cta = boundedCtaV2(ctaId);
   const objectiveAction = objective.length
     ? `${objective[0]!.toLocaleLowerCase()}${objective.slice(1)}`
     : "validate the next decision";
-  const promise =
+  const accountReady =
+    family.family === "align" &&
+    Boolean(
+      accountPersonalization &&
+      accountPersonalization.quality.status !== "insufficient"
+    );
+  const accountDirective = (field: AccountPersonalizationField): string | undefined =>
+    accountReady ? accountPersonalization?.directives[field] : undefined;
+  const accountRefs = (field: AccountPersonalizationField): string[] =>
+    accountReady ? [...(accountPersonalization?.directiveEvidenceRefs[field] ?? [])] : [];
+  const promise = accountDirective("promise") ?? (
     family.family === "launch"
       ? `${offer} gives ${audience} a concrete path to ${objectiveAction}.`
       : family.family === "guide"
         ? `${audience} can evaluate ${offer} with clearer decision criteria.`
-        : `${targetName ?? "The target team"} and ${sellerName} can ${objectiveAction} together.`;
-  const tension =
+        : `${targetName ?? "The target team"} and ${sellerName} can ${objectiveAction} together.`
+  );
+  const tension = accountDirective("tension") ?? (
     family.family === "launch"
       ? publicContext ??
         `${audience} need a concrete reason to change the current approach.`
       : family.family === "guide"
         ? `${objective} requires connected stakes, observable criteria, and supported answers.`
-        : `${targetName ?? "The target team"} needs account-specific evidence before choosing where ${offer} fits.`;
-  const whyNow =
+        : `The current public evidence does not yet establish how ${offer} fits ${targetName ?? "the target team"}.`
+  );
+  const whyNow = accountDirective("whyNow") ?? (
     family.family === "guide"
       ? `${offer} changes what ${audience} should examine before making this decision.`
       : family.family === "align"
-        ? `${targetName ?? "The target team"} has a current priority to ${objective}.`
-        : `${objective} is the next useful buyer action for ${offer}.`;
+        ? `Use the available public context to frame ${objective} as a validation question, not a settled account priority.`
+        : `${objective} is the next useful buyer action for ${offer}.`
+  );
 
   return {
     audience: {
@@ -468,6 +488,7 @@ function familyArgument(input: {
       directive: tension,
       evidenceRefs: [
         ...new Set([
+          ...accountRefs("tension"),
           ...base.promise.evidenceRefs,
           ...base.mechanism.evidenceRefs
         ])
@@ -476,47 +497,92 @@ function familyArgument(input: {
     },
     promise: {
       directive: promise,
-      evidenceRefs: [...base.promise.evidenceRefs],
+      evidenceRefs: [...new Set([...accountRefs("promise"), ...base.promise.evidenceRefs])],
       unknowns: [...base.promise.unknowns]
     },
     mechanism: {
-      directive:
+      directive: accountDirective("mechanism") ?? (
         family.family === "launch"
           ? `Show how ${offer} moves from buyer action to capability to observable output.`
           : family.family === "guide"
             ? `Map each evaluation criterion to a supported ${sellerName} capability and observable result.`
-            : `Frame practical workstreams that ${targetName ?? "the target team"} and ${sellerName} can validate together.`,
-      evidenceRefs: [...base.mechanism.evidenceRefs],
+            : `Frame practical workstreams that ${targetName ?? "the target team"} and ${sellerName} can validate together.`
+      ),
+      evidenceRefs: [
+        ...new Set([...accountRefs("mechanism"), ...base.mechanism.evidenceRefs])
+      ],
       unknowns: [...base.mechanism.unknowns]
     },
     proofPlan: {
-      directive:
+      directive: accountDirective("proofPlan") ?? (
         family.family === "align"
           ? `Use target-relevant evidence or state a concrete validation plan for ${targetName ?? "the target team"}.`
-          : base.proofPlan.directive,
-      evidenceRefs: [...base.proofPlan.evidenceRefs],
+          : base.proofPlan.directive
+      ),
+      evidenceRefs: [
+        ...new Set([...accountRefs("proofPlan"), ...base.proofPlan.evidenceRefs])
+      ],
       unknowns: [...base.proofPlan.unknowns]
     },
     decisionHelp: {
-      directive:
+      directive: accountDirective("decisionHelp") ?? (
         family.family === "launch"
           ? `Let ${audience} choose among specific jobs, benefits, capabilities, and validation questions.`
           : family.family === "guide"
             ? `Give ${audience} observable criteria and supported application scenarios.`
-            : `Give ${targetName ?? "the target team"} priority-specific questions, evidence, and next steps.`,
-      evidenceRefs: [...base.decisionHelp.evidenceRefs],
+            : `Give ${targetName ?? "the target team"} priority-specific questions, evidence, and next steps.`
+      ),
+      evidenceRefs: [
+        ...new Set([...accountRefs("decisionHelp"), ...base.decisionHelp.evidenceRefs])
+      ],
       unknowns: [...base.decisionHelp.unknowns]
     },
     nextAction: {
-      directive: `${cta.label} to ${objective}.`,
-      evidenceRefs: [...base.nextAction.evidenceRefs],
+      directive: accountDirective("nextAction") ?? `${cta.label} to ${objective}.`,
+      evidenceRefs: [
+        ...new Set([...accountRefs("nextAction"), ...base.nextAction.evidenceRefs])
+      ],
       unknowns: []
     },
     whyNow: {
       directive: whyNow,
-      evidenceRefs: [...base.promise.evidenceRefs],
+      evidenceRefs: [...new Set([...accountRefs("whyNow"), ...base.promise.evidenceRefs])],
       unknowns: []
     }
+  };
+}
+
+function overlayAccountPersonalization(
+  argument: RequiredProductionArgument,
+  compilation: AccountPersonalizationCompilerResult
+): RequiredProductionArgument {
+  if (compilation.quality.status === "insufficient") return argument;
+  const apply = <K extends AccountPersonalizationField>(
+    field: K,
+    current: RequiredProductionArgument[K]
+  ): RequiredProductionArgument[K] => {
+    const directive = compilation.directives[field];
+    if (!directive || !current) return current;
+    return {
+      ...current,
+      directive,
+      evidenceRefs: [
+        ...new Set([
+          ...(compilation.directiveEvidenceRefs[field] ?? []),
+          ...current.evidenceRefs
+        ])
+      ]
+    } as RequiredProductionArgument[K];
+  };
+  return {
+    ...argument,
+    tension: apply("tension", argument.tension),
+    whyNow: apply("whyNow", argument.whyNow),
+    promise: apply("promise", argument.promise),
+    mechanism: apply("mechanism", argument.mechanism),
+    proofPlan: apply("proofPlan", argument.proofPlan),
+    decisionHelp: apply("decisionHelp", argument.decisionHelp),
+    nextAction: apply("nextAction", argument.nextAction)
   };
 }
 
@@ -979,6 +1045,20 @@ export async function compileSessionProductionPage(input: {
     completedAt
   });
   const targetName = targetNameFor(session, input.targetBrand);
+  const accountPersonalization = compileAccountPersonalization({
+    revision,
+    sellerName: brand.companyName,
+    targetName: targetName ?? "The target account",
+    targetDomain:
+      input.targetBrand?.canonicalDomain ??
+      input.targetBrand?.domain ??
+      session.answers.targetDomain ??
+      "",
+    offer,
+    audience: audience.label,
+    objective,
+    evidence: session.evidenceItems ?? []
+  });
   const ctaId = selectedFamilyCtaId(session, selectedFamilyDecision);
   const baseFamilyArgument = (base: RequiredProductionArgument) =>
     familyArgument({
@@ -990,7 +1070,10 @@ export async function compileSessionProductionPage(input: {
       audience: audience.label,
       objective,
       publicContext: brand.publicContext,
-      ctaId
+      ctaId,
+      ...(selectedFamilyDecision.family === "align"
+        ? { accountPersonalization }
+        : {})
     });
   const baselineArgument = messageSpineArtifact.value
     ? baseFamilyArgument(messageSpineArtifact.value.argument)
@@ -1060,7 +1143,21 @@ export async function compileSessionProductionPage(input: {
         completedAt
       })
     : undefined;
-  const familyMessageSpineArtifact = baselineArgument
+  const selectedProductionArgument = baselineArgument
+    ? thesisStrategy?.selected
+      ? productionArgumentFromStrategy({
+          base: baselineArgument,
+          strategy: thesisStrategy.selected,
+          ledger
+        })
+      : baselineArgument
+    : undefined;
+  const writerProductionArgument = selectedProductionArgument
+    ? selectedFamilyDecision.family === "align"
+      ? overlayAccountPersonalization(selectedProductionArgument, accountPersonalization)
+      : selectedProductionArgument
+    : undefined;
+  const familyMessageSpineArtifact = writerProductionArgument
     ? compileFamilyProductionMessageSpine({
         sessionId: session.id,
         revision,
@@ -1069,13 +1166,7 @@ export async function compileSessionProductionPage(input: {
         // The thesis strategy is the only selected strategy that may shape
         // customer-facing directives. If it clears no gates, the original
         // deterministic family argument remains the explicit fallback.
-        argument: thesisStrategy?.selected
-            ? productionArgumentFromStrategy({
-                base: baselineArgument,
-                strategy: thesisStrategy.selected,
-                ledger
-              })
-          : baselineArgument,
+        argument: writerProductionArgument,
         sellerName: brand.companyName,
         targetName,
         ctaId,
@@ -1115,6 +1206,9 @@ export async function compileSessionProductionPage(input: {
     },
     compositionArtifact,
     messageSpineArtifact,
+    ...(selectedFamilyDecision.family === "align" && accountPersonalization.claims.length > 0
+      ? { additionalSectionEvidence: accountPersonalization.claims }
+      : {}),
     allowVisualRepair: true,
     ...(input.attemptId || input.traceId
       ? {

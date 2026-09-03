@@ -48,7 +48,8 @@ import {
   brandWithFirstPartyImages,
   brandWithSessionLogoDelivery,
   imageDeliverySources,
-  renderPlanWithFirstPartyImages
+  renderPlanWithFirstPartyImages,
+  withTargetSupportingImage
 } from "@/lib/image-delivery";
 import {
   harvestBrand,
@@ -1151,7 +1152,12 @@ async function assembleExperienceArtifact(input: {
       ? {
           assetPlan: renderPlanWithFirstPartyImages(
             input.id,
-            productionResult.assetPlan,
+            input.imageSourceTargetBrand
+              ? withTargetSupportingImage(
+                  productionResult.assetPlan,
+                  input.imageSourceTargetBrand.imageUrls
+                )
+              : productionResult.assetPlan,
             imageSources,
             qualityReceipt.artifactRevision
           )

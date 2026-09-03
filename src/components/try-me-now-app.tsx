@@ -3111,24 +3111,28 @@ export function AssemblyPreview({ session, iframeRef }: { session: PublicTryMeSe
 /**
  * V2 is a final-only, app-hosted reveal. Legacy temporary URL, personalization,
  * and countdown controls stay hidden, but final-only V2 still exposes live
- * engagement and email-save actions at reveal.
+ * engagement and account-personalization actions at reveal.
  */
 export function isUnifiedFinalOnlyV2(session: Pick<PublicTryMeSession, "experienceSpec"> | undefined): boolean {
   return session?.experienceSpec?.schemaVersion === "2.0";
 }
 
-function useDialogBehavior(onClose: () => void) {
+function useDialogBehavior(
+  onClose: () => void,
+  returnFocusRef?: RefObject<HTMLElement | null>
+) {
   const dialogRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const returnFocusTarget = returnFocusRef?.current ?? previouslyFocused;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     dialogRef.current?.querySelector<HTMLElement>("button, a, input, [tabindex]:not([tabindex='-1'])")?.focus();
     return () => {
       document.body.style.overflow = previousOverflow;
-      previouslyFocused?.focus();
+      returnFocusTarget?.focus();
     };
-  }, []);
+  }, [returnFocusRef]);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
@@ -3165,6 +3169,7 @@ export function SaveExperienceDialog({
   onSubmitTargets,
   onAutoSelectTargets,
   onOpenLink,
+  returnFocusRef,
   onClose
 }: {
   open: boolean;
@@ -3177,9 +3182,10 @@ export function SaveExperienceDialog({
   onSubmitTargets: (targets: PersonalizationTargetInput[]) => void | Promise<void>;
   onAutoSelectTargets?: () => void | Promise<void>;
   onOpenLink?: (position: number) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
 }) {
-  const { dialogRef, onKeyDown } = useDialogBehavior(onClose);
+  const { dialogRef, onKeyDown } = useDialogBehavior(onClose, returnFocusRef);
   if (!open) return null;
   return createPortal(
     <div className="drawerBackdrop saveDialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !["saving_email", "saving_targets"].includes(status)) onClose(); }}>
@@ -3300,6 +3306,7 @@ export function TryMeNowApp() {
   const initialPreviewScrolled = useRef(false);
   const buildShellScrolled = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const personalizationTriggerRef = useRef<HTMLButtonElement | null>(null);
   const patchRequestRef = useRef(0);
   const persistedSectionSignals = useRef(new Set<string>());
   const journeyCompleteAnalyticsOpened = useRef<string | undefined>(undefined);
@@ -4650,7 +4657,7 @@ export function TryMeNowApp() {
             </div>
             <div className="revealActions">
               {canPersonalizeExperience && (
-                <button className="buttonPrimary" type="button" onClick={openSavePrompt}>
+                <button ref={personalizationTriggerRef} className="buttonPrimary" type="button" onClick={openSavePrompt}>
                   <Users size={16} />
                   {personalizationRequest
                     ? ["queued", "generating"].includes(personalizationRequest.status)
@@ -4748,6 +4755,7 @@ export function TryMeNowApp() {
         onSubmitEmail={startPersonalizationRequest}
         onSubmitTargets={submitPersonalizationTargets}
         onAutoSelectTargets={autoSelectPersonalizationTargets}
+        returnFocusRef={personalizationTriggerRef}
         onOpenLink={(position) => {
           captureUnifiedProductEvent("personalization_variant_link_opened", {
             sessionId: session.id,

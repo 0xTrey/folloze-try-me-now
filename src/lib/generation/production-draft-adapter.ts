@@ -13,11 +13,23 @@ function bounded(
   fallback: string
 ): string {
   const clean = value?.replace(/\s+/g, " ").trim();
-  return clean &&
-    clean.length >= min &&
-    clean.length <= max
-    ? clean
-    : fallback;
+  if (!clean || clean.length < min) return fallback;
+  if (clean.length <= max) return clean;
+
+  const candidate = clean.slice(0, max + 1);
+  const sentenceBoundary = Math.max(
+    candidate.lastIndexOf("."),
+    candidate.lastIndexOf("!"),
+    candidate.lastIndexOf("?")
+  );
+  const wordBoundary = candidate.lastIndexOf(" ");
+  const boundary = sentenceBoundary >= min
+    ? sentenceBoundary + 1
+    : wordBoundary >= min
+      ? wordBoundary
+      : max;
+  const excerpt = candidate.slice(0, boundary).trim().replace(/[,;:]+$/, "");
+  return excerpt.length >= min ? excerpt : fallback;
 }
 
 function evidenceIds(

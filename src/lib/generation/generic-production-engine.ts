@@ -227,6 +227,13 @@ export interface GenericProductionEngineInput {
   recipeSelection?: PageRecipeSelection;
   compositionArtifact: ProductionArtifact<WireframeSelectionV1>;
   messageSpineArtifact: ProductionArtifact<ProductionMessageSpine>;
+  /**
+   * Current-revision, public target-account claims compiled upstream. They are
+   * private writer input, never a public response field. Keeping them separate
+   * from the seller live brief prevents account research from being mistaken
+   * for a seller capability claim.
+   */
+  additionalSectionEvidence?: readonly SectionEvidenceClaim[];
   allowVisualRepair?: boolean;
   /** Optional session trace identity. Derived deterministically when absent. */
   trace?: { traceId?: string; attemptId?: string; supportRef?: string };
@@ -1077,7 +1084,8 @@ function sourceRoleFor(
 
 function sectionEvidence(
   evidence: MaterialLiveBriefEvidence,
-  revision: number
+  revision: number,
+  additional: readonly SectionEvidenceClaim[] = []
 ): SectionEvidenceClaim[] {
   const byId = new Map<string, SectionEvidenceClaim>();
   for (const [field, reconciled] of Object.entries(evidence.fields) as Array<
@@ -1100,6 +1108,22 @@ function sectionEvidence(
         sourceRole: current?.sourceRole ?? sourceRoleFor(field, reconciled)
       });
     }
+  }
+  for (const claim of additional) {
+    if (
+      claim.revision !== revision ||
+      claim.sourceRole !== "target" ||
+      !claim.id.trim() ||
+      !claim.text.trim() ||
+      !Number.isFinite(claim.confidence)
+    ) {
+      continue;
+    }
+    byId.set(claim.id, {
+      ...claim,
+      confidence: boundedConfidence(claim.confidence),
+      kind: claim.kind ?? "target_fact"
+    });
   }
   return [...byId.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
@@ -1270,7 +1294,15 @@ export async function compileGenericProductionPage(
   const spine = input.messageSpineArtifact.value!;
   const familySpine = input.familyMessageSpineArtifact?.value;
   const brand = input.brandArtifact.value!;
-  const evidence = sectionEvidence(evidenceValue, input.revision);
+  const evidence = sectionEvidence(
+    evidenceValue,
+    input.revision,
+    input.additionalSectionEvidence
+  );
+  traceContext.evidenceIds = unique([
+    ...traceContext.evidenceIds,
+    ...evidence.map(({ id }) => id)
+  ]);
   const slots = familySpine
     ? writerSlotsFromFamilyMessageSpine(familySpine)
     : writerSlots(spine, selection);
