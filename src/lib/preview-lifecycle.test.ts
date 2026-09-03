@@ -4,6 +4,7 @@ import {
   analyticsDurationBucket,
   analyticsQualityGate,
   canOfferClaimModal,
+  canOfferPersonalizationModal,
   canRevealPreview,
   hasMeaningfulPreviewEngagement,
   isSessionGenerationEligible,
@@ -169,6 +170,26 @@ describe("preview lifecycle eligibility and reveal", () => {
 });
 
 describe("preview lifecycle modal and claim timing", () => {
+  it("offers three-account personalization from a final artifact without an engagement delay", () => {
+    const experience: PublicExperienceSummary = {
+      ready: true,
+      title: "Ready",
+      headline: "Ready headline",
+      readiness: "final",
+      generationSource: "openai",
+      artifactRevision: 2
+    };
+    const ready = baseSession({
+      status: "preview_ready_unclaimed",
+      answers: eligibleAnswers,
+      experience,
+      finalArtifact: finalReceiptFor(experience)
+    });
+    expect(canOfferPersonalizationModal(ready)).toBe(true);
+    expect(canOfferPersonalizationModal({ ...ready, finalArtifact: undefined })).toBe(false);
+    expect(canOfferPersonalizationModal({ ...ready, status: "generating" })).toBe(false);
+  });
+
   it("never offers the claim modal before meaningful preview engagement (U22/U23)", () => {
     const experience: PublicExperienceSummary = {
       ready: true,

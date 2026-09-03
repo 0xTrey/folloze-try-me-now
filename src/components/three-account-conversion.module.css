@@ -1,0 +1,319 @@
+.panel {
+  padding: clamp(26px, 4vw, 42px);
+  color: #102847;
+}
+
+.panel h2 {
+  max-width: 600px;
+  margin: 0;
+  font-size: clamp(30px, 4.2vw, 46px);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+}
+
+.intro {
+  max-width: 620px;
+  margin: 18px 0 0;
+  color: #516784;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.valueGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin: 26px 0;
+}
+
+.valueGrid span {
+  min-height: 82px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid #d9e7f4;
+  border-radius: 15px;
+  background: #f7fbff;
+  color: #284462;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.valueGrid svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #087443;
+}
+
+.form {
+  display: grid;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.form label,
+.targetFields legend {
+  color: #183653;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.form label span {
+  margin-left: 5px;
+  color: #71839a;
+  font-weight: 500;
+}
+
+.form input {
+  width: 100%;
+  min-height: 49px;
+  padding: 12px 14px;
+  border: 1px solid #c9d9e9;
+  border-radius: 12px;
+  background: #fff;
+  color: #102847;
+  font: inherit;
+}
+
+.form input:focus {
+  border-color: #0877ff;
+  outline: 3px solid rgba(8, 119, 255, 0.15);
+}
+
+.primaryButton,
+.secondaryButton,
+.openLink {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+.primaryButton {
+  justify-self: start;
+  margin-top: 8px;
+  padding: 12px 20px;
+  border: 1px solid #0877ff;
+  background: #0877ff;
+  color: #fff;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.secondaryButton {
+  padding: 12px 18px;
+  border: 1px solid #c9d9e9;
+  background: #fff;
+  color: #284462;
+}
+
+.testBoundary {
+  margin: 24px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid #e2ebf3;
+  color: #71839a;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.stepStatus {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #eef7ff;
+  color: #47617e;
+  font-size: 12px;
+}
+
+.stepStatus strong {
+  color: #075fbf;
+}
+
+.targetFields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.targetFields fieldset {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #d7e3ee;
+  border-radius: 15px;
+  background: #fbfdff;
+}
+
+.targetFields legend {
+  padding: 0 5px;
+  color: #0877ff;
+}
+
+.targetFields input {
+  min-height: 44px;
+  padding: 10px;
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 9px;
+}
+
+.actions .primaryButton {
+  margin: 0;
+}
+
+.targetProgress {
+  display: grid;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.targetProgressRow {
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #d8e4ef;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.targetProgressRow[data-state="ready"] {
+  border-color: #bde6d2;
+  background: #f7fdf9;
+}
+
+.targetProgressRow[data-state="needs_review"],
+.targetProgressRow[data-state="failed"] {
+  background: #fffaf7;
+}
+
+.statusIcon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf4ff;
+  color: #0877ff;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+[data-state="ready"] .statusIcon {
+  background: #dff6e9;
+  color: #087443;
+}
+
+.targetIdentity {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.targetIdentity strong {
+  overflow: hidden;
+  color: #102847;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.targetIdentity small,
+.targetStatus {
+  color: #71839a;
+  font-size: 11px;
+}
+
+.targetStatus {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.openLink {
+  min-height: 36px;
+  padding: 8px 13px;
+  background: #102847;
+  color: #fff;
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.workingNote {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
+  color: #47617e;
+  font-size: 12px;
+}
+
+.spinner {
+  animation: personalizationSpin 0.8s linear infinite;
+}
+
+.error {
+  margin: 8px 0 0;
+  color: #a23820;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@keyframes personalizationSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+@media (max-width: 680px) {
+  .valueGrid,
+  .targetFields {
+    grid-template-columns: 1fr;
+  }
+
+  .valueGrid span { min-height: auto; }
+
+  .stepStatus,
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actions .primaryButton,
+  .actions .secondaryButton,
+  .primaryButton {
+    width: 100%;
+  }
+
+  .targetProgressRow {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+  }
+
+  .openLink {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+}

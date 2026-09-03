@@ -1412,12 +1412,13 @@ function normalizedAnswersFor(session: TryMeSession): SessionAnswers {
 }
 
 export async function createSession(
-  input: CreateSessionInput
+  input: CreateSessionInput,
+  options: { sessionId?: string } = {}
 ): Promise<{ session: PublicTryMeSession; editorToken: string; traceId: string }> {
   assertProductionSessionStore();
   const companyDomain = normalizeDomain(input.companyDomain);
   const now = new Date().toISOString();
-  const id = opaqueId();
+  const id = options.sessionId ?? opaqueId();
   const editorToken = opaqueId();
   const session: TryMeSession = appendEvent(
     {

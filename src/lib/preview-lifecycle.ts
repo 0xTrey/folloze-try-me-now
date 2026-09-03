@@ -233,6 +233,26 @@ export function canOfferClaimModal(
 }
 
 /**
+ * The three-account conversion can be offered as soon as the finished standard
+ * experience is revealable. It does not claim, publish, or mutate that artifact.
+ */
+export function canOfferPersonalizationModal(
+  session:
+    | Pick<PublicTryMeSession, "experience" | "status" | "finalArtifact" | "useCase" | "answers">
+    | undefined
+): boolean {
+  if (!session) return false;
+  if (
+    !["preview_ready_unclaimed", "claim_failed", "claimed"].includes(
+      session.status
+    )
+  ) {
+    return false;
+  }
+  return canRevealFinalExperience(session);
+}
+
+/**
  * Customer-visible language for each build phase. Active verbs, no percentages,
  * and no internal recipe, strategy, or evidence labels.
  */

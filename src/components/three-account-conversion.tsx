@@ -1,0 +1,274 @@
+"use client";
+
+import { ArrowRight, Check, ExternalLink, LoaderCircle } from "lucide-react";
+import { type FormEvent, useMemo, useState } from "react";
+
+import type {
+  PersonalizationTargetInput,
+  PublicPersonalizationRequest
+} from "@/lib/personalization-request-store";
+
+import styles from "./three-account-conversion.module.css";
+
+type SubmissionStatus =
+  | "idle"
+  | "saving_email"
+  | "saving_targets"
+  | "polling"
+  | "error";
+
+export type ThreeAccountConversionProps = {
+  email: string;
+  request?: PublicPersonalizationRequest;
+  status: SubmissionStatus;
+  error?: string;
+  onEmailChange: (value: string) => void;
+  onSubmitEmail: () => void | Promise<void>;
+  onSubmitTargets: (targets: PersonalizationTargetInput[]) => void | Promise<void>;
+  onOpenLink?: (position: number) => void;
+};
+
+const emptyTargets = (): PersonalizationTargetInput[] => [
+  { domain: "" },
+  { domain: "" },
+  { domain: "" }
+];
+
+const targetStatusLabel: Record<
+  PublicPersonalizationRequest["targets"][number]["status"],
+  string
+> = {
+  pending: "Queued",
+  researching: "Building",
+  ready: "Ready",
+  needs_review: "Needs review",
+  failed: "Could not finish"
+};
+
+function isTerminal(status: PublicPersonalizationRequest["status"]): boolean {
+  return ["completed", "partial", "needs_review", "failed"].includes(status);
+}
+
+export function ThreeAccountConversion({
+  email,
+  request,
+  status,
+  error,
+  onEmailChange,
+  onSubmitEmail,
+  onSubmitTargets,
+  onOpenLink
+}: ThreeAccountConversionProps) {
+  const [targets, setTargets] = useState<PersonalizationTargetInput[]>(emptyTargets);
+  const requestIsWorking = Boolean(
+    request && ["queued", "generating"].includes(request.status)
+  );
+  const requestIsTerminal = Boolean(request && isTerminal(request.status));
+  const busy = ["saving_email", "saving_targets", "polling"].includes(status);
+
+  const readyTargets = useMemo(
+    () => request?.targets.filter((target) => target.status === "ready" && target.link) ?? [],
+    [request]
+  );
+
+  const submitEmail = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!email.trim() || busy) return;
+    await onSubmitEmail();
+  };
+
+  const submitTargets = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy || targets.some((target) => !target.domain.trim())) return;
+    await onSubmitTargets(
+      targets.map(({ domain, role }) => ({
+        domain: domain.trim(),
+        ...(role?.trim() ? { role: role.trim() } : {})
+      }))
+    );
+  };
+
+  const updateTarget = (
+    index: number,
+    field: "domain" | "role",
+    value: string
+  ) => {
+    setTargets((current) =>
+      current.map((target, position) =>
+        position === index ? { ...target, [field]: value } : target
+      )
+    );
+  };
+
+  if (requestIsWorking || requestIsTerminal) {
+    const headline = requestIsWorking
+      ? "We are building all three versions in parallel."
+      : request?.status === "completed"
+        ? "Your three account versions are ready."
+        : readyTargets.length
+          ? `${readyTargets.length} account ${readyTargets.length === 1 ? "version is" : "versions are"} ready.`
+          : "These account versions need another pass.";
+    return (
+      <div className={styles.panel}>
+        <h2 id="personalization-dialog-title">{headline}</h2>
+        <p className={styles.intro}>
+          {requestIsWorking
+            ? "Each account is moving through public research, account-specific writing, quality checks, and final readback before a link appears."
+            : readyTargets.length
+              ? "Open each finished version below. Targets without a link were withheld because they did not pass the evidence or final quality gate."
+              : "No generic account page was released. The targets below show where the evidence or final quality gate stopped the build."}
+        </p>
+
+        <div className={styles.targetProgress} aria-live="polite">
+          {request?.targets.map((target) => (
+            <article
+              className={styles.targetProgressRow}
+              data-state={target.status}
+              key={target.id}
+            >
+              <span className={styles.statusIcon} aria-hidden="true">
+                {target.status === "ready" ? (
+                  <Check size={15} />
+                ) : target.status === "researching" ? (
+                  <LoaderCircle className={styles.spinner} size={16} />
+                ) : (
+                  String(target.position).padStart(2, "0")
+                )}
+              </span>
+              <span className={styles.targetIdentity}>
+                <strong>{target.domain}</strong>
+                <small>{target.role || "Account-level version"}</small>
+              </span>
+              <span className={styles.targetStatus}>{targetStatusLabel[target.status]}</span>
+              {target.status === "ready" && target.link && (
+                <a
+                  className={styles.openLink}
+                  href={target.link}
+                  target="_blank"
+                  rel="noopener"
+                  onClick={() => onOpenLink?.(target.position)}
+                >
+                  Open <ExternalLink size={14} />
+                </a>
+              )}
+            </article>
+          ))}
+        </div>
+
+        {requestIsWorking && (
+          <div className={styles.workingNote} role="status">
+            <LoaderCircle className={styles.spinner} size={17} />
+            This dialog will update as each final link is verified.
+          </div>
+        )}
+        {error && <p className={styles.error} role="alert">{error}</p>}
+        <p className={styles.testBoundary}>
+          Test delivery happens here. Email delivery and Folloze publishing stay off until production.
+        </p>
+      </div>
+    );
+  }
+
+  if (!request) {
+    return (
+      <div className={styles.panel}>
+        <h2 id="personalization-dialog-title">
+          Build three account versions from this experience.
+        </h2>
+        <p className={styles.intro}>
+          Enter your work email. Next, choose three target companies. We will create account-specific messaging, proof, imagery, resources, and next steps.
+        </p>
+        <div className={styles.valueGrid} aria-label="What will be created">
+          <span><Check size={15} />One focused version per account</span>
+          <span><Check size={15} />Only final-gated links are shown</span>
+          <span><Check size={15} />Your standard experience stays intact</span>
+        </div>
+        <form className={styles.form} onSubmit={submitEmail}>
+          <label htmlFor="personalization-email">Work email</label>
+          <input
+            id="personalization-email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => onEmailChange(event.target.value)}
+            placeholder="you@company.com"
+            required
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? "personalization-form-error" : undefined}
+          />
+          {error && <p id="personalization-form-error" className={styles.error} role="alert">{error}</p>}
+          <button className={styles.primaryButton} type="submit" disabled={busy}>
+            {status === "saving_email" ? "Saving your request" : "Choose my 3 accounts"}
+            {status === "saving_email" ? (
+              <LoaderCircle className={styles.spinner} size={17} />
+            ) : (
+              <ArrowRight size={17} />
+            )}
+          </button>
+        </form>
+        <p className={styles.testBoundary}>
+          We save this request to your finished app experience. Nothing is emailed or published to Folloze in this test phase.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.panel}>
+      <h2 id="personalization-dialog-title">Choose the three accounts.</h2>
+      <p className={styles.intro}>
+        Add exactly three public company domains. A buyer role is optional and helps focus each account’s story.
+      </p>
+      <div className={styles.stepStatus} aria-label="Step 2 of 2">
+        <span>Work email saved as {request?.emailMasked || "your business email"}</span>
+        <strong>3 accounts required</strong>
+      </div>
+      <form className={styles.form} onSubmit={submitTargets}>
+        <div className={styles.targetFields}>
+          {targets.map((target, index) => (
+            <fieldset key={index}>
+              <legend>Account {index + 1}</legend>
+              <label htmlFor={`personalization-domain-${index}`}>Company domain</label>
+              <input
+                id={`personalization-domain-${index}`}
+                inputMode="url"
+                value={target.domain}
+                onChange={(event) => updateTarget(index, "domain", event.target.value)}
+                placeholder="company.com"
+                required
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? "personalization-form-error" : undefined}
+              />
+              <label htmlFor={`personalization-role-${index}`}>
+                Buyer role <span>Optional</span>
+              </label>
+              <input
+                id={`personalization-role-${index}`}
+                value={target.role || ""}
+                onChange={(event) => updateTarget(index, "role", event.target.value)}
+                placeholder="VP of Marketing"
+                maxLength={120}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? "personalization-form-error" : undefined}
+              />
+            </fieldset>
+          ))}
+        </div>
+        {error && <p id="personalization-form-error" className={styles.error} role="alert">{error}</p>}
+        <div className={styles.actions}>
+          <button className={styles.primaryButton} type="submit" disabled={busy}>
+            {status === "saving_targets" ? "Starting all three" : "Build 3 account versions"}
+            {status === "saving_targets" ? (
+              <LoaderCircle className={styles.spinner} size={17} />
+            ) : (
+              <ArrowRight size={17} />
+            )}
+          </button>
+        </div>
+      </form>
+      <p className={styles.testBoundary}>
+        The three builds run in parallel. Links appear here only after each version passes its checks.
+      </p>
+    </div>
+  );
+}

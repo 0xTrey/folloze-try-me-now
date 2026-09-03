@@ -716,6 +716,15 @@ export interface SessionLineage {
   label?: string;
 }
 
+/** Server-only provenance for an app-hosted account version. */
+export interface PersonalizationLineage {
+  requestId: string;
+  baselineSessionId: string;
+  baselineArtifactRevision: number;
+  baselineArtifactDigest: string;
+  targetPosition: number;
+}
+
 export interface CampaignBriefField {
   key: BriefFieldKey;
   label: string;
@@ -1094,6 +1103,7 @@ export interface TryMeSession {
   qualityReceipt?: QualityReceipt;
   cockpit?: ClaimCockpitMetadata;
   lineage?: SessionLineage;
+  personalizationLineage?: PersonalizationLineage;
   campaignBrief?: CampaignBrief;
   audienceLens?: AudienceLensArtifact;
   campaignOfferSource?: CampaignOfferSource;
@@ -1138,6 +1148,7 @@ export type PublicTryMeSession = Omit<
   | "sourceArtifact"
   | "finalArtifact"
   | "offerDiscoveryGraph"
+  | "personalizationLineage"
 > & {
   supportRef: string;
   answers: PublicSessionAnswers;

@@ -698,6 +698,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   border: 0;
 }
 
+.saveExperienceDialog.personalizationDialog {
+  width: min(100%,760px);
+  padding: 0;
+}
+
 @media (max-width: 600px) {
   .saveDialogBackdrop { padding: 12px; }
   .saveExperienceDialog { border-radius: 20px; }

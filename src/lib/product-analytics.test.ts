@@ -101,6 +101,32 @@ describe("first-party product analytics", () => {
     })).not.toThrow();
   });
 
+  it("tracks the three-account funnel without accepting account identity", () => {
+    expect(() => parseProductEventBatch({
+      events: [{
+        eventId: "tme_personalize123456",
+        ...identity,
+        event: "personalization_batch_status_changed",
+        category: "workflow",
+        properties: {
+          request_status: "partial",
+          ready_count: 1,
+          review_count: 1,
+          failed_count: 1
+        }
+      }]
+    })).not.toThrow();
+    expect(() => parseProductEventBatch({
+      events: [{
+        eventId: "tme_personalize654321",
+        ...identity,
+        event: "personalization_targets_submitted",
+        category: "conversion",
+        properties: { target_count: 3, target_domain: "acme.com" }
+      }]
+    })).toThrow();
+  });
+
   it("keeps only bounded presence signals in the behavior session snapshot", async () => {
     const session = {
       id: "session_12345678",

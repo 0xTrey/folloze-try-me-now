@@ -19,7 +19,6 @@ import {
   Globe2,
   Layers3,
   LoaderCircle,
-  Mail,
   Megaphone,
   MessageSquareText,
   PencilLine,
@@ -44,7 +43,6 @@ import {
 import {
   AnalyticsSignalPanel,
   AudienceEvidenceTray,
-  ExpirySaveValuePanel,
   InstantBrandLockStrip,
   type AnalyticsSignal,
   type CtaValue,
@@ -60,6 +58,7 @@ import {
   type StreamingBriefQuestion,
   type StreamingBriefSummaryField
 } from "@/components/streaming-brief-composer";
+import { ThreeAccountConversion } from "@/components/three-account-conversion";
 
 import type {
   AudienceRecommendation,
@@ -74,6 +73,10 @@ import type {
   UseCase
 } from "@/lib/types";
 import { PERSONALIZATION_VARIANT_IDS } from "@/lib/types";
+import type {
+  PersonalizationTargetInput,
+  PublicPersonalizationRequest
+} from "@/lib/personalization-request-store";
 import {
   ApiResponseError,
   friendlyUploadError,
@@ -101,7 +104,7 @@ import {
   analyticsDurationBucket,
   analyticsQualityGate,
   answersPatchForStageRetry,
-  canOfferClaimModal,
+  canOfferPersonalizationModal,
   canRevealFinalExperience,
   isBuildInProgress,
   isSessionGenerationEligible,
@@ -112,7 +115,6 @@ import {
 import {
   captureProductEvent,
   captureUnifiedProductEvent,
-  identifyProductVisitor,
   initializeProductAnalytics,
   productAnalyticsHeaders,
   resetProductAnalyticsVisitor,
@@ -3154,52 +3156,42 @@ function useDialogBehavior(onClose: () => void) {
 
 export function SaveExperienceDialog({
   open,
-  expiresLabel,
-  url,
-  sellerName,
-  targetName,
-  headline,
-  remainingSeconds,
   email,
+  request,
   status,
   error,
   onEmailChange,
-  onSave,
+  onSubmitEmail,
+  onSubmitTargets,
+  onOpenLink,
   onClose
 }: {
   open: boolean;
-  expiresLabel: string;
-  url: string;
-  sellerName: string;
-  targetName?: string;
-  headline: string;
-  remainingSeconds?: number;
   email: string;
-  status: "idle" | "saving" | "saved" | "error";
+  request?: PublicPersonalizationRequest;
+  status: "idle" | "saving_email" | "saving_targets" | "polling" | "error";
   error?: string;
   onEmailChange: (email: string) => void;
-  onSave: () => void;
+  onSubmitEmail: () => void | Promise<void>;
+  onSubmitTargets: (targets: PersonalizationTargetInput[]) => void | Promise<void>;
+  onOpenLink?: (position: number) => void;
   onClose: () => void;
 }) {
   const { dialogRef, onKeyDown } = useDialogBehavior(onClose);
   if (!open) return null;
   return createPortal(
-    <div className="drawerBackdrop saveDialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && status !== "saving") onClose(); }}>
-      <section ref={dialogRef} className="saveExperienceDialog" role="dialog" aria-modal="true" aria-labelledby="save-value-title" onKeyDown={onKeyDown}>
-        <button className="drawerClose" type="button" onClick={onClose} disabled={status === "saving"} aria-label="Close save experience"><X size={20} /></button>
-        <ExpirySaveValuePanel
-          expiresLabel={expiresLabel}
-          url={url}
-          sellerName={sellerName}
-          targetName={targetName}
-          headline={headline}
-          remainingSeconds={remainingSeconds}
+    <div className="drawerBackdrop saveDialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !["saving_email", "saving_targets"].includes(status)) onClose(); }}>
+      <section ref={dialogRef} className="saveExperienceDialog personalizationDialog" role="dialog" aria-modal="true" aria-labelledby="personalization-dialog-title" onKeyDown={onKeyDown}>
+        <button className="drawerClose" type="button" onClick={onClose} disabled={["saving_email", "saving_targets"].includes(status)} aria-label="Close personalization request"><X size={20} /></button>
+        <ThreeAccountConversion
           email={email}
+          request={request}
           status={status}
           error={error}
           onEmailChange={onEmailChange}
-          onSave={onSave}
-          benefits={["Permanent app-hosted URL", "Copy-and-share access", "Engagement-ready experience"]}
+          onSubmitEmail={onSubmitEmail}
+          onSubmitTargets={onSubmitTargets}
+          onOpenLink={onOpenLink}
         />
       </section>
     </div>,
@@ -3286,9 +3278,12 @@ export function TryMeNowApp() {
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showAnalyticsPanel, setShowAnalyticsPanel] = useState(false);
   const [pdfUpload, setPdfUpload] = useState<PdfUploadFeedback>(idlePdfUpload);
-  const [claimEmail, setClaimEmail] = useState("");
-  const [claimStatus, setClaimStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [claimError, setClaimError] = useState("");
+  const [personalizationEmail, setPersonalizationEmail] = useState("");
+  const [personalizationRequest, setPersonalizationRequest] = useState<PublicPersonalizationRequest>();
+  const [personalizationStatus, setPersonalizationStatus] = useState<
+    "idle" | "saving_email" | "saving_targets" | "polling" | "error"
+  >("idle");
+  const [personalizationError, setPersonalizationError] = useState("");
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([]);
   const [revealedAt, setRevealedAt] = useState<number>();
   const [previewClockNow, setPreviewClockNow] = useState(() => Date.now());
@@ -3311,6 +3306,7 @@ export function TryMeNowApp() {
   const activePreflightKey = useRef<string | undefined>(undefined);
   const finalRenderTracked = useRef<string | undefined>(undefined);
   const supportRefTracked = useRef<string | undefined>(undefined);
+  const personalizationStatusTracked = useRef<string | undefined>(undefined);
   const resetGeneration = useRef(0);
   const [resetFenceEpoch, setResetFenceEpoch] = useState(0);
   const bumpResetGeneration = useCallback(() => {
@@ -3337,6 +3333,7 @@ export function TryMeNowApp() {
     previewScrolledSession.current = undefined;
     finalRenderTracked.current = undefined;
     supportRefTracked.current = undefined;
+    personalizationStatusTracked.current = undefined;
   }, []);
   const [preflightCoordinator] = useState(() => (
     new SellerBrandPreflightCoordinator(
@@ -3409,9 +3406,10 @@ export function TryMeNowApp() {
     setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
     setPdfUpload(idlePdfUpload);
-    setClaimEmail("");
-    setClaimStatus("idle");
-    setClaimError("");
+    setPersonalizationEmail("");
+    setPersonalizationRequest(undefined);
+    setPersonalizationStatus("idle");
+    setPersonalizationError("");
     setPersonalizationSelection({ key: "", variantId: "generic" });
     track("path_selected", { useCase: selected });
     track("use_case_selected", { useCase: selected });
@@ -3437,9 +3435,10 @@ export function TryMeNowApp() {
     setShowSavePrompt(false);
     setShowAnalyticsPanel(false);
     setPdfUpload(idlePdfUpload);
-    setClaimEmail("");
-    setClaimStatus("idle");
-    setClaimError("");
+    setPersonalizationEmail("");
+    setPersonalizationRequest(undefined);
+    setPersonalizationStatus("idle");
+    setPersonalizationError("");
     setClientEvents([]);
     setRevealedAt(undefined);
     setPersonalizationSelection({ key: "", variantId: "generic" });
@@ -4150,56 +4149,169 @@ export function TryMeNowApp() {
     void patchAnswers(patch);
   };
 
-  const claim = async (email: string) => {
-    if (!session) return;
-    const requestGeneration = resetGeneration.current;
-    setClaimStatus("saving");
-    setClaimError("");
-    captureUnifiedProductEvent("claim_started", {
-      sessionId: session.id,
-      properties: { claim_step: "email", trigger: "save_cta" }
+  const recordPersonalizationStatus = useCallback((
+    next: PublicPersonalizationRequest,
+    activeSessionId: string
+  ) => {
+    const readyCount = next.targets.filter((target) => target.status === "ready").length;
+    const reviewCount = next.targets.filter((target) => target.status === "needs_review").length;
+    const failedCount = next.targets.filter((target) => target.status === "failed").length;
+    const key = `${next.id}:${next.status}:${readyCount}:${reviewCount}:${failedCount}`;
+    if (personalizationStatusTracked.current === key) return;
+    personalizationStatusTracked.current = key;
+    captureUnifiedProductEvent("personalization_batch_status_changed", {
+      sessionId: activeSessionId,
+      properties: {
+        request_status: next.status,
+        ready_count: readyCount,
+        review_count: reviewCount,
+        failed_count: failedCount
+      }
     });
-    captureUnifiedProductEvent("claim_attempted", {
+  }, []);
+
+  const startPersonalizationRequest = async () => {
+    if (!session || !personalizationEmail.trim()) return;
+    const requestGeneration = resetGeneration.current;
+    setPersonalizationStatus("saving_email");
+    setPersonalizationError("");
+    captureUnifiedProductEvent("personalization_request_started", {
       sessionId: session.id,
-      properties: { claim_step: "submit", has_value: Boolean(email.trim()) }
+      properties: { request_step: "email", target_count: 0 }
     });
     try {
-      const result = await api<{ session: PublicTryMeSession }>(`/api/sessions/${session.id}/claim`, {
-        method: "POST",
-        body: JSON.stringify({ email })
-      });
+      const result = await api<{ request: PublicPersonalizationRequest }>(
+        `/api/sessions/${session.id}/personalization-request`,
+        {
+          method: "POST",
+          body: JSON.stringify({ email: personalizationEmail })
+        }
+      );
       if (isResetGenerationStale(requestGeneration)) return;
-      setSession(result.session);
-      setClaimStatus("saved");
-      setShowSavePrompt(false);
-      identifyProductVisitor(email);
-      captureUnifiedProductEvent("claim_completed", {
-        sessionId: result.session.id,
-        properties: { claim_step: "email" }
-      });
-      track("save_completed", { useCase: result.session.useCase });
-      track("experience_claimed", { useCase: result.session.useCase });
-    } catch (claimFailure) {
+      setPersonalizationRequest(result.request);
+      setPersonalizationStatus("idle");
+      recordPersonalizationStatus(result.request, session.id);
+    } catch (requestError) {
       if (isResetGenerationStale(requestGeneration)) return;
-      const message = claimFailure instanceof Error ? claimFailure.message : "We could not save this experience.";
-      setClaimStatus("error");
-      setClaimError(message);
-      track("claim_failed", {
-        useCase: session.useCase,
-        code: claimFailure instanceof ApiResponseError ? claimFailure.code ?? "claim_failed" : "claim_failed"
-      });
-      if (session.supportRef) {
-        captureUnifiedProductEvent("support_reference_created", {
-          sessionId: session.id,
-          outcome: "failure",
-          properties: {
-            support_ref: session.supportRef,
-            failure_stage: "claim"
-          }
-        });
-      }
+      setPersonalizationStatus("error");
+      setPersonalizationError(
+        requestError instanceof Error
+          ? requestError.message
+          : "We could not save this personalization request."
+      );
     }
   };
+
+  const submitPersonalizationTargets = async (
+    targets: PersonalizationTargetInput[]
+  ) => {
+    if (!session || targets.length !== 3) return;
+    const requestGeneration = resetGeneration.current;
+    setPersonalizationStatus("saving_targets");
+    setPersonalizationError("");
+    try {
+      const result = await api<{ request: PublicPersonalizationRequest }>(
+        `/api/sessions/${session.id}/personalization-request`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ targets })
+        }
+      );
+      if (isResetGenerationStale(requestGeneration)) return;
+      setPersonalizationRequest(result.request);
+      setPersonalizationStatus("polling");
+      captureUnifiedProductEvent("personalization_targets_submitted", {
+        sessionId: session.id,
+        properties: { target_count: 3 }
+      });
+      recordPersonalizationStatus(result.request, session.id);
+    } catch (requestError) {
+      if (isResetGenerationStale(requestGeneration)) return;
+      setPersonalizationStatus("error");
+      setPersonalizationError(
+        requestError instanceof Error
+          ? requestError.message
+          : "We could not start the three account builds."
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (!showSavePrompt || !session || personalizationRequest) return;
+    const requestGeneration = resetGeneration.current;
+    let cancelled = false;
+    void api<{ request: PublicPersonalizationRequest }>(
+      `/api/sessions/${session.id}/personalization-request`
+    ).then((result) => {
+      if (cancelled || isResetGenerationStale(requestGeneration)) return;
+      setPersonalizationRequest(result.request);
+      recordPersonalizationStatus(result.request, session.id);
+      if (["queued", "generating"].includes(result.request.status)) {
+        setPersonalizationStatus("polling");
+      }
+    }).catch((requestError) => {
+      if (cancelled || isResetGenerationStale(requestGeneration)) return;
+      if (requestError instanceof ApiResponseError && requestError.code === "personalization_request_not_found") {
+        return;
+      }
+      setPersonalizationStatus("error");
+      setPersonalizationError(
+        requestError instanceof Error
+          ? requestError.message
+          : "We could not check this personalization request."
+      );
+    });
+    return () => { cancelled = true; };
+  }, [
+    isResetGenerationStale,
+    personalizationRequest,
+    recordPersonalizationStatus,
+    session,
+    showSavePrompt
+  ]);
+
+  useEffect(() => {
+    if (
+      !showSavePrompt ||
+      !session ||
+      !personalizationRequest ||
+      !["queued", "generating"].includes(personalizationRequest.status)
+    ) return;
+    const requestGeneration = resetGeneration.current;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void api<{ request: PublicPersonalizationRequest }>(
+        `/api/sessions/${session.id}/personalization-request`
+      ).then((result) => {
+        if (cancelled || isResetGenerationStale(requestGeneration)) return;
+        setPersonalizationRequest(result.request);
+        recordPersonalizationStatus(result.request, session.id);
+        setPersonalizationStatus(
+          ["queued", "generating"].includes(result.request.status)
+            ? "polling"
+            : "idle"
+        );
+      }).catch((requestError) => {
+        if (cancelled || isResetGenerationStale(requestGeneration)) return;
+        setPersonalizationStatus("error");
+        setPersonalizationError(
+          requestError instanceof Error
+            ? requestError.message
+            : "We could not refresh the account build status."
+        );
+      });
+    }, 2_000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    isResetGenerationStale,
+    personalizationRequest,
+    recordPersonalizationStatus,
+    session,
+    showSavePrompt
+  ]);
 
   const retryFailedStage = async (stage: StageKey) => {
     if (!session) return;
@@ -4233,15 +4345,11 @@ export function TryMeNowApp() {
 
   const openSavePrompt = () => {
     if (!session) return;
-    const allowed = canOfferClaimModal(session, {
-      events: clientEvents,
-      previewOpened: Boolean(revealedAt)
-    });
+    const allowed = canOfferPersonalizationModal(session);
     if (!allowed) return;
-    track("save_opened", { useCase: session.useCase });
-    captureUnifiedProductEvent("modal_displayed", {
+    captureUnifiedProductEvent("personalization_offer_opened", {
       sessionId: session.id,
-      properties: { modal_kind: "claim", trigger: "save_cta" }
+      properties: { trigger: "preview_cta" }
     });
     setShowSavePrompt(true);
   };
@@ -4254,11 +4362,8 @@ export function TryMeNowApp() {
   const isFinalOnlyV2 = isUnifiedFinalOnlyV2(session);
   const lifecycleCopy = previewLifecycleCopy(lifecyclePhase);
   const personalizationOptions = session ? personalizationVariantOptionsFor(session) : [];
-  const canSaveExperience = canOfferClaimModal(session, {
-    events: clientEvents,
-    previewOpened: Boolean(revealedAt)
-  });
-  const saveDialogOpen = Boolean(showSavePrompt && session && canSaveExperience);
+  const canPersonalizeExperience = canOfferPersonalizationModal(session);
+  const saveDialogOpen = Boolean(showSavePrompt && session && canPersonalizeExperience);
   const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
   const revealCopy = session ? getRevealCopy(session) : undefined;
   const analyticsSignals: AnalyticsSignal[] = clientEvents.map((event, index) => ({
@@ -4512,16 +4617,18 @@ export function TryMeNowApp() {
               </div>
             </div>
             <div className="revealActions">
-              {session.status === "claimed" ? (
-                <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
-              ) : canSaveExperience ? (
+              {canPersonalizeExperience && (
                 <button className="buttonPrimary" type="button" onClick={openSavePrompt}>
-                  <Mail size={16} />Save by email
+                  <Users size={16} />
+                  {personalizationRequest
+                    ? ["queued", "generating"].includes(personalizationRequest.status)
+                      ? "View account builds"
+                      : "View 3 account versions"
+                    : "Personalize for 3 accounts"}
                 </button>
-              ) : (
-                <span className="buttonSecondary" role="status">
-                  Explore the preview to unlock save by email
-                </span>
+              )}
+              {session.status === "claimed" && (
+                <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
               )}
               <a className="buttonSecondary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
             </div>
@@ -4601,17 +4708,19 @@ export function TryMeNowApp() {
     {saveDialogOpen && session && (
       <SaveExperienceDialog
         open
-        expiresLabel={previewCountdown}
-        url={session.liveUrl || session.temporaryUrl}
-        sellerName={brandNameFor(session)}
-        targetName={session.useCase === "abm" ? targetNameFor(session) : undefined}
-        headline={session.experience?.headline || `${brandNameFor(session)} experience`}
-        remainingSeconds={previewSecondsRemaining}
-        email={claimEmail}
-        status={claimStatus}
-        error={claimError}
-        onEmailChange={setClaimEmail}
-        onSave={() => void claim(claimEmail)}
+        email={personalizationEmail}
+        request={personalizationRequest}
+        status={personalizationStatus}
+        error={personalizationError}
+        onEmailChange={setPersonalizationEmail}
+        onSubmitEmail={startPersonalizationRequest}
+        onSubmitTargets={submitPersonalizationTargets}
+        onOpenLink={(position) => {
+          captureUnifiedProductEvent("personalization_variant_link_opened", {
+            sessionId: session.id,
+            properties: { position }
+          });
+        }}
         onClose={() => setShowSavePrompt(false)}
       />
     )}

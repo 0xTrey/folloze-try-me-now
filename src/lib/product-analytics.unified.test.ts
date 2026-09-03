@@ -238,6 +238,51 @@ describe("unified product analytics contracts", () => {
         },
         {
           ...baseEvent({
+            eventId: "tme_personaloffer001",
+            event: "personalization_offer_opened",
+            category: "conversion",
+            properties: { trigger: "final_experience" }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_personalrequest01",
+            event: "personalization_request_started",
+            category: "conversion",
+            properties: { request_step: "email", target_count: 3 }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_personaltargets01",
+            event: "personalization_targets_submitted",
+            category: "conversion",
+            properties: { target_count: 3 }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_personalstatus001",
+            event: "personalization_batch_status_changed",
+            category: "workflow",
+            properties: {
+              request_status: "completed",
+              ready_count: 3,
+              review_count: 0,
+              failed_count: 0
+            }
+          })
+        },
+        {
+          ...baseEvent({
+            eventId: "tme_personallink0001",
+            event: "personalization_variant_link_opened",
+            category: "conversion",
+            properties: { position: 1 }
+          })
+        },
+        {
+          ...baseEvent({
             eventId: "tme_variantviewed001",
             event: "personalization_variant_viewed",
             category: "interaction",

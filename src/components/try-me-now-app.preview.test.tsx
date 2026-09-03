@@ -431,58 +431,45 @@ describe("PreviewUpdateNotice", () => {
 });
 
 describe("SaveExperienceDialog", () => {
-  it("asks for a business email only after the preview and closes accessibly", () => {
+  it("opens the three-account conversion and closes accessibly", () => {
     const onClose = vi.fn();
-    const onSave = vi.fn();
+    const onSubmitEmail = vi.fn();
     render(
       <SaveExperienceDialog
         open
-        expiresLabel="24:00"
-        url="https://experience.example/jitterbit-for-cisco"
-        sellerName="Jitterbit"
-        targetName="Cisco"
-        headline="Connect Cisco workflows without losing control."
         email=""
         status="idle"
         onEmailChange={vi.fn()}
-        onSave={onSave}
+        onSubmitEmail={onSubmitEmail}
+        onSubmitTargets={vi.fn()}
         onClose={onClose}
       />
     );
 
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Save your live experience.");
-    expect(screen.getByText("Jitterbit for Cisco")).toBeInTheDocument();
-    expect(screen.getByText("https://experience.example/jitterbit-for-cisco")).toBeInTheDocument();
-    expect(screen.getByText("Private preview · expires in 24:00")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Business email" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("Build three account versions from this experience.");
+    expect(screen.getByRole("textbox", { name: "Work email" })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
-    expect(onSave).not.toHaveBeenCalled();
+    expect(onSubmitEmail).not.toHaveBeenCalled();
   });
 
-  it("does not advertise disconnected email delivery as part of an app-hosted save", () => {
+  it("states the Vercel test boundary without promising disconnected delivery", () => {
     render(
       <SaveExperienceDialog
         open
-        expiresLabel="24:00"
-        url="https://experience.example/jitterbit-for-cisco"
-        sellerName="Jitterbit"
-        targetName="Cisco"
-        headline="Connect Cisco workflows without losing control."
         email=""
         status="idle"
         onEmailChange={vi.fn()}
-        onSave={vi.fn()}
+        onSubmitEmail={vi.fn()}
+        onSubmitTargets={vi.fn()}
         onClose={vi.fn()}
       />
     );
 
-    expect(screen.getByText("Permanent app-hosted URL")).toBeInTheDocument();
-    expect(screen.getByText("Copy-and-share access")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save this experience" })).toBeInTheDocument();
-    expect(screen.getByText("No newsletter signup. Your business email records this request and saves the app-hosted experience.")).toBeInTheDocument();
-    expect(screen.queryByText(/email delivery/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/email (?:me|the link)|deliver this experience/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Only final-gated links are shown")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Choose my 3 accounts/i })).toBeInTheDocument();
+    expect(screen.getByText(/Nothing is emailed or published to Folloze in this test phase/)).toBeInTheDocument();
+    expect(screen.queryByText(/we will send|delivered as live links/i)).not.toBeInTheDocument();
   });
 });
 

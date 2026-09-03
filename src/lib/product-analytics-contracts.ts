@@ -36,6 +36,11 @@ export const PRODUCT_EVENT_NAMES = [
   "pdf_upload_completed",
   "pdf_upload_failed",
   "pdf_upload_started",
+  "personalization_batch_status_changed",
+  "personalization_offer_opened",
+  "personalization_request_started",
+  "personalization_targets_submitted",
+  "personalization_variant_link_opened",
   "personalization_variant_viewed",
   "preview_interaction",
   "preview_rendered",
@@ -99,6 +104,11 @@ export const UNIFIED_PRODUCT_EVENT_NAMES = [
   "production_plan_ready",
   "provisional_rendered",
   "final_rendered",
+  "personalization_batch_status_changed",
+  "personalization_offer_opened",
+  "personalization_request_started",
+  "personalization_targets_submitted",
+  "personalization_variant_link_opened",
   "personalization_variant_viewed",
   "resource_interaction",
   "cta_interaction",
@@ -264,6 +274,31 @@ export const UNIFIED_PRODUCT_EVENT_CONTRACTS: Record<
   final_rendered: {
     category: "performance",
     allowedProperties: ["artifact_revision", "duration_bucket", "quality_gate"]
+  },
+  personalization_offer_opened: {
+    category: "conversion",
+    allowedProperties: ["trigger"]
+  },
+  personalization_request_started: {
+    category: "conversion",
+    allowedProperties: ["request_step", "target_count"]
+  },
+  personalization_targets_submitted: {
+    category: "conversion",
+    allowedProperties: ["target_count"]
+  },
+  personalization_batch_status_changed: {
+    category: "workflow",
+    allowedProperties: [
+      "request_status",
+      "ready_count",
+      "review_count",
+      "failed_count"
+    ]
+  },
+  personalization_variant_link_opened: {
+    category: "conversion",
+    allowedProperties: ["position"]
   },
   personalization_variant_viewed: {
     category: "interaction",
