@@ -60,12 +60,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .sectionKicker { display: inline-block; color: var(--fz-accent); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 
-.entryStage { min-height: calc(100vh - 72px); display: flex; flex-direction: column; padding: 46px clamp(22px, 4vw, 64px) 24px; }
-.entryHero { max-width: 1040px; margin: 0 auto 34px; text-align: center; }
-.entryHero h1 { margin: 12px 0 16px; color: var(--fz-ink); font-family: var(--font-display), sans-serif; font-size: clamp(46px, 5.5vw, 76px); font-weight: 560; letter-spacing: -.045em; line-height: .98; text-wrap: balance; }
+.entryStage {
+  width: min(calc(100% - 48px),1040px);
+  min-height: calc(100vh - 72px);
+  margin: 0 auto;
+  padding: 72px 0 54px;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(310px,420px);
+  grid-template-areas:
+    "hero hero"
+    "paths action"
+    "example example";
+  column-gap: 46px;
+  row-gap: 42px;
+  align-items: stretch;
+}
+.entryHero { grid-area: hero; width: 100%; text-align: left; }
+.entryHero h1 { width: 100%; max-width: none; margin: 0; color: var(--fz-ink); font-family: var(--font-display), sans-serif; font-size: clamp(48px,6vw,72px); font-weight: 650; letter-spacing: -.06em; line-height: .97; text-wrap: balance; }
 .entryHero h1 em { color: var(--fz-accent); font-style: normal; }
-.entryHero p { max-width: 760px; margin: 0 auto; color: var(--fz-body); font-size: clamp(17px, 1.6vw, 21px); line-height: 1.55; }
-.entryFooter { width: min(100%,1460px); margin: 24px auto 0; color: var(--fz-muted-strong); font-size: 12px; text-align: center; }
+.entryHero p { max-width: 780px; margin: 28px 0 0; color: var(--fz-body); font-size: clamp(18px,2vw,21px); line-height: 1.55; }
 
 .domainStage { min-height: calc(100vh - 72px); padding: clamp(42px,6vw,84px) clamp(22px,8vw,130px); background: linear-gradient(135deg,#fff 0%,#fff 62%,var(--fz-canvas) 100%); }
 .textBack { margin: 0 0 clamp(52px,8vw,100px) -8px; padding-inline: 8px; color: var(--fz-muted-strong); }
@@ -271,99 +284,82 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* Prospect experience v2: unified conversational entry. */
 .unifiedEntry {
-  width: min(100%, 820px);
-  margin: 0 auto;
-  display: grid;
-  gap: 14px;
-  justify-items: stretch;
+  display: contents;
+}
+.unifiedAction {
+  grid-area: action;
+  min-height: 100%;
+  padding: 34px;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.34);
+  border-radius: 26px;
+  background: linear-gradient(145deg,#0a73ff 0%,#074bd4 100%);
+  box-shadow: 0 22px 60px rgba(16,39,70,.09);
+}
+.unifiedAction h2 {
+  margin: 0;
+  font: 650 clamp(31px,3vw,40px)/1.02 var(--font-display),sans-serif;
+  letter-spacing: -.045em;
+}
+.unifiedAction p {
+  margin: 20px 0 32px;
+  color: rgba(255,255,255,.88);
+  font-size: 16px;
+  line-height: 1.55;
 }
 .unifiedPrimaryCta {
   width: 100%;
-  min-height: 148px;
-  padding: 28px 30px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px 18px;
-  color: #fff;
+  min-height: 58px;
+  margin-top: auto;
+  padding: 17px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: var(--fz-action-dark);
   text-align: left;
   border: 0;
-  border-radius: 22px;
-  background: linear-gradient(135deg, #0077ff 0%, #0048de 100%);
-  box-shadow: 0 22px 48px rgba(0, 119, 255, .28);
+  border-radius: 14px;
+  background: #fff;
   cursor: pointer;
+  transition: transform .16s var(--ease),box-shadow .16s var(--ease);
 }
 .unifiedPrimaryCta strong {
-  grid-column: 1;
-  font: 620 clamp(28px, 3.4vw, 40px) / 1.05 var(--font-display), sans-serif;
-  letter-spacing: -.04em;
-}
-.unifiedPrimaryCta small {
-  grid-column: 1;
-  max-width: 34rem;
-  color: rgba(255, 255, 255, .86);
   font-size: 14px;
-  line-height: 1.5;
-}
-.unifiedPrimaryCta > svg {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
+  line-height: 1.2;
 }
 .unifiedPrimaryCta:hover:not(:disabled),
 .unifiedPrimaryCta:focus-visible:not(:disabled) {
   outline: 0;
-  transform: translateY(-1px);
-  box-shadow: 0 26px 56px rgba(0, 119, 255, .34);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0,28,95,.24);
 }
-.unifiedPrimaryCta:disabled,
-.unifiedSecondaryCta:disabled { opacity: .55; cursor: not-allowed; }
-.unifiedSecondaryCta {
+.unifiedPrimaryCta:disabled { opacity: .55; cursor: not-allowed; }
+.campaignExampleLink {
+  grid-area: example;
   width: 100%;
-  min-height: 52px;
-  padding: 14px 18px;
+  min-height: 58px;
+  padding: 17px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   color: var(--fz-action);
-  text-align: left;
   border: 1px solid var(--fz-border);
   border-radius: 14px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 650;
-}
-.unifiedSecondaryCta:hover:not(:disabled),
-.unifiedSecondaryCta:focus-visible:not(:disabled) {
-  border-color: var(--fz-accent);
-  background: var(--fz-accent-tint);
-  outline: 0;
-}
-.northpeakWorkedStates {
-  margin-top: 8px;
-  padding: 16px 18px;
-  border: 1px dashed #c9dff0;
-  border-radius: 14px;
-  background: #f7fbff;
-}
-.northpeakWorkedStates .sectionKicker { margin-bottom: 10px; }
-.northpeakWorkedStates ul {
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-  list-style: none;
-}
-.northpeakWorkedStates a {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--fz-body);
+  background: rgba(255,255,255,.82);
   text-decoration: none;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 14px;
+  font-weight: 750;
+  transition: border-color .16s var(--ease),background .16s var(--ease);
 }
-.northpeakWorkedStates a:hover,
-.northpeakWorkedStates a:focus-visible {
-  color: var(--fz-accent);
+.campaignExampleLink:hover,
+.campaignExampleLink:focus-visible {
+  color: var(--fz-action-dark);
+  border-color: var(--fz-action);
+  background: #fff;
   outline: 0;
 }
 
@@ -725,28 +721,34 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 
 /* Guided control-room experience: a short conversation on top of the same live pipeline. */
-.entryPromise {
-  margin: 22px auto 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
+.entryPaths {
+  grid-area: paths;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  align-content: start;
+  text-align: left;
+  list-style: none;
+  border-top: 1px solid var(--fz-border);
 }
-.entryPromise span {
-  min-height: 32px;
-  padding: 7px 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.entryPaths > li {
+  min-width: 0;
+  padding: 30px 0;
+  display: grid;
+  grid-template-columns: 36px minmax(0,1fr);
+  gap: 20px;
   color: var(--fz-body);
-  border: 1px solid var(--fz-border);
-  border-radius: 999px;
-  background: rgba(255,255,255,.75);
-  font-size:11px;
-  font-weight: 650;
+  border-bottom: 1px solid var(--fz-border);
 }
-.entryPromise svg { color: var(--fz-success); }
+.entryPathNumber { color: var(--fz-action); font-size: 16px; font-weight: 800; line-height: 1.35; }
+.entryPaths li > span:last-child { display: block; }
+.entryPaths strong {
+  display: block;
+  color: var(--fz-ink);
+  font: 650 23px/1.25 var(--font-display),sans-serif;
+  letter-spacing: -.025em;
+}
+.entryPaths small { display: block; margin-top: 9px; color: var(--fz-muted-strong); font-size: 17px; line-height: 1.5; }
 
 .domainStage {
   padding: clamp(38px,5vw,72px) clamp(22px,7vw,112px) 64px;
@@ -1149,7 +1151,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 
 @media (max-width: 820px) {
-  .entryPromise { justify-content: flex-start; }
+  .entryStage {
+    width: min(calc(100% - 32px),620px);
+    min-height: calc(100vh - 66px);
+    padding: 46px 0 36px;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "hero"
+      "action"
+      "paths"
+      "example";
+    row-gap: 30px;
+  }
+  .entryHero { margin: 0; text-align: left; }
+  .entryHero h1 { font-size: clamp(40px,12vw,54px); line-height: .99; }
+  .entryHero p { margin-top: 22px; font-size: 17px; }
+  .unifiedAction { min-height: 360px; padding: 28px; border-radius: 22px; }
+  .entryPaths { margin: 0; }
+  .entryPaths > li { padding: 24px 0; }
   .domainStageGrid { grid-template-columns:1fr;gap:32px; }
   .domainInput { margin-top:0; }
   .domainPromise { margin-top: 20px; }

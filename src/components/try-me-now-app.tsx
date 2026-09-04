@@ -315,19 +315,11 @@ export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCa
 const NORTHPEAK_ACCOUNT_EXAMPLE_URL = "https://experience.folloze.com/northpeak--folloze";
 const NORTHPEAK_CAMPAIGN_EXAMPLE_URL = "https://engage.folloze.com/120367";
 
-/** Optional Northpeak worked states for the unified entry, never primary CTAs. */
-export const northpeakWorkedStates = [
-  {
-    id: "account",
-    label: "See a Northpeak account experience",
-    href: NORTHPEAK_ACCOUNT_EXAMPLE_URL
-  },
-  {
-    id: "campaign",
-    label: "See a Northpeak personalized campaign",
-    href: NORTHPEAK_CAMPAIGN_EXAMPLE_URL
-  }
-] as const;
+/** One worked campaign example for the unified entry, never a primary CTA. */
+export const personalizedCampaignExample = {
+  label: "View an example personalized campaign page",
+  href: NORTHPEAK_CAMPAIGN_EXAMPLE_URL
+} as const;
 
 export const entryPathOptions: Record<UseCase, EntryPathOption> = {
   abm: {
@@ -383,7 +375,7 @@ export function experienceTypeLabelFor(session: Pick<PublicTryMeSession, "useCas
   if (session.answers.campaignType === "event") return "Event landing page";
   if (session.answers.campaignType === "demand") return "Demand campaign";
   if (session.answers.campaignType === "product") return "Product campaign";
-  return "Buyer experience";
+  return "Personalized campaign page";
 }
 
 function uiCtaType(value?: SessionAnswers["ctaType"]): CtaValue["type"] {
@@ -1713,55 +1705,36 @@ export function UseCasePortals({
   disabled?: boolean;
 }) {
   return (
-    <div className="unifiedEntry" aria-label="Start building a buyer experience">
-      <button
-        type="button"
-        className="unifiedPrimaryCta"
-        disabled={disabled}
-        onClick={() => {
-          captureUnifiedProductEvent("unified_entry_started", {
-            properties: { entry_surface: "homepage", device_class: "desktop" }
-          });
-          onSelect("campaign", "campaign");
-        }}
-      >
-        <strong>Build a buyer experience</strong>
-        <small>Add your company and a few signals. Folloze infers the experience type and assembles the page.</small>
-        <ArrowRight size={18} aria-hidden="true" />
-      </button>
+    <div className="unifiedEntry" aria-label="Start building a personalized campaign page">
+      <section className="unifiedAction" aria-labelledby="unified-action-title">
+        <h2 id="unified-action-title">Try the custom widget</h2>
+        <p>Start with your company. The widget researches the brand, asks only for missing context, and builds one finished personalized campaign page.</p>
+        <button
+          type="button"
+          className="unifiedPrimaryCta"
+          disabled={disabled}
+          onClick={() => {
+            captureUnifiedProductEvent("unified_entry_started", {
+              properties: { entry_surface: "homepage", device_class: "desktop" }
+            });
+            onSelect("campaign", "campaign");
+          }}
+        >
+          <strong>Build a personalized campaign page</strong>
+          <ArrowRight size={20} aria-hidden="true" />
+        </button>
+      </section>
 
-      <button
-        type="button"
-        className="unifiedSecondaryCta"
-        disabled={disabled}
-        onClick={() => {
-          captureUnifiedProductEvent("unified_entry_started", {
-            properties: { entry_surface: "content_magic", device_class: "desktop" }
-          });
-          onSelect("content");
-        }}
+      <a
+        className="campaignExampleLink"
+        href={personalizedCampaignExample.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => track("example_opened", { useCase: "campaign" })}
       >
-        Or open Content Magic to make a URL or PDF interactive
-      </button>
-
-      <aside className="northpeakWorkedStates" aria-label="Optional Northpeak worked states">
-        <span className="sectionKicker">Optional examples</span>
-        <ul>
-          {northpeakWorkedStates.map((example) => (
-            <li key={example.id}>
-              <a
-                href={example.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => track("example_opened", { useCase: example.id === "account" ? "abm" : "campaign" })}
-              >
-                <ExternalLink size={14} aria-hidden="true" />
-                {example.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </aside>
+        {personalizedCampaignExample.label}
+        <ExternalLink size={18} aria-hidden="true" />
+      </a>
     </div>
   );
 }
@@ -1912,7 +1885,7 @@ function ConversationThread({ session, onRestart }: { session: PublicTryMeSessio
     <section className="guidedThread" aria-labelledby="guided-thread-title" data-guided-composer="true">
       <div className="guidedThreadHeader">
         <span className="guideAvatar" aria-hidden="true"><Sparkles size={16} /></span>
-        <div><span>Live brief</span><h2 id="guided-thread-title">Folloze is turning your inputs into a focused buyer experience.</h2></div>
+        <div><span>Live brief</span><h2 id="guided-thread-title">Folloze is turning your inputs into a focused campaign page.</h2></div>
       </div>
       <div className="conversationHistory">
         <article className="guideBubble">
@@ -4429,11 +4402,11 @@ export function TryMeNowApp() {
     : 30 * 60;
   const previewCountdown = `${String(Math.floor(previewSecondsRemaining / 60)).padStart(2, "0")}:${String(previewSecondsRemaining % 60).padStart(2, "0")}`;
   const headerStatus = !useCase
-    ? "Build a buyer experience in about a minute"
+    ? "Build a personalized campaign page in about a minute"
     : !session
       ? useCase === "content"
         ? "Content Magic selected"
-        : "Buyer experience selected"
+        : "Personalized campaign page selected"
       : showBuildShell
         ? session.buildProgress?.failure
           ? "The build stopped before it finished"
@@ -4460,19 +4433,18 @@ export function TryMeNowApp() {
       {!useCase && (
         <section className="entryStage">
           <div className="entryHero">
-            <h1>Build a buyer experience.</h1>
-            <p>Start with your company. Answer one missing signal at a time. Folloze assembles a branded buyer experience you can explore before you save.</p>
-            <div className="entryPromise" aria-label="Try Me Now experience promise">
-              <span><CircleCheck size={14} />One guided conversation</span>
-              <span><Clock3 size={14} />First preview in about a minute</span>
-              <span><ShieldCheck size={14} />Preview first. Save when ready.</span>
-            </div>
+            <h1>Build personalized campaign pages from the tools you already use.</h1>
+            <p>Folloze is built to be open. Bring your own AI, use Folloze Campaign Agent, or connect a custom workflow, then turn those inputs into finished, on-brand campaign pages.</p>
           </div>
+          <ol className="entryPaths" aria-label="Ways to build with Folloze">
+            <li><span className="entryPathNumber">1</span><span><strong>Bring your own AI</strong><small>Create in ChatGPT, Claude, Copilot, Gemini, or your own agent.</small></span></li>
+            <li><span className="entryPathNumber">2</span><span><strong>Use Campaign Agent</strong><small>Build directly inside Folloze.</small></span></li>
+            <li><span className="entryPathNumber">3</span><span><strong>Build with a custom workflow</strong><small>Start from Slack, Teams, or a custom widget like the one to the right.</small></span></li>
+          </ol>
           <UseCasePortals
             onSelect={selectUseCase}
             disabled={!interactionReady}
           />
-          <div className="entryFooter">Start with a company domain. Explore the result before sharing your email.</div>
         </section>
       )}
 

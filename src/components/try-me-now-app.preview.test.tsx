@@ -620,32 +620,23 @@ describe("guided campaign workspace", () => {
     ]);
   });
 
-  it("offers one dominant buyer-experience entry with Content Magic secondary and Northpeak worked states", () => {
+  it("offers one open-platform custom-widget entry and one campaign example", () => {
     const onSelect = vi.fn();
     render(<UseCasePortals onSelect={onSelect} />);
 
-    expect(screen.getByRole("button", { name: /Build a buyer experience/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Try the custom widget/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Build a personalized campaign page/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Watch one build/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Content Magic/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Aprio|ServiceNow|Cisco Hybrid Mesh/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Northpeak account experience/i })).toHaveAttribute(
-      "href",
-      "https://experience.folloze.com/northpeak--folloze"
-    );
-    expect(screen.getByRole("link", { name: /Northpeak personalized campaign/i })).toHaveAttribute(
+    expect(screen.queryByRole("link", { name: /Northpeak account experience/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /example personalized campaign page/i })).toHaveAttribute(
       "href",
       "https://engage.folloze.com/120367"
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Build a buyer experience/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Build a personalized campaign page/i }));
     expect(onSelect).toHaveBeenCalledWith("campaign", "campaign");
-  });
-
-  it("routes Content Magic through a secondary entry path", () => {
-    const onSelect = vi.fn();
-    render(<UseCasePortals onSelect={onSelect} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /Content Magic/i }));
-    expect(onSelect).toHaveBeenCalledWith("content");
   });
 
   it("starts building Content Magic from its source without asking audience or goal questions", () => {

@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Try Me Now | Entry page annotation preview</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #102746;
+        --muted: #415979;
+        --blue: #0b67f5;
+        --blue-deep: #0755d1;
+        --blue-pale: #eaf4ff;
+        --line: #cfe0f1;
+        --surface: #ffffff;
+        --page: #f2f8ff;
+        --shadow: 0 22px 60px rgba(16, 39, 70, 0.09);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--page);
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--ink);
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background:
+          radial-gradient(circle at 83% 10%, rgba(181, 220, 255, 0.34), transparent 32rem),
+          linear-gradient(180deg, #f7fbff 0%, var(--page) 100%);
+      }
+
+      button,
+      a {
+        font: inherit;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .site-header {
+        height: 72px;
+        border-bottom: 1px solid rgba(154, 184, 214, 0.45);
+        background: rgba(255, 255, 255, 0.88);
+        backdrop-filter: blur(18px);
+      }
+
+      .site-header__inner {
+        width: min(1180px, calc(100% - 48px));
+        height: 100%;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+
+      .brand-mark {
+        display: block;
+        width: 91px;
+        height: auto;
+      }
+
+      .site-name {
+        padding-left: 18px;
+        border-left: 1px solid var(--line);
+        font-size: 14px;
+        font-weight: 750;
+        letter-spacing: -0.01em;
+      }
+
+      main {
+        width: min(1040px, calc(100% - 48px));
+        margin: 0 auto;
+        padding: 72px 0 54px;
+      }
+
+      .entry {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(310px, 420px);
+        grid-template-areas:
+          "intro intro"
+          "paths action"
+          "example example";
+        column-gap: 46px;
+        row-gap: 42px;
+        align-items: stretch;
+      }
+
+      .intro {
+        grid-area: intro;
+        width: 100%;
+      }
+
+      h1 {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        font-size: clamp(48px, 6vw, 72px);
+        line-height: 0.97;
+        letter-spacing: -0.06em;
+        text-wrap: balance;
+      }
+
+      .intro p {
+        max-width: 780px;
+        margin: 28px 0 0;
+        color: var(--muted);
+        font-size: clamp(18px, 2vw, 21px);
+        line-height: 1.55;
+      }
+
+      .paths {
+        grid-area: paths;
+        display: grid;
+        align-content: start;
+        border-top: 1px solid var(--line);
+      }
+
+      .path {
+        display: grid;
+        grid-template-columns: 36px minmax(0, 1fr);
+        gap: 20px;
+        padding: 30px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .path__number {
+        color: var(--blue);
+        font-size: 16px;
+        font-weight: 800;
+        line-height: 1.35;
+      }
+
+      .path h2 {
+        margin: 0;
+        font-size: 23px;
+        line-height: 1.25;
+        letter-spacing: -0.025em;
+      }
+
+      .path p {
+        margin: 9px 0 0;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.5;
+      }
+
+      .action {
+        grid-area: action;
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+        padding: 34px;
+        border: 1px solid rgba(255, 255, 255, 0.34);
+        border-radius: 26px;
+        background: linear-gradient(145deg, #0a73ff 0%, #074bd4 100%);
+        color: white;
+        box-shadow: var(--shadow);
+      }
+
+      .action h2 {
+        margin: 0;
+        font-size: clamp(31px, 3vw, 40px);
+        line-height: 1.02;
+        letter-spacing: -0.045em;
+      }
+
+      .action p {
+        margin: 20px 0 32px;
+        color: rgba(255, 255, 255, 0.88);
+        font-size: 16px;
+        line-height: 1.55;
+      }
+
+      .action__button {
+        width: 100%;
+        margin-top: auto;
+        padding: 17px 20px;
+        border: 0;
+        border-radius: 14px;
+        background: white;
+        color: var(--blue-deep);
+        cursor: default;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        font-weight: 800;
+        text-align: left;
+        transition: transform 160ms ease, box-shadow 160ms ease;
+      }
+
+      .action__button:hover,
+      .action__button:focus-visible {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 30px rgba(0, 28, 95, 0.24);
+        outline: none;
+      }
+
+      .action__arrow,
+      .example__arrow {
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      .example {
+        grid-area: example;
+        padding: 17px 20px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.82);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        color: var(--blue-deep);
+        font-size: 14px;
+        font-weight: 750;
+        text-decoration: none;
+        transition: border-color 160ms ease, background 160ms ease;
+      }
+
+      .example:hover,
+      .example:focus-visible {
+        border-color: var(--blue);
+        background: white;
+        outline: none;
+      }
+
+      @media (max-width: 760px) {
+        .site-header {
+          height: 66px;
+        }
+
+        .site-header__inner,
+        main {
+          width: min(100% - 32px, 620px);
+        }
+
+        main {
+          padding: 46px 0 36px;
+        }
+
+        .entry {
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            "intro"
+            "action"
+            "paths"
+            "example";
+          row-gap: 30px;
+        }
+
+        h1 {
+          font-size: clamp(40px, 12vw, 54px);
+          line-height: 0.99;
+        }
+
+        .intro p {
+          margin-top: 22px;
+          font-size: 17px;
+        }
+
+        .action {
+          min-height: 360px;
+          padding: 28px;
+          border-radius: 22px;
+        }
+
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <img class="brand-mark" src="../public/brand/folloze-logo.svg" alt="Folloze" />
+        <span class="site-name">Try Me Now</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="entry" aria-labelledby="page-title">
+        <div class="intro">
+          <h1 id="page-title">Build personalized campaign pages from the tools you already use.</h1>
+          <p>
+            Folloze is built to be open. Bring your own AI, use Folloze Campaign Agent, or connect
+            a custom workflow, then turn those inputs into finished, on-brand campaign pages.
+          </p>
+        </div>
+
+        <div class="paths" aria-label="Ways to build">
+          <article class="path">
+            <span class="path__number">1</span>
+            <div>
+              <h2>Bring your own AI</h2>
+              <p>Create in ChatGPT, Claude, Copilot, Gemini, or your own agent.</p>
+            </div>
+          </article>
+          <article class="path">
+            <span class="path__number">2</span>
+            <div>
+              <h2>Use Campaign Agent</h2>
+              <p>Build directly inside Folloze.</p>
+            </div>
+          </article>
+          <article class="path">
+            <span class="path__number">3</span>
+            <div>
+              <h2>Build with a custom workflow</h2>
+              <p>Start from Slack, Teams, or a custom widget like the one to the right.</p>
+            </div>
+          </article>
+        </div>
+
+        <div class="action">
+          <h2>Try the custom widget</h2>
+          <p>
+            Start with your company. The widget researches the brand, asks only for missing
+            context, and builds one finished personalized campaign page.
+          </p>
+          <button class="action__button" type="button">
+            <span>Build a personalized campaign page</span>
+            <span class="action__arrow" aria-hidden="true">→</span>
+          </button>
+        </div>
+
+        <a
+          class="example"
+          href="https://engage.folloze.com/120367"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span>View an example personalized campaign page</span>
+          <span class="example__arrow" aria-hidden="true">↗</span>
+        </a>
+
+      </section>
+    </main>
+  </body>
+</html>

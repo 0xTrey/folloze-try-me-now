@@ -229,12 +229,16 @@ test.describe("unified guided first-run experience", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
   });
 
-  test("shows one dominant buyer-experience door, Northpeak examples, and no legacy paths (U01-U04)", async ({
+  test("shows the open-platform story, one custom-widget door, and one campaign example (U01-U04)", async ({
     page
   }, testInfo) => {
-    await expect(page.getByRole("heading", { name: "Build a buyer experience." })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Build a buyer experience/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Content Magic/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Build personalized campaign pages from the tools you already use." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Try the custom widget/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Build a personalized campaign page/i })).toBeVisible();
+    await expect(page.getByText("Bring your own AI", { exact: true })).toBeVisible();
+    await expect(page.getByText("Use Campaign Agent", { exact: true })).toBeVisible();
+    await expect(page.getByText("Build with a custom workflow", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Content Magic/i })).toHaveCount(0);
 
     await expect(page.getByRole("button", { name: "Build a 1:1 account experience" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Launch a campaign landing page" })).toHaveCount(0);
@@ -243,16 +247,12 @@ test.describe("unified guided first-run experience", () => {
     await expect(page.locator('input[type="email"]')).toHaveCount(0);
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
-    const northpeak = page.locator('aside[aria-label="Optional Northpeak worked states"] a');
-    await expect(northpeak).toHaveCount(2);
-    await expect(northpeak.nth(0)).toHaveAttribute(
-      "href",
-      "https://experience.folloze.com/northpeak--folloze"
-    );
-    await expect(northpeak.nth(1)).toHaveAttribute("href", "https://engage.folloze.com/120367");
-    await expect(northpeak.nth(0)).toHaveText(/Northpeak account experience/i);
-    await expect(northpeak.nth(1)).toHaveText(/Northpeak personalized campaign/i);
+    const example = page.getByRole("link", { name: /example personalized campaign page/i });
+    await expect(example).toHaveCount(1);
+    await expect(example).toHaveAttribute("href", "https://engage.folloze.com/120367");
+    await expect(page.getByRole("link", { name: /Northpeak account experience/i })).toHaveCount(0);
 
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: testInfo.outputPath("unified-entry-u01.png"),
       fullPage: false
@@ -498,60 +498,6 @@ test.describe("unified guided first-run experience", () => {
     await expect(page.locator('input[type="email"]')).toHaveCount(0);
   });
 
-  test("Content Magic remains reachable as a secondary route (U04)", async ({ page }) => {
-    const sessions = new Map<string, PublicTryMeSession>();
-    await mockSessionApis(page, sessions);
-
-    const secondary = page.locator(".unifiedSecondaryCta");
-    await expect(secondary).toBeVisible();
-    await expect(async () => {
-      if (await page.locator(".domainStage").count()) return;
-      await secondary.click();
-      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
-    }).toPass({ timeout: 15_000 });
-    await expect(page.getByLabel("Company domain")).toBeVisible();
-    await page.getByLabel("Company domain").fill("northpeak.com");
-    await page.getByRole("button", { name: /Use this company/i }).click();
-    await expect(page.getByText(/Live brief|content|URL or PDF/i).first()).toBeVisible({
-      timeout: 10_000
-    });
-    expect([...sessions.values()].some((session) => session.useCase === "content")).toBe(true);
-    await expect(page.locator('input[type="email"]')).toHaveCount(0);
-  });
-
-  test("Content Magic source submission goes straight to build without audience or goal questions", async ({ page }) => {
-    const sessions = new Map<string, PublicTryMeSession>();
-    const patches: SessionAnswers[] = [];
-    await mockSessionApis(page, sessions, undefined, patches);
-
-    const secondary = page.locator(".unifiedSecondaryCta");
-    await expect(secondary).toBeVisible();
-    // SSR markup may be visible before React hydrates under the parallel suite.
-    // Retry the click until the Content Magic domain stage owns the page.
-    await expect(async () => {
-      if (await page.locator(".domainStage").count()) return;
-      await secondary.click({ trial: false });
-      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
-    }).toPass({ timeout: 15_000 });
-    await page.getByLabel("Company domain").fill("northpeak.com");
-    await page.getByRole("button", { name: /Use this company/i }).click();
-
-    await expect(page.getByText(/Live brief/i).first()).toBeVisible({ timeout: 10_000 });
-    const contentUrl = page.getByLabel("Content URL");
-    await expect(contentUrl).toBeVisible();
-    await contentUrl.fill("https://northpeak.com/research/governed-automation");
-
-    await expect.poll(
-      () => patches.filter((patch) => patch.sourceUrl === "https://northpeak.com/research/governed-automation").length,
-      { timeout: 10_000 }
-    ).toBe(1);
-    await expect(page.getByText(/building|research|reading|composing/i).first()).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/Who should|What should they do after|Choose the buyer role|Choose one goal/i)).toHaveCount(0);
-    expect([...sessions.values()][0]?.answers.sourceUrl).toBe(
-      "https://northpeak.com/research/governed-automation"
-    );
-  });
-
   test("Start over is prominent and returns to the unified door", async ({ page }) => {
     const sessions = new Map<string, PublicTryMeSession>();
     await mockSessionApis(page, sessions);
@@ -755,15 +701,7 @@ test.describe("unified guided first-run experience", () => {
     });
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    const secondary = page.locator(".unifiedSecondaryCta");
-    await expect(async () => {
-      if (await page.locator(".domainStage").count()) return;
-      await secondary.click({ trial: false });
-      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
-    }).toPass({ timeout: 15_000 });
-    await page.getByLabel("Company domain").fill("northpeak.com");
-    await page.getByRole("button", { name: /Use this company/i }).click();
-    await expect(page.getByText(/Upload a PDF|Content URL|Live brief/i).first()).toBeVisible({ timeout: 10_000 });
+    await startBuyerExperience(page, "northpeak.com");
 
     const sessionId = [...sessions.values()][0]?.id;
     expect(sessionId).toBeTruthy();

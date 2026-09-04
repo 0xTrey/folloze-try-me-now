@@ -174,7 +174,7 @@ test.describe("analytics experience completion contract", () => {
     const consoleErrors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
-    const primary = page.getByRole("button", { name: /Build a buyer experience/i });
+    const primary = page.getByRole("button", { name: /Build a personalized campaign page/i });
     await expect(primary).toBeVisible();
     await expect(async () => {
       if (await page.locator(".domainStage").count()) return;
