@@ -2446,10 +2446,34 @@ export async function patchSessionAnswers(
   assertProductionSessionStore();
   const updated = await updateSession(id, (session) => {
     const wasGenerationReady = isGenerationReady(session.useCase, session.answers);
+    const retryingFailedGeneration = session.stages.story.status === "failed";
     const previousFingerprint = storyInputFingerprint(session);
     applyAnswerPatch(session, patch);
     completeInputMutation(session, previousFingerprint);
-    if (!wasGenerationReady && isGenerationReady(session.useCase, session.answers)) {
+    const generationReady = isGenerationReady(session.useCase, session.answers);
+    if (retryingFailedGeneration && generationReady) {
+      const eligibleAt = Date.now();
+      const budget = generationBudgetFor(eligibleAt, {
+        totalMs: config.generationDeadlineMs,
+        finalizationReserveMs: config.generationFinalizationReserveMs
+      }, eligibleAt);
+      resetGeneratedExperience(
+        session,
+        "Retry queued. The build will use a fresh generation window."
+      );
+      session.buildProgress = undefined;
+      advanceBuildProgress(session, {
+        completed: [],
+        active: "queued",
+        phase: "queued",
+        budget
+      });
+      appendEvent(session, "generation_eligible", {
+        trigger: "retry",
+        revision: session.revision + 1,
+        ...timingMetaForGenerationBudget(budget)
+      });
+    } else if (!wasGenerationReady && generationReady) {
       const eligibleAt = Date.now();
       const budget = generationBudgetFor(eligibleAt, {
         totalMs: config.generationDeadlineMs,

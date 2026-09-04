@@ -400,6 +400,34 @@ describe("deterministic experience copy", () => {
     ).toBeUndefined();
   });
 
+  it("accepts the longest valid promoted offer without breaking the persuasion schema", () => {
+    const promotedOffer =
+      "A managed go-to-market service that combines account research, campaign planning, seller enablement, performance insights, and hands-on execution for GTM teams.";
+    const answers = {
+      audience: "Revenue leaders building predictable pipeline",
+      objective: "Learn about the offer",
+      campaignType: "product" as const,
+      promotedOffer,
+      promotedOfferConfirmed: true
+    };
+    const { context, draft } = draftFor("campaign", answers);
+
+    expect(promotedOffer).toHaveLength(160);
+    expect(experienceDraftSchema.safeParse(draft).success).toBe(true);
+    expect(draft.persuasionFramework?.credibility.headline.length).toBeLessThanOrEqual(120);
+    expect(draft.persuasionFramework?.teamValue.roles[0].decision.length).toBeLessThanOrEqual(150);
+    expect(draft.persuasionFramework?.nextStep.scope.length).toBeLessThanOrEqual(130);
+    expect(
+      experienceQualityFailure({
+        draft,
+        brand: jitterbit,
+        useCase: "campaign",
+        answers,
+        context
+      })
+    ).toBeUndefined();
+  });
+
   it("blocks content drafts when source grounding is missing or poorly distributed", () => {
     const contentContext = compileCampaignContext({
       brand: jitterbit,

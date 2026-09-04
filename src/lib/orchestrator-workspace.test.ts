@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   canEditSession,
   duplicateSession,
+  patchSessionAnswers,
   patchSessionWorkspace,
   recordPreviewInteraction,
   runStoryStage
@@ -574,6 +575,62 @@ describe("session workspace foundation", () => {
       code: "generation_failed",
       retryable: true
     });
+  });
+
+  it("requeues a failed build with a fresh generation budget when the answer is unchanged", async () => {
+    const id = `generation-retry-budget-${Date.now()}`;
+    ids.add(id);
+    const failed = workspaceSession(id, "generation_failed");
+    const expiredEligibleAt = new Date(Date.now() - 120_000).toISOString();
+    failed.experience = undefined;
+    failed.experienceSpec = undefined;
+    failed.qualityReceipt = undefined;
+    failed.finalArtifact = undefined;
+    failed.stages.story = {
+      status: "failed",
+      completedAt: new Date().toISOString(),
+      detail: "The story could not be completed.",
+      errorCode: "generation_failed"
+    };
+    failed.buildProgress = {
+      phase: "failed",
+      startedAt: expiredEligibleAt,
+      updatedAt: new Date().toISOString(),
+      slow: false,
+      receipts: [],
+      failure: {
+        code: "generation_failed",
+        nextAction: "Retry the build.",
+        retryable: true
+      }
+    };
+    failed.events.push({
+      name: "generation_eligible",
+      at: expiredEligibleAt,
+      meta: { trigger: "answers", remainingMs: 0 }
+    });
+    await putSession(failed);
+
+    const result = await patchSessionAnswers(id, { objective: failed.answers.objective });
+    const stored = await getSession(id);
+    const eligibilityEvents = stored?.events.filter(({ name }) => name === "generation_eligible") ?? [];
+    const latestEligibility = eligibilityEvents.at(-1);
+
+    expect(result.shouldGenerate).toBe(true);
+    expect(result.session).toMatchObject({
+      status: "collecting",
+      stages: { story: { status: "pending" } },
+      buildProgress: { phase: "queued" }
+    });
+    expect(result.session.buildProgress?.failure).toBeUndefined();
+    expect(eligibilityEvents).toHaveLength(2);
+    expect(Date.parse(latestEligibility?.at ?? "")).toBeGreaterThan(Date.parse(expiredEligibleAt));
+    expect(latestEligibility?.meta).toMatchObject({
+      trigger: "retry",
+      elapsedMs: 0,
+      remainingMs: expect.any(Number)
+    });
+    expect(Number(latestEligibility?.meta?.remainingMs)).toBeGreaterThan(0);
   });
 
   it("replaces source provenance atomically and binds confirmation to the newly submitted source", async () => {

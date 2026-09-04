@@ -41,6 +41,32 @@ const marketingCliche =
 const trimSentence = (value: string, max: number) =>
   value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1)).replace(/[\s,;:.]+$/g, "")}…`;
 
+function conciseOfferReference(value: string, max = 70, maxWords = 6): string {
+  const normalized = value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.!?]+$/g, "");
+  if (!normalized) return "the selected offer";
+  const clipped = normalized.length <= max
+    ? normalized
+    : (() => {
+        const candidate = normalized.slice(0, max + 1);
+        const boundary = candidate.lastIndexOf(" ");
+        return boundary >= Math.floor(max * 0.55)
+          ? candidate.slice(0, boundary)
+          : candidate.slice(0, max);
+      })();
+  const phrase = clipped
+    .split(/\s+/)
+    .slice(0, maxWords)
+    .join(" ")
+    .replace(/\s+\b(?:and|or|but|with|to|for|of|the|a|an|that|which|who)$/i, "")
+    .replace(/[\s,;:|/-]+$/g, "")
+    .trim();
+  return phrase || "the selected offer";
+}
+
 export class SourceFetchError extends Error {
   constructor(cause: unknown) {
     super("The public content URL could not be read.", { cause });
@@ -151,7 +177,7 @@ function persuasionFrameworkFor(input: {
   const account = context.brief.targetAccount?.name ?? targetBrand?.companyName;
   const isAccount = context.brief.campaignRegister === "one-to-one-abm";
   const audience = normalizeAudienceLabel(context.brief.audience);
-  const offer = context.brief.offerOrSource.name;
+  const offer = conciseOfferReference(context.brief.offerOrSource.name);
   const sellerFact =
     (
       brand.description?.trim() ||
@@ -254,7 +280,10 @@ function persuasionFrameworkFor(input: {
     },
     credibility: {
       eyebrow: isAccount ? "What is already working" : "Reasons to believe",
-      headline: draft.thesisHeadline,
+      headline:
+        draft.thesisHeadline.length <= 120
+          ? draft.thesisHeadline
+          : "The operating change needs a clear reason to believe.",
       fact: trimSentence(sourceClaim || sellerFact, 240),
       implication: draft.thesisBody,
       evidenceIds: credibilityEvidence,
@@ -695,7 +724,9 @@ export function deterministicDraft(input: {
   if (context.brief.campaignRegister === "one-to-one-abm") {
     const account = target || "the priority account";
     const introducedProduct = answers.objective === "Introduce a product";
-    const abmOffer = introducedProduct ? sourceTitle || profile.offerLabel : profile.offerLabel;
+    const abmOffer = conciseOfferReference(
+      introducedProduct ? sourceTitle || profile.offerLabel : profile.offerLabel
+    );
     const visitorProductContext = introducedProduct && answers.messageBelief?.trim()
       ? trimSentence(answers.messageBelief, 220)
       : undefined;
@@ -839,11 +870,14 @@ export function deterministicDraft(input: {
   }
 
   if (context.brief.campaignRegister === "campaign-product") {
-    const promotedOffer = context.brief.offerOrSource.name || profile.offerLabel;
+    const promotedOffer = conciseOfferReference(
+      context.brief.offerOrSource.name || profile.offerLabel
+    );
+    const productEyebrow = `${brand.companyName} | ${promotedOffer}`;
     return finalize({
       ...common,
-      title: trimSentence(`${brand.companyName} | ${promotedOffer}`, 90),
-      eyebrow: trimSentence(`${brand.companyName} | ${promotedOffer}`, 52),
+      title: trimSentence(productEyebrow, 90),
+      eyebrow: productEyebrow.length <= 52 ? productEyebrow : trimSentence(brand.companyName, 52),
       headline: trimSentence(`Bring ${promotedOffer} into the way the team actually works.`, 120),
       subhead: trimSentence(
         `${brand.companyName} gives ${roleAudience.toLowerCase()} a focused way to connect ${promotedOffer} to the operating change and first use case worth validating.`,
