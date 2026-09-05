@@ -1,6 +1,6 @@
 # Buyer journey and security status
 
-The implementation is pushed on `codex/buyer-journey-security`. The September 5 production rollout has activated restricted database credentials, row-level security, Turnstile, encrypted storage, and public security headers at https://folloze-try-me-now.vercel.app. Final strict-read deployment and follow-up copy verification are in progress.
+The September 5 release is live at the [production URL](https://folloze-try-me-now.vercel.app). Tested runtime commit `6b7cfe2` is pushed to both `codex/buyer-journey-security` and `production`. Deployment `dpl_4txynfL9EKGoEFvsBfuXDnTCthb6` is READY and owns the canonical alias. Restricted database access, forced RLS, Turnstile, encrypted writes, strict encrypted reads, and public security headers are active.
 
 ## Saved checkpoints
 
@@ -14,6 +14,7 @@ The implementation is pushed on `codex/buyer-journey-security`. The September 5 
 | `8794148` | Sentence-boundary correction and saved implementation status |
 | `09f27e4` | Database cross-session verification, conditional Blob migration, and browser-contract updates |
 | `559461b` | Browser expectations aligned with the approved next-step chooser and earned sections |
+| `6b7cfe2` | Preserved reviewed campaign/content copy, buyer-facing fallback navigation, and production rollout receipts |
 
 The three screenshots that were modified before this work remain untouched and uncommitted in `output/product-owner-remediation/`.
 
@@ -39,7 +40,7 @@ These are implementation and fixture-verification receipts. They are not evidenc
 | 14 | Scoped proof | Customer outcomes and quantified results require explicit types, permitted use, public source scope, past-result language, and a match to the selected product. Source extraction binds proof to its own quote or section, not another section sharing a citation. Unresolved product identity cannot authorize proof. No-proof journeys use a walkthrough question. |
 | 15 | Purchase questions | Verified pricing, security, and implementation answers can add a purchase-question module. A regression follows a synthetic published price through the section contract and fallback into rendered HTML. Missing facts remain unknown. |
 | 16 | Concrete CTA | One shared contract controls label, destination, and expectation. Source links do not promise a completed registration. Missing destinations use an existing next-step anchor, without claiming a booking. Secret-bearing URLs are rejected. |
-| 17 | Whole-page editorial review | A bounded structured model review checks meaning, unsupported claims, repetition, and CTA continuity. Repairs affect at most two sections. A failed rereview cannot clear an existing blocker. Live-provider quality has not been measured in this run. |
+| 17 | Whole-page editorial review | A bounded structured model review checks meaning, unsupported claims, repetition, and CTA continuity. Repairs affect at most two sections. A failed rereview cannot clear an existing blocker. Live campaign generation was smoke-tested, but both samples used the legacy fallback after section acceptance fell below its coherence gate. This is not live validation of every section-review path. |
 | 18 | Useful fallbacks | Minimum-length padding is removed. Short complete copy and explicit walkthrough questions replace internal review instructions. Unverified closing-offer details are not rendered. |
 | 19 | Buyer-ready performance | Parallel writing remains bounded. Session-isolated section caching refreshes changed evidence, scoped brief fields, voice, or expired responses. Writer duration, model/fallback counts, cache hits, and review status enter telemetry. The source cache is per process, not a cross-instance knowledge service. |
 | 20 | Outcome learning tools | The benchmark, six compiled review samples, blinded export, sticky assignment, and exposure/conversion analysis are available. Human comparisons, CRM outcome joining, production experiment activation, and measured conversion lift remain pending. |
@@ -54,7 +55,7 @@ The ABM and copywriting guidance shaped evidence boundaries, account relevance, 
 | Purge secrets from Git | The full-history scan found no confirmed secrets. The final staged diff also passed. No purge or history rewrite was warranted. |
 | Expose only public DB key | This app has no browser database credential. Neon access remains on the server; a public database key is not needed. |
 | Enable row-level security | Migrations 010 and 011 were tested on an isolated schema-only branch and applied to production. All nine tables have forced RLS. The application login owns no tables, has neither superuser nor BYPASSRLS, inherits only the runtime role, and is separate from maintenance. Synthetic lead probes verified allowed own-session access and denied cross-session reads, updates, and inserts. The other eight tables use trusted service policies, not tenant-specific row isolation. |
-| Encrypt sensitive data | Production writes use AES-256-GCM envelopes for Blob sessions and Blob lead receipts. The migration encrypted 277 existing records with authenticated readback and no conflicts or failures. One new live record was already encrypted. A strict-read audit authenticated all 278 records and found no plaintext. The strict flag is configured for the next deployment. Production does not use Redis. SQL lead email remains application-readable and depends on provider encryption at rest, which was not independently verified. |
+| Encrypt sensitive data | Production writes use AES-256-GCM envelopes for Blob sessions and Blob lead receipts. The migration encrypted 277 existing records with authenticated readback and no conflicts or failures. One new live record was already encrypted. A strict-read audit authenticated all 278 records and found no plaintext. Strict mode is deployed, and a real session was recovered and rebuilt under that mode. Production does not use Redis. SQL lead email remains application-readable and depends on provider encryption at rest, which was not independently verified. |
 | Enforce server-side auth | Private editor reads and mutations validate the server-issued editor capability. Public buyer pages keep a separate public projection. |
 | Lock record access | Cross-session and capability checks are covered by API tests. Database-level lead isolation passed actual allowed and denied operations on both the canary and production branches. Synthetic probe records were removed after verification. |
 | Block field tampering | Strict schemas separate writable answers from server-owned state. Unknown properties and invalid field types are rejected. |
@@ -75,10 +76,14 @@ The generated client-bundle scan produced one private-key alert. Inspection trac
 
 ## Verification receipts
 
+- [GitHub quality gate 33997924983](https://github.com/0xTrey/folloze-try-me-now/actions/runs/33997924983) passed at released runtime commit `6b7cfe2`: 1,909 tests passed, one skipped, 101 desktop browser tests passed, both production builds passed, and the dependency and Git-history scans passed.
+- Strict deployment `dpl_4A7vhDihYJxSesmgsLapekWvwmyR` was promoted and verified. The `production` branch was then fast-forwarded to the identical tested commit without rewriting history. Its Git-triggered deployment `dpl_4txynfL9EKGoEFvsBfuXDnTCthb6` is READY, owns the canonical alias, and returned production-capable health.
+- The rebuilt Folloze sample preserved the canonical hero, shared CTA, and buyer-facing navigation. It reached a persisted, read-back final artifact. The existing editor cookie recovered the encrypted session; anonymous editor and recovery requests returned 403. Public generated HTML returned 200 with nonce-based CSP and no-store headers.
+- The live engagement panel captured the selected topic and section. Desktop, compact-desktop, and mobile checks at 1440, 1024, and 390 pixels found no horizontal overflow in the shell or iframe; the mobile image check found no broken images. No lead claim, email, Folloze save, or Folloze publication was performed.
 - [GitHub quality gate 33997221090](https://github.com/0xTrey/folloze-try-me-now/actions/runs/33997221090) passed at `559461b`: 1,906 tests passed, one skipped, 101 desktop browser tests passed, both production builds passed, and no dependency vulnerabilities or confirmed Git secrets were found.
 - Production deployment `dpl_HHUhhVLQ1fJAFb8Xay73x58wC2gQ` was promoted to the canonical URL after those checks. Health reported production-capable sessions, leads, generation, and distributed limits. The bounded post-promotion log query returned no 5xx requests.
-- A real Folloze test brief reached a persisted final experience. Visual inspection caught a late personalization overlay replacing the canonical hero and CTA with a seller website phrase. The follow-up preserves reviewed campaign/content copy and uses buyer-facing fallback navigation. Its focused tests passed; a fresh production readback is still required.
-- Preview and development now use a separate private Blob store. Production retains its original store and data. Older immutable deployments retain their historical configuration and are not a basis for shared-storage testing.
+- Visual inspection of the first Folloze sample caught a late personalization overlay replacing the canonical hero and CTA with a seller website phrase. The follow-up fixed that overwrite and passed a fresh production readback.
+- Current preview and development environment values route to a separate private Blob store. Production retains its original store and data. The old store attachment still lists all three environments, and older immutable deployments retain their historical credentials. Environment routing is verified; historical credential revocation and attachment cleanup are not completed security receipts.
 - Full suite after the completion-audit fixes: 1,899 passed, zero failed, one skipped. A subsequent sentence-boundary correction passed all 33 focused writer and production integration tests.
 - Type checking passed. Lint passed with three pre-existing unused-variable warnings in `cloudflare-upload-contract.test.ts`.
 - Both Turbopack and Webpack production builds passed after the final runtime changes.
@@ -91,16 +96,16 @@ The generated client-bundle scan produced one private-key alert. Inspection trac
 
 Review material: [manifest](../output/buyer-journey-validation/manifest.json) and [blinded copy samples](../output/buyer-journey-validation/blind-review.json). Rebuild with `EMIT_BUYER_JOURNEY_EVIDENCE=1 npm run benchmark:buyer-journey`. Serve the output directory locally for browser inspection. Do not publish these synthetic examples as customer evidence.
 
-## Remaining release checks and measurement
+## Remaining measurement and hardening
 
-1. Promote the strict-read build after its quality gate, then verify the preserved product story and editor access at the canonical URL.
-2. Keep expiration and replay checks in the Turnstile acceptance checklist. See [Turnstile activation](security-turnstile-activation.md).
+1. Review thin-evidence copy with humans and measure fallback rates. Both live smoke builds used the legacy artifact fallback after `GPE_MINIMUM_SECTIONS_UNAVAILABLE`. They verified end-to-end generation, storage, and the preview fix, not successful live acceptance of every section-writer path or a conversion improvement.
+2. Exercise expiration and replay with real Turnstile tokens. Missing, invalid, and valid live challenges were checked. See [Turnstile activation](security-turnstile-activation.md).
 3. Run blinded human review before enabling a controlled experiment. Fix the eligible audience, randomization unit, qualified-conversion definition, downstream outcome window, exclusion rules, and analysis horizon in advance. The sample-size floor in the helper is a guard, not a statistical power calculation.
-4. The first live smoke test used the legacy artifact fallback after `GPE_MINIMUM_SECTIONS_UNAVAILABLE`. It verified end-to-end generation and storage, not successful live acceptance of every section-writer path or a conversion improvement. Provider-quality measurement remains separate from release health.
+4. Clean up the historical multi-environment Blob attachment and rotate historical credentials through a coordinated redeployment. Current environment values use distinct stores, but old deployment credentials have not been revoked. Do not mistake environment metadata changes for credential revocation.
 
 ## Rollback
 
-After encryption, do not promote a pre-security deployment: it cannot read encrypted records. The encrypted-write deployment `dpl_HHUhhVLQ1fJAFb8Xay73x58wC2gQ` is the strict-mode recovery candidate because it can read authenticated envelopes and, if required, legacy plaintext. It still uses restricted database credentials and Turnstile. It contains the preview-copy defect documented above, so a forward fix is preferred.
+After encryption, do not promote a pre-security deployment: it cannot read encrypted records. Deployment `dpl_4A7vhDihYJxSesmgsLapekWvwmyR` is an already-verified copy of the released code with strict encryption and the preview fix. The earlier encrypted-write deployment `dpl_HHUhhVLQ1fJAFb8Xay73x58wC2gQ` can read authenticated envelopes and, if required, legacy plaintext. It still uses restricted database credentials and Turnstile, but contains the preview-copy defect, so a forward fix is preferred.
 
 The earlier compatibility deployment `dpl_AH3CxbqTwjYUrU8gYoLDkTqyQT6a` can decrypt with the retained key ring but writes plaintext. It is an emergency recovery option only, not an acceptable steady state. Do not delete or regenerate the configured key ring during rollback; retain decryption keys for the complete retention window.
 

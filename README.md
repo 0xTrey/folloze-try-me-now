@@ -28,15 +28,15 @@ Work begins progressively. Brand extraction starts as soon as the company domain
 | Surface | State |
 | --- | --- |
 | Local source and visual QA | Complete; desktop, mobile, 320px, reduced motion, error, claim, and signal states exercised. |
-| Automated QA | 187 unit tests plus generated-experience Playwright checks cover copy, brands, responsive layouts, keyboard tabs, failure fallbacks, and lead capture. |
+| Automated QA | September 5 release: 1,909 tests passed, one skipped, 101 desktop browser tests passed, both production builds passed, and dependency and Git-history secret scans passed. |
 | Public Vercel app | Deployed at <https://folloze-try-me-now.vercel.app>. |
-| Release control | Vercel is authoritative. GitHub's default branch remains `codex/visual-v1`; production tracks the intentional `production` release branch. Pinned commit and deployment evidence are recorded in [Architecture](docs/architecture.md). |
-| Session durability | Connected private Vercel Blob store with uncached reads, wrapper TTL, and optimistic ETag updates. Blob remains the session store when Redis is also configured. Its current attachment spans Production, Preview, and Development; separate non-production storage and later credential rotation are tracked in [Integration readiness](docs/integration-readiness.md). |
+| Release control | Vercel tracks the intentional `production` release branch, now at tested runtime commit `6b7cfe2`. GitHub's default branch is `codex/unified-microsite-builder`. Current deployment, security, and recovery evidence is recorded in [Release status](docs/buyer-journey-security-status.md). |
+| Session durability | Private Blob storage uses authenticated AES-256-GCM envelopes, strict encrypted reads, wrapper TTL, uncached reads, and optimistic ETag updates. All 278 records passed the migration audit. Current preview/development values use a separate private store; historical credential revocation remains separate work. |
 | Brand | Brand-aware fast extractor now rejects unrelated logos and badges, ranks semantic palette roles, discovers live font faces, and selects multiple contextual visual assets; the full remote Brand Harvester is still a later option. |
-| Generation | Fresh schema-constrained OpenAI generation is implemented and live-tested across ABM, demand, product, event-registration, and Content Magic. The project key remains server-only. Production promotion follows the controlled Vercel release branch and immutable-deployment verification contract. |
+| Generation | OpenAI generation is active. The September 5 campaign smoke test and rebuild reached final persisted artifacts. Thin-evidence samples used the documented legacy fallback; live section-writer acceptance and conversion quality still need measurement. The project key remains server-only. |
 | Folloze | Local integration test saved unpublished Board `249022`; remote publish is disabled. |
-| Email | Claim persistence works; Resend delivery is disabled, so fixture claims do not send mail. |
-| Lead ledger | Neon Postgres adapter, additive migration, idempotent `session_id` upsert, and private Blob fallback are implemented. The schema is migrated and `DATABASE_URL` is attached to Vercel Preview; deployed claim readback remains a separate verification checkpoint. |
+| Email | Agentmail is configured. No claim or email was sent during the September 5 rollout; provider configuration is not a delivery receipt. |
+| Lead ledger | Production Neon access uses a restricted application login and separate maintenance login. Forced RLS is active on nine app tables; session-scoped lead isolation passed actual allowed and denied operations. SQL email field encryption is not implemented. |
 
 The Folloze designer URL is <https://app.folloze.com/app/board/249022/designer>. It proves a draft save only. The board is not published and has no verified anonymous URL.
 

@@ -1,8 +1,8 @@
 # Folloze Try Me Now integration readiness
 
-This inventory separates what the current visual MVP demonstrates from what must exist before public production traffic. “Configured” means credentials are present; it does not mean an end-to-end path has passed its launch gate.
+The current September 5 deployment and security receipts are in [Release status](buyer-journey-security-status.md). The original inventory below is retained as a historical gap analysis, not a claim about today's provider modes. “Configured” means credentials are present; it does not mean an end-to-end path has passed its launch gate.
 
-## Verified deployment checkpoint
+## Historical deployment checkpoint
 
 | Checkpoint | Evidence | Current state |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ session store, and the Folloze draft board are separate checkpoints. None of
 them proves the remote publish-and-email claim path. Vercel is the authoritative
 host; closed Cloudflare migration PR #8 was never activated and remains deferred.
 
-## Current versus needed
+## Original gap analysis
 
 | Area | Current visual MVP | Production target | Readiness gap / proof required |
 | --- | --- | --- | --- |

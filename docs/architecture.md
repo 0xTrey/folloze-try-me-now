@@ -1,6 +1,6 @@
 # Folloze Try Me Now technical architecture
 
-Status: implementation contract for production hardening. A visual MVP is deployed at <https://folloze-try-me-now.vercel.app>; the target design below is not yet the deployed runtime.
+The current September 5 deployment and security receipts are in [Release status](buyer-journey-security-status.md). This document retains the original architecture contract and historical visual-MVP baseline. Its older provider modes and release snapshots are not current deployment evidence, and proposed target components are not implied to be live.
 
 ## Product boundary
 
@@ -20,7 +20,7 @@ The interaction contract is the same for all three:
 - Claiming with a business email makes the experience durable and triggers a follow-up email containing the live URL.
 - Track preview engagement and the demo CTA as first-class conversion signals.
 
-## Current visual MVP
+## Original visual MVP baseline
 
 The existing Next.js application proves the interaction and generated experience, but several runtime paths intentionally favor a working demo over durability:
 
