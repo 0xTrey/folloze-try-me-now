@@ -463,7 +463,9 @@ export function renderExperienceHtml(input: {
 }): string {
   const brand = input.brand;
   const targetBrand = input.targetBrand;
-  const personalizationPlan = input.personalization;
+  // Also protect rendering of older stored campaign/content plans that still
+  // contain the legacy seller-category overwrite.
+  const personalizationPlan = input.useCase === "abm" ? input.personalization : undefined;
   const activePersonalization = personalizationPlan
     ? personalizationVariantById(
         personalizationPlan,
@@ -689,11 +691,19 @@ export function renderExperienceHtml(input: {
     id: string;
     roles: readonly WireframeSectionRole[];
   }>;
+  const fallbackNavigation: Record<WireframeSectionRole, string> = {
+    hero: "Overview", context: "Why it matters", mechanism: "How it works",
+    proof: "Evidence", pathways: "Use cases", agenda: "Agenda",
+    "chapter-navigation": "Chapters", "decision-support": "Explore your options",
+    resources: "Resources", "seller-validation": "Team value", "next-action": "Next step"
+  };
   const journeyNavItems = framework
     ? plannedSections
       ? plannedSections.filter((section) => !plannedRoles || plannedRoles.has(section.role)).map((section) => ({
           id: anchorForRole(section.role, section.label),
-          label: sanitizeBuyerFacingLabel(section.label, "Overview")
+          label: familyProduction
+            ? sanitizeBuyerFacingLabel(section.label, "Overview")
+            : fallbackNavigation[section.role]
         }))
       : frameworkSections
         .filter(({ roles }) => !plannedRoles || roles.some((role) => plannedRoles.has(role)))

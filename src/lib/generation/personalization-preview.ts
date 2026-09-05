@@ -183,6 +183,21 @@ export function compilePersonalizationPlan(
   const { draft, seller, target, useCase, answers, evidenceItems, audienceRecommendations } = input;
   const sellerFidelity = compileBrandFidelity(seller);
   const sellerTreatment = sellerFidelity.imagery.treatment;
+  // Campaign and source-led pages already contain their reviewed product story.
+  // A generic preview is that canonical page, not a second category copywriter.
+  // Account variants remain a separate, evidence-backed ABM interaction.
+  if (useCase !== "abm") {
+    return {
+      mode: "preview-variants",
+      defaultVariantId: "generic",
+      safeFields: ["imageryTreatment"],
+      omittedFields: PERSONALIZATION_FIELD_KEYS.filter((key) => key !== "imageryTreatment"),
+      visibleVariants: [buildVariant({
+        variantId: "generic", audienceState: "canonical", fields: {},
+        imageryTreatment: sellerTreatment, hasEvidence: false
+      })]
+    };
+  }
   const sellerRef = seller.sourceUrl || `seller:${seller.domain}`;
   const category = sellerCategory(seller);
   const audience =

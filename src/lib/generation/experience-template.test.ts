@@ -11,6 +11,7 @@ import { normalizeRemoteBrandProfile } from "@/lib/integrations/brand-harvester"
 import { deterministicDraft } from "@/lib/integrations/openai";
 import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
+import { selectWireframe } from "@/lib/generation/wireframe-library";
 
 const brand: BrandProfile = {
   domain: "jitterbit.com",
@@ -124,6 +125,27 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("settleImage(image,'has-image')");
     expect(html).toContain("settleImage(image,'has-asset')");
     expect(html).toContain("object-fit:cover");
+  });
+
+  it("uses buyer-facing navigation when a fallback has internal composition labels", () => {
+    const answers: SessionAnswers = {
+      campaignType: "product", promotedOffer: "Harmony", audience: "Enterprise architects",
+      objective: "Learn about the offer", ctaType: "explore"
+    };
+    const generated = deterministicDraft({
+      brand, useCase: "campaign", answers,
+      context: compileCampaignContext({ brand, useCase: "campaign", answers })
+    });
+    const output = renderExperienceHtml({
+      draft: generated, brand, useCase: "campaign", answers,
+      wireframeSelection: selectWireframe({ family: "campaign", campaignType: "product" })
+    });
+    const navigation = output.match(/<nav[^>]+aria-label="Experience journey"[\s\S]*?<\/nav>/)?.[0];
+    expect(navigation).toBeDefined();
+    expect(navigation).toContain("Overview");
+    expect(navigation).toContain("Next step");
+    expect(navigation).not.toContain("Product promise for the selected audience");
+    expect(navigation).not.toContain("Strongest supported reason to believe");
   });
 
   it("uses a content-led layout when approved imagery is unavailable", () => {

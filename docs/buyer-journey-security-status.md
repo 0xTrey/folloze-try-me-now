@@ -1,6 +1,6 @@
 # Buyer journey and security status
 
-The implementation is saved locally on `codex/buyer-journey-security`. Nothing was pushed or deployed, and no production database migration or credential change was made.
+The implementation is pushed on `codex/buyer-journey-security`. The September 5 production rollout has activated restricted database credentials, row-level security, Turnstile, encrypted storage, and public security headers at https://folloze-try-me-now.vercel.app. Final strict-read deployment and follow-up copy verification are in progress.
 
 ## Saved checkpoints
 
@@ -11,6 +11,9 @@ The implementation is saved locally on `codex/buyer-journey-security`. Nothing w
 | `ee59f31` | Request security, bot verification, encrypted storage, database-role preparation, and dependency remediation |
 | `be8eb92` | Buyer brief, source knowledge, evidence-aware selection, section writing and review, CTA consistency, rendering, and evaluation fixtures |
 | `da87f5c` | Completion-audit fixes for product-scoped proof and purchase-answer evidence through writers, review, and rendered HTML |
+| `8794148` | Sentence-boundary correction and saved implementation status |
+| `09f27e4` | Database cross-session verification, conditional Blob migration, and browser-contract updates |
+| `559461b` | Browser expectations aligned with the approved next-step chooser and earned sections |
 
 The three screenshots that were modified before this work remain untouched and uncommitted in `output/product-owner-remediation/`.
 
@@ -30,7 +33,7 @@ These are implementation and fixture-verification receipts. They are not evidenc
 | 8 | Real proof and asset signals | Source count is not proof. Typed, public, permitted seller outcomes drive proof eligibility; selected usable imagery drives visual readiness. |
 | 9 | Section assignments | Each section receives its buyer question, intended conclusion, claim references, relevant objection, and transition. Nonempty claim pools constrain both model and fallback writers, and the final reviewer uses the same references. |
 | 10 | Earned modules | Unsupported friction, optional proof depth, and resources are omitted. Rendered order and navigation follow retained sections. Omitted sections no longer revive old draft content. |
-| 11 | Clearer hero | Opening copy names the offer and buyer; a scoped seller claim explains the product where available. Actual comprehension still needs human review. |
+| 11 | Clearer hero | Opening copy names the offer and buyer; a scoped seller claim explains the product where available. Campaign and content previews preserve the canonical reviewed draft instead of overwriting it with seller-category copy. The renderer also ignores legacy campaign/content personalization overlays. Actual comprehension still needs human review. |
 | 12 | Supported problem | Workflow context is distinguished from account context. Unsupported friction is removed, and invented urgency is rejected. |
 | 13 | Product mechanism | Source capability and workflow claims reach section writers. Unknown mechanisms remain validation questions rather than invented features. |
 | 14 | Scoped proof | Customer outcomes and quantified results require explicit types, permitted use, public source scope, past-result language, and a match to the selected product. Source extraction binds proof to its own quote or section, not another section sharing a citation. Unresolved product identity cannot authorize proof. No-proof journeys use a walkthrough question. |
@@ -50,28 +53,32 @@ The ABM and copywriting guidance shaped evidence boundaries, account relevance, 
 | Hide API keys | Credentials remain server-side. An exact-value check of four configured server secrets across 36 client files found no matches. |
 | Purge secrets from Git | The full-history scan found no confirmed secrets. The final staged diff also passed. No purge or history rewrite was warranted. |
 | Expose only public DB key | This app has no browser database credential. Neon access remains on the server; a public database key is not needed. |
-| Enable row-level security | Migration 011 and transaction-scoped lead access are implemented. Live metadata audit failed: the current login has BYPASSRLS, owns all eight present tables, and none has RLS enabled. Migration 010's build-trace table and both new roles are absent. RLS is not active. |
-| Encrypt sensitive data | AES-256-GCM envelopes protect Blob/Redis sessions and Blob lead receipts when enabled. Record-bound authentication, rotation key IDs, tamper checks, and strict legacy-read mode are tested. Production keys and old-record migration are not activated. SQL lead email remains application-readable and depends on provider encryption at rest, which was not independently verified. |
+| Enable row-level security | Migrations 010 and 011 were tested on an isolated schema-only branch and applied to production. All nine tables have forced RLS. The application login owns no tables, has neither superuser nor BYPASSRLS, inherits only the runtime role, and is separate from maintenance. Synthetic lead probes verified allowed own-session access and denied cross-session reads, updates, and inserts. The other eight tables use trusted service policies, not tenant-specific row isolation. |
+| Encrypt sensitive data | Production writes use AES-256-GCM envelopes for Blob sessions and Blob lead receipts. The migration encrypted 277 existing records with authenticated readback and no conflicts or failures. One new live record was already encrypted. A strict-read audit authenticated all 278 records and found no plaintext. The strict flag is configured for the next deployment. Production does not use Redis. SQL lead email remains application-readable and depends on provider encryption at rest, which was not independently verified. |
 | Enforce server-side auth | Private editor reads and mutations validate the server-issued editor capability. Public buyer pages keep a separate public projection. |
-| Lock record access | Cross-session and capability checks are covered by API tests. Database-level lead isolation still requires the RLS rollout below. |
+| Lock record access | Cross-session and capability checks are covered by API tests. Database-level lead isolation passed actual allowed and denied operations on both the canary and production branches. Synthetic probe records were removed after verification. |
 | Block field tampering | Strict schemas separate writable answers from server-owned state. Unknown properties and invalid field types are rejected. |
 | Secure session cookies | Editor cookies are HttpOnly, SameSite=Lax, scoped to `/api/sessions`, time-limited, and Secure in production. Cross-origin JSON mutations are rejected. |
 | Hash passwords | There is no password login. Random editor capabilities are stored as SHA-256 hashes and compared in constant time. This is not a password-hashing scheme and should not be reused as one. |
 | Rate limit login | Applicable creation, editor, claim, recovery, and related routes have abuse limits. Production fails closed without a distributed limiter. There is no password-login endpoint to add. |
-| Add bot protection | Turnstile client and server verification are implemented and tested. Activation flags, site key, server secret, hostname, and action must be configured together. It is not active by default. |
+| Add bot protection | Both Turnstile flags, the site key, server secret, exact production hostname, and `session_create` action are active. A real browser completed the protected session flow. Missing and invalid tokens returned 403; cross-origin creation also returned 403. Expired and replayed real tokens were not separately exercised in the live browser. |
 | Parameterize queries | Runtime data access uses tagged, parameterized SQL. Lead session context and its query run in one transaction. |
 | Validate all input | Strict schemas, streamed body limits, origin checks, URL safety, and route-specific bounds cover exposed operations. Signed upload callbacks retain their provider-specific verification. |
 | Escape user content | Reviewed text still passes escaped HTML rendering. Provider instructions treat source text, strategy, and brief values as untrusted data. |
 | Restrict file uploads | Existing ownership, PDF signature/type/size, expiry, and replay controls remain; upload request JSON is now bounded. |
 | Trim API responses | Public projections exclude editor tokens, private source ledgers, internal strategy receipts, and sensitive delivery state. Rendered production copy is public content, not private diagnostics. |
-| Add security headers | Local production HTTP checks returned CSP, nosniff, referrer, permissions, framing, and HSTS headers. Generated experience routes retain their nonce-based policy. The app shell permits inline Next scripts and is not described as a strict nonce-only CSP. |
-| Force HTTPS | A fixed-host production redirect and HSTS are configured. The edge must own the forwarded-protocol header. No live production redirect test or release was performed. |
-| Scan dependencies | `npm audit --audit-level=high` reports zero vulnerabilities. The js-yaml advisory was remediated. CI now includes dependency and pinned secret-scanning checks; remote CI has not run for this branch. |
+| Add security headers | The public production URL returns CSP, nosniff, referrer, permissions, framing, and HSTS headers. Generated experience routes retain their nonce-based policy. The app shell permits inline Next scripts and is not described as a strict nonce-only CSP. |
+| Force HTTPS | The live HTTP URL returned 308 to the canonical HTTPS URL, which returned 200 with HSTS. The edge must own the forwarded-protocol header. |
+| Scan dependencies | `npm audit --audit-level=high` reports zero vulnerabilities. The js-yaml advisory was remediated. Remote CI passed dependency and pinned full-history secret scans. |
 
 The generated client-bundle scan produced one private-key alert. Inspection traced it to the `jose` dependency's generic `format_pem.js` template, not key material. No real PEM block or configured server-secret value was present. No broad allowlist was added.
 
 ## Verification receipts
 
+- [GitHub quality gate 33997221090](https://github.com/0xTrey/folloze-try-me-now/actions/runs/33997221090) passed at `559461b`: 1,906 tests passed, one skipped, 101 desktop browser tests passed, both production builds passed, and no dependency vulnerabilities or confirmed Git secrets were found.
+- Production deployment `dpl_HHUhhVLQ1fJAFb8Xay73x58wC2gQ` was promoted to the canonical URL after those checks. Health reported production-capable sessions, leads, generation, and distributed limits. The bounded post-promotion log query returned no 5xx requests.
+- A real Folloze test brief reached a persisted final experience. Visual inspection caught a late personalization overlay replacing the canonical hero and CTA with a seller website phrase. The follow-up preserves reviewed campaign/content copy and uses buyer-facing fallback navigation. Its focused tests passed; a fresh production readback is still required.
+- Preview and development now use a separate private Blob store. Production retains its original store and data. Older immutable deployments retain their historical configuration and are not a basis for shared-storage testing.
 - Full suite after the completion-audit fixes: 1,899 passed, zero failed, one skipped. A subsequent sentence-boundary correction passed all 33 focused writer and production integration tests.
 - Type checking passed. Lint passed with three pre-existing unused-variable warnings in `cloudflare-upload-contract.test.ts`.
 - Both Turbopack and Webpack production builds passed after the final runtime changes.
@@ -84,20 +91,21 @@ The generated client-bundle scan produced one private-key alert. Inspection trac
 
 Review material: [manifest](../output/buyer-journey-validation/manifest.json) and [blinded copy samples](../output/buyer-journey-validation/blind-review.json). Rebuild with `EMIT_BUYER_JOURNEY_EVIDENCE=1 npm run benchmark:buyer-journey`. Serve the output directory locally for browser inspection. Do not publish these synthetic examples as customer evidence.
 
-## Activation still required
+## Remaining release checks and measurement
 
-1. Approve a staging and production rollout. Verify the exact Vercel project and database before changing either.
-2. On an isolated database branch, apply missing migration 010, then 011. Provision a separate application login that inherits only `try_me_runtime`, does not own tables, and has neither superuser nor BYPASSRLS. Provision a distinct maintenance login. Do not put login passwords in Git or in SQL files.
-3. Set the application's restricted `DATABASE_URL`, the server-only `DATABASE_MAINTENANCE_URL`, and `DATABASE_RLS_ENABLED=true`. Run `node scripts/verify-database-security.mjs`, then test permitted lead access and denied cross-session reads/writes with synthetic records. The other eight tables use trusted service policies, not tenant-specific row isolation.
-4. Configure the encryption key ring through the secret manager. Enable encrypted writes, migrate old Blob/Redis records, verify readback and rollback, then set `SENSITIVE_STORAGE_ALLOW_LEGACY_PLAINTEXT=false`. Retain old decryption keys for their full data-retention window. Database field-level encryption would be a separate schema and workflow change.
-5. Configure both Turnstile flags and the public site key at build time, plus the server-only secret, exact hostname, and `session_create` action. Test valid, invalid, expired, and missing challenges on the intended host. See [Turnstile activation](security-turnstile-activation.md).
-6. Deploy the verified branch, check anonymous rendering and private editor access, confirm HTTPS and headers at the public edge, then monitor errors and completion/fallback rates.
-7. Run blinded human review before enabling a controlled experiment. Fix the eligible audience, randomization unit, qualified-conversion definition, downstream outcome window, exclusion rules, and analysis horizon in advance. The sample-size floor in the helper is a guard, not a statistical power calculation.
+1. Promote the strict-read build after its quality gate, then verify the preserved product story and editor access at the canonical URL.
+2. Keep expiration and replay checks in the Turnstile acceptance checklist. See [Turnstile activation](security-turnstile-activation.md).
+3. Run blinded human review before enabling a controlled experiment. Fix the eligible audience, randomization unit, qualified-conversion definition, downstream outcome window, exclusion rules, and analysis horizon in advance. The sample-size floor in the helper is a guard, not a statistical power calculation.
+4. The first live smoke test used the legacy artifact fallback after `GPE_MINIMUM_SECTIONS_UNAVAILABLE`. It verified end-to-end generation and storage, not successful live acceptance of every section-writer path or a conversion improvement. Provider-quality measurement remains separate from release health.
 
 ## Rollback
 
-No rollback was needed. All runtime changes passed the checks above.
+After encryption, do not promote a pre-security deployment: it cannot read encrypted records. The encrypted-write deployment `dpl_HHUhhVLQ1fJAFb8Xay73x58wC2gQ` is the strict-mode recovery candidate because it can read authenticated envelopes and, if required, legacy plaintext. It still uses restricted database credentials and Turnstile. It contains the preview-copy defect documented above, so a forward fix is preferred.
 
-For code rollback, revert `da87f5c`, then `be8eb92`, then `ee59f31`, then `6c5c7de` on a recovery branch and rerun `npm run qa`. Preserve the three unrelated screenshots. Do not use `git reset --hard` or restore the entire working tree.
+The earlier compatibility deployment `dpl_AH3CxbqTwjYUrU8gYoLDkTqyQT6a` can decrypt with the retained key ring but writes plaintext. It is an emergency recovery option only, not an acceptable steady state. Do not delete or regenerate the configured key ring during rollback; retain decryption keys for the complete retention window.
 
-Database and encryption activation need their own recovery plan. Code rollback alone does not undo RLS, restore role ownership, migrate encrypted records, or recover retired keys. Keep the previous deployment and previous server configuration available until staging and production checks pass. No production data or credentials were changed during this implementation.
+The pre-migration Neon recovery branch is `br-bold-fire-amhxaudb`, retained through September 19, 2026. The schema-only canary is `br-rough-river-am3ah18y`, expiring September 12. The source database is shared with other work: never rewind the whole database for this app. Recover only this application's tables, policies, and role changes after identifying the exact impact.
+
+Use `node scripts/verify-database-security.mjs` for metadata, and `node scripts/verify-database-cross-session.mjs` with an explicit expected host for a synthetic behavior probe. The Blob migration defaults to dry-run; `--apply` uses conditional writes and authenticated readback. `vercel env run` preserves ambient variables, so unset local `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN` when auditing remote configuration. Never print connection strings, tokens, keys, or decrypted records.
+
+No destructive Git rollback was performed. The three unrelated screenshots remain unmodified by this rollout and uncommitted.

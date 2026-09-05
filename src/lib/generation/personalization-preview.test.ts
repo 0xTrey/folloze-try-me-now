@@ -143,6 +143,33 @@ const personas: AudienceRecommendation[] = [
 ];
 
 describe("personalization preview variants", () => {
+  it.each(["campaign", "content"] as const)("preserves the reviewed %s story despite conflicting seller topics", (useCase) => {
+    const canonical = { ...draft,
+      headline: "Create personalized pages with Folloze Campaign Agent.",
+      subhead: "Keep each campaign focused on its selected audience.",
+      primaryCta: "Explore Campaign Agent"
+    };
+    const conflictingSeller = { ...seller, publicTopics: ["Target and convert your key accounts"] };
+    const plan = compilePersonalizationPlan({
+      draft: canonical, seller: conflictingSeller, useCase,
+      answers: { promotedOffer: "Folloze Campaign Agent" }
+    });
+    expect(applyPersonalizationVariant(canonical, plan)).toEqual(canonical);
+    expect(personalizationRuntimePayload(plan).variants.generic.fields).toEqual({});
+    // Older persisted plans must not reintroduce the overwrite in the renderer.
+    const legacyPlan = compilePersonalizationPlan({
+      draft: canonical, seller: conflictingSeller, useCase: "abm", answers: {}
+    });
+    const html = renderExperienceHtml({
+      draft: canonical, brand: conflictingSeller, useCase,
+      answers: { promotedOffer: "Folloze Campaign Agent" }, personalization: legacyPlan
+    });
+    expect(html).toContain(canonical.headline);
+    expect(html).toContain(canonical.subhead);
+    expect(html).not.toContain("Make Target and convert your key accounts decisions");
+    expect(html).not.toContain("window.flzApplyPersonalizationVariant");
+  });
+
   it("compiles generic, account, industry, and two persona states when evidence permits (U20)", () => {
     const plan = compilePersonalizationPlan({
       draft,
@@ -229,7 +256,8 @@ describe("personalization preview variants", () => {
       }
     });
     expect(availablePersonalizationVariantIds(thin)).toEqual(["generic"]);
-    expect(thin.visibleVariants[0]?.omittedFields).not.toContain("headline");
+    expect(thin.visibleVariants[0]?.omittedFields).toContain("headline");
+    expect(applyPersonalizationVariant(draft, thin)).toEqual(draft);
 
     const onePersona = compilePersonalizationPlan({
       draft,
