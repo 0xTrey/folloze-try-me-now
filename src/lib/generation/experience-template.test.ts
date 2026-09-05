@@ -135,7 +135,7 @@ describe("renderExperienceHtml", () => {
     });
 
     expect(withoutImages).toContain('data-fallback-kind="editorial-evidence"');
-    expect(withoutImages).toContain("A considered point of view");
+    expect(withoutImages).not.toContain('<span class="media-fallback-kicker">');
     expect(withoutImages).toContain("The signal is clear.<br>The next move<br>should be too.");
     expect(withoutImages).toContain(".media.media .media-fallback:before,.media.media .media-fallback:after{display:none}");
     expect(withoutImages).not.toContain("<div class=\"media-fallback\" aria-hidden=\"true\"><span></span><span></span><span></span></div>");
@@ -874,7 +874,7 @@ describe("renderExperienceHtml", () => {
       sectionOrder: ["experience-thesis", "decision-path", "supporting-resources"]
     });
     expect(abm).toContain("Jitterbit × Cisco");
-    expect(abm).toContain("Executive account narrative for Cisco");
+    expect(abm).not.toContain("Executive account narrative for Cisco");
     expect(html).toContain("Product introduction");
     expect(content).toContain("Executive report");
     expect(content).toContain("How should buyers explore the enterprise automation guide?");

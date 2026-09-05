@@ -34,6 +34,12 @@ The primary CTA has no default Folloze meeting destination. Verified source dest
 
 Chapter-journey panels use light-surface body text and headings on their light background. Verified brand evidence remains the source for color choices; the renderer does not invent a Dynatrace palette when evidence is missing.
 
+All 17 wireframe archetypes start sections with their main headline. Small labels such as Reasons to believe and Why change now are not rendered above headings, including hero, supporting cards, and content-detail dialogs. Navigation choices and evidence field labels remain. The review gallery's miniature wireframes follow the same rule. Eyebrow fields can remain in private generation contracts without appearing on the page.
+
+When an approved image is unavailable, the renderer shows a designed text fallback. Its typography and spacing scale to the media container, not the browser width. The panel grows with its content, and the three step labels have independent columns and spacing. This avoids clipped headlines and merged step labels in narrow right-side panels. Real approved image delivery is unchanged.
+
+The app applies the same presentation rules when serving an existing saved experience, including its embedded view. A refresh is enough; it does not regenerate the page, change saved copy, or write a new artifact receipt. Script contents and nonce protection are preserved.
+
 These changes are source changes until separately deployed. Testing a fixture verifies interaction and layout, not live AI output quality or the exact Dynatrace experience reported by Luke.
 
 ## Local verification
@@ -43,3 +49,5 @@ On September 5, 2026, the original five usability changes passed 1,758 tests acr
 The follow-up confirmation and full-width entry update added coverage for both queued and generating requests, a return CTA before and after completion, and known disabled-email states. Browser checks confirmed matching headline and subheader widths on desktop and mobile, no horizontal overflow, the compact customer-facing confirmation, and a working return action. The existing route and fulfillment tests also verify server-side scheduling and email handoff without a browser status request.
 
 The full-width result and analytics follow-up passed 1,784 tests across 160 files. Browser checks confirmed the four result actions, a large interactive frame without horizontal overflow at desktop and mobile widths, and a timer that stayed at 37 seconds while analytics remained open. The standalone bottom prompt restored both analytics activity and an existing account-selection request without another email submission or a new build. Owner-only resume, expired or unauthorized links, bounded activity transfer, and fractional timer pause/resume behavior have regression coverage. Opening an analytics owner control does not count as buyer CTA intent.
+
+The wireframe presentation fix passed 1,805 tests across 163 files. The opt-in public-page fixture test is skipped in normal runs and passed when explicitly run against the reported GCP Cloud experience. Browser checks covered all 17 archetypes at 1,363px and 390px widths, with no clipped fallback text, horizontal page overflow, or rendered section eyebrows. The reported saved page also retained its original main headline and evidence content while its proof visual fit both widths. The fixture emitter is `scripts/emit-wireframe-presentation-evidence.test.ts`; it writes only when `EMIT_WIREFRAME_PRESENTATION=1` is set.

@@ -570,13 +570,6 @@ input:focus-visible,
   flex-direction: column;
 }
 
-.mini-eyebrow {
-  width: 42px;
-  height: 3px;
-  margin-bottom: 9px;
-  background: var(--accent);
-}
-
 .mini-title {
   width: 85%;
   height: 8px;

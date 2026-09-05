@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import { canRevealFinalExperience } from "@/lib/preview-lifecycle";
 import { getSession, toPublicSession } from "@/lib/session-store";
+import { upgradeStoredExperiencePresentation } from "@/lib/generation/experience-presentation";
 
 import { experienceDocumentHeaders, nonceExperienceRuntime } from "./security-headers";
 import { appendOwnerHandoff } from "./owner-handoff";
@@ -36,7 +37,8 @@ export async function GET(_request: Request, context: RouteContext) {
   // though its HTML is sitting right here.
   if (session.experience?.html && canRevealFinalExperience(toPublicSession(session))) {
     const nonce = randomBytes(18).toString("base64");
-    const html = appendOwnerHandoff(session.experience.html, id, nonce, new URL(_request.url).searchParams.get("embed") === "1");
+    const presentedHtml = upgradeStoredExperiencePresentation(session.experience.html);
+    const html = appendOwnerHandoff(presentedHtml, id, nonce, new URL(_request.url).searchParams.get("embed") === "1");
     return new Response(nonceExperienceRuntime(html, nonce), {
       status: 200,
       headers: experienceDocumentHeaders(nonce)

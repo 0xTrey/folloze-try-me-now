@@ -395,7 +395,6 @@ function visualMarkup(wireframe) {
       <span class="mini-nav"><span></span><span></span></span>
       <span class="mini-hero">
         <span class="mini-copy">
-          <span class="mini-eyebrow"></span>
           <span class="mini-title"></span>
           <span class="mini-body"></span>
           <span class="mini-button"></span>

@@ -12,6 +12,7 @@ import {
   type ExperiencePrimitive
 } from "@/lib/generation/experience-renderers";
 import { sanitizeBuyerFacingLabel } from "@/lib/generation/message-spine";
+import { EXPERIENCE_PRESENTATION_CSS } from "@/lib/generation/experience-presentation";
 import type { VisualGrammar } from "@/lib/generation/visual-grammar";
 import type {
   WireframeSectionRole,
@@ -300,9 +301,8 @@ function imageFigure(
   const safeAssetRole = assetRole && /^[a-z-]{1,48}$/.test(assetRole) ? ` data-asset-role="${assetRole}"` : "";
   return `<figure class="media ${className}${roleClass}"${showFallback ? "" : ' data-no-fallback="true"'}${safeAssetRole}${slotAttribute(slot)}>
     ${showFallback ? `<div class="media-fallback"${allowFallback ? ' data-fallback-kind="experience-blueprint"' : ""} aria-hidden="true">
-      <span class="media-fallback-kicker">Experience blueprint</span>
       <strong>Context.<br>Proof.<br>Next step.</strong>
-      <span class="media-fallback-steps"><i>01</i><i>02</i><i>03</i></span>
+      <span class="media-fallback-steps"><i>1</i><i>2</i><i>3</i></span>
     </div>` : ""}
     ${safeUrl ? `<img src="${escapeHtml(safeUrl)}" alt="${escapeHtml(alt)}" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>` : ""}
   </figure>`;
@@ -324,7 +324,6 @@ function noAssetFigure(
   const treatment = copy[grammar.noAssetTreatment];
   return `<figure class="media ${className} no-asset-treatment no-asset-${grammar.noAssetTreatment}" data-fallback-kind="${grammar.noAssetTreatment}" data-asset-role="${grammar.heroMediaRole}"${slotAttribute(slot)}>
     <div class="media-fallback" aria-hidden="true">
-      <span class="media-fallback-kicker">${escapeHtml(treatment.label)}</span>
       <strong>${escapeHtml(treatment.headline).replace(/\n/g, "<br>")}</strong>
       <span class="media-fallback-steps">${treatment.steps.map((step) => `<i>${escapeHtml(step)}</i>`).join("")}</span>
     </div>
@@ -668,12 +667,6 @@ export function renderExperienceHtml(input: {
       : template.family === "account-abm" && targetBrand
         ? `${brand.companyName} for ${targetBrand.companyName}`
         : offerTitle ?? brand.companyName;
-  const heroEyebrow =
-    template.family === "content-source" && sourceTitle
-      ? sourceTitle
-      : template.family === "campaign-launch" && offerTitle
-        ? `${brand.companyName} | ${offerTitle}`
-        : draft.eyebrow;
   const themeLink = input.themeUrl
     ? `<link rel="stylesheet" href="${escapeHtml(input.themeUrl)}">`
     : "";
@@ -695,9 +688,6 @@ export function renderExperienceHtml(input: {
       ? new Set(input.wireframeSelection.compositionPlan.sections.map(({ role }) => role))
       : undefined;
   const plannedSections = input.wireframeSelection?.compositionPlan.sections;
-  const productionCopyActive = Boolean(
-    input.productionSections?.some(({ status }) => status === "complete")
-  );
   const familyProduction = Boolean(
     input.productionSections?.some(({ id }) => /^(?:launch|guide|align)-\d+$/.test(id))
   );
@@ -816,7 +806,7 @@ export function renderExperienceHtml(input: {
               : "") || noAssetFigure(visualGrammar, "lens-media", mediaSlot);
         return `<section class="lens-panel${media ? "" : " no-media"}" id="lens-panel-${index}" role="tabpanel" aria-labelledby="lens-tab-${index}" tabindex="0" ${index === 0 ? "" : "hidden"}>
         <div class="lens-number" aria-hidden="true">0${index + 1}</div>
-        <div class="lens-copy">${productionCopyActive ? "" : `<p class="eyebrow" ${editableBlock(`lens.${index}.eyebrow`, "eyebrow")}>${escapeHtml(label)}</p>`}<h2 ${editableBlock(`lens.${index}.headline`, "headline")}>${escapeHtml(headline)}</h2><p ${editableBlock(`lens.${index}.body`, "body")}>${escapeHtml(body)}</p>${question ? `<p class="validation-question"><strong>Question to answer</strong>${escapeHtml(question)}</p>` : ""}</div>
+        <div class="lens-copy"><h2 ${editableBlock(`lens.${index}.headline`, "headline")}>${escapeHtml(headline)}</h2><p ${editableBlock(`lens.${index}.body`, "body")}>${escapeHtml(body)}</p>${question ? `<p class="validation-question"><strong>Question to answer</strong>${escapeHtml(question)}</p>` : ""}</div>
         ${media}
       </section>`;
       }
@@ -852,7 +842,7 @@ export function renderExperienceHtml(input: {
         } satisfies ExperienceActionContract;
         return `<article class="journey-card resource-card" data-source-reference="${escapeHtml(sourceReference)}" data-content-item-id="${escapeHtml(item.id)}" data-content-item-kind="${escapeHtml(item.kind)}">
         <div class="journey-index" aria-hidden="true">0${index + 1}</div>
-        <div class="journey-copy">${productionCopyActive ? "" : `<p class="eyebrow" ${editableBlock(`resource.${index}.eyebrow`, "eyebrow")}>${escapeHtml(item.eyebrow)}</p>`}<h3 ${editableBlock(`resource.${index}.headline`, "proof-point")}>${escapeHtml(item.title)}</h3><p ${editableBlock(`resource.${index}.body`, "body")}>${escapeHtml(item.summary)}</p>${item.sourceLabel ? `<p class="source-citation">${escapeHtml(item.sourceLabel)}</p>` : ""}</div>
+        <div class="journey-copy"><h3 ${editableBlock(`resource.${index}.headline`, "proof-point")}>${escapeHtml(item.title)}</h3><p ${editableBlock(`resource.${index}.body`, "body")}>${escapeHtml(item.summary)}</p>${item.sourceLabel ? `<p class="source-citation">${escapeHtml(item.sourceLabel)}</p>` : ""}</div>
         ${actionControl(action, "journey-action", "", `${item.actionLabel} →`)}
       </article>`;
       }
@@ -866,13 +856,12 @@ export function renderExperienceHtml(input: {
           ? action.destination.replace(/^#/, "")
           : `content-detail-${index + 1}`;
       if (action && action.actionType !== "content-dialog") return "";
-      return `<dialog class="content-detail" id="${escapeHtml(dialogId)}" aria-labelledby="${escapeHtml(dialogId)}-title"><form method="dialog"><button class="dialog-close" value="close" aria-label="Close content detail">×</button>${productionCopyActive ? "" : `<p class="eyebrow">${escapeHtml(item.eyebrow)}</p>`}<h3 id="${escapeHtml(dialogId)}-title">${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p>${item.sourceLabel ? `<p class="source-citation">${escapeHtml(item.sourceLabel)}</p>` : ""}<button class="primary" value="close">Continue exploring</button></form></dialog>`;
+      return `<dialog class="content-detail" id="${escapeHtml(dialogId)}" aria-labelledby="${escapeHtml(dialogId)}-title"><form method="dialog"><button class="dialog-close" value="close" aria-label="Close content detail">×</button><h3 id="${escapeHtml(dialogId)}-title">${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p>${item.sourceLabel ? `<p class="source-citation">${escapeHtml(item.sourceLabel)}</p>` : ""}<button class="primary" value="close">Continue exploring</button></form></dialog>`;
     })
     .join("");
 
   const regions: Record<ExperiencePrimitive, () => string> = {
     thesis: () => `<section class="thesis experience-region" id="experience-thesis" data-journey-section="experience-thesis" data-template-primitive="thesis" aria-labelledby="experience-thesis-heading">
-      <p class="eyebrow" ${editableBlock("thesis.label", "section-label")}>${escapeHtml(draft.sectionLabels.thesis)}</p>
       <h2 id="experience-thesis-heading" ${editableBlock("thesis.headline", "headline")}>${escapeHtml(draft.thesisHeadline)}</h2>
       <p ${editableBlock("thesis.body", "body")}>${escapeHtml(draft.thesisBody)}</p>
     </section>`,
@@ -882,7 +871,7 @@ export function renderExperienceHtml(input: {
       ${buildLensPanels()}
     </section>`,
     resources: () => `<section class="journey experience-region" id="supporting-resources" data-journey-section="supporting-resources" data-template-primitive="resources" aria-labelledby="supporting-resources-heading">
-      <header class="journey-header"><p class="eyebrow">${escapeHtml(template.resourcesEyebrow)}</p><h2 id="supporting-resources-heading" ${editableBlock("resources.heading", "section-heading")}>${escapeHtml(resourcesHeading)}</h2><p class="source-basis">Built from ${escapeHtml(sourceReference)}.</p></header>
+      <header class="journey-header"><h2 id="supporting-resources-heading" ${editableBlock("resources.heading", "section-heading")}>${escapeHtml(resourcesHeading)}</h2><p class="source-basis">Built from ${escapeHtml(sourceReference)}.</p></header>
       <div class="journey-grid">${resourceCards}</div>
     </section>`
   };
@@ -899,7 +888,7 @@ export function renderExperienceHtml(input: {
     ? `${brand.companyName} × ${targetBrand.companyName}`
     : `For ${draft.audienceLabel}`;
   const signatureMoment = `<section class="signature signature-canonical" data-template-primitive="signature-paths" aria-label="${escapeHtml(template.signatureAriaLabel)}">
-      <div class="signature-intro"><p class="eyebrow">${escapeHtml(template.signatureEyebrow(draft.audienceLabel, targetBrand?.companyName))}</p><h2>${escapeHtml(draft.narrativeArc)}</h2><p>${escapeHtml(signatureContext)}</p></div>
+      <div class="signature-intro"><h2>${escapeHtml(draft.narrativeArc)}</h2><p>${escapeHtml(signatureContext)}</p></div>
       <div class="signature-items">${signatureButtons}</div>
     </section>`;
   const evidenceAttribute = (ids: string[]) =>
@@ -912,7 +901,6 @@ export function renderExperienceHtml(input: {
   const buildFrameworkFlow = () => framework
     ? `${rolePlanned("proof") ? `<section class="framework-section credibility-anchor" id="credibility-anchor" data-journey-section="credibility-anchor" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)} aria-labelledby="credibility-anchor-heading">
         <div class="framework-copy">
-          ${productionCopyActive ? "" : `<p class="eyebrow" ${editableBlock("credibility.eyebrow", "section-label")}>${escapeHtml(framework.credibility.eyebrow)}</p>`}
           <h2 id="credibility-anchor-heading" ${editableBlock("credibility.headline", "headline")}>${escapeHtml(framework.credibility.headline)}</h2>
           <div class="fact-implication">
             <div><span>Verified fact</span><p ${editableBlock("credibility.fact", "evidence")}>${escapeHtml(framework.credibility.fact)}</p></div>
@@ -922,7 +910,7 @@ export function renderExperienceHtml(input: {
         ${frameworkImage(assetAllocator, PROOF_MEDIA_SLOT, framework.credibility.imageBrief, "framework-media", false, visualGrammar)}
       </section>` : ""}
       ${rolePlanned("context") ? `<section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)} aria-labelledby="why-change-now-heading">
-        <header class="framework-heading">${productionCopyActive ? "" : `<p class="eyebrow" ${editableBlock("urgency.eyebrow", "section-label")}>${escapeHtml(framework.urgency.eyebrow)}</p>`}<h2 id="why-change-now-heading" ${editableBlock("urgency.headline", "headline")}>${escapeHtml(framework.urgency.headline)}</h2></header>
+        <header class="framework-heading"><h2 id="why-change-now-heading" ${editableBlock("urgency.headline", "headline")}>${escapeHtml(framework.urgency.headline)}</h2></header>
         <div class="argument-sequence">
           <article><span>01 · The change</span><p ${editableBlock("urgency.change", "evidence")}>${escapeHtml(framework.urgency.change)}</p></article>
           <article><span>02 · The consequence</span><p ${editableBlock("urgency.consequence", "body")}>${escapeHtml(framework.urgency.consequence)}</p></article>
@@ -930,13 +918,12 @@ export function renderExperienceHtml(input: {
         </div>
       </section>` : ""}
       ${rolePlanned("pathways", "agenda", "chapter-navigation", "decision-support") ? `<section class="lens-lab framework-starting-points" id="starting-points" data-journey-section="starting-points" data-template-primitive="starting-points" aria-labelledby="starting-points-heading">
-        <header class="region-heading">${productionCopyActive ? "" : `<p class="eyebrow" ${editableBlock("startingPoints.eyebrow", "section-label")}>${escapeHtml(framework.startingPoints.eyebrow)}</p>`}<h2 id="starting-points-heading" ${editableBlock("startingPoints.headline", "headline")}>${escapeHtml(framework.startingPoints.headline)}</h2><p class="region-intro" ${editableBlock("startingPoints.intro", "body")}>${escapeHtml(framework.startingPoints.intro)}</p></header>
+        <header class="region-heading"><h2 id="starting-points-heading" ${editableBlock("startingPoints.headline", "headline")}>${escapeHtml(framework.startingPoints.headline)}</h2><p class="region-intro" ${editableBlock("startingPoints.intro", "body")}>${escapeHtml(framework.startingPoints.intro)}</p></header>
         <div class="lens-tabs" role="tablist" aria-orientation="horizontal" aria-label="${escapeHtml(framework.startingPoints.headline)}">${lensButtons}</div>
         ${buildLensPanels()}
       </section>` : ""}
       ${rolePlanned("mechanism") ? `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism" aria-labelledby="outcome-mechanism-heading">
         <div class="framework-copy">
-          ${productionCopyActive ? "" : `<p class="eyebrow" ${editableBlock("mechanism.eyebrow", "section-label")}>${escapeHtml(framework.mechanism.eyebrow)}</p>`}
           <h2 id="outcome-mechanism-heading" ${editableBlock("mechanism.headline", "headline")}>${escapeHtml(framework.mechanism.headline)}</h2>
           <p class="region-intro" ${editableBlock("mechanism.intro", "body")}>${escapeHtml(framework.mechanism.intro)}</p>
           <div class="mechanism-steps">${framework.mechanism.steps
@@ -948,7 +935,7 @@ export function renderExperienceHtml(input: {
         ${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media", false, visualGrammar)}
       </section>` : ""}
       ${rolePlanned("seller-validation") ? `<section class="framework-section team-value-section" id="team-value" data-journey-section="team-value" data-template-primitive="team-value" aria-labelledby="team-value-heading">
-        <header class="framework-heading">${productionCopyActive ? "" : `<p class="eyebrow" ${editableBlock("teamValue.eyebrow", "section-label")}>${escapeHtml(framework.teamValue.eyebrow)}</p>`}<h2 id="team-value-heading" ${editableBlock("teamValue.headline", "headline")}>${escapeHtml(framework.teamValue.headline)}</h2><p class="region-intro" ${editableBlock("teamValue.intro", "body")}>${escapeHtml(framework.teamValue.intro)}</p></header>
+        <header class="framework-heading"><h2 id="team-value-heading" ${editableBlock("teamValue.headline", "headline")}>${escapeHtml(framework.teamValue.headline)}</h2><p class="region-intro" ${editableBlock("teamValue.intro", "body")}>${escapeHtml(framework.teamValue.intro)}</p></header>
         <div class="role-grid">${framework.teamValue.roles
           .map(
             (role, index) => `<article ${evidenceAttribute(role.evidenceIds)}><span class="role-index">0${index + 1}</span><h3 ${editableBlock(`teamValue.${index}.role`, "role")}>${escapeHtml(role.role)}</h3><dl><div><dt>Decision</dt><dd ${editableBlock(`teamValue.${index}.decision`, "body")}>${escapeHtml(role.decision)}</dd></div><div><dt>Risk</dt><dd ${editableBlock(`teamValue.${index}.risk`, "body")}>${escapeHtml(role.risk)}</dd></div><div><dt>Value</dt><dd ${editableBlock(`teamValue.${index}.benefit`, "body")}>${escapeHtml(role.benefit)}</dd></div><div><dt>Evidence needed</dt><dd ${editableBlock(`teamValue.${index}.evidence`, "evidence")}>${escapeHtml(role.evidenceNeeded)}</dd></div></dl></article>`
@@ -1007,11 +994,11 @@ export function renderExperienceHtml(input: {
     : `${signatureMoment}${experienceFlow()}`;
   const closeMarkup = framework
     ? `<section class="close framework-close" id="next-step" data-journey-section="next-step" ${evidenceAttribute(framework.nextStep.evidenceIds)} aria-labelledby="next-step-heading">
-        <div>${productionCopyActive ? "" : `<p class="eyebrow" ${editableBlock("nextStep.eyebrow", "section-label")}>${escapeHtml(framework.nextStep.eyebrow)}</p>`}<h2 id="next-step-heading" ${editableBlock("nextStep.headline", "headline")}>${escapeHtml(framework.nextStep.headline)}</h2><p ${editableBlock("nextStep.body", "body")}>${escapeHtml(framework.nextStep.body)}</p></div>
+        <div><h2 id="next-step-heading" ${editableBlock("nextStep.headline", "headline")}>${escapeHtml(framework.nextStep.headline)}</h2><p ${editableBlock("nextStep.body", "body")}>${escapeHtml(framework.nextStep.body)}</p></div>
         <div class="next-step-panel"><dl><div><dt>Scope</dt><dd>${escapeHtml(framework.nextStep.scope)}</dd></div><div><dt>Activity</dt><dd>${escapeHtml(framework.nextStep.activity)}</dd></div><div><dt>You leave with</dt><dd>${escapeHtml(framework.nextStep.deliverable)}</dd></div><div><dt>Decision</dt><dd>${escapeHtml(framework.nextStep.resultingDecision)}</dd></div></dl>${actionControl(primaryAction, "primary", editableBlock("nextStep.ctaLabel", "cta"), framework.nextStep.ctaLabel)}</div>
       </section>`
     : `<section class="close" id="next-step" data-journey-section="next-step" aria-labelledby="next-step-heading">
-        <div><p class="eyebrow" ${editableBlock("close.label", "section-label")}>${escapeHtml(draft.sectionLabels.close)}</p><h2 id="next-step-heading" ${editableBlock("close.headline", "headline")}>${escapeHtml(draft.closingHeadline)}</h2><p ${editableBlock("close.body", "body")}>${escapeHtml(draft.closingBody)}</p></div>
+        <div><h2 id="next-step-heading" ${editableBlock("close.headline", "headline")}>${escapeHtml(draft.closingHeadline)}</h2><p ${editableBlock("close.body", "body")}>${escapeHtml(draft.closingBody)}</p></div>
         ${actionControl(primaryAction, "primary", editableBlock("close.primaryCta", "cta"), draft.primaryCta)}
       </section>`;
 
@@ -1072,6 +1059,7 @@ export function renderExperienceHtml(input: {
     body.brand-hero-dark .hero .eyebrow,.close .eyebrow{color:var(--brand-accent)}
     .content-detail{width:min(620px,calc(100vw - 32px));padding:0;border:1px solid var(--line);border-radius:var(--card-radius);background:var(--brand-surface);color:var(--brand-ink);box-shadow:0 32px 96px color-mix(in srgb,var(--brand-ink) 30%,transparent)}.content-detail::backdrop{background:color-mix(in srgb,var(--brand-ink) 64%,transparent);backdrop-filter:blur(5px)}.content-detail form{position:relative;padding:clamp(28px,5vw,52px)}.content-detail h3{margin:0;font:var(--heading-weight) clamp(30px,4vw,48px)/1.05 var(--display);letter-spacing:var(--heading-tracking)}.content-detail p:not(.eyebrow){margin:20px 0;color:var(--text);font-size:17px}.content-detail .dialog-close{position:absolute;right:16px;top:14px;width:42px;height:42px;border:1px solid var(--line);border-radius:999px;background:var(--brand-surface);color:var(--brand-ink);cursor:pointer;font-size:24px}.content-detail .primary{margin-top:12px}
   </style>
+  <style data-flz-presentation="responsive-media-v1">${EXPERIENCE_PRESENTATION_CSS}</style>
 </head>
 <body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} visual-grammar-${visualGrammar.id} motion-${visualGrammar.motionProfile} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}${imageryTreatment ? ` imagery-${imageryTreatment}` : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}" data-visual-grammar="${visualGrammar.id}" data-motion-profile="${visualGrammar.motionProfile}" data-hero-media-role="${visualGrammar.heroMediaRole}" data-proof-device="${visualGrammar.proofDevice}" data-cadence="${visualGrammar.cadence}" data-close-treatment="${visualGrammar.closeTreatment}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-personalization-variant="${escapeHtml(activePersonalizationId)}"${imageryTreatment ? ` data-imagery-treatment="${escapeHtml(imageryTreatment)}"` : ""} data-brand-source="${escapeHtml(brand.source)}" data-brand-palette-treatment="${neutralPreview ? "neutral-fallback" : "verified-or-legacy"}"${neutralPreview ? ` data-brand-warning="palette-confidence-low" data-brand-warning-copy="${escapeHtml(neutralPreviewNotice)}"` : ""}${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
 <button class="skip-link" type="button" data-scroll-target="main-content">Skip to experience</button>
@@ -1097,7 +1085,6 @@ export function renderExperienceHtml(input: {
   <main id="main-content" tabindex="-1">
     <section class="hero" id="experience-overview" data-journey-section="experience-overview" data-template-primitive="hero" ${framework ? evidenceAttribute(framework.opening.evidenceIds) : ""} aria-labelledby="experience-headline">
       <div class="hero-copy">
-        ${productionCopyActive ? "" : `<p class="eyebrow" ${editableBlock("hero.eyebrow", "eyebrow")}>${escapeHtml(framework?.opening.eyebrow ?? heroEyebrow)}</p>`}
         <h1 id="experience-headline" ${editableBlock("hero.headline", "headline")}>${escapeHtml(framework?.opening.headline ?? draft.headline)}</h1>
         <p class="subhead" ${editableBlock("hero.subhead", "subhead")}>${escapeHtml(framework?.opening.body ?? draft.subhead)}</p>
         <div class="actions">
