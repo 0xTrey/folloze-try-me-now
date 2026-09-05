@@ -2,6 +2,8 @@
 
 Implement the approved buyer-journey improvements while preserving a fast public builder, private editing access, and public buyer experiences. Quality scores are diagnostic checks, not conversion predictions.
 
+This is the original acceptance plan. The completed implementation receipts, remaining activation work, and rollback instructions are recorded in [Buyer journey and security status](buyer-journey-security-status.md).
+
 ## Recovery boundary
 
 - Starting commit: `a188486` on `codex/messaging-compiler-v1`.
@@ -11,7 +13,7 @@ Implement the approved buyer-journey improvements while preserving a fast public
 - Revert only this implementation's commits if verification exposes a regression. Do not reset or discard the working tree.
 - Deployment, secret rotation, database migration, and Git history rewriting are separate operations with separate receipts. Do not silently change production configuration.
 
-## Product acceptance checklist
+## Original product acceptance checklist
 
 | # | Improvement | Required acceptance signal | State |
 | --- | --- | --- | --- |
@@ -36,7 +38,7 @@ Implement the approved buyer-journey improvements while preserving a fast public
 | 19 | Buyer-ready performance | Reusable context and section-level change detection preserve bounded generation; latency and fallback use are measured together. | In progress |
 | 20 | Outcome learning | Representative benchmark, blind-review export, and controlled experiment measurement distinguish diagnostics from observed conversions. | In progress |
 
-## Security acceptance checklist
+## Original security acceptance checklist
 
 | Control | Required evidence | State |
 | --- | --- | --- |
