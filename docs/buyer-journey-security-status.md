@@ -10,6 +10,7 @@ The implementation is saved locally on `codex/buyer-journey-security`. Nothing w
 | `6c5c7de` | Shorter fallback copy and complete sentence boundaries |
 | `ee59f31` | Request security, bot verification, encrypted storage, database-role preparation, and dependency remediation |
 | `be8eb92` | Buyer brief, source knowledge, evidence-aware selection, section writing and review, CTA consistency, rendering, and evaluation fixtures |
+| `da87f5c` | Completion-audit fixes for product-scoped proof and purchase-answer evidence through writers, review, and rendered HTML |
 
 The three screenshots that were modified before this work remain untouched and uncommitted in `output/product-owner-remediation/`.
 
@@ -27,13 +28,13 @@ These are implementation and fixture-verification receipts. They are not evidenc
 | 6 | Buyer-question sequencing | Explicit cold and post-demo context changes the sequence before final composition. Browser fixtures confirm different Guide and Align journeys. |
 | 7 | Deterministic wireframe fit | Eligibility gates and weighted fit replace a dominating rule bonus. Stable tie-breaking and close-score uncertainty are retained. |
 | 8 | Real proof and asset signals | Source count is not proof. Typed, public, permitted seller outcomes drive proof eligibility; selected usable imagery drives visual readiness. |
-| 9 | Section assignments | Each section receives its buyer question, intended conclusion, claim references, relevant objection, and transition. |
+| 9 | Section assignments | Each section receives its buyer question, intended conclusion, claim references, relevant objection, and transition. Nonempty claim pools constrain both model and fallback writers, and the final reviewer uses the same references. |
 | 10 | Earned modules | Unsupported friction, optional proof depth, and resources are omitted. Rendered order and navigation follow retained sections. Omitted sections no longer revive old draft content. |
 | 11 | Clearer hero | Opening copy names the offer and buyer; a scoped seller claim explains the product where available. Actual comprehension still needs human review. |
 | 12 | Supported problem | Workflow context is distinguished from account context. Unsupported friction is removed, and invented urgency is rejected. |
 | 13 | Product mechanism | Source capability and workflow claims reach section writers. Unknown mechanisms remain validation questions rather than invented features. |
-| 14 | Scoped proof | Customer outcomes and quantified results require explicit types, permitted use, public source scope, and past-result language. No-proof journeys use a walkthrough question. |
-| 15 | Purchase questions | Verified pricing, security, and implementation answers can add a purchase-question module. Missing facts remain unknown. |
+| 14 | Scoped proof | Customer outcomes and quantified results require explicit types, permitted use, public source scope, past-result language, and a match to the selected product. Source extraction binds proof to its own quote or section, not another section sharing a citation. Unresolved product identity cannot authorize proof. No-proof journeys use a walkthrough question. |
+| 15 | Purchase questions | Verified pricing, security, and implementation answers can add a purchase-question module. A regression follows a synthetic published price through the section contract and fallback into rendered HTML. Missing facts remain unknown. |
 | 16 | Concrete CTA | One shared contract controls label, destination, and expectation. Source links do not promise a completed registration. Missing destinations use an existing next-step anchor, without claiming a booking. Secret-bearing URLs are rejected. |
 | 17 | Whole-page editorial review | A bounded structured model review checks meaning, unsupported claims, repetition, and CTA continuity. Repairs affect at most two sections. A failed rereview cannot clear an existing blocker. Live-provider quality has not been measured in this run. |
 | 18 | Useful fallbacks | Minimum-length padding is removed. Short complete copy and explicit walkthrough questions replace internal review instructions. Unverified closing-offer details are not rendered. |
@@ -71,10 +72,10 @@ The generated client-bundle scan produced one private-key alert. Inspection trac
 
 ## Verification receipts
 
-- Full suite: 1,895 passed, zero failed, one skipped.
+- Full suite after the completion-audit fixes: 1,899 passed, zero failed, one skipped. A subsequent sentence-boundary correction passed all 33 focused writer and production integration tests.
 - Type checking passed. Lint passed with three pre-existing unused-variable warnings in `cloudflare-upload-contract.test.ts`.
 - Both Turbopack and Webpack production builds passed after the final runtime changes.
-- Buyer-journey benchmark: 48 tests passed. The later retained-section assertions in the exporter also passed.
+- Buyer-journey benchmark: 49 tests passed, including refreshed compiled review samples and retained-section assertions.
 - Security and API checkpoint: 156 focused tests passed before `ee59f31`.
 - Six synthetic fixtures were checked at 1440, 1024, and 390 pixels. No horizontal overflow or missing navigation target was found. One first-load image was pending during the initial pass; its settled recheck loaded correctly.
 - The mobile fallback CTA scrolled to the actual next-step section, verified in the viewport after the animation. The production-built app opened its company-domain intake without a browser console error.
@@ -97,6 +98,6 @@ Review material: [manifest](../output/buyer-journey-validation/manifest.json) an
 
 No rollback was needed. All runtime changes passed the checks above.
 
-For code rollback, revert `be8eb92`, then `ee59f31`, then `6c5c7de` on a recovery branch and rerun `npm run qa`. Preserve the three unrelated screenshots. Do not use `git reset --hard` or restore the entire working tree.
+For code rollback, revert `da87f5c`, then `be8eb92`, then `ee59f31`, then `6c5c7de` on a recovery branch and rerun `npm run qa`. Preserve the three unrelated screenshots. Do not use `git reset --hard` or restore the entire working tree.
 
 Database and encryption activation need their own recovery plan. Code rollback alone does not undo RLS, restore role ownership, migrate encrypted records, or recover retired keys. Keep the previous deployment and previous server configuration available until staging and production checks pass. No production data or credentials were changed during this implementation.
