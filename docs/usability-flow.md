@@ -1,6 +1,6 @@
 # Try Me Now usability flow
 
-The approved entry page leads into one focused question at a time. The active question and its choices appear before a collapsed answer summary. Completed answers remain editable without repeating the same information in a separate sidebar.
+The entry headline and supporting copy span the page width with responsive edge spacing. The build options below remain in a centered, bounded layout. The entry page leads into one focused question at a time. The active question and its choices appear before a collapsed answer summary. Completed answers remain editable without repeating the same information in a separate sidebar.
 
 ## Completed experience
 
@@ -14,7 +14,9 @@ Automatic account selection and manual account entry are separate options. Manua
 
 Escape continues to work after a form transition removes the focused control. An unfinished account request uses Continue personalization on the result screen; queued builds and finished versions use separate status labels.
 
-Closing the dialog does not cancel a submitted build. Reopening restores its server-side status. Reloading the browser is not a promise of draft persistence.
+After account selection, a compact confirmation replaces the internal build dashboard: "We're building all three versions for you. Check your email in about 5 minutes to see what they look like." Back to your experience closes the dialog without submitting again. The five-minute wording is an estimate, not a delivery guarantee; the server emails the available finished links after the targets settle. A known unconfigured email service gets a return-to-page message instead of an email promise.
+
+The account-submission route schedules work with server-side `after()`, and fulfillment invokes email delivery without requiring a browser status read. Closing the dialog or page does not cancel submitted work. Reopening restores its server-side status and can trigger recovery of interrupted work. Reloading the browser is not a promise of draft persistence. Final links and email failure states remain available when a visitor returns to the dialog.
 
 An email with pending delivery is not active work while the request is awaiting account choices. Polling starts for queued or generating variants, or for deliverable links awaiting email delivery. Background reads do not disable account entry.
 
@@ -30,4 +32,6 @@ These changes are source changes until separately deployed. Testing a fixture ve
 
 ## Local verification
 
-On September 5, 2026, all 1,758 tests across 156 files, TypeScript checks, and both production builds (Turbopack and webpack) passed. Lint reported zero errors and three existing warnings in the upload-contract test. Browser checks covered desktop and mobile result layouts, cancelling and rebuilding a retained brief, interactive account choices after email entry, retained manual account drafts, Escape after form transitions and backdrop clicks, and a complete three-account fixture build. The full experience opened in its own tab. Email was disabled for these local checks; no email was sent and no Folloze board was published.
+On September 5, 2026, the original five usability changes passed 1,758 tests across 156 files, TypeScript checks, and both production builds (Turbopack and webpack). Lint reported zero errors and three existing warnings in the upload-contract test. Browser checks covered desktop and mobile result layouts, cancelling and rebuilding a retained brief, interactive account choices after email entry, retained manual account drafts, Escape after form transitions and backdrop clicks, and a complete three-account fixture build. The full experience opened in its own tab. Email was disabled for these local checks; no email was sent and no Folloze board was published.
+
+The follow-up confirmation and full-width entry update added coverage for both queued and generating requests, a return CTA before and after completion, and known disabled-email states. Browser checks confirmed matching headline and subheader widths on desktop and mobile, no horizontal overflow, the compact customer-facing confirmation, and a working return action. The existing route and fulfillment tests also verify server-side scheduling and email handoff without a browser status request.

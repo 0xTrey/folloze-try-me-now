@@ -151,47 +151,56 @@ describe("ThreeAccountConversion", () => {
     expect(screen.getByText("Option 2: Enter my own accounts")).toBeInTheDocument();
   });
 
-  it("labels system-selected accounts as illustrative after refresh", () => {
+  it.each(["queued", "generating"] as const)("shows a concise %s confirmation without internal progress details", (state) => {
+    const onDone = vi.fn();
     render(
       <ThreeAccountConversion
         {...baseProps}
         email="buyer@example.com"
-        request={request("generating", "representative")}
+        request={request(state, "representative")}
         status="polling"
+        onDone={onDone}
       />
     );
-    expect(screen.getByText(/representative companies were selected for this demo/i)).toBeInTheDocument();
-    expect(screen.getByText(/not account-fit recommendations/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "We're building all three versions for you." })).toBeInTheDocument();
+    expect(screen.getByText("Check your email in about 5 minutes to see what they look like.")).toBeInTheDocument();
+    expect(screen.queryByText(/final readback|representative companies|app-hosted for testing|one\.com|two\.com|three\.com/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to your experience" }));
+    expect(onDone).toHaveBeenCalledOnce();
   });
 
-  it("shows honest parallel progress and promises only final-gated email links", () => {
+  it("is honest when email delivery is not configured", () => {
     render(
       <ThreeAccountConversion
         {...baseProps}
         email="buyer@example.com"
-        request={request("generating")}
+        request={{ ...request("generating"), delivery: { status: "not_configured" } }}
         status="polling"
+        onDone={vi.fn()}
       />
     );
-    expect(screen.getByRole("heading", { name: "We are building all three versions in parallel." })).toBeInTheDocument();
-    expect(screen.getByText("Building")).toBeInTheDocument();
-    expect(screen.getByText(/We will email the links that pass/)).toBeInTheDocument();
-    expect(screen.getByText(/Nothing is published to Folloze/)).toBeInTheDocument();
+    expect(screen.getByText(/email delivery is not connected/i)).toBeInTheDocument();
+    expect(screen.queryByText(/about 5 minutes|keep this page open/i)).not.toBeInTheDocument();
   });
 
   it("shows only final ready links and records which position opened", () => {
     const onOpenLink = vi.fn();
+    const onDone = vi.fn();
     render(
       <ThreeAccountConversion
         {...baseProps}
         email="buyer@example.com"
         request={request("completed")}
         onOpenLink={onOpenLink}
+        onDone={onDone}
       />
     );
     expect(screen.getAllByRole("link", { name: /Open/i })).toHaveLength(3);
     expect(screen.getByText(/AgentMail accepted the email/)).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("link", { name: /Open/i })[1]!);
     expect(onOpenLink).toHaveBeenCalledWith(2);
+    expect(screen.queryByText(/quality gate|app-hosted for testing/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to your experience" }));
+    expect(onDone).toHaveBeenCalledOnce();
   });
 });

@@ -432,6 +432,24 @@ describe("PreviewUpdateNotice", () => {
 });
 
 describe("SaveExperienceDialog", () => {
+  it("lets visitors leave the submitted confirmation without resubmitting their request", () => {
+    const onClose = vi.fn(), onSubmitTargets = vi.fn();
+    render(<SaveExperienceDialog
+      open email="buyer@example.com" status="polling"
+      request={{
+        id: "confirmation-request", sessionId: "session", emailMasked: "b***@example.com",
+        targetCount: 3, variantCount: 3, baselineArtifactRevision: 1, status: "queued",
+        targets: ["one.com", "two.com", "three.com"].map((domain, index) => ({ id: domain, domain, position: index + 1, status: "pending" })),
+        delivery: { status: "pending" }, createdAt: "2026-09-05T12:00:00Z", updatedAt: "2026-09-05T12:00:00Z", expiresAt: "2026-10-05T12:00:00Z"
+      }}
+      onEmailChange={vi.fn()} onSubmitEmail={vi.fn()} onSubmitTargets={onSubmitTargets} onClose={onClose}
+    />);
+    expect(screen.getByRole("dialog")).toHaveClass("personalizationConfirmation");
+    fireEvent.click(screen.getByRole("button", { name: "Back to your experience" }));
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onSubmitTargets).not.toHaveBeenCalled();
+  });
+
   it("does not poll pending email before account choices or when no links can be sent", () => {
     expect(personalizationRequestNeedsPolling({ status: "awaiting_targets", delivery: { status: "pending" }, targets: [] })).toBe(false);
     expect(personalizationRequestNeedsPolling({ status: "failed", delivery: { status: "pending" }, targets: [] })).toBe(false);

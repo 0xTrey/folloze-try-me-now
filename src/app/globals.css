@@ -61,24 +61,30 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .sectionKicker { display: inline-block; color: var(--fz-accent); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 
 .entryStage {
-  width: min(calc(100% - 48px),1040px);
+  width: 100%;
   min-height: calc(100vh - 72px);
   margin: 0 auto;
-  padding: 72px 0 54px;
+  padding: 72px clamp(24px,3.6vw,64px) 54px;
+  display: flex;
+  flex-direction: column;
+  gap: 42px;
+}
+.entryContent {
+  width: min(100%,1040px);
+  margin-inline: auto;
   display: grid;
   grid-template-columns: minmax(0,1fr) minmax(310px,420px);
   grid-template-areas:
-    "hero hero"
     "paths action"
     "example example";
   column-gap: 46px;
   row-gap: 42px;
   align-items: stretch;
 }
-.entryHero { grid-area: hero; width: 100%; text-align: left; }
-.entryHero h1 { width: 100%; max-width: none; margin: 0; color: var(--fz-ink); font-family: var(--font-display), sans-serif; font-size: clamp(48px,6vw,72px); font-weight: 650; letter-spacing: -.06em; line-height: .97; text-wrap: balance; }
+.entryHero { width: 100%; text-align: left; }
+.entryHero h1 { width: 100%; max-width: none; margin: 0; color: var(--fz-ink); font-family: var(--font-display), sans-serif; font-size: clamp(48px,6vw,72px); font-weight: 650; letter-spacing: -.06em; line-height: .97; text-wrap: wrap; }
 .entryHero h1 em { color: var(--fz-accent); font-style: normal; }
-.entryHero p { max-width: 780px; margin: 28px 0 0; color: var(--fz-body); font-size: clamp(18px,2vw,21px); line-height: 1.55; }
+.entryHero p { width: 100%; max-width: none; margin: 28px 0 0; color: var(--fz-body); font-size: clamp(18px,2vw,21px); line-height: 1.55; }
 
 .domainStage { min-height: calc(100vh - 72px); padding: clamp(42px,6vw,84px) clamp(22px,8vw,130px); background: linear-gradient(135deg,#fff 0%,#fff 62%,var(--fz-canvas) 100%); }
 .textBack { margin: 0 0 clamp(52px,8vw,100px) -8px; padding-inline: 8px; color: var(--fz-muted-strong); }
@@ -698,6 +704,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   width: min(100%,760px);
   padding: 0;
 }
+.saveExperienceDialog.personalizationConfirmation { width: min(100%,620px); }
 
 @media (max-width: 600px) {
   .saveDialogBackdrop { padding: 12px; }
@@ -1152,12 +1159,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 @media (max-width: 820px) {
   .entryStage {
-    width: min(calc(100% - 32px),620px);
+    width: 100%;
     min-height: calc(100vh - 66px);
-    padding: 46px 0 36px;
+    padding: 46px 16px 36px;
+    gap: 30px;
+  }
+  .entryContent {
+    width: min(100%,620px);
     grid-template-columns: 1fr;
     grid-template-areas:
-      "hero"
       "action"
       "paths"
       "example";

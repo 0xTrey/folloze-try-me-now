@@ -27,6 +27,7 @@ export type ThreeAccountConversionProps = {
   onSubmitTargets: (targets: PersonalizationTargetInput[]) => void | Promise<void>;
   targetDraft?: PersonalizationTargetInput[];
   onTargetDraftChange?: (targets: PersonalizationTargetInput[]) => void;
+  onDone?: () => void;
   onAutoSelectTargets?: () => void | Promise<void>;
   onOpenLink?: (position: number) => void;
 };
@@ -82,6 +83,7 @@ export function ThreeAccountConversion({
   onSubmitTargets,
   targetDraft,
   onTargetDraftChange,
+  onDone,
   onAutoSelectTargets,
   onOpenLink
 }: ThreeAccountConversionProps) {
@@ -100,6 +102,23 @@ export function ThreeAccountConversion({
     () => request?.targets.filter((target) => target.status === "ready" && target.link) ?? [],
     [request]
   );
+
+  if (requestIsWorking) {
+    const emailReady = request?.delivery.status !== "not_configured";
+    return (
+      <div className={`${styles.panel} ${styles.confirmationPanel}`}>
+        <h2 id="personalization-dialog-title">We&apos;re building all three versions for you.</h2>
+        <p className={styles.confirmation} role="status" aria-live="polite">
+          {emailReady
+            ? "Check your email in about 5 minutes to see what they look like."
+            : "Your email delivery is not connected in this environment. You can return to your experience while the build continues."}
+        </p>
+        <p className={styles.confirmationNote}>{emailReady ? "You don't need to keep this page open." : "Return to your experience to check the finished versions here."}</p>
+        {onDone && <button className={styles.doneButton} type="button" onClick={onDone}>Back to your experience</button>}
+        {error && <p className={styles.error} role="alert">{error}</p>}
+      </div>
+    );
+  }
 
   const submitEmail = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -140,10 +159,8 @@ export function ThreeAccountConversion({
     onTargetDraftChange?.(nextTargets);
   };
 
-  if (requestIsWorking || requestIsTerminal) {
-    const headline = requestIsWorking
-      ? "We are building all three versions in parallel."
-      : request?.status === "completed"
+  if (requestIsTerminal) {
+    const headline = request?.status === "completed"
         ? "Your three account versions are ready."
         : readyTargets.length
           ? `${readyTargets.length} account ${readyTargets.length === 1 ? "version is" : "versions are"} ready.`
@@ -152,18 +169,12 @@ export function ThreeAccountConversion({
       <div className={styles.panel}>
         <h2 id="personalization-dialog-title">{headline}</h2>
         <p className={styles.intro}>
-          {requestIsWorking
-            ? "Each account is moving through public research, account-specific writing, quality checks, and final readback before a link appears."
-            : readyTargets.length
-              ? "Open each finished version below. Targets without a link were withheld because they did not pass the evidence or final quality gate."
-              : "No generic account page was released. The targets below show where the evidence or final quality gate stopped the build."}
+          {readyTargets.length
+              ? readyTargets.length === 3
+                ? "Open your finished account versions below."
+                : "Open the finished versions below. The remaining versions couldn't be completed."
+              : "We couldn't finish these account versions. Your original experience is still available."}
         </p>
-
-        {request?.selectionMode === "representative" && (
-          <p className={styles.representativeNotice}>
-            These representative companies were selected for this demo. They are illustrative examples, not account-fit recommendations.
-          </p>
-        )}
 
         <div className={styles.targetProgress} aria-live="polite">
           {request?.targets.map((target) => (
@@ -178,7 +189,7 @@ export function ThreeAccountConversion({
                 ) : target.status === "researching" ? (
                   <LoaderCircle className={styles.spinner} size={16} />
                 ) : (
-                  String(target.position).padStart(2, "0")
+                  target.position
                 )}
               </span>
               <span className={styles.targetIdentity}>
@@ -201,12 +212,6 @@ export function ThreeAccountConversion({
           ))}
         </div>
 
-        {requestIsWorking && (
-          <div className={styles.workingNote} role="status">
-            <LoaderCircle className={styles.spinner} size={17} />
-            This dialog will update as each final link is verified. We will email the links that pass.
-          </div>
-        )}
         {requestIsTerminal && request && (
           <div className={styles.workingNote} role="status">
             {["pending", "sending"].includes(request.delivery.status) ? (
@@ -218,9 +223,7 @@ export function ThreeAccountConversion({
           </div>
         )}
         {error && <p className={styles.error} role="alert">{error}</p>}
-        <p className={styles.testBoundary}>
-          These versions stay app-hosted for testing. Nothing is published to Folloze.
-        </p>
+        {onDone && <button className={styles.doneButton} type="button" onClick={onDone}>Back to your experience</button>}
       </div>
     );
   }

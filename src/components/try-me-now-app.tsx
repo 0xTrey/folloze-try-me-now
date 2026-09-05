@@ -3161,7 +3161,7 @@ export function SaveExperienceDialog({
   if (!open) return null;
   return createPortal(
     <div className="drawerBackdrop saveDialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) event.preventDefault(); }}>
-      <section ref={dialogRef} className="saveExperienceDialog personalizationDialog" role="dialog" aria-modal="true" aria-labelledby="personalization-dialog-title" onKeyDown={onKeyDown}>
+      <section ref={dialogRef} className={`saveExperienceDialog personalizationDialog${request && ["queued", "generating"].includes(request.status) ? " personalizationConfirmation" : ""}`} role="dialog" aria-modal="true" aria-labelledby="personalization-dialog-title" onKeyDown={onKeyDown}>
         <button className="drawerClose" type="button" onClick={onClose} aria-label="Close personalization request"><X size={20} /></button>
         <ThreeAccountConversion
           email={email}
@@ -3174,6 +3174,7 @@ export function SaveExperienceDialog({
           onAutoSelectTargets={onAutoSelectTargets}
           targetDraft={targetDraft}
           onTargetDraftChange={onTargetDraftChange}
+          onDone={onClose}
           onOpenLink={onOpenLink}
         />
       </section>
@@ -4365,6 +4366,7 @@ export function TryMeNowApp() {
             <h1>Build personalized campaign pages from the tools you already use.</h1>
             <p>Folloze is built to be open. Bring your own AI, use Folloze Campaign Agent, or connect a custom workflow, then turn those inputs into finished, on-brand campaign pages.</p>
           </div>
+          <div className="entryContent">
           <ol className="entryPaths" aria-label="Ways to build with Folloze">
             <li><span className="entryPathNumber">1</span><span><strong>Bring your own AI</strong><small>Create in ChatGPT, Claude, Copilot, Gemini, or your own agent.</small></span></li>
             <li><span className="entryPathNumber">2</span><span><strong>Use Campaign Agent</strong><small>Build directly inside Folloze.</small></span></li>
@@ -4374,6 +4376,7 @@ export function TryMeNowApp() {
             onSelect={selectUseCase}
             disabled={!interactionReady}
           />
+          </div>
         </section>
       )}
 
@@ -4587,7 +4590,7 @@ export function TryMeNowApp() {
             ? personalizationRequest.status === "awaiting_targets"
               ? "Continue personalization"
               : ["queued", "generating"].includes(personalizationRequest.status)
-                ? "View account builds"
+                ? "View account request"
                 : "View account versions"
             : "Personalize for 3 accounts"}
           publicationNote={lifecycleCopy.publicationNote}
