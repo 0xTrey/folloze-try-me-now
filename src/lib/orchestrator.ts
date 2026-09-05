@@ -2430,13 +2430,35 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
   }
 }
 
-function completeInputMutation(session: TryMeSession, previousFingerprint: string): void {
+function completeInputMutation(session: TryMeSession, previousFingerprint: string): boolean {
   if (storyInputFingerprint(session) !== previousFingerprint) {
     resetGeneratedExperience(
       session,
       "Inputs changed. The next preview will use the latest workspace decisions."
     );
+    return true;
   }
+  return false;
+}
+
+function queueFreshGenerationBudget(session: TryMeSession, trigger: "answers" | "workspace"): void {
+  const eligibleAt = Date.now();
+  const budget = generationBudgetFor(eligibleAt, {
+    totalMs: config.generationDeadlineMs,
+    finalizationReserveMs: config.generationFinalizationReserveMs
+  }, eligibleAt);
+  session.buildProgress = undefined;
+  advanceBuildProgress(session, {
+    completed: [],
+    active: "queued",
+    phase: "queued",
+    budget
+  });
+  appendEvent(session, "generation_eligible", {
+    trigger,
+    revision: session.revision + 1,
+    ...timingMetaForGenerationBudget(budget)
+  });
 }
 
 export async function patchSessionAnswers(
@@ -2449,7 +2471,7 @@ export async function patchSessionAnswers(
     const retryingFailedGeneration = session.stages.story.status === "failed";
     const previousFingerprint = storyInputFingerprint(session);
     applyAnswerPatch(session, patch);
-    completeInputMutation(session, previousFingerprint);
+    const inputsChanged = completeInputMutation(session, previousFingerprint);
     const generationReady = isGenerationReady(session.useCase, session.answers);
     if (retryingFailedGeneration && generationReady) {
       const eligibleAt = Date.now();
@@ -2473,17 +2495,8 @@ export async function patchSessionAnswers(
         revision: session.revision + 1,
         ...timingMetaForGenerationBudget(budget)
       });
-    } else if (!wasGenerationReady && generationReady) {
-      const eligibleAt = Date.now();
-      const budget = generationBudgetFor(eligibleAt, {
-        totalMs: config.generationDeadlineMs,
-        finalizationReserveMs: config.generationFinalizationReserveMs
-      }, eligibleAt);
-      appendEvent(session, "generation_eligible", {
-        trigger: "answers",
-        revision: session.revision + 1,
-        ...timingMetaForGenerationBudget(budget)
-      });
+    } else if (generationReady && (!wasGenerationReady || inputsChanged)) {
+      queueFreshGenerationBudget(session, "answers");
     }
     return session;
   });
@@ -2640,12 +2653,10 @@ export async function patchSessionWorkspace(
 
     syncCampaignContracts(session);
 
-    completeInputMutation(session, previousFingerprint);
-    if (!wasGenerationReady && isGenerationReady(session.useCase, session.answers)) {
-      appendEvent(session, "generation_eligible", {
-        trigger: "workspace",
-        revision: session.revision + 1
-      });
+    const inputsChanged = completeInputMutation(session, previousFingerprint);
+    const generationReady = isGenerationReady(session.useCase, session.answers);
+    if (generationReady && (!wasGenerationReady || inputsChanged)) {
+      queueFreshGenerationBudget(session, "workspace");
     }
     return session;
   });

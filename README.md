@@ -4,6 +4,8 @@ A repo-backed visual MVP for a top-of-funnel, product-led Folloze experience. A 
 
 [Open the deployed MVP](https://folloze-try-me-now.vercel.app)
 
+For the current entry, editing, result, and account-selection behavior, see [Usability flow](docs/usability-flow.md). Source changes and production deployment remain separate checkpoints.
+
 ![Try Me Now entry experience](output/playwright/entry-desktop.png)
 
 ## V1 paths

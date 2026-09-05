@@ -39,11 +39,11 @@ export type StreamingBriefSummaryField = {
 const modeCopy: Record<StreamingBriefMode, { title: string; detail: string }> = {
   unified: {
     title: "Tell Folloze what to build.",
-    detail: "One missing signal at a time. Your answers stay in this transcript, and the Live Brief stays editable."
+    detail: "Answer one question at a time. Review or edit your answers below."
   },
   campaign: {
     title: "Tell Folloze what you want to launch.",
-    detail: "One question at a time. The Live Brief stays visible and editable while Folloze interprets your answers."
+    detail: "Answer one question at a time. Review or edit your answers below."
   },
   event: {
     title: "Tell Folloze what you want to promote.",
@@ -76,7 +76,7 @@ export function StreamingBriefComposer({
   onStepChange,
   onSummaryEdit
 }: StreamingBriefComposerProps) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState<{ questionId?: string; value: string }>({ value: "" });
   const descriptionId = useId();
   const summaryId = useId();
   const questionInputRef = useRef<HTMLTextAreaElement>(null);
@@ -87,7 +87,7 @@ export function StreamingBriefComposer({
   const answerForCurrent = currentQuestion
     ? answers.find((answer) => answer.questionId === currentQuestion.id)?.value
     : undefined;
-  const value = draft || answerForCurrent || "";
+  const value = draft.questionId === activeQuestionId ? draft.value : answerForCurrent || "";
   const stepIndex = currentQuestion
     ? Math.max(questions.findIndex((question) => question.id === currentQuestion.id) + 1, 1)
     : questions.length;
@@ -111,7 +111,7 @@ export function StreamingBriefComposer({
     event.preventDefault();
     if (!currentQuestion || !value.trim()) return;
     onAnswer({ questionId: currentQuestion.id, label: currentQuestion.label, value: value.trim() });
-    setDraft("");
+    setDraft({ value: "" });
   };
 
   return (
@@ -121,14 +121,41 @@ export function StreamingBriefComposer({
         <p id={descriptionId}>{copy.detail}</p>
       </header>
 
-      {visibleSummary.length > 0 && (
-        <section className={styles.summary} aria-labelledby={summaryId}>
-          <div className={styles.summaryHeader}>
-            <h3 id={summaryId}>Live Brief</h3>
-            <span>Editable anytime</span>
+      {currentQuestion ? (
+        <form className={styles.question} onSubmit={submit} aria-describedby={descriptionId}>
+          <div className={styles.questionHeading}>
+            <label htmlFor={`streaming-brief-${currentQuestion.id}`}>
+              <strong>{currentQuestion.prompt}</strong>
+            </label>
+            <span className={styles.step}>Question {stepIndex} of {questions.length}</span>
           </div>
-          <ul className={styles.summaryList}>
-            {visibleSummary.map((field) => {
+          {currentQuestion.hint && <p className={styles.questionHint}>{currentQuestion.hint}</p>}
+          {currentQuestion.choices && currentQuestion.choices.length > 0 && (
+            <div className={styles.chips} role="group" aria-label={currentQuestion.label}>
+              {currentQuestion.choices.map((choice) => (
+                <button type="button" key={choice} className={value === choice ? styles.selected : undefined} aria-pressed={value === choice} aria-label={currentQuestion.recommendedChoice === choice ? `${choice}, recommended` : choice} disabled={disabled} onClick={() => { onAnswer({ questionId: currentQuestion.id, label: currentQuestion.label, value: choice }); setDraft({ questionId: currentQuestion.id, value: choice }); }}>
+                  {choice}
+                  {currentQuestion.recommendedChoice === choice && <small>Recommended</small>}
+                </button>
+              ))}
+            </div>
+          )}
+          <textarea ref={questionInputRef} id={`streaming-brief-${currentQuestion.id}`} value={value} onChange={(event) => setDraft({ questionId: currentQuestion.id, value: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={currentQuestion.placeholder || "Add a short answer"} disabled={disabled} required={currentQuestion.required} rows={3} />
+          <div className={styles.actions}><button type="submit" disabled={disabled || !value.trim()} aria-label="Send answer">Send <span aria-hidden="true">→</span></button></div>
+        </form>
+      ) : null}
+
+      {(visibleSummary.length > 0 || completedAnswers.length > 0) && (
+        <details className={styles.review}>
+          <summary>Review your answers</summary>
+          {visibleSummary.length > 0 && (
+            <section className={styles.summary} aria-labelledby={summaryId}>
+              <div className={styles.summaryHeader}>
+                <h3 id={summaryId}>Live Brief</h3>
+                <span>Editable anytime</span>
+              </div>
+              <ul className={styles.summaryList}>
+                {visibleSummary.map((field) => {
               const complete = Boolean(field.value?.trim());
               const content = (
                 <>
@@ -157,13 +184,12 @@ export function StreamingBriefComposer({
                   <div>{content}</div>
                 </li>
               );
-            })}
-          </ul>
-        </section>
-      )}
+                })}
+              </ul>
+            </section>
+          )}
 
-      <div className={styles.stream} aria-label="Brief conversation" role="log" aria-live="polite">
-        {completedAnswers.map((answer) => {
+          {!summaryFields.length && completedAnswers.length > 0 && <div className={styles.stream} aria-label="Brief conversation" role="log">{completedAnswers.map((answer) => {
           const question = questions.find((candidate) => candidate.id === answer.questionId);
           return (
             <button
@@ -180,65 +206,9 @@ export function StreamingBriefComposer({
               <span>Edit</span>
             </button>
           );
-        })}
-        {currentQuestion ? (
-          <form className={styles.question} onSubmit={submit} aria-describedby={descriptionId}>
-            <div className={styles.questionHeading}>
-              <label htmlFor={`streaming-brief-${currentQuestion.id}`}>
-                <strong>{currentQuestion.prompt}</strong>
-              </label>
-              <span className={styles.step}>Question {stepIndex} of {questions.length}</span>
-            </div>
-            {currentQuestion.hint && <p className={styles.questionHint}>{currentQuestion.hint}</p>}
-            {currentQuestion.choices && currentQuestion.choices.length > 0 && (
-              <div className={styles.chips} role="group" aria-label={currentQuestion.label}>
-                {currentQuestion.choices.map((choice) => (
-                  <button
-                    type="button"
-                    key={choice}
-                    className={value === choice ? styles.selected : undefined}
-                    aria-pressed={value === choice}
-                    aria-label={
-                      currentQuestion.recommendedChoice === choice
-                        ? `${choice}, recommended`
-                        : choice
-                    }
-                    disabled={disabled}
-                    onClick={() => {
-                      onAnswer({ questionId: currentQuestion.id, label: currentQuestion.label, value: choice });
-                      setDraft("");
-                    }}
-                  >
-                    {choice}
-                    {currentQuestion.recommendedChoice === choice && <small>Recommended</small>}
-                  </button>
-                ))}
-              </div>
-            )}
-            <textarea
-              ref={questionInputRef}
-              id={`streaming-brief-${currentQuestion.id}`}
-              value={value}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
-              placeholder={currentQuestion.placeholder || "Add a short answer"}
-              disabled={disabled}
-              required={currentQuestion.required}
-              rows={3}
-            />
-            <div className={styles.actions}>
-              <button type="submit" disabled={disabled || !value.trim()} aria-label="Send answer">
-                Send <span aria-hidden="true">→</span>
-              </button>
-            </div>
-          </form>
-        ) : null}
-      </div>
+          })}</div>}
+        </details>
+      )}
     </section>
   );
 }

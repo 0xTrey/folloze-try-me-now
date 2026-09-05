@@ -25,6 +25,8 @@ export type ThreeAccountConversionProps = {
   onEmailChange: (value: string) => void;
   onSubmitEmail: () => void | Promise<void>;
   onSubmitTargets: (targets: PersonalizationTargetInput[]) => void | Promise<void>;
+  targetDraft?: PersonalizationTargetInput[];
+  onTargetDraftChange?: (targets: PersonalizationTargetInput[]) => void;
   onAutoSelectTargets?: () => void | Promise<void>;
   onOpenLink?: (position: number) => void;
 };
@@ -78,16 +80,20 @@ export function ThreeAccountConversion({
   onEmailChange,
   onSubmitEmail,
   onSubmitTargets,
+  targetDraft,
+  onTargetDraftChange,
   onAutoSelectTargets,
   onOpenLink
 }: ThreeAccountConversionProps) {
-  const [targets, setTargets] = useState<PersonalizationTargetInput[]>(emptyTargets);
+  const [localTargets, setLocalTargets] = useState<PersonalizationTargetInput[]>(emptyTargets);
+  const targets = targetDraft ?? localTargets;
   const [autoSelecting, setAutoSelecting] = useState(false);
   const requestIsWorking = Boolean(
     request && ["queued", "generating"].includes(request.status)
   );
   const requestIsTerminal = Boolean(request && isTerminal(request.status));
-  const busy = ["saving_email", "saving_targets", "polling"].includes(status);
+  // Background status reads must not lock the visitor out of account entry.
+  const busy = ["saving_email", "saving_targets"].includes(status);
   const autoBusy = autoSelecting || busy;
 
   const readyTargets = useMemo(
@@ -127,11 +133,11 @@ export function ThreeAccountConversion({
     field: "domain" | "role",
     value: string
   ) => {
-    setTargets((current) =>
-      current.map((target, position) =>
-        position === index ? { ...target, [field]: value } : target
-      )
+    const nextTargets = targets.map((target, position) =>
+      position === index ? { ...target, [field]: value } : target
     );
+    if (targetDraft === undefined) setLocalTargets(nextTargets);
+    onTargetDraftChange?.(nextTargets);
   };
 
   if (requestIsWorking || requestIsTerminal) {
@@ -271,15 +277,25 @@ export function ThreeAccountConversion({
       </p>
       <div className={styles.stepStatus} aria-label="Step 2 of 2">
         <span>Work email saved as {request?.emailMasked || "your business email"}</span>
-        <strong>Account details optional</strong>
+        <strong>Choose one account path</strong>
       </div>
       {onAutoSelectTargets && (
         <div className={styles.autoChoice}>
           <div>
-            <strong>Skip the account details.</strong>
+            <strong>Option 1: Pick 3 accounts for me</strong>
             <span id="representative-account-explanation">
               We will choose three public companies and build all three versions now. These are illustrative examples, not account recommendations.
             </span>
+            {autoSelecting && (
+              <span className={styles.choiceStatus} role="status" aria-live="polite">
+                Choosing three representative accounts. This usually takes a few seconds.
+              </span>
+            )}
+            {error && !autoSelecting && (
+              <span className={styles.choiceStatus} role="status" aria-live="polite">
+                We could not choose accounts this time. Try again, or enter your own below.
+              </span>
+            )}
           </div>
           <button
             className={styles.autoButton}
@@ -289,7 +305,7 @@ export function ThreeAccountConversion({
             aria-busy={autoSelecting}
             aria-describedby="representative-account-explanation"
           >
-            {autoSelecting ? "Choosing accounts" : "Pick 3 accounts for me"}
+            {autoSelecting ? "Choosing accounts" : error ? "Retry account selection" : "Pick 3 accounts for me"}
             {autoSelecting ? <LoaderCircle className={styles.spinner} size={17} /> : <ArrowRight size={17} />}
           </button>
         </div>
@@ -298,6 +314,12 @@ export function ThreeAccountConversion({
         <div className={styles.choiceDivider}><span>Or choose your own</span></div>
       )}
       <form className={styles.form} onSubmit={submitTargets}>
+        {onAutoSelectTargets && (
+          <p className={styles.manualChoice}>
+            <strong>Option 2: Enter my own accounts</strong>
+            <span>Provide three public company domains. Buyer roles are optional.</span>
+          </p>
+        )}
         <div className={styles.targetFields}>
           {targets.map((target, index) => (
             <fieldset key={index}>
@@ -308,6 +330,7 @@ export function ThreeAccountConversion({
                 inputMode="url"
                 value={target.domain}
                 onChange={(event) => updateTarget(index, "domain", event.target.value)}
+                disabled={autoBusy}
                 placeholder="company.com"
                 required
                 aria-invalid={Boolean(error)}
@@ -320,6 +343,7 @@ export function ThreeAccountConversion({
                 id={`personalization-role-${index}`}
                 value={target.role || ""}
                 onChange={(event) => updateTarget(index, "role", event.target.value)}
+                disabled={autoBusy}
                 placeholder="VP of Marketing"
                 maxLength={120}
                 aria-invalid={Boolean(error)}

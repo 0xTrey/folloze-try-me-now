@@ -49,6 +49,11 @@ const baseProps = {
 };
 
 describe("ThreeAccountConversion", () => {
+  it("keeps awaiting account choices interactive during a background status read", () => {
+    render(<ThreeAccountConversion {...baseProps} status="polling" request={request("awaiting_targets")} onAutoSelectTargets={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Pick 3 accounts for me" })).toBeEnabled();
+    expect(screen.getAllByLabelText("Company domain").every(input => !(input as HTMLInputElement).disabled)).toBe(true);
+  });
   it("captures email before showing exactly three target accounts", () => {
     const { rerender } = render(<ThreeAccountConversion {...baseProps} />);
     expect(screen.getByRole("heading", { name: "Build three account versions from this experience." })).toBeInTheDocument();
@@ -95,18 +100,55 @@ describe("ThreeAccountConversion", () => {
     ]);
   });
 
+  it("supports a controlled manual target draft", () => {
+    const onTargetDraftChange = vi.fn();
+    render(
+      <ThreeAccountConversion
+        {...baseProps}
+        email="buyer@example.com"
+        request={request("awaiting_targets")}
+        targetDraft={[{ domain: "saved.com" }, { domain: "" }, { domain: "" }]}
+        onTargetDraftChange={onTargetDraftChange}
+      />
+    );
+    expect(screen.getAllByLabelText("Company domain")[0]).toHaveValue("saved.com");
+    fireEvent.change(screen.getAllByLabelText("Company domain")[1]!, { target: { value: "new.com" } });
+    expect(onTargetDraftChange).toHaveBeenCalledWith([
+      { domain: "saved.com" },
+      { domain: "new.com" },
+      { domain: "" }
+    ]);
+  });
+
   it("keeps manual entry and offers account selection with a busy state", async () => {
     let resolveSelection!: () => void;
     const onAutoSelectTargets = vi.fn(() => new Promise<void>((resolve) => { resolveSelection = resolve; }));
     render(<ThreeAccountConversion {...baseProps} email="buyer@example.com" request={request("awaiting_targets")} onAutoSelectTargets={onAutoSelectTargets} />);
     expect(screen.getAllByLabelText("Company domain")).toHaveLength(3);
-    expect(screen.getByText("Account details optional")).toBeInTheDocument();
+    expect(screen.getByText("Choose one account path")).toBeInTheDocument();
+    expect(screen.getByText("Option 1: Pick 3 accounts for me")).toBeInTheDocument();
+    expect(screen.getByText("Option 2: Enter my own accounts")).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Pick 3 accounts for me" });
     fireEvent.click(button);
     expect(onAutoSelectTargets).toHaveBeenCalledOnce();
     expect(screen.getByRole("button", { name: /Choosing accounts/i })).toBeDisabled();
     expect(screen.getAllByLabelText("Company domain")).toHaveLength(3);
     await act(async () => resolveSelection());
+  });
+
+  it("gives account selection a clear retry state", () => {
+    render(
+      <ThreeAccountConversion
+        {...baseProps}
+        email="buyer@example.com"
+        request={request("awaiting_targets")}
+        onAutoSelectTargets={vi.fn()}
+        error="Account selection failed"
+      />
+    );
+    expect(screen.getByRole("button", { name: "Retry account selection" })).toBeEnabled();
+    expect(screen.getAllByRole("status").some((node) => node.textContent?.includes("Try again, or enter your own below"))).toBe(true);
+    expect(screen.getByText("Option 2: Enter my own accounts")).toBeInTheDocument();
   });
 
   it("labels system-selected accounts as illustrative after refresh", () => {

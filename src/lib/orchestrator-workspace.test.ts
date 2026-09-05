@@ -633,6 +633,39 @@ describe("session workspace foundation", () => {
     expect(Number(latestEligibility?.meta?.remainingMs)).toBeGreaterThan(0);
   });
 
+  it("refreshes the generation budget when an edited ready brief changes inputs", async () => {
+    const id = `generation-edit-budget-${Date.now()}`;
+    ids.add(id);
+    const ready = workspaceSession(id);
+    const expiredEligibleAt = new Date(Date.now() - 120_000).toISOString();
+    ready.events.push({ name: "generation_eligible", at: expiredEligibleAt, meta: { remainingMs: 0 } });
+    await putSession(ready);
+
+    const result = await patchSessionAnswers(id, { objective: "Run a security architecture workshop" });
+    const stored = await getSession(id);
+    const latestEligibility = stored?.events.filter(({ name }) => name === "generation_eligible").at(-1);
+
+    expect(result.session.buildProgress).toMatchObject({ phase: "queued" });
+    expect(Date.parse(latestEligibility?.at ?? "")).toBeGreaterThan(Date.parse(expiredEligibleAt));
+    expect(latestEligibility?.meta).toMatchObject({ trigger: "answers", remainingMs: expect.any(Number) });
+    expect(Number(latestEligibility?.meta?.remainingMs)).toBeGreaterThan(0);
+  });
+
+  it("does not refresh the generation budget for a no-op ready brief edit", async () => {
+    const id = `generation-noop-budget-${Date.now()}`;
+    ids.add(id);
+    const ready = workspaceSession(id);
+    const expiredEligibleAt = new Date(Date.now() - 120_000).toISOString();
+    ready.events.push({ name: "generation_eligible", at: expiredEligibleAt, meta: { remainingMs: 0 } });
+    await putSession(ready);
+
+    const result = await patchSessionAnswers(id, {});
+    const stored = await getSession(id);
+
+    expect(result.session.buildProgress).toBeUndefined();
+    expect(stored?.events.filter(({ name }) => name === "generation_eligible")).toHaveLength(1);
+  });
+
   it("replaces source provenance atomically and binds confirmation to the newly submitted source", async () => {
     const id = `source-replacement-${Date.now()}`;
     ids.add(id);

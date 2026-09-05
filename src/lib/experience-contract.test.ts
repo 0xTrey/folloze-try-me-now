@@ -405,4 +405,25 @@ describe("campaign contract", () => {
     expect(projection.experienceSpec).not.toHaveProperty("draft");
     expect(projection.experienceSpec).not.toHaveProperty("wireframeDecisionV2");
   });
+
+  it("uses an honest in-experience CTA fallback when no public source is available", () => {
+    const current = session();
+    current.answers.sourceUrl = undefined;
+    current.answers.sourceConfirmed = false;
+    current.answers.offerSourceUrl = undefined;
+    current.answers.offerSourceConfirmed = false;
+    current.campaignOfferSource = undefined;
+
+    const spec = buildExperienceSpec(current, draft, seller, target);
+    const primaryAction = spec.actions.find((action) => action.id === "primary-conversion");
+
+    expect(primaryAction).toMatchObject({
+      purpose: "guided-exploration",
+      actionType: "scroll",
+      destination: "#supporting-resources",
+      verification: "fallback",
+      fallbackReason: "No verified external destination was available."
+    });
+    expect(primaryAction?.destination).not.toContain("folloze.com");
+  });
 });

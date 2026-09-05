@@ -1018,6 +1018,12 @@ describe("renderExperienceHtml", () => {
     expect(fingerprints[4]?.sectionOrder).toEqual(["experience-thesis", "decision-path", "supporting-resources"]);
   });
 
+  it("overrides chapter journey lens copy to use light-surface text colors", () => {
+    expect(html).toContain(
+      ".composition-chapter-journey .lens-panel{color:var(--brand-ink)}.composition-chapter-journey .lens-copy>p:not(.eyebrow){color:var(--text)}"
+    );
+  });
+
   it("makes external links safe and avoids raw fragment links", () => {
     const anchors = [...html.matchAll(/<a\b[^>]*>/g)].map(([tag]) => tag);
     expect(anchors.length).toBeGreaterThan(0);

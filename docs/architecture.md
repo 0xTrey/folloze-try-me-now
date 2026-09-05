@@ -280,7 +280,7 @@ before environment isolation can be claimed.
 | `TRY_ME_SESSION_TTL_SECONDS` | Yes | Unclaimed ready-preview TTL; production value `1800`. |
 | `TRY_ME_MAX_PDF_BYTES` | Yes | Upload cap; V1 value `10485760`. |
 | `TRY_ME_DEMO_MODE` | No integration role | Currently a product/demo configuration value. Do not use it to infer provider activation or launch readiness. |
-| `NEXT_PUBLIC_DEMO_CTA_URL` | Yes | Approved demo destination tracked as the primary CTA conversion. |
+| `NEXT_PUBLIC_DEMO_CTA_URL` | Optional | Approved explicit destination tracked as the primary CTA conversion. Blank uses in-experience exploration, not a default Folloze sales link. |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Recommended before public traffic | Abuse challenge, enabled according to risk thresholds. |
 
 Workflow and Blob vendor-provided variables should retain their platform names. Do not copy local Folloze OAuth profiles, cookies, or token files into deployment variables.

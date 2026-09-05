@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { config } from "@/lib/config";
 import { buildExperienceSpec } from "@/lib/experience-contract";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import { applyProductionPageToDraft } from "@/lib/generation/production-draft-adapter";
@@ -15,6 +16,9 @@ import type { BrandProfile, SessionEvidenceItem, TryMeSession } from "@/lib/type
 import { compileSessionProductionPage } from "./session-production-engine";
 
 const now = "2026-08-22T18:00:00.000Z";
+const originalCtaUrl = config.demoCtaUrl;
+beforeEach(() => { config.demoCtaUrl = "https://acme.example/contact"; });
+afterEach(() => { config.demoCtaUrl = originalCtaUrl; });
 
 function brand(source: BrandProfile["source"] = "brand-harvester"): BrandProfile {
   return {

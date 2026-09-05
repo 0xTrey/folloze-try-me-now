@@ -168,7 +168,7 @@ describe("Try Me Now experience copy", () => {
       title: "Launch a campaign landing page",
       actionLabel: "Launch a campaign landing page",
       exampleLabel: "See a Northpeak personalized campaign",
-      exampleUrl: "https://engage.folloze.com/120367",
+      exampleUrl: "https://experience.folloze.com/northpeak-personalized-campaign-example",
       previewAlt: "Northpeak-branded personalized campaign landing page"
     });
     expect(entryPathOptions.content).toMatchObject({
@@ -176,7 +176,7 @@ describe("Try Me Now experience copy", () => {
       title: "Make content interactive",
       actionLabel: "Make content interactive",
       exampleLabel: "See a Northpeak Content Magic example",
-      exampleUrl: "https://engage.folloze.com/120367",
+      exampleUrl: "https://experience.folloze.com/northpeak-personalized-campaign-example",
       previewImage: "/entry/content-preview.webp"
     });
     expect(JSON.stringify(entryPathOptions)).not.toMatch(/Aprio|ServiceNow|Cisco|aprio-for-georgia-pacific|servicenow-ai-platform|cisco-hmf/i);
@@ -185,7 +185,7 @@ describe("Try Me Now experience copy", () => {
   it("exposes one generically labeled personalized campaign example", () => {
     expect(personalizedCampaignExample).toEqual({
       label: "View an example personalized campaign page",
-      href: "https://engage.folloze.com/120367"
+      href: "https://experience.folloze.com/northpeak-personalized-campaign-example"
     });
   });
 

@@ -192,10 +192,15 @@ describe("campaign offer source intelligence", () => {
 
     const stored = await getSession(id);
     const eligibilityEvents = stored?.events.filter(({ name }) => name === "generation_eligible");
-    expect(eligibilityEvents).toHaveLength(1);
+    expect(eligibilityEvents).toHaveLength(2);
     expect(eligibilityEvents?.[0]?.meta).toEqual(expect.objectContaining({
       trigger: "answers",
       revision: 2
+    }));
+    expect(eligibilityEvents?.[1]?.meta).toEqual(expect.objectContaining({
+      trigger: "answers",
+      revision: 3,
+      remainingMs: expect.any(Number)
     }));
   });
 

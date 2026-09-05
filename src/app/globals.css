@@ -1211,7 +1211,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 .streamingWorkbench {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: calc(100vh - 72px);
   background:
     radial-gradient(circle at 12% 0, rgba(0, 119, 255, .07), transparent 34%),
@@ -1220,15 +1220,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .streamingWorkbench .briefPanel {
   grid-column: 1;
   padding: clamp(28px, 3.5vw, 52px) clamp(24px, 3.5vw, 56px) 52px;
-  border-right: 1px solid var(--fz-border);
+  border-right: 0;
   background: transparent;
 }
 /* Intake is one centered conversational surface; nothing competes with it. */
 .streamingWorkbench .guidedWorkspaceInner { width: min(100%, 860px); margin-inline: auto; }
+.streamingWorkbench .briefHeader { margin-bottom: 18px; }
+.streamingWorkbench .mobileStatus { display: none; }
 .streamingWorkbench .processRail {
-  grid-column: 2;
-  display: flex;
-  background: #fff;
+  display: none;
 }
 .streamingWorkbench .connectionNotice,
 .streamingWorkbench .inlineError { width: min(100%, 760px); margin: 14px 0 0; }
@@ -1337,7 +1337,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .streamingWorkbench .briefPanel { min-height: 0; padding: 24px 0 28px; border-right: 0; }
   .streamingWorkbench .briefHeader { padding: 0 18px; }
   .streamingWorkbench .processRail {
-    display: block !important;
+    display: none !important;
     order: 2;
     padding: 8px 18px 24px;
     border-left: 0;

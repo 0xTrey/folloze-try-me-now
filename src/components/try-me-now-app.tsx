@@ -11,7 +11,6 @@ import {
   Check,
   CircleCheck,
   ChevronDown,
-  Clipboard,
   Clock3,
   ExternalLink,
   FileText,
@@ -59,6 +58,7 @@ import {
   type StreamingBriefSummaryField
 } from "@/components/streaming-brief-composer";
 import { ThreeAccountConversion } from "@/components/three-account-conversion";
+import { EditBriefForm, ExperienceReady } from "@/components/experience-ready";
 
 import type {
   AudienceRecommendation,
@@ -313,7 +313,7 @@ export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCa
 }
 
 const NORTHPEAK_ACCOUNT_EXAMPLE_URL = "https://experience.folloze.com/northpeak--folloze";
-const NORTHPEAK_CAMPAIGN_EXAMPLE_URL = "https://engage.folloze.com/120367";
+const NORTHPEAK_CAMPAIGN_EXAMPLE_URL = "https://experience.folloze.com/northpeak-personalized-campaign-example";
 
 /** One worked campaign example for the unified entry, never a primary CTA. */
 export const personalizedCampaignExample = {
@@ -1315,25 +1315,6 @@ async function reportClientUploadFailure(sessionId: string, file: File, error: u
   }
 }
 
-function CopyButton({ value, label = "Copy URL", className }: { value: string; label?: string; className?: string }) {
-  const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setStatus("copied");
-      window.setTimeout(() => setStatus("idle"), 2_000);
-    } catch {
-      setStatus("failed");
-    }
-  };
-  const visibleLabel = status === "copied" ? "Copied" : status === "failed" ? "Copy failed" : label;
-  return (
-    <button type="button" className={className} onClick={() => void copy()}>
-      <Clipboard size={16} />{visibleLabel}
-      <span className="srOnly" aria-live="polite">{status === "copied" ? "Link copied to clipboard." : status === "failed" ? "Clipboard access failed. Select and copy the URL shown on the page." : ""}</span>
-    </button>
-  );
-}
 
 function StatusMark({ state }: { state: StageState }) {
   if (state.status === "complete" || state.status === "fallback") {
@@ -1795,10 +1776,8 @@ function DomainStart({
           <button className="textBack buttonTertiary" type="button" onClick={onBack}><ArrowLeft size={16} />Back to start</button>
       <div className="domainStageGrid">
         <div className="domainPrompt">
-          <span className="sectionKicker">Start with the brand</span>
           <h2>{portal.domainTitle}</h2>
           <p>{portal.domainBody}</p>
-          <div className="domainPromise"><ShieldCheck size={18} /><span><strong>We verify the brand before we build.</strong> You will see the company, logo, and palette we found before we tailor the experience.</span></div>
         </div>
         <form className={`domainInput ${isStarting ? "isWorking" : ""}`} onSubmit={(event) => { event.preventDefault(); onContinue(); }}>
           <label htmlFor="company-domain">Company domain</label>
@@ -3107,12 +3086,17 @@ function useDialogBehavior(
     };
   }, [returnFocusRef]);
 
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
+  useEffect(() => {
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       event.preventDefault();
       onClose();
-      return;
-    }
+    };
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => document.removeEventListener("keydown", dismissOnEscape);
+  }, [onClose]);
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key !== "Tab") return;
     const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
       "button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex='-1'])"
@@ -3131,12 +3115,14 @@ function useDialogBehavior(
   return { dialogRef, onKeyDown };
 }
 
-function personalizationRequestNeedsPolling(
-  request: PublicPersonalizationRequest
+export function personalizationRequestNeedsPolling(
+  request: Pick<PublicPersonalizationRequest, "status" | "delivery" | "targets">
 ): boolean {
+  if (request.status === "awaiting_targets") return false;
   return (
     ["queued", "generating"].includes(request.status) ||
-    ["pending", "sending"].includes(request.delivery.status)
+    (request.targets.some(target => target.status === "ready" && target.link) &&
+      ["pending", "sending"].includes(request.delivery.status))
   );
 }
 
@@ -3150,6 +3136,8 @@ export function SaveExperienceDialog({
   onSubmitEmail,
   onSubmitTargets,
   onAutoSelectTargets,
+  targetDraft,
+  onTargetDraftChange,
   onOpenLink,
   returnFocusRef,
   onClose
@@ -3163,6 +3151,8 @@ export function SaveExperienceDialog({
   onSubmitEmail: () => void | Promise<void>;
   onSubmitTargets: (targets: PersonalizationTargetInput[]) => void | Promise<void>;
   onAutoSelectTargets?: () => void | Promise<void>;
+  targetDraft?: PersonalizationTargetInput[];
+  onTargetDraftChange?: (targets: PersonalizationTargetInput[]) => void;
   onOpenLink?: (position: number) => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
@@ -3170,9 +3160,9 @@ export function SaveExperienceDialog({
   const { dialogRef, onKeyDown } = useDialogBehavior(onClose, returnFocusRef);
   if (!open) return null;
   return createPortal(
-    <div className="drawerBackdrop saveDialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !["saving_email", "saving_targets"].includes(status)) onClose(); }}>
+    <div className="drawerBackdrop saveDialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) event.preventDefault(); }}>
       <section ref={dialogRef} className="saveExperienceDialog personalizationDialog" role="dialog" aria-modal="true" aria-labelledby="personalization-dialog-title" onKeyDown={onKeyDown}>
-        <button className="drawerClose" type="button" onClick={onClose} disabled={["saving_email", "saving_targets"].includes(status)} aria-label="Close personalization request"><X size={20} /></button>
+        <button className="drawerClose" type="button" onClick={onClose} aria-label="Close personalization request"><X size={20} /></button>
         <ThreeAccountConversion
           email={email}
           request={request}
@@ -3182,6 +3172,8 @@ export function SaveExperienceDialog({
           onSubmitEmail={onSubmitEmail}
           onSubmitTargets={onSubmitTargets}
           onAutoSelectTargets={onAutoSelectTargets}
+          targetDraft={targetDraft}
+          onTargetDraftChange={onTargetDraftChange}
           onOpenLink={onOpenLink}
         />
       </section>
@@ -3263,6 +3255,7 @@ export function TryMeNowApp() {
   const [isStarting, setIsStarting] = useState(false);
   const [preflightStatus, setPreflightStatus] = useState<"idle" | "scheduled" | "starting" | "started" | "failed">("idle");
   const [isSaving, setIsSaving] = useState(false);
+  const [editingBrief, setEditingBrief] = useState(false);
   const [error, setError] = useState("");
   const [connectionError, setConnectionError] = useState("");
   const [showProcess, setShowProcess] = useState(false);
@@ -3270,6 +3263,7 @@ export function TryMeNowApp() {
   const [showAnalyticsPanel, setShowAnalyticsPanel] = useState(false);
   const [pdfUpload, setPdfUpload] = useState<PdfUploadFeedback>(idlePdfUpload);
   const [personalizationEmail, setPersonalizationEmail] = useState("");
+  const [personalizationTargetDraft, setPersonalizationTargetDraft] = useState<PersonalizationTargetInput[]>([{ domain: "" }, { domain: "" }, { domain: "" }]);
   const [personalizationRequest, setPersonalizationRequest] = useState<PublicPersonalizationRequest>();
   const [personalizationStatus, setPersonalizationStatus] = useState<
     "idle" | "saving_email" | "saving_targets" | "polling" | "error"
@@ -3277,11 +3271,6 @@ export function TryMeNowApp() {
   const [personalizationError, setPersonalizationError] = useState("");
   const [clientEvents, setClientEvents] = useState<ClientEvent[]>([]);
   const [revealedAt, setRevealedAt] = useState<number>();
-  const [previewClockNow, setPreviewClockNow] = useState(() => Date.now());
-  const [personalizationSelection, setPersonalizationSelection] = useState<{
-    key: string;
-    variantId: PersonalizationVariantId;
-  }>({ key: "", variantId: "generic" });
   const startedDomain = useRef<string | undefined>(undefined);
   const stabilizedSellerDomain = useRef<string | undefined>(undefined);
   const revealTracked = useRef(false);
@@ -3311,6 +3300,8 @@ export function TryMeNowApp() {
     []
   );
   const resetSessionScopedRefs = useCallback(() => {
+    setEditingBrief(false);
+    setPersonalizationTargetDraft([{ domain: "" }, { domain: "" }, { domain: "" }]);
     patchRequestRef.current = 0;
     startedDomain.current = undefined;
     stabilizedSellerDomain.current = undefined;
@@ -3402,7 +3393,6 @@ export function TryMeNowApp() {
     setPersonalizationRequest(undefined);
     setPersonalizationStatus("idle");
     setPersonalizationError("");
-    setPersonalizationSelection({ key: "", variantId: "generic" });
     track("path_selected", { useCase: selected });
     track("use_case_selected", { useCase: selected });
   }, [bumpResetGeneration, resetSessionScopedRefs]);
@@ -3433,7 +3423,6 @@ export function TryMeNowApp() {
     setPersonalizationError("");
     setClientEvents([]);
     setRevealedAt(undefined);
-    setPersonalizationSelection({ key: "", variantId: "generic" });
   }, [bumpResetGeneration, resetSessionScopedRefs]);
 
   const closeAnalyticsPanel = useCallback(() => setShowAnalyticsPanel(false), []);
@@ -3641,64 +3630,6 @@ export function TryMeNowApp() {
     return () => window.clearTimeout(timer);
   }, [isResetGenerationStale, resetFenceEpoch, session]);
 
-  const personalizationSourceKey = session?.experienceSpec?.personalizationVariantIds?.length
-    ? `${session.id}:${session.experienceSpec.artifactDigest ?? session.revision}`
-    : "";
-  if (
-    personalizationSourceKey
-    && personalizationSelection.key !== personalizationSourceKey
-    && session
-  ) {
-    setPersonalizationSelection({
-      key: personalizationSourceKey,
-      variantId: defaultPersonalizationVariantFor(session)
-    });
-  }
-  const personalizationVariantId = personalizationSelection.key === personalizationSourceKey
-    ? personalizationSelection.variantId
-    : session?.experienceSpec?.personalizationVariantIds?.length
-      ? defaultPersonalizationVariantFor(session)
-      : "generic";
-
-  const selectPersonalizationVariant = useCallback(
-    (variantId: PersonalizationVariantId) => {
-      setPersonalizationSelection((current) => ({
-        key: current.key || personalizationSourceKey,
-        variantId
-      }));
-      const frame = previewFrameRef.current?.contentWindow;
-      if (frame) {
-        try {
-          frame.postMessage(
-            {
-              source: "folloze-builder",
-              type: "set_personalization_variant",
-              variantId
-            },
-            "*"
-          );
-        } catch {
-          // Preview frame may be cross-origin during transient loads; ignore.
-        }
-      }
-      captureUnifiedProductEvent("personalization_variant_viewed", {
-        sessionId: session?.id,
-        properties: {
-          variant_id: variantId,
-          has_evidence: variantId === "generic" ? false : true
-        }
-      });
-    },
-    [personalizationSourceKey, session?.id]
-  );
-
-  useEffect(() => {
-    if (session?.status !== "preview_ready_unclaimed" || !session.expiresAt) return;
-    const expiresAt = Date.parse(session.expiresAt);
-    if (!Number.isFinite(expiresAt)) return;
-    const timer = window.setInterval(() => setPreviewClockNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [session?.expiresAt, session?.status]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -3820,8 +3751,8 @@ export function TryMeNowApp() {
     return () => window.removeEventListener("message", handleMessage);
   }, [session]);
 
-  const patchAnswers = async (patch: SessionAnswers) => {
-    if (!session) return;
+  const patchAnswers = async (patch: SessionAnswers): Promise<boolean> => {
+    if (!session) return false;
     const requestGeneration = resetGeneration.current;
     const requestNumber = ++patchRequestRef.current;
     setIsSaving(true);
@@ -3840,9 +3771,9 @@ export function TryMeNowApp() {
         method: "PATCH",
         body: JSON.stringify(patch)
       });
-      if (requestNumber !== patchRequestRef.current || isResetGenerationStale(requestGeneration)) return;
+      if (requestNumber !== patchRequestRef.current || isResetGenerationStale(requestGeneration)) return false;
       const nextSession = await confirmHighConfidenceSource(result.session);
-      if (isResetGenerationStale(requestGeneration)) return;
+      if (isResetGenerationStale(requestGeneration)) return false;
       setSession((current) => preservePreviewDuringRegeneration(current, nextSession));
       setAnswers(nextSession.answers);
       if (typeof patch.audience === "string" && patch.audience.trim()) {
@@ -3851,9 +3782,11 @@ export function TryMeNowApp() {
       if (typeof patch.objective === "string" && patch.objective.trim()) {
         track("goal_confirmed", { useCase: session.useCase });
       }
+      return true;
     } catch (patchError) {
-      if (isResetGenerationStale(requestGeneration)) return;
+      if (isResetGenerationStale(requestGeneration)) return false;
       setError(patchError instanceof Error ? patchError.message : "We could not save that answer.");
+      return false;
     } finally {
       if (requestNumber === patchRequestRef.current && !isResetGenerationStale(requestGeneration)) {
         setIsSaving(false);
@@ -4236,7 +4169,7 @@ export function TryMeNowApp() {
     try {
       const result = await api<{ request: PublicPersonalizationRequest }>(
         `/api/sessions/${session.id}/personalization-request`,
-        { method: "PATCH", body: JSON.stringify({ autoSelect: true }) }
+        { method: "PATCH", body: JSON.stringify({ autoSelect: true }), signal: AbortSignal.timeout(30_000) }
       );
       if (isResetGenerationStale(requestGeneration)) return;
       setPersonalizationRequest(result.request);
@@ -4251,7 +4184,9 @@ export function TryMeNowApp() {
       setPersonalizationStatus("error");
       setPersonalizationError(
         requestError instanceof Error
-          ? requestError.message
+          ? requestError.name === "TimeoutError"
+            ? "Choosing accounts took longer than expected. Retry, or enter your own accounts."
+            : requestError.message
           : "We could not choose the three account builds."
       );
     }
@@ -4380,9 +4315,7 @@ export function TryMeNowApp() {
     isReveal && revealedAt && session ? session.id : undefined
   );
   const lifecyclePhase = previewLifecyclePhase(session);
-  const isFinalOnlyV2 = isUnifiedFinalOnlyV2(session);
   const lifecycleCopy = previewLifecycleCopy(lifecyclePhase);
-  const personalizationOptions = session ? personalizationVariantOptionsFor(session) : [];
   const canPersonalizeExperience = canOfferPersonalizationModal(session);
   const saveDialogOpen = Boolean(showSavePrompt && session && canPersonalizeExperience);
   const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
@@ -4397,10 +4330,6 @@ export function TryMeNowApp() {
     occurredAt: event.at,
     context: event.context
   }));
-  const previewSecondsRemaining = session?.expiresAt
-    ? Math.max(0, Math.ceil((Date.parse(session.expiresAt) - previewClockNow) / 1_000))
-    : 30 * 60;
-  const previewCountdown = `${String(Math.floor(previewSecondsRemaining / 60)).padStart(2, "0")}:${String(previewSecondsRemaining % 60).padStart(2, "0")}`;
   const headerStatus = !useCase
     ? "Build a personalized campaign page in about a minute"
     : !session
@@ -4493,11 +4422,11 @@ export function TryMeNowApp() {
           <div className="mobileStatus"><button type="button" aria-expanded={showProcess} aria-controls="mobile-process-dialog" onClick={() => setShowProcess(true)}><span className="liveDot" /><strong>{buildPanelCopy.mobileLabel}</strong><span>{buildPanelCopy.mobileStep}</span><ChevronDown size={15} /></button></div>
           <div className="briefPanel">
             <div className="guidedWorkspaceInner">
-              <div className="briefHeader"><span className="sectionKicker">Live brief</span><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
+              <div className="briefHeader"><span className="briefDomain"><Globe2 size={14} />{session.companyDomain}</span></div>
               {session.status === "brand_help_required" ? (
                 <BrandHelpRecoveryPanel
                   isSaving={isSaving}
-                  onPatch={patchAnswers}
+                  onPatch={async patch => { await patchAnswers(patch); }}
                 />
               ) : session.useCase === "campaign" ? (
                 <StreamingBriefComposer
@@ -4572,7 +4501,7 @@ export function TryMeNowApp() {
                     answers={answers}
                     isSaving={isSaving}
                     pdfUpload={pdfUpload}
-                    onPatch={patchAnswers}
+                    onPatch={async patch => { await patchAnswers(patch); }}
                     onBackgroundPatch={patchAnswersInBackground}
                     onWorkspacePatch={patchWorkspace}
                     onUpload={uploadPdf}
@@ -4582,7 +4511,7 @@ export function TryMeNowApp() {
                     answers={answers}
                     isSaving={isSaving}
                     pdfUpload={pdfUpload}
-                    onPatch={patchAnswers}
+                    onPatch={async patch => { await patchAnswers(patch); }}
                     onUpload={uploadPdf}
                   />}
                 </>
@@ -4623,104 +4552,53 @@ export function TryMeNowApp() {
         </section>
       )}
 
-      {session && isReveal && revealCopy && (
-        <section className="revealStage" data-lifecycle-phase={lifecyclePhase} data-final-only-reveal={isFinalOnlyV2 ? "true" : undefined}>
-          <div className="revealIntro">
-            <div className="revealIntroCopy">
-              <h1>{getRevealShellHeadline(session)}</h1>
-            <div className="revealMeta">
-                <span>{lifecycleCopy.statusLabel}</span>
-                <i />
-                <span>Built from public brand and company signals</span>
-                <i />
-                <span>{lifecycleCopy.publicationNote}</span>
-              </div>
-            </div>
-            <div className="revealActions">
-              {canPersonalizeExperience && (
-                <button ref={personalizationTriggerRef} className="buttonPrimary" type="button" onClick={openSavePrompt}>
-                  <Users size={16} />
-                  {personalizationRequest
-                    ? ["queued", "generating"].includes(personalizationRequest.status)
-                      ? "View account builds"
-                      : "View 3 account versions"
-                    : "Personalize for 3 accounts"}
-                </button>
-              )}
-              {session.status === "claimed" && (
-                <CopyButton value={session.liveUrl || session.temporaryUrl} className="buttonSecondary" />
-              )}
-              <a className="buttonSecondary" href={session.liveUrl || session.temporaryUrl} target="_blank" rel="noopener">Open full screen<ExternalLink size={16} /></a>
-            </div>
-          </div>
-          {!isFinalOnlyV2 && <PreviewUpdateNotice
-            session={session}
-            onRetry={() => void retryFailedStage("story")}
-          />}
-          <div className="revealGrid">
-            <div className="revealPreview">
-              <div className="previewControlBar">
-                <div className="desktopPreviewLabel">
-                  <Globe2 size={16} aria-hidden="true" />
-                  <span><strong>Live preview</strong><small>Scroll inside to explore the full experience.</small></span>
-                </div>
-                <div className="previewToolbarActions">
-                  {!isFinalOnlyV2 && (lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed" ? (
-                    <span className="previewReadinessStatus isSaved" data-lifecycle-phase={lifecyclePhase}>
-                      <Check size={14} />{lifecycleCopy.statusLabel}
-                    </span>
-                  ) : (
-                    <span
-                      className={`previewReadinessStatus ${previewSecondsRemaining <= 300 ? "isWarning" : ""}`}
-                      data-lifecycle-phase="preview_ready"
-                    >
-                      <Clock3 size={14} />Preview ready · {previewCountdown}
-                    </span>
-                  ))}
-                  <button
-                    className="previewAnalyticsButton"
-                    type="button"
-                    aria-label={`See live engagement, ${Math.max(analyticsSignals.length, 1)} ${Math.max(analyticsSignals.length, 1) === 1 ? "signal" : "signals"}`}
-                    onClick={() => {
-                      setShowAnalyticsPanel(true);
-                      captureUnifiedProductEvent("analytics_panel_opened", {
-                        sessionId: session.id,
-                        properties: { trigger: "preview_toolbar" }
-                      });
-                    }}
-                  >
-                    <Gauge size={16} />See live engagement<span aria-hidden="true">{Math.max(analyticsSignals.length, 1)}</span>
-                  </button>
-                </div>
-              </div>
-              {!isFinalOnlyV2 && <PersonalizationVariantBar
-                options={personalizationOptions}
-                selectedId={personalizationVariantId}
-                onSelect={selectPersonalizationVariant}
-              />}
-              <div className="desktopPreviewShell">
-                <AssemblyPreview session={session} iframeRef={previewFrameRef} />
-              </div>
-              <a
-                className="mobilePreviewCta"
-                href={session.liveUrl || session.temporaryUrl}
-                target="_blank"
-                rel="noopener"
-              >
-                Explore the full experience<ArrowRight size={16} />
-              </a>
-            </div>
-          </div>
-          {!isFinalOnlyV2 && <div className="revealFooter">
-            <span>{lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed" ? "Saved URL" : "Temporary URL"}</span>
-            <code>{session.liveUrl || session.temporaryUrl}</code>
-            <span>
-              {lifecyclePhase === "saved_locally" || lifecyclePhase === "claimed"
-                ? lifecycleCopy.statusLabel
-                : "Expires 30 minutes after generation"}
-            </span>
-          </div>}
-        </section>
+      {session && isReveal && editingBrief && (
+        <EditBriefForm
+          answers={answers}
+          onCancel={() => setEditingBrief(false)}
+          onRebuild={async (patch) => {
+            const objective = session.objectiveRecommendations?.find(candidate => candidate.label === patch.objective);
+            const saved = await patchAnswers({
+              ...patch,
+              ...(patch.objective !== answers.objective ? { ctaType: objective?.cta?.type ?? "explore" } : {})
+            });
+            if (saved) {
+              setStreamingAnswers([]);
+              setStreamingFocusId(undefined);
+              setEditingBrief(false);
+              setPersonalizationRequest(undefined);
+              setPersonalizationStatus("idle");
+              setClientEvents([]);
+            }
+            return saved;
+          }}
+        />
+      )}
+      {session && isReveal && !editingBrief && revealCopy && (
+        <ExperienceReady
+          companyName={brandNameFor(session)}
+          domain={session.companyDomain}
+          href={session.liveUrl || session.temporaryUrl}
+          preview={<AssemblyPreview session={session} iframeRef={previewFrameRef} />}
+          onEdit={() => { setError(""); setEditingBrief(true); }}
+          onPersonalize={canPersonalizeExperience ? openSavePrompt : undefined}
+          personalizationRef={personalizationTriggerRef}
+          personalizationLabel={personalizationRequest
+            ? personalizationRequest.status === "awaiting_targets"
+              ? "Continue personalization"
+              : ["queued", "generating"].includes(personalizationRequest.status)
+                ? "View account builds"
+                : "View account versions"
+            : "Personalize for 3 accounts"}
+          publicationNote={lifecycleCopy.publicationNote}
+          onAnalytics={() => {
+            setShowAnalyticsPanel(true);
+            captureUnifiedProductEvent("analytics_panel_opened", {
+              sessionId: session.id,
+              properties: { trigger: "preview_toolbar" }
+            });
+          }}
+        />
       )}
 
       {showProcess && session && <MobileProcessDialog session={session} onClose={() => setShowProcess(false)} />}
@@ -4736,6 +4614,8 @@ export function TryMeNowApp() {
         onSubmitEmail={startPersonalizationRequest}
         onSubmitTargets={submitPersonalizationTargets}
         onAutoSelectTargets={autoSelectPersonalizationTargets}
+        targetDraft={personalizationTargetDraft}
+        onTargetDraftChange={setPersonalizationTargetDraft}
         returnFocusRef={personalizationTriggerRef}
         onOpenLink={(position) => {
           captureUnifiedProductEvent("personalization_variant_link_opened", {

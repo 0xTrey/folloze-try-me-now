@@ -73,7 +73,9 @@ export const config = {
     25 * 1024 * 1024
   ),
   demoMode: process.env.TRY_ME_DEMO_MODE !== "false",
-  demoCtaUrl: process.env.NEXT_PUBLIC_DEMO_CTA_URL ?? "https://www.folloze.com/book-a-meeting",
+  // An external CTA is opt-in. Without a verified destination, the experience
+  // contract uses its in-experience exploration fallback instead of guessing.
+  demoCtaUrl: process.env.NEXT_PUBLIC_DEMO_CTA_URL?.trim() || undefined,
   follozeToolName: process.env.FOLLOZE_MCP_TOOL_NAME ?? "create_try_me_experience",
   follozeAllowedPublicHosts
 };

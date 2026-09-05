@@ -95,7 +95,7 @@ These names already exist in `.env.example`. The “current behavior if missing�
 | `TRY_ME_SESSION_TTL_SECONDS` | Generated unclaimed session | Defaults to 1800 seconds and is clamped to 300–86400. | Set to 1800 and test from ready time. |
 | `TRY_ME_MAX_PDF_BYTES` | Upload validation | Defaults to 10 MB and is clamped to 1 KB–25 MB. | Set to 10 MB for V1 and mirror at edge/storage. |
 | `TRY_ME_DEMO_MODE` | Product/demo configuration only | Defaults true and does not activate or disable integrations. | Do not use as a readiness signal; define a separate product behavior or remove it. |
-| `NEXT_PUBLIC_DEMO_CTA_URL` | Builder and generated experience CTA | Uses Folloze book-a-meeting URL. | Required approved destination with analytics attribution. |
+| `NEXT_PUBLIC_DEMO_CTA_URL` | Generated experience CTA | No default external destination. Without an approved link, use the in-experience exploration fallback. | Optional verified destination with analytics attribution. Remove the retired Folloze meeting URL from deployment configuration if present. |
 
 ## Environment variables still needed
 

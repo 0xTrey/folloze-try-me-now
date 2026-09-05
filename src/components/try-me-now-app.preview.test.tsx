@@ -19,6 +19,7 @@ import {
   getBuildPanelCopy,
   IntentComposer,
   OptionalContextComposer,
+  personalizationRequestNeedsPolling,
   PreviewUpdateNotice,
   ProgressiveQuestions,
   SaveExperienceDialog,
@@ -431,6 +432,12 @@ describe("PreviewUpdateNotice", () => {
 });
 
 describe("SaveExperienceDialog", () => {
+  it("does not poll pending email before account choices or when no links can be sent", () => {
+    expect(personalizationRequestNeedsPolling({ status: "awaiting_targets", delivery: { status: "pending" }, targets: [] })).toBe(false);
+    expect(personalizationRequestNeedsPolling({ status: "failed", delivery: { status: "pending" }, targets: [] })).toBe(false);
+    expect(personalizationRequestNeedsPolling({ status: "generating", delivery: { status: "pending" }, targets: [] })).toBe(true);
+    expect(personalizationRequestNeedsPolling({ status: "completed", delivery: { status: "pending" }, targets: [{ id: "one", position: 1, domain: "one.com", status: "ready", link: "/e/one" }] })).toBe(true);
+  });
   it("opens the three-account conversion and closes accessibly", () => {
     const onClose = vi.fn();
     const onSubmitEmail = vi.fn();
@@ -448,7 +455,10 @@ describe("SaveExperienceDialog", () => {
 
     expect(screen.getByRole("dialog")).toHaveAccessibleName("Build three account versions from this experience.");
     expect(screen.getByRole("textbox", { name: "Work email" })).toBeInTheDocument();
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(fireEvent.mouseDown(screen.getByRole("dialog").parentElement!)).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+    // Form transitions can remove the focused control before Escape is pressed.
+    fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
     expect(onSubmitEmail).not.toHaveBeenCalled();
   });
@@ -632,7 +642,7 @@ describe("guided campaign workspace", () => {
     expect(screen.queryByRole("link", { name: /Northpeak account experience/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /example personalized campaign page/i })).toHaveAttribute(
       "href",
-      "https://engage.folloze.com/120367"
+      "https://experience.folloze.com/northpeak-personalized-campaign-example"
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Build a personalized campaign page/i }));

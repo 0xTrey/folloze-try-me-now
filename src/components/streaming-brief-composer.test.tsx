@@ -38,7 +38,6 @@ const questions = [
 describe("StreamingBriefComposer", () => {
   it("shows one question at a time and keeps finished answers in the transcript", () => {
     const onAnswer = vi.fn();
-    const onStepChange = vi.fn();
     render(
       <StreamingBriefComposer
         mode="unified"
@@ -51,7 +50,6 @@ describe("StreamingBriefComposer", () => {
           { key: "experience_type", label: "Experience type", value: "Product campaign", editable: false }
         ]}
         onAnswer={onAnswer}
-        onStepChange={onStepChange}
         onSummaryEdit={vi.fn()}
       />
     );
@@ -59,12 +57,11 @@ describe("StreamingBriefComposer", () => {
     expect(screen.queryByRole("heading", { name: "What are you taking to market?" })).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Who should this reach/i)).toBeInTheDocument();
     expect(screen.getByText("Question 2 of 3")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Edit Campaign: Harmony for operations leaders/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Review your answers"));
     expect(screen.getByRole("heading", { name: "Live Brief" })).toBeInTheDocument();
     expect(screen.getByText("Product campaign")).toBeInTheDocument();
-    expect(screen.getByText("What are you taking to market?")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Edit Campaign: Harmony for operations leaders/i }));
-    expect(onStepChange).toHaveBeenCalledWith("intent");
+    expect(screen.queryByText("What are you taking to market?")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Edit Campaign: Harmony for operations leaders/i })).not.toBeInTheDocument();
     expect(screen.getByText("Recommended")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Enterprise architects, recommended" }));
     expect(onAnswer).toHaveBeenCalledWith({
@@ -137,8 +134,35 @@ describe("StreamingBriefComposer", () => {
       />
     );
 
+    fireEvent.click(screen.getByText("Review your answers"));
     fireEvent.click(screen.getByRole("button", { name: "Edit Offer" }));
     expect(onSummaryEdit).toHaveBeenCalledWith("offer");
+  });
+
+  it("clears an existing answer without leaking it into the next question", () => {
+    const { rerender } = render(
+      <StreamingBriefComposer
+        mode="campaign"
+        questions={questions}
+        currentQuestionId="intent"
+        answers={[{ questionId: "intent", label: "Campaign", value: "Old answer" }]}
+        onAnswer={vi.fn()}
+      />
+    );
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveValue("Old answer");
+    fireEvent.change(input, { target: { value: "" } });
+    expect(input).toHaveValue("");
+    rerender(
+      <StreamingBriefComposer
+        mode="campaign"
+        questions={questions}
+        currentQuestionId="audience"
+        answers={[{ questionId: "intent", label: "Campaign", value: "Old answer" }]}
+        onAnswer={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("textbox")).toHaveValue("");
   });
 
 });

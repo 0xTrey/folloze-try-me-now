@@ -105,7 +105,7 @@
 
 .primaryButton:disabled,
 .secondaryButton:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.62;
 }
 
@@ -186,8 +186,13 @@
 }
 
 .autoButton:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.62;
+}
+
+.choiceStatus {
+  color: #075fbf;
+  font-weight: 700;
 }
 
 .choiceDivider {
@@ -224,6 +229,20 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.manualChoice {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 2px;
+  color: #183653;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.manualChoice span {
+  color: #516784;
+  font-size: 12px;
 }
 
 .targetFields fieldset {
