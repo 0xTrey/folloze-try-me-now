@@ -1067,13 +1067,13 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("Proof for the first use case");
     expect(html).not.toContain("Experience receipt");
     expect(html).not.toContain('id="guided-questions"');
-    expect(html).toContain(`>${draft.primaryCta}</button>`);
+    expect(html).toContain(">Explore the page</button>");
   });
 
   it("gives every primary CTA a typed, functional in-experience fallback", () => {
     expect(html.match(/data-experience-action="primary-conversion"/g)).toHaveLength(2);
     expect(
-      html.match(/data-experience-action="primary-conversion"[^>]*data-scroll-target="supporting-resources"/g)
+      html.match(/data-experience-action="primary-conversion"[^>]*data-scroll-target="next-step"/g)
     ).toHaveLength(2);
     expect(html).not.toContain('data-demo-cta="true"');
     expect(html).not.toContain("window.location=");

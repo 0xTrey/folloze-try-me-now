@@ -195,10 +195,10 @@ function nextActionCandidate(
     slot.v2Role === "first-decision" && targetClaims.length > 0
       ? plainText(input.brief.nextAction)
       : "";
-  const body = accountNextAction
+  const body = plainText(input.brief.ctaExpectation ?? "") || (accountNextAction
     ? `Use that session to ${objectiveAction}. Confirm priorities, timing, and results with the team.`
     : `${CTA_ACTION_COPY[input.cta.type]}: ${objective}. ` +
-      "Bring the relevant material and open questions into the next step.";
+      "Bring the relevant material and open questions into the next step.");
   const headline =
     accountNextAction
       ? fitHeadline(accountNextAction, slot)

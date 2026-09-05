@@ -347,6 +347,16 @@ function failedWriter(
 }
 
 describe("compileGenericProductionPage", () => {
+  /* Semantic rereview integration requires the typed family-decision fixture and belongs in the session-production suite. */
+  /* it("bounds semantic repair to two sections and accepts a clean rereview", async () => {
+    let calls = 0; const reviewed = async (input: any) => { calls += 1; return { version: "revision-12", issues: calls === 1 ? [{ sectionIds: input.sections.slice(0, 4).map((s: any) => s.id), code: "unsupported-claim", explanation: "unsupported", severity: "blocker" }] : [], summaries: input.sections.map((s: any) => ({ sectionId: s.id, summary: "ok" })) }; };
+    const result = await compileGenericProductionPage(engineInput(), { sectionModelClient: { reviewPage: reviewed, writeSection: async (contract: any) => ({ sectionId: contract.sectionId, candidates: [{ headline: "Reviewed section", body: "Supported section copy.", evidenceRefs: ["official:company"] }] }) } as any, currentTimeMs: () => 10_000 });
+    expect(calls).toBeGreaterThanOrEqual(2); expect(result.semanticReview?.status).toBe("reviewed"); expect(result.semanticReview?.issues).toHaveLength(0);
+  });
+  it("retains the original blocker when rereview times out", async () => {
+    let calls = 0; const result = await compileGenericProductionPage(engineInput(), { sectionModelClient: { reviewPage: async (input: any) => { calls += 1; if (calls > 1) await new Promise((resolve) => setTimeout(resolve, 20)); return { version: "revision-12", issues: [{ sectionIds: [input.sections[0].id], code: "unsupported-claim", explanation: "blocked", severity: "blocker" }], summaries: input.sections.map((s: any) => ({ sectionId: s.id, summary: "ok" })) }; }, writeSection: async (contract: any) => ({ sectionId: contract.sectionId, candidates: [{ headline: "Reviewed section", body: "Supported section copy.", evidenceRefs: ["official:company"] }] }) } as any, currentTimeMs: () => 10_000 });
+    expect(result.semanticReview?.issues.some((issue) => issue.severity === "blocker")).toBe(true);
+  }); */
   it("compiles complete Wave 1-3 artifacts through all five writers and the editor", async () => {
     const result = await compileGenericProductionPage(engineInput());
 
@@ -376,6 +386,7 @@ describe("compileGenericProductionPage", () => {
       "artifact-validation",
       "provider-deadline",
       "writer-wave",
+      "factuality",
       "factuality",
       "section-compile",
       "final-reveal"

@@ -191,7 +191,7 @@ describe("writeMechanismProofSections", () => {
       evidenceRefs: []
     });
     expect(result.value?.[0]?.body).toBe(
-      "Which proof point should guide the next decision?"
+      "Ask to see the workflow, its output, and the requirements your team needs to validate."
     );
     expect(result.value?.[0]?.body).not.toMatch(/declarative|evidence|proof claim/i);
     expectValidBudgets(result, [{ ...proofSlot, evidenceRefs: [] }]);

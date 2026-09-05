@@ -475,6 +475,11 @@ export interface SectionWritingContract {
   strategySlots: Partial<Record<StrategySlotKey, string>>;
   /** Present only when a strategy was bound. Gates the review specificity checks. */
   strategySubject?: { audienceLabel: string; offerLabel: string };
+  repairFeedback?: readonly string[];
+  brandVoice?: { description: string; source: string };
+  ctaOffer?: { action?: string; benefit?: string; destination?: string; expectation?: string; expectations: "known" | "unknown" };
+  buyerAssignment?: Pick<import("@/lib/generation/buyer-decision-journey").BuyerSectionAssignment,
+    "buyerQuestion" | "desiredConclusion" | "claimRefs" | "objection" | "transition">;
 }
 
 export const STRATEGY_SLOT_KEYS = [

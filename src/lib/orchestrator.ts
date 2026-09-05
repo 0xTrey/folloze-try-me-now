@@ -1185,6 +1185,20 @@ function recordProductionEngineResult(
   reveal: "withheld" | "final"
 ): void {
   session.workerReceipts = structuredClone([...result.workerReceipts]);
+  if (result.buyerReadyPerformance) {
+    appendEvent(session, "buyer_ready_performance", { ...result.buyerReadyPerformance });
+  }
+  if (result.buyerDecisionBrief) {
+    const brief = result.buyerDecisionBrief;
+    appendEvent(session, "buyer_decision_brief", {
+      digest: brief.digest, schemaVersion: brief.schemaVersion,
+      fetchedAt: brief.fetchedAt, expiresAt: brief.expiresAt,
+      productStatus: brief.product.status, trafficIntent: brief.trafficIntent.value ?? "unknown",
+      buyerStage: brief.buyingStage.value, questionCount: brief.questions.length,
+      capabilityCount: brief.knowledge.supportedCapabilityWorkflowClaims.length,
+      approvedProofCount: brief.knowledge.proofClaims.length
+    });
+  }
   const revision =
     result.outcome === "production-page"
       ? result.artifact.revision

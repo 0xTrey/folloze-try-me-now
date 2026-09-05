@@ -2802,8 +2802,21 @@ export function ProgressiveQuestions({
             <small>Optional. This sharpens the promise without adding another setup step.</small>
           </label>
         )}
+        <details className="briefPromptField">
+          <summary>Buyer context (optional)</summary>
+          <label htmlFor="buyer-traffic">Where will buyers come from?</label>
+          <select id="buyer-traffic" value={fieldValues["buyer-traffic"] ?? answers.trafficIntent ?? ""} disabled={isSaving} onChange={(event) => setFieldValues((current) => ({ ...current, "buyer-traffic": event.target.value }))}>
+            <option value="">Not specified</option><option value="cold-outreach">Cold outreach</option><option value="search">Search</option><option value="retargeting">Retargeting</option><option value="post-demo">After a demo</option><option value="existing-opportunity">Active opportunity</option>
+          </select>
+          <label htmlFor="buyer-stage">What decision are they ready to make?</label>
+          <select id="buyer-stage" value={fieldValues["buyer-stage"] ?? answers.buyerStage ?? ""} disabled={isSaving} onChange={(event) => setFieldValues((current) => ({ ...current, "buyer-stage": event.target.value }))}>
+            <option value="">Not specified</option><option value="awareness">Understand the problem</option><option value="consideration">Understand the options</option><option value="evaluation">Evaluate product fit</option><option value="decision">Resolve purchase questions</option>
+          </select>
+        </details>
         <button className="buttonPrimary" type="button" disabled={isSaving || isChangingProductSource || !productContextReady} onClick={() => void onPatch({
           objective: chosenObjective,
+          trafficIntent: (fieldValues["buyer-traffic"] || answers.trafficIntent || undefined) as SessionAnswers["trafficIntent"],
+          buyerStage: (fieldValues["buyer-stage"] || answers.buyerStage || undefined) as SessionAnswers["buyerStage"],
           messageBelief: needsProductContext && productMode === "text"
             ? productDescription.trim()
             : objectiveContext.trim() || undefined,
@@ -3393,9 +3406,11 @@ export function TryMeNowApp() {
   const [preflightCoordinator] = useState(() => (
     new SellerBrandPreflightCoordinator(
       async (selectedUseCase, companyDomain) => {
+        const { requestBotToken } = await import("@/lib/turnstile-client");
+        const botToken = await requestBotToken("session_create");
         const result = await api<{ session: PublicTryMeSession }>("/api/sessions", {
           method: "POST",
-          body: JSON.stringify({ useCase: selectedUseCase, companyDomain })
+          body: JSON.stringify({ useCase: selectedUseCase, companyDomain, ...(botToken ? { botToken } : {}) })
         });
         return result.session;
       },

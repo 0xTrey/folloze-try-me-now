@@ -51,6 +51,11 @@ import {
   type RequiredProductionArgument
 } from "@/lib/generation/production-message-spine";
 import { boundedCtaV2 } from "@/lib/generation/section-copy-types";
+import { deriveWireframeEvidenceSignals } from "@/lib/generation/wireframe-evidence-signals";
+import { assignBuyerJourneySections, deriveBuyerDecisionBrief } from "@/lib/generation/buyer-decision-journey";
+import { compilerEvidenceFromProductSource } from "@/lib/generation/source-backed-product-knowledge";
+import { resolveBuyerCtaOffer, selectedBuyerCta } from "@/lib/cta-offer-contract";
+import { config } from "@/lib/config";
 import type { SectionModelClient } from "@/lib/generation/section-model-writer";
 import type { SectionStrategyBinding } from "@/lib/generation/section-writing-contract";
 import {
@@ -167,18 +172,7 @@ function selectedAudience(session: TryMeSession): {
 }
 
 function selectedCta(session: TryMeSession): { type: CtaType; label: string } {
-  const objectiveLabel = session.answers.objective;
-  const selected = objectiveLabel
-    ? session.objectiveRecommendations?.find((candidate) => candidate.label === objectiveLabel)
-    : undefined;
-  const recommended = session.objectiveRecommendations?.find(({ recommended }) => recommended);
-  const resolved = selected ?? recommended;
-  return {
-    type: session.answers.ctaType ?? resolved?.cta?.type ?? "book-meeting",
-    label:
-      resolved?.cta?.label ||
-      (session.answers.campaignType === "event" ? "Register now" : "Book a meeting")
-  };
+  return selectedBuyerCta(session);
 }
 
 function offerEvidence(
@@ -427,6 +421,7 @@ function familyArgument(input: {
   objective: string;
   publicContext?: string;
   ctaId: CtaIdV2;
+  heroEvidenceRef?: string;
   accountPersonalization?: AccountPersonalizationCompilerResult;
 }): RequiredProductionArgument {
   const {
@@ -457,7 +452,7 @@ function familyArgument(input: {
     accountReady ? [...(accountPersonalization?.directiveEvidenceRefs[field] ?? [])] : [];
   const promise = accountDirective("promise") ?? (
     family.family === "launch"
-      ? `${offer} gives ${audience} a concrete path to ${objectiveAction}.`
+      ? `${offer} for ${audience}`
       : family.family === "guide"
         ? `${audience} can evaluate ${offer} with clearer decision criteria.`
         : `${targetName ?? "The target team"} and ${sellerName} can ${objectiveAction} together.`
@@ -497,7 +492,7 @@ function familyArgument(input: {
     },
     promise: {
       directive: promise,
-      evidenceRefs: [...new Set([...accountRefs("promise"), ...base.promise.evidenceRefs])],
+      evidenceRefs: [...new Set([...accountRefs("promise"), ...base.promise.evidenceRefs, ...(input.heroEvidenceRef ? [input.heroEvidenceRef] : [])])],
       unknowns: [...base.promise.unknowns]
     },
     mechanism: {
@@ -600,6 +595,10 @@ function thesisEvidenceFromLedger(input: {
   const claimFor = (item: CompilerEvidenceItem): ThesisEvidenceClaim => ({
     id: item.id,
     claim: item.claim,
+    sourceRef: item.sourceRef,
+    evidenceType: item.evidenceType,
+    entityRole: item.entityRole,
+    subject: item.subject,
     status: item.kind === "fact" ? "fact" : "inference",
     confidence: item.confidence,
     allowedUses: [...item.allowedUses],
@@ -640,9 +639,12 @@ function productThesisProposals(input: {
   const objectiveRefs = firstAvailable("brief:objective");
   const ctaRefs = firstAvailable("brief:cta");
   const positioningRefs = firstAvailable("brief:positioning", "brief:company", "brief:offer");
-  const objectiveAction = input.objective.trim()
-    ? `${input.objective.trim()[0]!.toLocaleLowerCase()}${input.objective.trim().slice(1)}`
-    : "make the next useful decision";
+  const sourcedProduct = input.evidence.claims.filter((item) =>
+    item.status === "fact" && item.confidence !== "low" &&
+    (item.entityRole === "seller" || item.entityRole === "source") &&
+    !item.prohibitedUses.includes("declarative-claim"));
+  const capability = sourcedProduct.find((item) => item.evidenceType === "capability");
+  const workflow = sourcedProduct.find((item) => item.evidenceType === "workflow") ?? capability;
 
   return {
     seller: { value: input.sellerName, claimIds: sellerRefs },
@@ -651,13 +653,13 @@ function productThesisProposals(input: {
     audienceJob: { value: input.audience.buyerJob, claimIds: audienceRefs },
     desiredOutcome: { value: input.objective, claimIds: objectiveRefs },
     promise: {
-      value: `${input.offer} gives ${input.audience.label} a focused way to ${objectiveAction}.`,
-      claimIds: [...new Set([...offerRefs, ...audienceRefs, ...objectiveRefs])]
+      value: capability?.claim ?? `Evaluate ${input.offer} for ${input.audience.buyerJob}.`,
+      claimIds: capability ? [capability.id] : [...new Set([...offerRefs, ...audienceRefs])]
     },
     mechanism: {
-      value: input.publicContext?.trim() ||
-        `Use a working session to map ${input.offer} to ${input.audience.buyerJob}.`,
-      claimIds: positioningRefs
+      value: workflow?.claim ?? (input.publicContext?.trim() ||
+        `Explore how ${input.offer} fits ${input.audience.buyerJob}.`),
+      claimIds: workflow ? [workflow.id] : positioningRefs
     },
     nextAction: { value: input.ctaLabel, claimIds: ctaRefs }
   };
@@ -893,13 +895,26 @@ export async function compileSessionProductionPage(input: {
   const objective =
     evidence?.fields.objective?.value ?? session.answers.objective ?? "Start a useful conversation";
   const cta = evidence?.fields.cta?.value ?? selectedCta(session);
+  const ledger = [...compileEvidenceLedger({
+    sessionEvidence: session.evidenceItems,
+    liveBriefEvidence: evidence
+  }), ...compilerEvidenceFromProductSource({ artifact: session.sourceArtifact, seller: brand, offer })];
+  const proofSignals = deriveWireframeEvidenceSignals(ledger);
+  const ctaOffer = resolveBuyerCtaOffer({ intent: cta.type, label: cta.label,
+    sourceUrl: session.answers.sourceUrl ?? session.answers.offerSourceUrl ?? session.answers.eventSource,
+    meetingUrl: config.demoCtaUrl });
+  const buyerDecisionBrief = deriveBuyerDecisionBrief({
+    session, seller: brand, resolvedOffer: offer, audience: audience.label,
+    buyerJob: audience.buyerJob, objective, cta: { ...cta, label: ctaOffer.action.label,
+      destination: ctaOffer.action.destination, expectation: ctaOffer.expectation }, now: completedAt
+  }, ledger);
   const framework = rankMessageFrameworks({
     motion: messageMotion(session),
     audience: audience.label,
     objective,
     cta: cta.label,
     offerMaturity: session.answers.promotedOffer ? "confirmed" : "unconfirmed",
-    proofDensity: (session.evidenceItems?.length ?? 0) >= 3 ? "rich" : "sparse",
+    proofDensity: proofSignals.approvedProofItemCount > 0 ? "rich" : "sparse",
     contentVolume: session.sourceArtifact ? "deep" : "standard",
     decisionComplexity: session.useCase === "abm" ? "high" : "medium"
   });
@@ -931,26 +946,16 @@ export async function compileSessionProductionPage(input: {
         ? session.answers.messageBelief ?? session.answers.objective
         : undefined,
     evidenceRefs: evidenceArtifact.evidenceRefs,
-    proofEvidenceRefs: (session.evidenceItems ?? [])
-      .filter((item) => item.disposition !== "excluded")
-      .map((item) => item.id),
+    proofEvidenceRefs: proofSignals.approvedProofRefs,
     assetEvidenceRefs: brandArtifact.value?.imagery.selected.map(
       ({ evidenceRef }) => evidenceRef
     ),
-    includeProofDepth: (session.evidenceItems?.length ?? 0) >= 2,
-    includeResource: Boolean(
-      session.answers.sourceUrl ||
-      session.answers.offerSourceUrl ||
-      session.answers.eventSource
-    )
+    includeProofDepth: proofSignals.approvedProofItemCount >= 2,
+    includeResource: buyerDecisionBrief.knowledge.resources.length > 0
   });
   // The thesis is compiled from the same permissioned ledger used by the
   // strategy compiler. This prevents a second, weaker evidence vocabulary from
   // making a recipe look eligible while writers receive different support.
-  const ledger = compileEvidenceLedger({
-    sessionEvidence: session.evidenceItems,
-    liveBriefEvidence: evidence
-  });
   const thesisEvidence = thesisEvidenceFromLedger({
     revision,
     ledger,
@@ -969,7 +974,7 @@ export async function compileSessionProductionPage(input: {
       publicContext: brand.publicContext
     })
   });
-  const recipeSelection = selectPageRecipe({
+  let recipeSelection = selectPageRecipe({
     thesis: thesisCompilation.thesis,
     signals: {
       useCase: session.useCase,
@@ -979,7 +984,24 @@ export async function compileSessionProductionPage(input: {
       strategicFamily: familyDecision.family
     }
   });
-  const selectedFamilyDecision = recipeDecisionFor(familyDecision, recipeSelection);
+  const recipeDecision = recipeDecisionFor(familyDecision, recipeSelection);
+  const buyerAssignments = assignBuyerJourneySections(recipeDecision.sectionPlan, buyerDecisionBrief);
+  const selectedFamilyDecision = { ...recipeDecision, sectionPlan: buyerAssignments };
+  if (recipeSelection.activated) {
+    const priorSections = recipeSelection.sections;
+    recipeSelection = { ...recipeSelection, sections: buyerAssignments.map((assigned, index) => {
+      const section = priorSections.find((item) => item.slotId === assigned.id);
+      if (!section) return {
+        slotId: assigned.id, order: index + 1, role: assigned.role, semanticJob: assigned.buyerJob, buyerMovement: assigned.buyerJob,
+        visualRole: assigned.visualRole, required: !assigned.optional, thesisFields: ["mechanism" as const, "nextAction" as const]
+      };
+      return { ...section, order: index + 1, role: assigned.role,
+        ...(section.role !== assigned.role ? {
+          semanticJob: assigned.buyerJob, buyerMovement: assigned.buyerJob,
+          thesisFields: ["nextAction" as const, "offer" as const]
+        } : {}) };
+    }) };
+  }
   const familyDecisionArtifact = productionArtifact({
     worker: "wireframe-ranker",
     sessionId: session.id,
@@ -1001,15 +1023,15 @@ export async function compileSessionProductionPage(input: {
     audience: audience.label,
     objective,
     promotedOffer: offer,
-    approvedQuantifiedProof: false,
-    approvedCustomerStory: false,
+    approvedQuantifiedProof: proofSignals.approvedQuantifiedProof,
+    approvedCustomerStory: proofSignals.approvedCustomerStory,
     contentDensity: session.sourceArtifact ? "rich" : "moderate",
     messageStructure: framework.selected.id === "problem-change"
       ? "problem-solution"
       : framework.selected.id === "technical-validation"
         ? "technical-sequence"
         : "single-idea",
-    proofAvailability: (session.evidenceItems?.length ?? 0) >= 3 ? "strong" : "limited",
+    proofAvailability: proofSignals.proofAvailability,
     decisionComplexity: session.useCase === "abm" ? "high" : "medium",
     sellerDensity:
       (brand.designDna?.spacing?.sectionBlockPx ?? 80) <= 72
@@ -1018,7 +1040,8 @@ export async function compileSessionProductionPage(input: {
           ? "sparse"
           : "balanced",
     sectionCount: sectionCountFor(session, brand),
-    assetQuality: brand.imageUrls.length > 0 ? "high" : "none",
+    assetQuality: brandArtifact.value?.imagery.selected.some((asset) => asset.role === "hero")
+      ? "high" : brandArtifact.value?.imagery.selected.length ? "medium" : "none",
     sellerLogoAvailable: Boolean(brand.logoUrl || brand.portableLogo)
   }, { selectedBy: "system", locked: true });
   const selection = applyV2SectionPlanToLegacySelection(
@@ -1046,6 +1069,7 @@ export async function compileSessionProductionPage(input: {
   });
   const targetName = targetNameFor(session, input.targetBrand);
   const accountPersonalization = compileAccountPersonalization({
+    sellerEvidence: ledger,
     revision,
     sellerName: brand.companyName,
     targetName: targetName ?? "The target account",
@@ -1071,6 +1095,8 @@ export async function compileSessionProductionPage(input: {
       objective,
       publicContext: brand.publicContext,
       ctaId,
+      heroEvidenceRef: buyerDecisionBrief.knowledge.supportedCapabilityWorkflowClaims[0]?.id
+        ?? buyerDecisionBrief.knowledge.productOffer[0]?.id,
       ...(selectedFamilyDecision.family === "align"
         ? { accountPersonalization }
         : {})
@@ -1184,6 +1210,8 @@ export async function compileSessionProductionPage(input: {
 
   return compileGenericProductionPage({
     sessionId: session.id,
+    buyerDecisionBrief,
+    buyerAssignments,
     revision,
     activeRevision: revision,
     startedAt,
@@ -1206,9 +1234,22 @@ export async function compileSessionProductionPage(input: {
     },
     compositionArtifact,
     messageSpineArtifact,
-    ...(selectedFamilyDecision.family === "align" && accountPersonalization.claims.length > 0
-      ? { additionalSectionEvidence: accountPersonalization.claims }
-      : {}),
+    additionalSectionEvidence: [
+      ...ledger.filter((item) => [
+        ...buyerDecisionBrief.knowledge.productOffer,
+        ...buyerDecisionBrief.knowledge.workflowContext,
+        ...buyerDecisionBrief.knowledge.supportedCapabilityWorkflowClaims,
+        ...buyerDecisionBrief.knowledge.proofClaims,
+        ...Object.values(buyerDecisionBrief.knowledge.objections).flat()
+      ].some((claim) => claim.id === item.id))
+        .map((item) => ({
+          id: item.id, text: item.claim, revision,
+          confidence: item.confidence === "high" ? 0.9 : 0.65,
+          sourceRole: item.entityRole as "seller" | "source",
+          kind: proofSignals.approvedProofRefs.includes(item.id) ? "proof" as const : "seller_fact" as const
+        })),
+      ...(selectedFamilyDecision.family === "align" ? accountPersonalization.claims : [])
+    ],
     allowVisualRepair: true,
     ...(input.attemptId || input.traceId
       ? {

@@ -16,7 +16,7 @@ function bounded(
   if (!clean || clean.length < min) return fallback;
   if (clean.length <= max) return clean;
 
-  const candidate = clean.slice(0, max + 1);
+  const candidate = clean.slice(0, max);
   const sentenceBoundary = Math.max(
     candidate.lastIndexOf("."),
     candidate.lastIndexOf("!"),

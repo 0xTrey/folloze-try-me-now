@@ -703,6 +703,9 @@ export async function compileRuntimeVisualFixture(fixture: RuntimeVisualFixture)
       id: section.sectionId,
       role: section.role,
       status: section.status,
+      headline: section.headline,
+      body: section.body,
+      choices: section.choices?.map(({ label, body }) => ({ label, body })),
       wordCount: [section.eyebrow, section.headline, section.body]
         .filter(Boolean)
         .join(" ")
@@ -817,7 +820,7 @@ const assetStyle: Record<string, { ink: string; accent: string; surface: string;
   apex: { ink: "#18324A", accent: "#D97706", surface: "#FFF8ED", label: "APEX HOME SERVICES" }
 };
 
-function assetSvg(fileName: string): string {
+export function assetSvg(fileName: string): string {
   const id = Object.keys(assetStyle).find((candidate) => fileName.startsWith(candidate)) ?? "adp";
   const style = assetStyle[id]!;
   if (fileName.endsWith("-logo.svg")) {

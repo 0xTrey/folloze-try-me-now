@@ -60,7 +60,7 @@ function truncateBody(value: string, limit: number): string {
 function headlineForSlot(value: string, slot: SectionWriterSlot): string {
   if (!slot.headlineWordBudget) return value;
   const { max } = slot.headlineWordBudget;
-  let result = truncateWords(value, max);
+  const result = truncateWords(value, max);
   return result;
 }
 function fitCandidateToBudget(
@@ -135,13 +135,14 @@ function buildCandidate(
   const audience = normalizeCopy(input.brief.audience);
   const claimText = unique(
     safeClaims
+      .filter(({ claim }) => !input.brief.family || claim.sourceRole === "seller" || claim.sourceRole === "source")
       .map(({ text }) => text)
       .filter(
         (text) =>
           text.toLocaleLowerCase() !== promise.toLocaleLowerCase() &&
           text.toLocaleLowerCase() !== audience?.toLocaleLowerCase()
       )
-  ).join(" ");
+  ).map((text) => /[.!?]$/.test(text) ? text : `${text}.`).join(" ");
   const accountWhyNow =
     slot.v2Role === "shared-priority"
       ? normalizeCopy(input.brief.whyNow ?? "")

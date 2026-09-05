@@ -27,6 +27,7 @@
     "db:export:leads": "node scripts/export-leads.mjs",
     "trace:inspect": "node scripts/inspect-trace.mjs",
     "build-trace:inspect": "node scripts/inspect-build-trace.mjs",
+    "benchmark:buyer-journey": "vitest run src/lib/generation/buyer-decision-journey.test.ts src/lib/generation/buyer-journey-evaluation.test.ts src/lib/generation/source-backed-product-knowledge.test.ts src/lib/generation/account-personalization-compiler.test.ts src/lib/generation/messaging-compiler-benchmark.test.ts scripts/emit-buyer-journey-evidence.test.ts",
     "analytics:inspect": "node scripts/inspect-product-session.mjs",
     "qa:claim-ledger": "node scripts/verify-claim-ledger.mjs",
     "qa": "npm run lint && npm run typecheck && npm run test && npm run build && npm run build:webpack"

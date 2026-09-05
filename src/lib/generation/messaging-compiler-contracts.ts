@@ -30,6 +30,20 @@ export type CompilerEvidenceKind = (typeof COMPILER_EVIDENCE_KINDS)[number];
 
 export type CompilerEvidenceConfidence = "high" | "medium" | "low";
 
+/** What a source actually demonstrates, distinct from its authority or count. */
+export type CompilerEvidenceType =
+  | "positioning"
+  | "capability"
+  | "workflow"
+  | "workflow-context"
+  | "customer-outcome"
+  | "quantified-outcome"
+  | "account-context"
+  | "pricing"
+  | "security"
+  | "implementation"
+  | "resource";
+
 /**
  * What an evidence item may never be used *as*, independent of section. A low
  * confidence inference can still shape a question; it can never be stated as a
@@ -55,6 +69,9 @@ export interface CompilerEvidenceItem {
   confidence: CompilerEvidenceConfidence;
   allowedUses: readonly MessageSpineSectionUse[];
   prohibitedUses: readonly CompilerProhibitedUse[];
+  evidenceType?: CompilerEvidenceType;
+  subject?: string;
+  entityRole?: "seller" | "target" | "source" | "visitor";
 }
 
 export interface MessageStrategyCandidate {
@@ -255,6 +272,10 @@ export function compilerEvidenceFromSessionItems(
         sourceAuthority: item.entityRole === "target" ? "target-official" : "seller-official",
         sourceRef: item.sourceUrl,
         confidence,
+        entityRole: item.entityRole,
+        subject: item.subject,
+        evidenceType: item.evidenceType ?? (item.entityRole === "target" ? "account-context"
+          : item.type === "public-operating-context" ? "workflow-context" : "positioning"),
         ...permissions
       }];
     });
@@ -317,6 +338,8 @@ export function compilerEvidenceFromLiveBrief(
       sourceAuthority: provenance?.authority ?? "deterministic",
       sourceRef: reconciled.evidenceRefs[0] ?? provenance?.source ?? `brief:${field}`,
       confidence,
+      entityRole: reconciled.visitorEdited ? "visitor" as const : "seller" as const,
+      evidenceType: "positioning" as const,
       ...permissions
     }];
   });
@@ -352,7 +375,20 @@ export function evidenceSupportsDeclarativeClaim(item: CompilerEvidenceItem): bo
 
 /** True when this item may be presented as proof. */
 export function evidenceSupportsProof(item: CompilerEvidenceItem): boolean {
-  return !item.prohibitedUses.includes("proof-point") && item.kind === "fact";
+  let publicSource = false;
+  try {
+    const url = new URL(item.sourceRef);
+    publicSource = url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;
+  } catch { return false; }
+  const outcome = item.evidenceType === "customer-outcome" || item.evidenceType === "quantified-outcome";
+  const observedResult = /\b(?:increased|decreased|reduced|improved|saved|grew|achieved)\b/i.test(item.claim);
+  const prediction = /\b(?:will|could|potential|target|goal|expects?|aims?|up to)\b/i.test(item.claim);
+  const quantified = item.evidenceType !== "quantified-outcome" || /\d+(?:\.\d+)?\s*(?:%|percent|x|times|days?|hours?|minutes?|dollars?)/i.test(item.claim);
+  return publicSource && outcome && observedResult && !prediction && quantified &&
+    item.kind === "fact" && item.confidence === "high" &&
+    (item.entityRole === "seller" || item.entityRole === "source") &&
+    item.allowedUses.includes("credibility") && !item.prohibitedUses.includes("declarative-claim") &&
+    !item.prohibitedUses.includes("proof-point");
 }
 
 /* -------------------------------------------------------------------------- */

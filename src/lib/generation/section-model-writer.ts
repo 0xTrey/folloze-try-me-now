@@ -78,11 +78,13 @@ export interface SectionModelCandidate {
 }
 
 export interface SectionModelResponse {
+  cacheHit?: boolean;
   sectionId: string;
   candidates: readonly SectionModelCandidate[];
 }
 
 export interface SectionModelClient {
+  reviewPage?: import("@/lib/generation/whole-page-semantic-review").SemanticReviewClient["reviewPage"];
   /**
    * Returns every requested candidate for one section in one structured
    * response. Implementations must honour the abort signal.
@@ -109,6 +111,7 @@ export interface SectionWriterRunInput {
 }
 
 export interface SectionWriterResult {
+  cacheHit?: boolean;
   sectionId: string;
   candidate: SectionCopyCandidate;
   outcome: SectionWriterOutcome;
@@ -117,6 +120,7 @@ export interface SectionWriterResult {
 }
 
 export interface SectionWriterRunResult {
+  cachedSectionCount?: number;
   results: SectionWriterResult[];
   modelSectionCount: number;
   fallbackSectionCount: number;
@@ -354,6 +358,7 @@ export async function runSectionWriters(
 
   let deadlineExceeded = false;
   type Attempt = {
+    cacheHit?: boolean;
     contract: SectionWritingContract;
     candidates: SectionCopyCandidate[];
     outcome: SectionWriterOutcome;
@@ -428,6 +433,7 @@ export async function runSectionWriters(
           const attempt = {
             contract,
             candidates,
+            cacheHit: response.cacheHit === true,
             // A provider whose candidates were partly discarded still wrote the
             // section, but the choice was made from a narrower field. Saying so
             // keeps a thin selection distinguishable from a full one in the
@@ -487,6 +493,7 @@ export async function runSectionWriters(
       outcome: attempt.outcome,
       selection,
       durationMs: attempt.durationMs
+      , cacheHit: attempt.cacheHit
     };
   });
 
@@ -496,6 +503,7 @@ export async function runSectionWriters(
   return {
     results,
     modelSectionCount,
+    cachedSectionCount: results.filter((result) => result.cacheHit).length,
     fallbackSectionCount: results.length - modelSectionCount,
     durationMs: now() - startedAt,
     deadlineExceeded

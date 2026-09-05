@@ -67,6 +67,7 @@ export interface SectionWriterBrief {
   proofPlan: string;
   decisionHelp: string;
   nextAction: string;
+  ctaExpectation?: string;
   tension?: string;
   whyNow?: string;
   unknowns: readonly string[];

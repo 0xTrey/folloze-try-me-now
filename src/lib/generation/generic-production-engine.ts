@@ -129,6 +129,8 @@ export type GenericProductionMediaIntent =
   | "diagram-led"
   | "type-led";
 
+import { runWholePageSemanticReview, SEMANTIC_REVIEW_TIMEOUT_MS, type SemanticReviewReceipt } from "@/lib/generation/whole-page-semantic-review";
+
 export type GenericProductionFallbackCode =
   | "GPE_INVALID_INPUT"
   | "GPE_ARTIFACT_SESSION_MISMATCH"
@@ -202,6 +204,8 @@ export interface GenericProductionSafeFallbackInstruction {
 
 export interface GenericProductionEngineInput {
   sessionId: string;
+  buyerDecisionBrief?: import("@/lib/generation/buyer-decision-journey").BuyerDecisionBrief;
+  buyerAssignments?: readonly import("@/lib/generation/buyer-decision-journey").BuyerSectionAssignment[];
   revision: number;
   activeRevision: number;
   startedAt: string;
@@ -266,6 +270,10 @@ export interface GenericProductionEngineDependencies {
 }
 
 interface GenericProductionResultBase {
+  /** Source-backed brief is private. Public projections never include this receipt. */
+  buyerDecisionBrief?: import("@/lib/generation/buyer-decision-journey").BuyerDecisionBrief;
+  buyerReadyPerformance?: { writerDurationMs: number; modelSections: number; fallbackSections: number; cachedSections: number; semanticReviewStatus: SemanticReviewReceipt["status"] };
+  semanticReview?: SemanticReviewReceipt;
   workerReceipts: readonly WorkerReceipt[];
   compileReceipts: readonly GenericProductionCompileReceipt[];
   /** Private provenance for this attempt. Never part of a public payload. */
@@ -518,6 +526,20 @@ function sectionWritingContracts(
     ...(strategy ? { strategy } : {}),
     ...(sectionJobs ? { sectionJobs } : {})
   });
+  for (const contract of contracts) {
+    const voice = input.buyerDecisionBrief?.knowledge.voice;
+    if (voice?.status === "sourced" && voice.description) contract.brandVoice = {
+      description: voice.description, source: voice.provenance
+    };
+    if (contract.allowedCtas.length) contract.ctaOffer = input.buyerDecisionBrief?.cta;
+    const assignment = input.buyerAssignments?.find((item) => item.id === contract.sectionId);
+    if (assignment && !contract.strategyJobs.length) contract.strategyJobs = [assignment.desiredConclusion];
+    if (assignment) contract.buyerAssignment = {
+      buyerQuestion: assignment.buyerQuestion, desiredConclusion: assignment.desiredConclusion,
+      claimRefs: assignment.claimRefs.filter((ref) => contract.evidenceRefs.includes(ref)),
+      objection: assignment.objection, transition: assignment.transition
+    };
+  }
   return new Map(contracts.map((contract) => [contract.sectionId, contract]));
 }
 
@@ -1049,11 +1071,11 @@ function fieldText(
       return value as string;
     case "offer": {
       const offer = value as LiveBriefEvidenceValueMap["offer"];
-      return `${offer.label} is the selected ${offer.kind}.`;
+      return offer.label;
     }
     case "audience": {
       const audience = value as LiveBriefEvidenceValueMap["audience"];
-      return `${audience.label} own the buyer job to ${audience.buyerJob}.`;
+      return `For ${audience.label}: ${audience.buyerJob}.`;
     }
     case "cta": {
       const cta = value as LiveBriefEvidenceValueMap["cta"];
@@ -1112,7 +1134,8 @@ function sectionEvidence(
   for (const claim of additional) {
     if (
       claim.revision !== revision ||
-      claim.sourceRole !== "target" ||
+      !["target", "seller", "source", "offer"].includes(claim.sourceRole) ||
+      (claim.sourceRole !== "target" && !["seller_fact", "offer", "proof"].includes(claim.kind ?? "")) ||
       !claim.id.trim() ||
       !claim.text.trim() ||
       !Number.isFinite(claim.confidence)
@@ -1348,6 +1371,7 @@ export async function compileGenericProductionPage(
       proofPlan: writerArgument.proofPlan.directive,
       decisionHelp: writerArgument.decisionHelp.directive,
       nextAction: writerArgument.nextAction.directive,
+      ...(input.buyerDecisionBrief?.cta.expectation ? { ctaExpectation: input.buyerDecisionBrief.cta.expectation } : {}),
       ...(writerArgument.tension
         ? { tension: writerArgument.tension.directive }
         : {}),
@@ -1471,7 +1495,7 @@ export async function compileGenericProductionPage(
     brief: baseWriterInput.brief,
     writerArtifacts
   });
-  const composedWriterArtifacts = sectionWriting.writerArtifacts;
+  let composedWriterArtifacts = sectionWriting.writerArtifacts;
   if (sectionWriting.run) {
     compileReceipts.push(
       compileReceipt(
@@ -1487,6 +1511,69 @@ export async function compileGenericProductionPage(
         evidence.length
       )
     );
+  }
+
+  const reviewClient = dependencies.sectionModelClient?.reviewPage
+    ? { reviewPage: dependencies.sectionModelClient.reviewPage.bind(dependencies.sectionModelClient) }
+    : undefined;
+  const reviewPage = () => runWholePageSemanticReview({
+    version: `revision-${input.revision}`,
+    sections: composedWriterArtifacts.flatMap((artifact) => artifact.value ?? [])
+      .filter((section) => section.status !== "omitted")
+      .map((section) => ({
+        id: section.sectionId, role: section.v2Role ?? section.role,
+        headline: section.headline ?? "", body: section.body ?? "",
+        evidenceRefs: [...section.evidenceRefs]
+      })),
+    evidence: evidence.map(({ id, text }) => ({ id, text })),
+    buyerBrief: {
+      product: input.buyerDecisionBrief?.product.label ?? "unknown",
+      audience: baseWriterInput.brief.audience,
+      buyerJob: input.buyerDecisionBrief?.buyerJob ?? "unknown",
+      cta: writerCta.label
+    }
+  }, reviewClient, Math.max(1, Math.min(SEMANTIC_REVIEW_TIMEOUT_MS, deadlineAt - (dependencies.currentTimeMs?.() ?? Date.now()))));
+  let semanticReview = await reviewPage();
+  if (semanticReview.status === "reviewed" && semanticReview.sectionsNeedingRepair.length &&
+      dependencies.sectionModelClient && deadlineAt - (dependencies.currentTimeMs?.() ?? Date.now()) > SEMANTIC_REVIEW_TIMEOUT_MS + 1000) {
+    const contracts = sectionWritingContracts(input, evidence, baseWriterInput.brief);
+    const current = new Map(composedWriterArtifacts.flatMap((artifact) => artifact.value ?? [])
+      .map((section) => [section.sectionId, section]));
+    const issues = semanticReview.issues;
+    const repairContracts = semanticReview.sectionsNeedingRepair.flatMap((id) => {
+      const contract = contracts.get(id);
+      if (!contract || !current.has(id)) return [];
+      return [{ ...contract, candidateCount: 1,
+        repairFeedback: issues.filter((issue) => issue.sectionIds.includes(id))
+          .map((issue) => `${issue.code}: ${issue.explanation}`) }];
+    });
+    const repair = await runSectionWriters({
+      contracts: repairContracts, client: dependencies.sectionModelClient,
+      fallback: (contract) => current.get(contract.sectionId)!,
+      deadlineMs: Math.max(1, Math.min(2500, deadlineAt - (dependencies.currentTimeMs?.() ?? Date.now()) - SEMANTIC_REVIEW_TIMEOUT_MS))
+    });
+    const repaired = new Map(repair.results.filter((item) => item.outcome === "model" || item.outcome === "model_partial")
+      .map((item) => [item.sectionId, item.candidate]));
+    if (repaired.size) {
+      composedWriterArtifacts = composedWriterArtifacts.map((artifact) => ({ ...artifact,
+        value: artifact.value?.map((section) => repaired.get(section.sectionId) ?? section)
+      }));
+      const previousReview = semanticReview;
+      const followupReview = await reviewPage();
+      // A timeout cannot clear a previously confirmed blocker. Only a valid
+      // rereview may approve a repair.
+      semanticReview = followupReview.status === "reviewed" ? followupReview : {
+        ...previousReview,
+        issues: previousReview.issues,
+      };
+    }
+  }
+  compileReceipts.push(compileReceipt(input, "factuality",
+    semanticReview.status === "reviewed" && semanticReview.issues.length === 0 ? "completed" : "fallback",
+    `semantic_review_${semanticReview.status}`, 1, evidence.length));
+  if (semanticReview.status === "reviewed" && semanticReview.issues.some((issue) => issue.severity === "blocker")) {
+    return { ...fallback(input, "GPE_FACTUALITY_REJECTED", "Whole-page review found an unsupported claim after bounded repair.",
+      "compile_safe_deterministic_experience_spec", "failed", workerReceipts, compileReceipts, traceContext), semanticReview };
   }
 
   const retainedSectionCount = composedWriterArtifacts.filter(
@@ -1641,6 +1728,7 @@ export async function compileGenericProductionPage(
   const allowVisualRepair =
     input.allowVisualRepair === true && currentTime < deadlineAt;
   const partial =
+    (Boolean(reviewClient) && (semanticReview.status !== "reviewed" || semanticReview.issues.length > 0)) ||
     dependencyArtifacts.some((artifact) => artifact.status !== "complete") ||
     writerArtifacts.some((artifact) => artifact.status !== "complete") ||
     editorArtifact.status !== "complete" ||
@@ -1736,6 +1824,15 @@ export async function compileGenericProductionPage(
   ]);
   return {
     outcome: "production-page",
+    ...(input.buyerDecisionBrief ? { buyerDecisionBrief: input.buyerDecisionBrief } : {}),
+    semanticReview,
+    ...(sectionWriting.run ? { buyerReadyPerformance: {
+      writerDurationMs: sectionWriting.run.durationMs,
+      modelSections: sectionWriting.run.modelSectionCount,
+      fallbackSections: sectionWriting.run.fallbackSectionCount,
+      cachedSections: sectionWriting.run.cachedSectionCount ?? 0,
+      semanticReviewStatus: semanticReview.status
+    } } : {}),
     artifact,
     workerReceipts,
     compileReceipts,

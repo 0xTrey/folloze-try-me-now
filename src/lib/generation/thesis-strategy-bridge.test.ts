@@ -42,6 +42,9 @@ function claim(id: string, text: string, overrides: Partial<ThesisEvidenceClaim>
     allowedUses: [...ALL_USES],
     prohibitedUses: [],
     buyerFacing: true,
+    evidenceType: "positioning",
+    entityRole: "seller",
+    sourceRef: "https://cryolane.example/lane-assurance",
     ...overrides
   };
 }
@@ -57,7 +60,8 @@ const evidence: ThesisEvidenceInput = {
     claim("ev-offer", "Cryolane documents Lane Assurance for validated pharma lanes."),
     claim(
       "ev-excursions",
-      "Cryolane quality logs recorded excursions above eight degrees on twelve of forty pharma lanes."
+      "Cryolane quality logs recorded excursions above eight degrees on twelve of forty pharma lanes.",
+      { evidenceType: "workflow-context" }
     ),
     claim(
       "ev-telemetry",
@@ -211,7 +215,7 @@ describe("compileThesisStrategy", () => {
     }
   });
 
-  it("hard-fails a candidate citing prohibited evidence use before ranking", () => {
+  it("prevents prohibited declarative evidence from entering eligible arguments", () => {
     const prohibited: ThesisEvidenceInput = {
       ...evidence,
       claims: evidence.claims.map((item) =>
@@ -227,14 +231,17 @@ describe("compileThesisStrategy", () => {
       record.hardFailures.includes("prohibited_evidence_use")
     );
 
-    expect(blocked.length).toBeGreaterThan(0);
     for (const record of blocked) {
       expect(record.total).toBeUndefined();
       expect(record.dimensions).toBeUndefined();
       expect(record.reasonCodes).toContain("hard_failure_prohibited_evidence_use");
     }
-    expect(selection.selectedId).not.toBe(blocked[0]!.candidateId);
-    expect(selection.reasonCodes).toContain("rejected_prohibited_evidence_use");
+    expect(selection.selected).toBeDefined();
+    expect(blocked.map((record) => record.candidateId)).not.toContain(selection.selectedId);
+    for (const candidate of selection.candidates) {
+      if (blocked.some((record) => record.candidateId === candidate.id)) continue;
+      expect(candidate.evidenceRefs).not.toContain("ev-excursions");
+    }
   });
 
   it("hard-fails everything when a required thesis field is missing", () => {

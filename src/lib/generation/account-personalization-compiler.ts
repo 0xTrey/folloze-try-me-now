@@ -1,5 +1,7 @@
 import type { SectionEvidenceClaim } from "@/lib/generation/section-copy-types";
 import type { SessionEvidenceItem } from "@/lib/types";
+import { evidenceSupportsProof, type CompilerEvidenceItem } from "@/lib/generation/messaging-compiler-contracts";
+import { compilerDigest } from "@/lib/generation/compiler-digest";
 
 export const ACCOUNT_PERSONALIZATION_FIELDS = [
   "tension", "whyNow", "promise", "mechanism", "decisionHelp", "proofPlan", "nextAction"
@@ -15,7 +17,9 @@ export interface AccountPersonalizationCompilerInput {
   audience: string;
   objective: string;
   evidence: readonly SessionEvidenceItem[];
+  sellerEvidence?: readonly CompilerEvidenceItem[];
 }
+export interface AccountCausalBinding { targetEvidenceRef: string; buyerWorkflow: string; sellerCapabilityRef?: string; proofRefs: string[]; nextDecision: string; }
 
 export interface AccountPersonalizationDirectives {
   tension?: string; whyNow?: string; promise?: string; mechanism?: string;
@@ -38,7 +42,11 @@ export interface AccountPersonalizationCompilerResult {
   evidenceRefs: string[];
   quality: AccountPersonalizationQualityReceipt;
   receipt: AccountPersonalizationQualityReceipt;
+  causalBindings?: AccountCausalBinding[];
+  accountEvidenceFingerprint?: string;
 }
+
+export interface AccountSwapEvaluation { changed: boolean; changedFields: string[]; accountEvidenceFingerprints: [string, string]; sellerCapabilityRefs: [string[], string[]]; }
 
 const UNSAFE =
   /<\/?[a-z][^>]*>|```|\b(?:confidential|not for distribution|will buy|must buy|purchase intent)\b/i;
@@ -146,6 +154,17 @@ function usable(item: SessionEvidenceItem, targetDomain: string): boolean {
   );
 }
 
+function usableSellerClaim(item: CompilerEvidenceItem): boolean {
+  try {
+    const url = new URL(item.sourceRef);
+    return item.kind === "fact" && item.confidence !== "low" &&
+      (item.entityRole === "seller" || item.entityRole === "source") &&
+      url.protocol === "https:" && !url.username && !url.password && !url.port &&
+      item.allowedUses.includes("credibility") && !item.prohibitedUses.includes("declarative-claim") &&
+      !UNSAFE.test(item.claim) && !UNSAFE_METADATA.test(item.claim);
+  } catch { return false; }
+}
+
 /** Deterministic, public-safe account argument compiler. It only derives copy from target evidence. */
 export function compileAccountPersonalization(
   input: AccountPersonalizationCompilerInput
@@ -160,7 +179,9 @@ export function compileAccountPersonalization(
         TYPE_PRIORITY[left.type] - TYPE_PRIORITY[right.type] || left.id.localeCompare(right.id)
     );
   const first = items[0];
-  const second = items[1] ?? first;
+  const second = items[1];
+  const accountEvidenceFingerprint = compilerDigest("account-evidence", { targetDomain: input.targetDomain,
+    evidence: items.map((item) => ({ id: item.id, text: item.text, sourceUrl: item.sourceUrl })) });
   if (!first) {
     const quality = {
       substantiveFieldCount: 0,
@@ -176,19 +197,23 @@ export function compileAccountPersonalization(
       claims: [],
       evidenceRefs: [],
       quality,
-      receipt: quality
+      receipt: quality,
+      causalBindings: [], accountEvidenceFingerprint
     };
   }
   const primarySignal = boundedSignal(first);
-  const secondarySignal = boundedSignal(second!);
+  const secondarySignal = items.length > 1 ? boundedSignal(second!) : undefined;
   const primaryLabel = safeMetadata(first.label, "the cited public signal", 80);
-  const secondaryLabel = safeMetadata(second!.label, primaryLabel, 80);
+  const secondaryLabel = second ? safeMetadata(second.label, primaryLabel, 80) : undefined;
   const targetName = safeMetadata(input.targetName, "The target account", 100);
-  const sellerName = safeMetadata(input.sellerName, "The seller", 100);
   const offer = safeMetadata(input.offer, "the offer", 140);
   const audience = safeMetadata(input.audience, "the buying team", 140);
   const objective = safeMetadata(input.objective, "the first decision", 160);
   const refs = [...new Set(items.map((e) => e.id))];
+  const sellerClaims = (input.sellerEvidence ?? []).filter(usableSellerClaim).sort((a, b) => a.id.localeCompare(b.id));
+  const capability = sellerClaims.find((item) => item.evidenceType === "workflow") ??
+    sellerClaims.find((item) => item.evidenceType === "capability");
+  const proofRefs = sellerClaims.filter(evidenceSupportsProof).map((item) => item.id);
   const directives: AccountPersonalizationDirectives = {
     tension: sentence(
       `${possessive(targetName)} public materials emphasize ${primarySignal}; the conversation should start there instead of with a generic product pitch`
@@ -197,14 +222,13 @@ export function compileAccountPersonalization(
       `That public focus gives ${audience} a concrete lens for ${objective}, while timing and internal ownership remain validation questions`
     ),
     promise: sentence(`Evaluate ${offer} for ${possessive(targetName)} ${primarySignal}`),
-    mechanism: sentence(
-      `Start with ${primarySignal}, connect it to ${possessive(sellerName)} supported ${offer} workflow, then validate the handoffs and outputs with ${targetName}`
-    ),
+    ...(capability ? { mechanism: `${sentence(capability.claim)} Would this capability support ${primarySignal}?` } : {}),
     decisionHelp: sentence(
-      `Compare the supported path with ${secondarySignal}, then identify the first decision ${audience} can validate`
+      secondarySignal ? `Compare the workflow against ${primarySignal} and ${secondarySignal}, then identify one decision ${audience} can validate`
+        : `Choose one workflow requirement to validate against ${primarySignal}`
     ),
     proofPlan: sentence(
-      `Use ${primaryLabel} and ${secondaryLabel} as public context; treat internal priorities, timing, and results as open questions`
+      `Use ${primaryLabel}${secondaryLabel ? ` and ${secondaryLabel}` : ""} as public context; treat internal priorities, timing, and results as open questions`
     ),
     nextAction: `Plan a working session around ${primarySignal.split(/\s+/).slice(0, 5).join(" ")}`
   };
@@ -215,16 +239,16 @@ export function compileAccountPersonalization(
     revision: input.revision,
     sourceRole: "target"
   }));
-  const directiveEvidenceRefs: Record<AccountPersonalizationField, string[]> = {
+  const directiveEvidenceRefs: Partial<Record<AccountPersonalizationField, string[]>> = {
     tension: [first.id],
     whyNow: [first.id],
     promise: [first.id],
-    mechanism: [first.id],
-    decisionHelp: [second!.id],
-    proofPlan: [...new Set([first.id, second!.id])],
+    decisionHelp: second ? [first.id, second.id] : [first.id],
+    proofPlan: second ? [first.id, second.id] : [first.id],
     nextAction: [first.id]
   };
-  const distinctSignalCount = new Set([primarySignal, secondarySignal]).size;
+  if (capability) directiveEvidenceRefs.mechanism = [first.id, capability.id];
+  const distinctSignalCount = new Set([primarySignal, secondarySignal].filter(Boolean)).size;
   const quality = {
     substantiveFieldCount: Object.keys(directives).length,
     status: refs.length >= 2 && distinctSignalCount >= 2
@@ -237,14 +261,30 @@ export function compileAccountPersonalization(
     distinctSignalCount,
     rejectedEvidenceIds
   };
+  const causalBindings: AccountCausalBinding[] = [{ targetEvidenceRef: first.id, buyerWorkflow: primarySignal,
+    ...(capability ? { sellerCapabilityRef: capability.id } : {}), proofRefs,
+    nextDecision: `Determine whether this workflow supports ${primarySignal}` }];
   return {
     directives,
     directiveEvidenceRefs,
     claims,
     evidenceRefs: refs,
     quality,
-    receipt: quality
+    receipt: quality, causalBindings, accountEvidenceFingerprint
   };
+}
+
+export function evaluateAccountSwap(base: AccountPersonalizationCompilerInput, alternate: Pick<AccountPersonalizationCompilerInput, "targetName" | "targetDomain" | "evidence">): AccountSwapEvaluation {
+  const one = compileAccountPersonalization(base); const two = compileAccountPersonalization({ ...base, ...alternate });
+  const neutral = (value?: string) => [base.targetName, alternate.targetName, base.targetDomain, alternate.targetDomain]
+    .filter(Boolean).reduce((result, name) => result.replaceAll(name.toLowerCase(), "account"), (value ?? "").toLowerCase())
+    .replace(/[^a-z0-9]+/g, " ").trim();
+  const changedFields = ACCOUNT_PERSONALIZATION_FIELDS.filter((field) => neutral(one.directives[field]) !== neutral(two.directives[field]));
+  const capabilityRefs = (result: AccountPersonalizationCompilerResult) => (result.causalBindings ?? [])
+    .flatMap((binding) => binding.sellerCapabilityRef ? [binding.sellerCapabilityRef] : []).sort();
+  return { changed: changedFields.filter((field) => ["tension", "promise", "decisionHelp", "nextAction"].includes(field)).length >= 2,
+    changedFields, accountEvidenceFingerprints: [one.accountEvidenceFingerprint!, two.accountEvidenceFingerprint!],
+    sellerCapabilityRefs: [capabilityRefs(one), capabilityRefs(two)] };
 }
 
 export const compileAccountPersonalizationDirectives = compileAccountPersonalization;

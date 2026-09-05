@@ -27,6 +27,12 @@ afterEach(() => {
 });
 
 describe("normalizeDomain", () => {
+  it("asks for a specific product instead of accepting a broad category", () => {
+    const result = answersSchema.safeParse({ promotedOffer: "Computers & Electronics" });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0].message).toContain("specific product");
+    expect(answersSchema.safeParse({ promotedOffer: "Acme Workflow Cloud", buyerStage: "evaluation", trafficIntent: "post-demo" }).success).toBe(true);
+  });
   it.each([
     ["acme.com", "acme.com"],
     ["HTTPS://WWW.Acme.com/", "acme.com"],

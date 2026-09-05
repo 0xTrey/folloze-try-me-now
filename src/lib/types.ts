@@ -448,6 +448,8 @@ export interface SessionAnswers {
   customAudience?: string;
   objective?: string;
   campaignType?: "product" | "demand" | "event";
+  trafficIntent?: "cold-outreach" | "search" | "retargeting" | "post-demo" | "existing-opportunity";
+  buyerStage?: "awareness" | "consideration" | "evaluation" | "decision";
   eventSource?: string;
   sourceUrl?: string;
   sourceName?: string;
@@ -594,6 +596,9 @@ export interface SessionEvidenceItem {
   disposition: "available" | "pinned" | "excluded";
   entityRole?: "seller" | "target";
   confidence?: IntelligenceConfidence;
+  /** Server research classification, never inferred from source count. */
+  evidenceType?: import("@/lib/generation/messaging-compiler-contracts").CompilerEvidenceType;
+  subject?: string;
 }
 
 export interface SourceConfirmation {
@@ -983,6 +988,9 @@ export interface ExperienceProductionReceipt {
     role: WireframeSectionRole;
     status: "complete" | "omitted";
     wordCount: number;
+    headline?: string;
+    body?: string;
+    choices?: Array<{ label: string; body: string }>;
     evidenceRefs: string[];
   }>;
   claimEvidenceCount: number;

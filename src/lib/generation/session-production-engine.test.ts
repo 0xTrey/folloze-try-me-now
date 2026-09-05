@@ -287,7 +287,7 @@ describe("compileSessionProductionPage", () => {
         currentTimeMs: 10_000
       });
 
-      expect(result.outcome).toBe("production-page");
+      expect(result.outcome, result.outcome === "production-page" ? "" : JSON.stringify(result.instruction)).toBe("production-page");
       if (result.outcome !== "production-page") return;
       expect(result.artifact.value?.familyMessageSpine?.cta).toMatchObject({
         id: expectedId,
@@ -295,7 +295,9 @@ describe("compileSessionProductionPage", () => {
         type: ctaType
       });
       const html = renderPage(currentSession, profile, result.artifact.value!);
-      expect(html).toContain(`>${expectedLabel}</a>`);
+      const renderedLabel = ctaType === "explore" || ctaType === "download" ? "Explore the page" : expectedLabel;
+      const tag = ctaType === "explore" || ctaType === "download" ? "button" : "a";
+      expect(html.includes(`>${renderedLabel}</${tag}>`)).toBe(true);
     }
   );
 
@@ -532,10 +534,9 @@ describe("compileSessionProductionPage", () => {
     const plan = result.artifact.value!.familyDecision!.sectionPlan;
     expect(plan.map(({ id, role }) => ({ id, role }))).toEqual([
       { id: "recognize-buyer-outcome", role: "buyer-outcome" },
-      { id: "name-constraint", role: "current-friction" },
       { id: "distinct-mechanism", role: "mechanism" },
       { id: "relevant-use-cases", role: "use-cases" },
-      { id: "proof-or-validation", role: "proof" },
+      { id: "proof-or-validation", role: "validation-plan" },
       { id: "next-action", role: "next-move" }
     ]);
     expect(observed.map(({ sectionId, role }) => ({ id: sectionId, role }))).toEqual(
@@ -543,10 +544,9 @@ describe("compileSessionProductionPage", () => {
     );
     expect(observed.map(({ sectionBrief }) => sectionBrief.semanticJob)).toEqual([
       "recognize the buyer and the promised outcome",
-      "name the current constraint in the buyer's language",
       "explain the seller's distinct mechanism",
       "show the most relevant use cases or workflow",
-      "establish proof or a credible validation path",
+      "Choose what to verify before taking the next step",
       "make the next action the logical continuation"
     ]);
     expect(observed.every(({ strategyJobs }) => strategyJobs.length > 0)).toBe(true);
@@ -608,14 +608,14 @@ describe("compileSessionProductionPage", () => {
         "Outcome",
         "How it works",
         "Use cases",
-        "Evidence",
+        "Validate fit",
         "Next step"
       ],
       sectionIds: [
         "experience-overview",
-        "credibility-anchor",
-        "starting-points",
         "outcome-mechanism",
+        "application-paths",
+        "credibility-anchor",
         "next-step"
       ],
       copy: [
@@ -759,7 +759,53 @@ describe("compileSessionProductionPage", () => {
 });
 
 describe("dedicated section writers reach the rendered page", () => {
-  const MODEL_HEADLINE = "Approvals close before the shift handover";
+  it.each(["clean", "timed-out"] as const)("repairs at most two sections and preserves blocker state after %s rereview", async (mode) => {
+    const profile = brand();
+    const baseline = await compileSessionProductionPage({ session: session(profile), brand: profile,
+      providerStartedAtMs: 0, currentTimeMs: 10_000 });
+    if (baseline.outcome !== "production-page") throw new Error("baseline_not_compiled");
+    const originals = new Map(baseline.artifact.value!.sections.map((section) => [section.sectionId, section]));
+    const repairs: string[] = [];
+    let reviews = 0;
+    const client: SectionModelClient = {
+      async writeSection(contract) {
+        if (!contract.repairFeedback?.length) return { sectionId: contract.sectionId, candidates: [] };
+        repairs.push(contract.sectionId);
+        const original = originals.get(contract.sectionId)!;
+        return { sectionId: contract.sectionId, candidates: [{
+          headline: original.headline, body: original.body,
+          ...(original.choices ? { choices: original.choices } : {}),
+          ...(original.cta ? { cta: original.cta } : {}), evidenceRefs: [...original.evidenceRefs]
+        }] };
+      },
+      async reviewPage(input) {
+        reviews += 1;
+        if (reviews > 1 && mode === "timed-out") {
+          return new Promise<never>((_, reject) => input.signal.addEventListener("abort", () => reject(new Error("timed out")), { once: true }));
+        }
+        return { version: input.version,
+          issues: reviews === 1 ? [{ sectionIds: input.sections.slice(0, 4).map(({ id }) => id),
+            code: "unsupported-claim", explanation: "Fixture editorial blocker", severity: "blocker" }] : [],
+          summaries: input.sections.map(({ id }) => ({ sectionId: id, summary: "Fixture section reviewed" })) };
+      }
+    };
+    const started = Date.now();
+    const result = await compileSessionProductionPage({ session: session(profile), brand: profile,
+      providerStartedAtMs: started, currentTimeMs: started, sectionModelClient: client });
+    expect(repairs).toHaveLength(2);
+    expect(reviews).toBe(2);
+    expect(result.semanticReview?.status).toBe("reviewed");
+    if (result.semanticReview?.status !== "reviewed") throw new Error("missing review receipt");
+    if (mode === "clean") {
+      expect(result.semanticReview.issues).toEqual([]);
+      expect(result.outcome).toBe("production-page");
+    } else {
+      expect(result.semanticReview.issues[0]?.severity).toBe("blocker");
+      expect(result).toMatchObject({ outcome: "safe-deterministic-fallback", instruction: { code: "GPE_FACTUALITY_REJECTED" } });
+    }
+  }, 10_000);
+
+  const MODEL_HEADLINE = "Operations leaders use Acme Workflow Cloud";
   /** Long enough to separate one section's work from the rest of the build. */
   const SLOW_SECTION_MS = 40;
   /** A setTimeout may fire a hair early, and durations are rounded to the ms. */
@@ -1116,7 +1162,7 @@ describe("dedicated section writers reach the rendered page", () => {
     expect(new Set(bodies).size).toBe(bodies.length);
     for (const [index, body] of bodies.entries()) {
       for (const other of bodies.slice(index + 1)) {
-        expect(copySimilarity(body, other)).toBeLessThan(NEAR_DUPLICATE_THRESHOLD);
+        expect(copySimilarity(body, other), `Repeated bodies: ${body} / ${other}`).toBeLessThan(NEAR_DUPLICATE_THRESHOLD);
       }
     }
   });

@@ -100,7 +100,10 @@ export function compilerLedgerFromThesisEvidence(
       kind: claim.status === "fact" ? ("fact" as const) : ("inference" as const),
       claim: claim.claim,
       sourceAuthority: "evidence-graph",
-      sourceRef: claim.id,
+      sourceRef: claim.sourceRef ?? claim.id,
+      evidenceType: claim.evidenceType,
+      entityRole: claim.entityRole,
+      subject: claim.subject,
       confidence: claim.confidence,
       allowedUses: narrowedUses(claim.allowedUses),
       prohibitedUses: narrowedProhibitions(claim.prohibitedUses)
@@ -139,7 +142,7 @@ const ANGLE_ASSERTED_USES: Record<MessageStrategyAngle, readonly CompilerProhibi
 
 /** Proof framed as an open question rather than asserted. */
 const PROOF_AS_QUESTION_PATTERN =
-  /validation plan|not yet available|verify|test each|confirm the cost|ask .* to (?:confirm|verify|test)/i;
+  /validation plan|not yet available|verify|test each|confirm the cost|ask .* to (?:confirm|verify|test)|\?\s*$/i;
 
 function normalizedName(value: string): string {
   return value

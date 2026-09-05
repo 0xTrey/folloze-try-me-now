@@ -203,7 +203,7 @@ describe("deterministic candidate evaluation", () => {
     const [contract] = contractsFor([slot("opening", "buyer-outcome")]);
     const evaluation = evaluateCandidate(
       contract!,
-      candidate("opening", "Too short", "Short."),
+      candidate("opening", "A concrete product headline", "Detail ".repeat(500)),
       0
     );
 

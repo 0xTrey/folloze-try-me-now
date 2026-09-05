@@ -105,6 +105,10 @@ export interface ThesisEvidenceEntity {
  * prohibitions it needs and treats an unrecognized permission as no permission.
  */
 export interface ThesisEvidenceClaim {
+  sourceRef?: string;
+  evidenceType?: import("@/lib/generation/messaging-compiler-contracts").CompilerEvidenceType;
+  entityRole?: "seller" | "target" | "source" | "visitor";
+  subject?: string;
   id: string;
   claim: string;
   status: ThesisStatus;

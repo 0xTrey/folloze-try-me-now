@@ -71,8 +71,9 @@ function ledgerItem(
 }
 
 const ledger: CompilerEvidenceItem[] = [
-  ledgerItem("ev-lane-audit", "fact", "high"),
+  ledgerItem("ev-lane-audit", "fact", "high", { entityRole: "target", evidenceType: "account-context" }),
   ledgerItem("ev-reefer-telemetry", "fact", "medium", {
+    entityRole: "seller", evidenceType: "workflow",
     claim:
       "Cryolane reefer telemetry samples every validated lane segment at four minute intervals."
   }),

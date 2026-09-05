@@ -1,0 +1,44 @@
+{
+  "fixtureOnly": true,
+  "liveProvider": false,
+  "humanReviewed": false,
+  "conversionExperimentActive": false,
+  "variants": [
+    {
+      "file": "journey-1-cold-outreach.html",
+      "family": "launch",
+      "sections": 4,
+      "traffic": "cold-outreach"
+    },
+    {
+      "file": "journey-1-post-demo.html",
+      "family": "launch",
+      "sections": 4,
+      "traffic": "post-demo"
+    },
+    {
+      "file": "journey-2-cold-outreach.html",
+      "family": "guide",
+      "sections": 6,
+      "traffic": "cold-outreach"
+    },
+    {
+      "file": "journey-2-post-demo.html",
+      "family": "guide",
+      "sections": 6,
+      "traffic": "post-demo"
+    },
+    {
+      "file": "journey-3-cold-outreach.html",
+      "family": "align",
+      "sections": 6,
+      "traffic": "cold-outreach"
+    },
+    {
+      "file": "journey-3-post-demo.html",
+      "family": "align",
+      "sections": 6,
+      "traffic": "post-demo"
+    }
+  ]
+}

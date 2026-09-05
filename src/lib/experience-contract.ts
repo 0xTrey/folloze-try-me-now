@@ -28,6 +28,7 @@ import {
   type TryMeSession
 } from "@/lib/types";
 import { config } from "@/lib/config";
+import { resolveBuyerCtaOffer, selectedBuyerCta } from "@/lib/cta-offer-contract";
 
 function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -88,39 +89,9 @@ function primaryActionFor(
   label: string,
   sourceUrl: string | undefined
 ): ExperienceActionContract {
-  const intent = session.answers.ctaType ?? "explore";
-  const configuredDestination = publicCitation(config.demoCtaUrl);
-  const sourceDestination = publicCitation(sourceUrl);
-  const prefersSource = ["register", "download", "explore"].includes(intent);
-  const destination = (prefersSource ? sourceDestination : undefined) ?? configuredDestination;
-  if (destination) {
-    return {
-      id: "primary-conversion",
-      purpose: "primary-conversion",
-      label,
-      actionType: "external-link",
-      destination,
-      access: "public",
-      analyticsEvent: "cta_click",
-      analyticsOwner: "try-me-now",
-      verification: prefersSource && !sourceDestination ? "fallback" : "verified",
-      ...(prefersSource && !sourceDestination
-        ? { fallbackReason: "No verified public source destination was available." }
-        : {})
-    };
-  }
-  return {
-    id: "primary-conversion",
-    purpose: "guided-exploration",
-    label,
-    actionType: "scroll",
-    destination: "#supporting-resources",
-    access: "public",
-    analyticsEvent: "cta_click",
-    analyticsOwner: "try-me-now",
-    verification: "fallback",
-    fallbackReason: "No verified external destination was available."
-  };
+  return resolveBuyerCtaOffer({ intent: selectedBuyerCta(session).type, label,
+    sourceUrl: session.answers.sourceUrl ?? session.answers.offerSourceUrl ?? session.answers.eventSource ?? sourceUrl,
+    meetingUrl: config.demoCtaUrl }).action;
 }
 
 function functionalContentFor(
@@ -680,6 +651,9 @@ export function buildExperienceSpec(
               role: section.role,
               status: section.status,
               wordCount: section.wordCount,
+              headline: section.headline,
+              body: section.body,
+              choices: section.choices?.map(({ label, body }) => ({ label, body })),
               evidenceRefs: [...section.evidenceRefs]
             })),
             claimEvidenceCount: productionPage.claimToEvidence.length
@@ -687,9 +661,9 @@ export function buildExperienceSpec(
         }
       : {}),
     cta: {
-      intent: session.answers.ctaType ?? "explore",
+      intent: selectedBuyerCta(session).type,
       style: session.answers.ctaStyle ?? "solid",
-      label: canonicalDraft.primaryCta,
+      label: primaryActionFor(session, canonicalDraft.primaryCta, sourceUrl).label,
       actionId: "primary-conversion"
     },
     personalization: compilePersonalizationPlan({

@@ -179,7 +179,7 @@ describe("messaging compiler in the production path", () => {
     expect(validateMessagingCompilerArtifact(receipt!.artifact)).toEqual([]);
     expect(receipt!.artifact.strategies).toHaveLength(4);
     expect(receipt!.evaluations).toHaveLength(4);
-    expect(receipt!.artifact.selectedStrategyId).toBe("strategy-upside");
+    expect(receipt!.artifact.selectedStrategyId).toBe("strategy-mechanism");
     expect(
       receipt!.artifact.strategies.map(({ id }) => id)
     ).toContain(receipt!.artifact.selectedStrategyId);
@@ -222,16 +222,9 @@ describe("messaging compiler in the production path", () => {
     const researchedOwner = researched.page.sections.find(
       ({ sectionId }) => sectionId === tensionSectionId(researched.result.messagingCompiler!)
     )!;
-    const bareOwner = bare.page.sections.find(
-      ({ sectionId }) => sectionId === tensionSectionId(bare.result.messagingCompiler!)
-    )!;
-
-    // Same route, same section, same slot. Only the compiled tension moved.
-    expect(bareOwner.sectionId).toBe(researchedOwner.sectionId);
-    expect(bareOwner.headline).toBe(researchedOwner.headline);
-    expect(bareOwner.body).not.toBe(researchedOwner.body);
-    expect(bareOwner.body).toContain(ROUTE_TENSION);
-    expect(bareOwner.body).not.toContain(APPROVAL_QUEUE_CLAIM);
+    // Without a supported friction, the section earns no place in the page.
+    expect(researchedOwner.body).toContain(APPROVAL_QUEUE_CLAIM);
+    expect(bare.page.sections.some((section) => section.v2Role === "current-friction")).toBe(false);
     expect(bare.html).not.toContain(APPROVAL_QUEUE_CLAIM);
   });
 
@@ -250,7 +243,7 @@ describe("messaging compiler in the production path", () => {
     const { result, page } = await compile({ evidenceItems: [approvalQueueEvidence] });
     const messaging = result.buildTrace.decisions.messaging;
 
-    expect(messaging?.selectedCandidateId).toBe("strategy-upside");
+    expect(messaging?.selectedCandidateId).toBe("strategy-mechanism");
     expect(messaging?.candidates.length).toBeGreaterThan(1);
     // The receipt carries ledger claim text, so none of it may reach the page.
     expect(JSON.stringify(page)).not.toContain("Approval queue backlog");

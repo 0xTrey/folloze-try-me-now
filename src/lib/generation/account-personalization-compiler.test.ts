@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { compileAccountPersonalization } from "@/lib/generation/account-personalization-compiler";
+import { compileAccountPersonalization, evaluateAccountSwap } from "@/lib/generation/account-personalization-compiler";
 import type { SessionEvidenceItem } from "@/lib/types";
+import type { CompilerEvidenceItem } from "@/lib/generation/messaging-compiler-contracts";
 
 const item = (id: string, text: string, entityRole: SessionEvidenceItem["entityRole"] = "target", sourceDomain = "target.example.com"): SessionEvidenceItem => ({
   id, type: "public-focus-area", label: id, text, sourceUrl: `https://${sourceDomain}/page`, signals: [], disposition: "available", entityRole, confidence: "high"
@@ -26,7 +27,7 @@ describe("account personalization compiler", () => {
   });
   it("cites target refs for every populated directive", () => {
     const result = compileAccountPersonalization({ ...base, evidence: [item("target-a", "Target is publishing a public focus on resilient data operations.")] });
-    expect(result.quality.substantiveFieldCount).toBe(7);
+    expect(result.quality.substantiveFieldCount).toBe(6);
     expect(result.quality).toMatchObject({ status: "limited", evidenceDepth: "single-signal" });
     expect(result.evidenceRefs).toEqual(["target-a"]);
     expect(result.claims.every((claim) => claim.sourceRole === "target")).toBe(true);
@@ -37,12 +38,30 @@ describe("account personalization compiler", () => {
       ]);
     }
   });
+  it("requires seller-scoped capability evidence before emitting mechanism", () => {
+    const unsupported = { id: "cap", kind: "fact", claim: "Seller capability", sourceAuthority: "seller", sourceRef: "https://seller.example/cap", confidence: "high", allowedUses: ["mechanism"], prohibitedUses: [], evidenceType: "capability", entityRole: "target" } as unknown as CompilerEvidenceItem;
+    const result = compileAccountPersonalization({ ...base, evidence: [item("target", "Target is focused on resilient operations.")], sellerEvidence: [unsupported] });
+    expect(result.directives.mechanism).toBeUndefined();
+  });
+  it("reports a true account swap while preserving seller capability identity", () => {
+    const capability = { id: "seller-cap", kind: "fact", claim: "Supported workflow", sourceAuthority: "seller", sourceRef: "https://seller.example/cap", confidence: "high", allowedUses: ["mechanism", "credibility"], prohibitedUses: [], evidenceType: "capability", entityRole: "seller" } as unknown as CompilerEvidenceItem;
+    const result = evaluateAccountSwap({ ...base, targetName: "Cisco", targetDomain: "cisco.example.com", sellerEvidence: [capability], evidence: [item("a", "Cisco is expanding secure networking.", "target", "cisco.example.com")] }, { targetName: "Google", targetDomain: "google.example.com", evidence: [item("b", "Google is investing in cloud security.", "target", "google.example.com")] });
+    expect(result.changed).toBe(true);
+    expect(result.accountEvidenceFingerprints[0]).not.toBe(result.accountEvidenceFingerprints[1]);
+    expect(result.sellerCapabilityRefs[0]).toEqual(["seller-cap"]);
+    expect(result.sellerCapabilityRefs[1]).toEqual(["seller-cap"]);
+  });
   it("rejects excluded, seller-role, and unsafe evidence", () => {
     const excluded = { ...item("excluded", "Target public focus"), disposition: "excluded" as const };
     const seller = item("seller", "Seller describes internal revenue growth.", "seller");
     const result = compileAccountPersonalization({ ...base, evidence: [excluded, seller] });
     expect(result.quality.status).toBe("insufficient");
     expect(result.quality.rejectedEvidenceIds).toEqual(["excluded", "seller"]);
+  });
+  it("fails an account-swap test when only the company name changes", () => {
+    const one = { ...base, targetName: "Acme", targetDomain: "acme.example", evidence: [item("a", "Acme is expanding secure networking.", "target", "acme.example")] };
+    const other = { targetName: "Beta", targetDomain: "beta.example", evidence: [item("a", "Beta is expanding secure networking.", "target", "beta.example")] };
+    expect(evaluateAccountSwap(one, other).changed).toBe(false);
   });
   it("does not turn low-confidence target research into buyer-facing claims", () => {
     const lowConfidence = {

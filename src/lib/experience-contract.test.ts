@@ -308,9 +308,9 @@ describe("campaign contract", () => {
         folloze: { status: "disabled", reason: "public-runtime-html-only" }
       },
       cta: {
-        intent: "explore",
+        intent: "book-meeting",
         style: "solid",
-        label: "Plan the architecture session",
+        label: "Explore the page",
         actionId: "primary-conversion"
       },
       wireframeSelection: {
@@ -342,8 +342,8 @@ describe("campaign contract", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "primary-conversion",
-          actionType: "external-link",
-          destination: "https://jitterbit.com/harmony/"
+          actionType: "scroll",
+          destination: "#next-step"
         })
       ])
     );
@@ -420,9 +420,10 @@ describe("campaign contract", () => {
     expect(primaryAction).toMatchObject({
       purpose: "guided-exploration",
       actionType: "scroll",
-      destination: "#supporting-resources",
+      destination: "#next-step",
       verification: "fallback",
-      fallbackReason: "No verified external destination was available."
+      label: "Explore the page",
+      fallbackReason: "No matching public destination was configured."
     });
     expect(primaryAction?.destination).not.toContain("folloze.com");
   });

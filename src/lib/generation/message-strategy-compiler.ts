@@ -160,10 +160,6 @@ function concise(value: string, max = 240): string {
   return `${(boundary > 40 ? cut.slice(0, boundary) : cut).trimEnd()}…`;
 }
 
-function lowerFirst(value: string): string {
-  return value.length ? `${value[0]!.toLocaleLowerCase()}${value.slice(1)}` : value;
-}
-
 function swappableMatches(value: string): number {
   return value.match(COMPETITOR_SWAPPABLE_PATTERN)?.length ?? 0;
 }
@@ -216,10 +212,18 @@ function evidenceForAngle(
 ): CompilerEvidenceItem[] {
   const use = ANGLE_EVIDENCE_USE[angle];
   return ledger.filter((item) => {
+    if (angle === "mechanism" && item.kind === "visitor-context" && item.confidence !== "low" && item.allowedUses.includes("hero")) return true;
     if (!item.allowedUses.includes(use)) return false;
     if (angle === "proof") return evidenceSupportsProof(item);
-    if (angle === "tension") return evidenceSupportsDeclarativeClaim(item);
-    return true;
+    const context = item.kind === "fact" && evidenceSupportsDeclarativeClaim(item) &&
+      (item.entityRole === "target" || item.evidenceType === "workflow-context");
+    if (angle === "tension") return context;
+    if (context) return true;
+    // Thin briefs may support an explicit evaluation question, not a new fact.
+    if (angle === "mechanism" && item.kind !== "fact" && item.confidence !== "low") return true;
+    return item.kind === "fact" && evidenceSupportsDeclarativeClaim(item) &&
+      (item.entityRole === "seller" || item.entityRole === "source") &&
+      ["capability", "workflow", "positioning", "pricing", "security", "implementation"].includes(item.evidenceType ?? "");
   });
 }
 
@@ -244,21 +248,25 @@ function angleSlots(
   input: MessageStrategyCompilerInput,
   support: readonly CompilerEvidenceItem[]
 ): AngleSlots {
-  const { baseline, offer, audienceLabel, objective, sellerName, targetName } = input;
-  const objectiveAction = objective.trim() ? lowerFirst(objective.trim()) : "validate the next decision";
-  const owner = targetName ?? audienceLabel;
+  const { baseline, offer, audienceLabel } = input;
   const proofClaim = support.find((item) => evidenceSupportsProof(item))?.claim;
   // Seller positioning already opens the page. Reusing it as the status quo
   // would restate one claim in two sections, so only referenced research
   // evidence can supply a tension the page has not already made.
-  const contextClaim = support.find((item) => item.kind === "fact")?.claim;
+  const contextClaim = support.find((item) => item.kind === "fact" &&
+    (item.entityRole === "target" || item.evidenceType === "workflow-context"))?.claim;
+  const capabilities = support.filter((item) => item.evidenceType === "capability");
+  const workflow = support.find((item) => item.evidenceType === "workflow");
+  const knownObjection = support.find((item) => item.kind === "fact" &&
+    evidenceSupportsDeclarativeClaim(item) && (item.entityRole === "seller" || item.entityRole === "source") &&
+    ["pricing", "security", "implementation"].includes(item.evidenceType ?? ""));
 
   // Every angle carries the tension when one is supported; the angle decides
   // whether it leads the argument, not whether the page may acknowledge it.
-  const tension = contextClaim?.trim() || baseline.tension?.trim();
+  const tension = contextClaim?.trim();
   const family = {
-    promise: baseline.promise,
-    mechanism: baseline.mechanism,
+    promise: capabilities[0]?.claim ?? baseline.promise,
+    mechanism: workflow?.claim ?? capabilities[0]?.claim ?? baseline.mechanism,
     ctaLogic: baseline.nextAction,
     ...(tension ? { tension: concise(tension) } : {})
   };
@@ -266,47 +274,45 @@ function angleSlots(
   if (angle === "tension") {
     return {
       ...family,
-      bigIdea: `The current approach costs ${owner} more than ${offer} would.`,
-      objectionPlan: `${baseline.decisionHelp} Answer the cost question with referenced evidence and phrase anything unreferenced as a question.`,
+      bigIdea: contextClaim ?? `Which part of ${input.audienceJob} should ${audienceLabel} evaluate with ${offer}?`,
+      objectionPlan: knownObjection?.claim ?? `Which account requirements must ${offer} meet?`,
       proofPlan: proofClaim
-        ? "Lead with the referenced evidence that the current approach carries this cost, then state its limits."
-        : `Use a validation plan instead of declarative proof; ask ${audienceLabel} to confirm the cost against their own numbers.`,
-      whyNow: `${objective} is the decision ${owner} is already facing.`
+        ? proofClaim
+        : `Which documented account priority should the evaluation address?`
     };
   }
 
   if (angle === "upside") {
     return {
       ...family,
-      bigIdea: `${offer} makes ${objectiveAction} a routine outcome for ${audienceLabel}.`,
-      objectionPlan: `${baseline.decisionHelp} Separate what the outcome depends on from what is already supported.`,
+      bigIdea: capabilities[0]?.claim ?? `What would make ${offer} useful for ${input.audienceJob}?`,
+      promise: capabilities[0]?.claim ?? baseline.promise,
+      objectionPlan: knownObjection?.claim ?? `What must be true for this capability to fit ${audienceLabel}'s workflow?`,
       proofPlan: proofClaim
-        ? `Use referenced ${sellerName} evidence only; separate supported facts from validation questions.`
-        : `Use a validation plan instead of declarative proof; ask ${audienceLabel} to verify the mechanism and the fit.`,
-      whyNow: `${objectiveAction} is the next useful buyer action for ${offer}.`
+        ? proofClaim
+        : `Which capability would be useful enough to test in the current workflow?`
     };
   }
 
   if (angle === "mechanism") {
     return {
       ...family,
-      bigIdea: `How ${offer} works is the reason ${audienceLabel} can trust the outcome.`,
-      objectionPlan: `${baseline.decisionHelp} Make each step checkable rather than asking for trust.`,
+      bigIdea: workflow?.claim ?? `How would ${offer} fit the work ${audienceLabel} need to do?`,
+      mechanism: workflow?.claim ?? baseline.mechanism,
+      objectionPlan: knownObjection?.claim ?? `What input, integration, or owner does this workflow require?`,
       proofPlan: proofClaim
-        ? "Attach each mechanism step to the referenced evidence that shows it working."
-        : `Ask ${audienceLabel} to test each mechanism step rather than asserting an unreferenced result.`,
-      whyNow: `${offer} changes what ${audienceLabel} should examine before making this decision.`
+        ? proofClaim
+        : `What input and output should a product walkthrough verify?`
     };
   }
 
   return {
     ...family,
-    bigIdea: `What ${sellerName} can already show decides whether ${offer} is worth ${owner}'s time.`,
-    objectionPlan: `${baseline.decisionHelp} Mark plainly where the evidence stops.`,
+    bigIdea: proofClaim ?? `What would demonstrate that ${offer} fits this use case?`,
+    objectionPlan: knownObjection?.claim ?? `Do the example's use case and conditions match this evaluation?`,
     proofPlan: proofClaim
-      ? "Lead with the strongest referenced evidence, state its limits, and keep every proof statement traceable."
-      : "State plainly that supporting evidence is not yet available and offer a validation plan instead.",
-    whyNow: `${owner} can ${objectiveAction} once the evidence is in front of them.`
+      ? proofClaim
+      : "What acceptance criteria should a product walkthrough demonstrate?"
   };
 }
 
@@ -518,7 +524,7 @@ export function evaluateMessageStrategy(
   const mechanismConnects = sharesTerm(candidate.promise, candidate.mechanism);
   const proofHonest = provableSupport
     ? !/validation plan instead/i.test(candidate.proofPlan)
-    : /validation plan|not yet available|verify|test each/i.test(candidate.proofPlan);
+    : /validation plan|not yet available|verify|test each|\?\s*$/i.test(candidate.proofPlan);
   const objectionNamed = candidate.objectionPlan.trim().length > 0;
   const timingHonest = Boolean(candidate.whyNow?.trim()) || candidate.unknowns.length > 0;
   const narrativeCoherence = scoreOf(

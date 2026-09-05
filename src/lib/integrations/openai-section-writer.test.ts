@@ -157,6 +157,38 @@ describe("sectionModelClient", () => {
 });
 
 describe("createSectionModelClient", () => {
+  it("reuses unchanged section input across revisions but invalidates changed claims and sessions", async () => {
+    const fake = provider(respondWith({ candidates: [providerCandidate()] }));
+    const client = createSectionModelClient({ provider: fake, cacheResponses: true });
+    const section = { ...contract(), sessionId: "cache-isolation-fixture" };
+    const signal = new AbortController().signal;
+    await client.writeSection(section, signal);
+    const reused = await client.writeSection({ ...section, revision: revision + 1,
+      brief: { ...section.brief, nextAction: "Read the public guide" } }, signal);
+    expect(reused.cacheHit).toBe(true);
+    expect(fake.calls).toHaveLength(1);
+    expect(JSON.parse(fake.calls[0]!.request.input).brief).not.toHaveProperty("nextAction");
+    await client.writeSection({ ...section, brief: { ...section.brief, promise: "Changed supported outcome" } }, signal);
+    await client.writeSection({ ...section, sessionId: "different-private-session" }, signal);
+    expect(fake.calls).toHaveLength(3);
+  });
+
+  it("invalidates a cached section when evidence, voice, or expiry changes", async () => {
+    const fake = provider(respondWith({ candidates: [providerCandidate()] }));
+    const client = createSectionModelClient({ provider: fake, cacheResponses: true });
+    const section = { ...contract(), sessionId: "cache-freshness-fixture" };
+    const signal = new AbortController().signal;
+    const time = vi.spyOn(Date, "now").mockReturnValue(1000);
+    try {
+      await client.writeSection(section, signal);
+      await client.writeSection({ ...section, evidence: section.evidence.map((item) => ({ ...item, text: "Corrected source statement" })) }, signal);
+      await client.writeSection({ ...section, brandVoice: { description: "Plain and direct", source: "https://example.com" } }, signal);
+      time.mockReturnValue(1000 + 16 * 60_000);
+      await client.writeSection(section, signal);
+      expect(fake.calls).toHaveLength(4);
+    } finally { time.mockRestore(); }
+  });
+
   it("maps a well-formed response to the section it was asked to write", async () => {
     const section = contract();
     const fake = provider(

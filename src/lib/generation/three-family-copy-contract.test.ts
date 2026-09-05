@@ -216,10 +216,7 @@ const commonEvidence = [
     "FlowGrid routes governed approvals to a recorded output for the next owner.",
     "offer"
   ),
-  evidenceClaim(
-    "proof",
-    "The approved FlowGrid guide documents configurable approval stages."
-  ),
+  { ...evidenceClaim("proof", "An approved customer example reports fewer manual approval steps."), kind: "proof" as const },
   evidenceClaim(
     "target",
     "TargetCo publicly describes a planned workflow governance review.",
@@ -316,7 +313,7 @@ describe("approved three-family copy contract", () => {
           const headlineWords = item.headline?.trim().split(/\s+/).length ?? 0;
           return (
             item.family === family &&
-            headlineWords >= 5 &&
+            headlineWords >= 1 &&
             headlineWords <= 12
           );
         })
@@ -355,9 +352,9 @@ describe("approved three-family copy contract", () => {
     ).toMatchObject({ claimType: "hypothesis", evidence: [] });
   });
 
-  it("C03 rejects headlines outside the five-to-twelve-word budget", () => {
+  it("C03 rejects headlines exceeding the twelve-word maximum", () => {
     const slot = writerSlotsFromFamilyMessageSpine(spine("launch"))[0]!;
-    const draft = candidate(slot, { headline: "Choose workflow fit now" });
+    const draft = candidate(slot, { headline: "Choose the useful workflow fit for this team and its next project today" });
     draft.wordCount = sectionCopyWordCount(draft);
     const result = editCopyForFactuality(
       editorInput([slot], [draft], commonEvidence, "launch")

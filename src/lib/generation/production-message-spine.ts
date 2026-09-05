@@ -753,7 +753,9 @@ export function compileFamilyProductionMessageSpine(
     input.decision.sectionPlan.length < 4 ||
     input.decision.sectionPlan.length > 8 ||
     input.decision.sectionPlan.some(
-      (slot) => !FAMILY_SECTION_ROLES[input.decision.family].has(slot.role)
+      (slot) => !FAMILY_SECTION_ROLES[input.decision.family].has(slot.role) &&
+        !(slot.role === "evaluation-criteria" && slot.optional && slot.requiredEvidenceKinds.includes("seller_fact")) &&
+        !(input.decision.family === "launch" && slot.role === "validation-plan" && slot.claimType === "instruction")
     )
   ) {
     return failedFamilySpineArtifact(

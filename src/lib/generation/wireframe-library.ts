@@ -602,6 +602,9 @@ export interface WireframeRankingScore {
   factors: Partial<Record<WireframeRankingFactor, number>>;
   reasonCode: WireframeSelectionReasonCode;
   reason: string;
+  /** False means the composition is retained for explainability but cannot win. */
+  eligible?: boolean;
+  ineligibilityReason?: string;
 }
 
 export interface WireframeSelectionOptions {
@@ -734,7 +737,10 @@ export interface WireframeSelectionV1 {
   locked: boolean;
   /** Internal explainability only; never shown as a prospect template picker. */
   ranking?: {
+    selectionVersion?: string;
     selectedScore: number;
+    confidence?: "high" | "medium" | "low";
+    margin?: number;
     candidates: WireframeRankingScore[];
   };
   compositionPlan: WireframeCompositionPlanV1;
@@ -1215,24 +1221,33 @@ function scoreArchetypeAgainstRule(
   signals: WireframeSelectionSignals
 ): WireframeRankingScore {
   const metadata = getWireframeArchetype(archetypeId);
+  const hasApprovedProof = Boolean(signals.approvedQuantifiedProof || signals.approvedCustomerStory);
+  const proofArchetype = archetypeId === "account-proof" || archetypeId === "campaign-proof";
+  const eligible = !proofArchetype || hasApprovedProof;
+  const ineligibilityReason = eligible ? undefined : "Requires approved quantified proof or an approved customer story.";
   const factors: Partial<Record<WireframeRankingFactor, number>> = {
     route: 100
   };
 
+  const text = normalizedSignalText(signals);
+  const fit = (patterns: RegExp[]) => patterns.some((pattern) => pattern.test(text)) ? 20 : 0;
+  factors.audience = archetypeId.includes("technical") ? fit([/architect|security|platform|technical|infrastructure|it\b/]) :
+    archetypeId.includes("team") ? fit([/team|marketing|sales|finance|operations|multiple|stakeholder/]) :
+    archetypeId.includes("executive") ? fit([/executive|leadership|strategic|c-suite/]) : 8;
+  factors.offer = archetypeId.includes("product") ? fit([/product|platform|solution|campaign builder/]) :
+    archetypeId.includes("use-case") ? fit([/use case|workflow|implementation|scenario/]) :
+    archetypeId.includes("event") ? fit([/event|webinar|conference|summit/]) : 8;
+  factors.objective = archetypeId.includes("nurture") ? fit([/nurture|re-engage|follow-up/]) :
+    archetypeId.includes("workshop") ? fit([/workshop|discovery|session|pilot/]) :
+    archetypeId.includes("demand") ? fit([/awareness|demand|generate interest/]) :
+    archetypeId.includes("guide") ? fit([/guide|playbook|how to|practical/]) :
+    archetypeId.includes("report") ? fit([/report|outlook|executive/]) : 8;
+  factors.proof = hasApprovedProof ? (proofArchetype ? 24 : 8) : (proofArchetype ? -30 : 2);
   if (archetypeId === rule.id) {
-    factors.audience = 40;
-    factors.offer = 30;
-    factors.objective = 30;
-    factors.proof = signals.approvedQuantifiedProof || signals.approvedCustomerStory ? 20 : 10;
-  } else {
-    // Compatible alternatives stay eligible but cannot outrank the documented rule winner
-    // unless soft signals are extreme — keep deterministic priority intact.
-    const ruleAlternatives = getWireframeArchetype(rule.id).compatibleAlternativeIds;
-    const alternativeIndex = ruleAlternatives.indexOf(archetypeId);
-    factors.audience = alternativeIndex >= 0 ? 12 - alternativeIndex * 2 : 4;
-    factors.offer = 4;
-    factors.objective = 4;
-    factors.proof = signals.approvedQuantifiedProof || signals.approvedCustomerStory ? 6 : 2;
+    factors.route = 100;
+    // The deterministic rule is a prior, not a veto. A meaningful evidence
+    // fit can still overcome it, while ordinary signals retain stability.
+    factors.objective = (factors.objective ?? 0) + 20;
   }
 
   const soft = softSignalBoosts(signals, archetypeId);
@@ -1246,16 +1261,18 @@ function scoreArchetypeAgainstRule(
     factors[key] = (factors[key] ?? 0) + value;
   }
 
-  const score = Object.values(factors).reduce((sum, value) => sum + (value ?? 0), 0);
+  const score = eligible ? Object.values(factors).reduce((sum, value) => sum + (value ?? 0), 0) : -10000;
   return {
     archetypeId,
     compositionId: metadata.primaryCompositionId,
     score,
     factors,
-    reasonCode: archetypeId === rule.id ? rule.reasonCode : rule.reasonCode,
-    reason: archetypeId === rule.id
+    reasonCode: rule.reasonCode,
+    reason: !eligible ? ineligibilityReason! : archetypeId === rule.id
       ? rule.reason
-      : `Compatible alternative to ${rule.id} with score ${score}.`
+      : `Compatible alternative to ${rule.id} with score ${score}.`,
+    eligible,
+    ineligibilityReason
   };
 }
 
@@ -1669,6 +1686,9 @@ export function selectWireframe(
         score: ranked[0]!.score
       };
   const metadata = getWireframeArchetype(selected.id);
+  const winner = ranked[0];
+  const runnerUp = ranked.find((candidate) => candidate.eligible !== false && candidate.archetypeId !== winner?.archetypeId);
+  const margin = winner && runnerUp ? winner.score - runnerUp.score : 0;
 
   return {
     version: 1,
@@ -1681,7 +1701,10 @@ export function selectWireframe(
     selectedBy: requested ? "visitor" : options.selectedBy ?? "system",
     locked: options.locked ?? false,
     ranking: {
+      selectionVersion: "wireframe-ranking-v2",
       selectedScore: selected.score,
+      confidence: requested && requested.id !== winner?.archetypeId ? "low" : margin >= 20 ? "high" : margin >= 8 ? "medium" : "low",
+      margin,
       candidates: ranked
     },
     compositionPlan: compositionPlanFromRanking(signals, selected.id, ranked)

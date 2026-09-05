@@ -98,7 +98,8 @@ function currentClaimsForSlot(
   );
   return [...new Set(slot.evidenceRefs)]
     .map((id) => currentById.get(id))
-    .filter((claim): claim is SectionEvidenceClaim => claim !== undefined);
+    .filter((claim): claim is SectionEvidenceClaim => claim !== undefined)
+    .filter((claim) => slot.role !== "proof" || !slot.family || claim.kind === "proof");
 }
 
 function appendWithinBudget(
@@ -149,7 +150,7 @@ function validationBody(
   const body =
     role === "mechanism"
       ? "What workflow detail should be validated first?"
-      : "Which proof point should guide the next decision?";
+      : "Ask to see the workflow, its output, and the requirements your team needs to validate.";
   if (headlineWords + words(body) > slot.wordBudget.max) return undefined;
   return body;
 }
@@ -183,7 +184,7 @@ function headlineForSlot(
     return "Turn the shared priority into practical workstreams";
   }
   if (slot.v2Role === "validation-plan") {
-    return "Use relevant proof or a clear validation plan";
+    return "What to check in a product walkthrough";
   }
   if (slot.v2Role === "proof-depth") {
     return "Review additional evidence for this decision";

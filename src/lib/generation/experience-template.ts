@@ -12,6 +12,7 @@ import {
   type ExperiencePrimitive
 } from "@/lib/generation/experience-renderers";
 import { sanitizeBuyerFacingLabel } from "@/lib/generation/message-spine";
+import { resolveBuyerCtaOffer } from "@/lib/cta-offer-contract";
 import { EXPERIENCE_PRESENTATION_CSS } from "@/lib/generation/experience-presentation";
 import type {
   WireframeSectionRole,
@@ -431,7 +432,7 @@ function actionControl(
   editable: string,
   label?: string
 ): string {
-  const copy = escapeHtml(label ?? action.label);
+  const copy = escapeHtml(action.id === "primary-conversion" ? action.label : label ?? action.label);
   const common = `class="${className}" data-experience-action="${escapeHtml(action.id)}" data-action-event="${escapeHtml(action.analyticsEvent)}" data-flz-cta-id="${escapeHtml(action.id)}" ${editable}`;
   if (action.actionType === "external-link") {
     return `<a ${common} href="${escapeHtml(action.destination)}" target="_blank" rel="noopener noreferrer">${copy}</a>`;
@@ -495,18 +496,10 @@ export function renderExperienceHtml(input: {
       (variant) => variant.variantId === personalizationPlan.defaultVariantId
     )?.imageryTreatment;
   const actionById = new Map((input.actions ?? []).map((action) => [action.id, action]));
-  const primaryAction = actionById.get("primary-conversion") ?? {
-    id: "primary-conversion",
-    purpose: "guided-exploration",
-    label: draft.primaryCta,
-    actionType: "scroll",
-    destination: "#supporting-resources",
-    access: "public",
-    analyticsEvent: "cta_click",
-    analyticsOwner: "try-me-now",
-    verification: "fallback",
-    fallbackReason: "Legacy renderer input did not include a V2 action contract."
-  } satisfies ExperienceActionContract;
+  const primaryAction = actionById.get("primary-conversion") ?? resolveBuyerCtaOffer({
+    intent: input.answers.ctaType ?? "book-meeting", label: draft.primaryCta,
+    sourceUrl: input.answers.sourceUrl ?? input.answers.offerSourceUrl ?? input.answers.eventSource
+  }).action;
   const selectedVariant = "standard";
   const selectedStyle = styleVariant(input.answers);
   const selectedCtaStyle = ctaStyle(input.answers);
@@ -655,7 +648,7 @@ export function renderExperienceHtml(input: {
       : undefined;
   const plannedSections = input.wireframeSelection?.compositionPlan.sections;
   const familyProduction = Boolean(
-    input.productionSections?.some(({ id }) => /^(?:launch|guide|align)-\d+$/.test(id))
+    input.productionSections?.length && plannedSections?.length
   );
   const anchorForRole = (role: WireframeSectionRole, label?: string): string => {
     if (role === "hero") return "experience-overview";
@@ -698,7 +691,7 @@ export function renderExperienceHtml(input: {
   }>;
   const journeyNavItems = framework
     ? plannedSections
-      ? plannedSections.map((section) => ({
+      ? plannedSections.filter((section) => !plannedRoles || plannedRoles.has(section.role)).map((section) => ({
           id: anchorForRole(section.role, section.label),
           label: sanitizeBuyerFacingLabel(section.label, "Overview")
         }))
@@ -911,9 +904,15 @@ export function renderExperienceHtml(input: {
     framework && familyProduction && plannedSections
       ? plannedSections
           .filter(
-            ({ role }) => role !== "hero" && role !== "next-action"
+            ({ role }) => role !== "hero" && role !== "next-action" && rolePlanned(role)
           )
           .map((section) => {
+            const reviewed = input.productionSections?.find((item) => item.role === section.role && item.status === "complete");
+            if (reviewed && ["pathways", "decision-support"].includes(section.role) && (reviewed.body || reviewed.choices?.length)) {
+              const sectionId = anchorForRole(section.role, section.label);
+              const cards = reviewed.choices?.map((choice, index) => `<article><span class="lens-number">${index + 1}</span><h3>${escapeHtml(choice.label)}</h3><p>${escapeHtml(choice.body)}</p></article>`).join("");
+              return `<section class="lens-lab framework-starting-points" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="starting-points"><header class="region-heading"><h2>${escapeHtml(reviewed.headline ?? section.label)}</h2>${reviewed.body ? `<p class="region-intro">${escapeHtml(reviewed.body)}</p>` : ""}</header>${cards ? `<div class="journey-grid">${cards}</div>` : ""}</section>`;
+            }
             if (section.role === "context") {
               return `<section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)}><header class="framework-heading"><h2>${escapeHtml(framework.urgency.headline)}</h2></header><p class="region-intro">${escapeHtml(framework.urgency.change)}</p></section>`;
             }
@@ -959,7 +958,7 @@ export function renderExperienceHtml(input: {
   const closeMarkup = framework
     ? `<section class="close framework-close" id="next-step" data-journey-section="next-step" ${evidenceAttribute(framework.nextStep.evidenceIds)} aria-labelledby="next-step-heading">
         <div><h2 id="next-step-heading" ${editableBlock("nextStep.headline", "headline")}>${escapeHtml(framework.nextStep.headline)}</h2><p ${editableBlock("nextStep.body", "body")}>${escapeHtml(framework.nextStep.body)}</p></div>
-        <div class="next-step-panel"><dl><div><dt>Scope</dt><dd>${escapeHtml(framework.nextStep.scope)}</dd></div><div><dt>Activity</dt><dd>${escapeHtml(framework.nextStep.activity)}</dd></div><div><dt>You leave with</dt><dd>${escapeHtml(framework.nextStep.deliverable)}</dd></div><div><dt>Decision</dt><dd>${escapeHtml(framework.nextStep.resultingDecision)}</dd></div></dl>${actionControl(primaryAction, "primary", editableBlock("nextStep.ctaLabel", "cta"), framework.nextStep.ctaLabel)}</div>
+        <div class="next-step-panel">${input.productionSections ? "" : `<dl><div><dt>Scope</dt><dd>${escapeHtml(framework.nextStep.scope)}</dd></div><div><dt>Activity</dt><dd>${escapeHtml(framework.nextStep.activity)}</dd></div><div><dt>You leave with</dt><dd>${escapeHtml(framework.nextStep.deliverable)}</dd></div><div><dt>Decision</dt><dd>${escapeHtml(framework.nextStep.resultingDecision)}</dd></div></dl>`}${actionControl(primaryAction, "primary", editableBlock("nextStep.ctaLabel", "cta"), framework.nextStep.ctaLabel)}</div>
       </section>`
     : `<section class="close" id="next-step" data-journey-section="next-step" aria-labelledby="next-step-heading">
         <div><h2 id="next-step-heading" ${editableBlock("close.headline", "headline")}>${escapeHtml(draft.closingHeadline)}</h2><p ${editableBlock("close.body", "body")}>${escapeHtml(draft.closingBody)}</p></div>
@@ -1033,7 +1032,7 @@ export function renderExperienceHtml(input: {
       ${wordmark(brand, "seller-wordmark", heroTheme === "dark")}
       ${targetBrand ? `<span class="lockup-divider">for</span>${wordmark(targetBrand, "target-wordmark", heroTheme === "dark")}` : ""}
     </div>
-    <button type="button" class="nav-action" data-scroll-target="next-step" data-flz-cta-id="header-next-step">${escapeHtml(framework?.nextStep.ctaLabel ?? draft.sectionLabels.close)}</button>
+    <button type="button" class="nav-action" data-scroll-target="next-step" data-flz-cta-id="header-next-step">Next step</button>
   </header>
   ${neutralPreview ? `<aside class="preview-brand-notice" data-brand-warning-copy role="note"><strong>Preview treatment:</strong> ${escapeHtml(neutralPreviewNotice)}</aside>` : ""}
   <nav class="journey-nav" aria-label="Experience journey" data-flz-journey-nav>
