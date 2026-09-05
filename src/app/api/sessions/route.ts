@@ -1,12 +1,14 @@
 import { after, NextRequest, NextResponse } from "next/server";
 
-import { apiError, noStoreHeaders, startServerOperation } from "@/lib/http";
+import { apiError, HttpError, noStoreHeaders, startServerOperation } from "@/lib/http";
+import { verifyBotToken } from "@/lib/bot-protection";
 import { createSession, runPreviewEnrichmentWave } from "@/lib/orchestrator";
 import { analyticsIdentityWithAttributionFromRequest } from "@/lib/product-analytics";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { createSessionSchema } from "@/lib/validation";
 
 import { setEditorTokenCookie } from "./editor-cookie";
+import { readJsonBody, requireSameOriginJson } from "@/lib/request-security";
 
 export async function POST(request: NextRequest) {
   const trace = startServerOperation({
@@ -16,8 +18,14 @@ export async function POST(request: NextRequest) {
     stage: "submission"
   });
   try {
+    requireSameOriginJson(request);
     await enforceRateLimit(`create:${anonymousClientKey(request)}`, 5, 60);
-    const input = createSessionSchema.parse(await request.json());
+    const { botToken, ...input } = createSessionSchema.parse(await readJsonBody(request));
+    const botCheck = await verifyBotToken(botToken, "session_create");
+    if (botCheck.status !== "disabled" && botCheck.status !== "verified") {
+      throw new HttpError(botCheck.status === "misconfigured" ? 503 : 403,
+        "bot_check_failed", "The security check could not be completed. Please try again.");
+    }
     const created = await createSession({
       ...input,
       analytics: analyticsIdentityWithAttributionFromRequest(request)

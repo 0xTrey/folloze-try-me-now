@@ -7,6 +7,7 @@ import {
 } from "@/lib/engagement-events";
 import { apiError, logServerError, noStoreHeaders } from "@/lib/http";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
+import { readJsonBody } from "@/lib/request-security";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,7 +30,7 @@ export function OPTIONS() {
 
 export async function POST(request: Request) {
   try {
-    const payload = parseEngagementEventPayload(await request.json());
+    const payload = parseEngagementEventPayload(await readJsonBody(request, 32 * 1024));
     await Promise.all([
       enforceRateLimit(`events:client:${anonymousClientKey(request)}`, 240, 60),
       enforceRateLimit(`events:session:${payload.sessionId}`, 180, 60)

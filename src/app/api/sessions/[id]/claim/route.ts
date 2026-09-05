@@ -13,6 +13,7 @@ import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { assertBusinessEmail, claimSchema } from "@/lib/validation";
 
 import { readEditorToken } from "../../editor-cookie";
+import { readJsonBody, requireSameOriginJson } from "@/lib/request-security";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -26,11 +27,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     stage: "claim"
   });
   try {
+    requireSameOriginJson(request);
     await enforceRateLimit(`claim:${anonymousClientKey(request)}`, 5, 3600);
     if (!(await canEditSession(id, readEditorToken(request, id)))) {
       throw new HttpError(403, "editor_forbidden", "This editor session is no longer active.");
     }
-    const { email: submittedEmail } = claimSchema.parse(await request.json());
+    const { email: submittedEmail } = claimSchema.parse(await readJsonBody(request));
     const email = assertBusinessEmail(submittedEmail);
     const { traceId, ...result } = await claimSession(id, email);
     // CRM delivery is intentionally post-response and best-effort: a tenant

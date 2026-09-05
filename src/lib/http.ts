@@ -187,11 +187,11 @@ export function apiError(error: unknown, context: ErrorContext = {}): NextRespon
     if (/expired|not found/i.test(rawMessage)) {
       status = 410;
       code = "expired";
-      message = rawMessage;
+      message = "This temporary experience is no longer available.";
     } else if (/already been claimed/i.test(rawMessage)) {
       status = 409;
       code = "already_claimed";
-      message = rawMessage;
+      message = "This experience has already been claimed.";
     } else if (isExpectedInputError) {
       status = 400;
       code = "invalid_input";

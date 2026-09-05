@@ -19,6 +19,8 @@ import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { getSession, toPublicSession, updateSession } from "@/lib/session-store";
 
 import { readEditorToken } from "../../editor-cookie";
+import { readJsonBody, requireSameOriginJson } from "@/lib/request-security";
+import { claimSchema, personalizationTargetsSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -41,6 +43,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     operation: "capture_personalization_request"
   });
   try {
+    requireSameOriginJson(request);
     await enforceRateLimit(
       `personalization:${anonymousClientKey(request)}`,
       10,
@@ -62,7 +65,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const body = (await request.json()) as { email?: string };
+    const body = claimSchema.parse(await readJsonBody(request));
     const personalizationRequest = await createPersonalizationRequest({
       sessionId: id,
       email: body.email ?? "",
@@ -113,6 +116,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     operation: "add_personalization_targets"
   });
   try {
+    requireSameOriginJson(request);
     await enforceRateLimit(
       `personalization-targets:${anonymousClientKey(request)}`,
       10,
@@ -149,7 +153,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         "The standard experience changed after this request started. Start a new request."
       );
     }
-    const body = (await request.json()) as { targets?: unknown; autoSelect?: boolean };
+    const body = personalizationTargetsSchema.parse(await readJsonBody(request));
     // Auto-selection is explicit and uses bounded demo accounts. It does not
     // infer visitor intent from private data or imply account qualification.
     const targets = body.autoSelect === true

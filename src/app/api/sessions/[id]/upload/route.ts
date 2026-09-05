@@ -19,6 +19,7 @@ import {
 import { canEditSession, finalizePdfSource, runStoryStage } from "@/lib/orchestrator";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
 import { pdfTitleFallback } from "@/lib/pdf-title";
+import { readJsonBody, requireSameOriginJson } from "@/lib/request-security";
 import { getSession, sessionStoreMode, updateSession } from "@/lib/session-store";
 import { appendEvent } from "@/lib/telemetry";
 import { traceIdForSession } from "@/lib/trace-store";
@@ -265,8 +266,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   try {
     await enforceRateLimit(`upload-request:${anonymousClientKey(request)}`, 40, 60);
-    const body = (await request.json()) as unknown;
+    const body = await readJsonBody(request, 32 * 1024);
     const bodyType = body && typeof body === "object" && "type" in body ? (body as { type?: unknown }).type : undefined;
+    // Provider callbacks are authenticated by handleUpload's signature check.
+    // Browser token requests and error reports still require same-origin JSON.
+    if (bodyType !== "blob.upload-completed") requireSameOriginJson(request);
     const traceSession = await getSession(id);
     if (traceSession) trace.setTraceId(traceIdForSession(traceSession));
 

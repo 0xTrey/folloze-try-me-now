@@ -7,6 +7,7 @@ import {
 } from "@/lib/product-analytics";
 import { apiError, HttpError, logServerError, noStoreHeaders } from "@/lib/http";
 import { anonymousClientKey, enforceRateLimit } from "@/lib/rate-limit";
+import { readJsonBody } from "@/lib/request-security";
 
 function requireSameOrigin(request: NextRequest): void {
   const origin = request.headers.get("origin");
@@ -48,7 +49,7 @@ function requireSingleIdentity(events: ReturnType<typeof parseProductEventBatch>
 export async function POST(request: NextRequest) {
   try {
     requireSameOrigin(request);
-    const events = parseProductEventBatch(await request.json());
+    const events = parseProductEventBatch(await readJsonBody(request, 64 * 1024));
     requireSingleIdentity(events);
     await Promise.all([
       enforceRateLimit(`product-events:client:${anonymousClientKey(request)}`, 360, 60),

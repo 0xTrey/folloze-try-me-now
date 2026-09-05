@@ -25,10 +25,11 @@ import {
 } from "@/lib/validation";
 
 import { readEditorToken, setEditorTokenCookie } from "../editor-cookie";
+import { readJsonBody, requireSameOriginJson } from "@/lib/request-security";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   const trace = startServerOperation({
     route: "/api/sessions/[id]",
@@ -37,6 +38,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     operation: "read_session"
   });
   try {
+    await enforceRateLimit(`read:${anonymousClientKey(request)}`, 60, 60);
+    if (!(await canEditSession(id, readEditorToken(request, id)))) {
+      throw new HttpError(403, "editor_forbidden", "This editor session is no longer active.");
+    }
     const session = await getSession(id);
     if (!session) {
       throw new HttpError(410, "expired", "This temporary experience has expired.");
@@ -61,11 +66,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     operation: "update_session"
   });
   try {
+    requireSameOriginJson(request);
     await enforceRateLimit(`input:${anonymousClientKey(request)}`, 60, 60);
     if (!(await canEditSession(id, readEditorToken(request, id)))) {
       throw new HttpError(403, "editor_forbidden", "This editor session is no longer active.");
     }
-    const body: unknown = await request.json();
+    const body: unknown = await readJsonBody(request);
     const workspaceParse = sessionWorkspacePatchSchema.safeParse(body);
     let updated;
     if (workspaceParse.success) {
@@ -94,6 +100,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     operation: "session_operation"
   });
   try {
+    requireSameOriginJson(request);
     // Preview interactions are session-scoped. Including the session ID prevents
     // one completed preview (or multiple prospects behind one corporate NAT) from
     // exhausting the interaction allowance for every other active experience.
@@ -101,7 +108,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (!(await canEditSession(id, readEditorToken(request, id)))) {
       throw new HttpError(403, "editor_forbidden", "This editor session is no longer active.");
     }
-    const operation = sessionOperationSchema.parse(await request.json());
+    const operation = sessionOperationSchema.parse(await readJsonBody(request));
     if (operation.operation === "preview-interaction") {
       const session = await recordPreviewInteraction(id, operation);
       const internal = await getSession(id);

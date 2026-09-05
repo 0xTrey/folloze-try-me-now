@@ -3,6 +3,7 @@ import { promises as dns } from "node:dns";
 
 import disposableEmailDomains from "disposable-email-domains";
 import { z } from "zod";
+import { isBroadProductCategory, PRODUCT_CLARIFICATION } from "@/lib/product-identity";
 
 import {
   CTA_STYLES,
@@ -21,6 +22,7 @@ const domainPattern = /^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])
 export const createSessionSchema = z.object({
   useCase: z.enum(USE_CASES),
   companyDomain: z.string().min(3).max(300),
+  botToken: z.string().min(1).max(2048).optional(),
   exampleMode: z.boolean().optional(),
   exampleKey: z.string().trim().min(2).max(80).regex(/^[a-z0-9][a-z0-9-]*$/).optional()
 }).strict();
@@ -71,9 +73,11 @@ export const answersSchema = z
     customAudience: z.string().min(2).max(160).optional(),
     objective: z.string().min(2).max(120).optional(),
     campaignType: z.enum(["product", "demand", "event"]).optional(),
+    trafficIntent: z.enum(["cold-outreach", "search", "retargeting", "post-demo", "existing-opportunity"]).optional(),
+    buyerStage: z.enum(["awareness", "consideration", "evaluation", "decision"]).optional(),
     eventSource: z.string().max(1000).optional(),
     sourceUrl: z.string().max(1000).optional(),
-    promotedOffer: z.string().trim().min(2).max(160).optional(),
+    promotedOffer: z.string().trim().min(2).max(160).refine((value) => !isBroadProductCategory(value), PRODUCT_CLARIFICATION).optional(),
     promotedOfferConfirmed: z.boolean().optional(),
     offerSourceUrl: z.union([httpsDestinationSchema, z.literal("")]).optional(),
     offerSourceTitle: z.string().trim().min(2).max(180).optional(),
@@ -189,6 +193,16 @@ export const sessionOperationSchema = z.discriminatedUnion("operation", [
 
 export const claimSchema = z.object({
   email: z.string().trim().email().max(320)
+}).strict();
+
+export const personalizationTargetsSchema = z.object({
+  targets: z.array(z.object({
+    domain: z.string().trim().min(3).max(253),
+    role: z.string().trim().min(1).max(100).optional()
+  }).strict()).length(3).optional(),
+  autoSelect: z.boolean().optional()
+}).strict().refine((value) => value.autoSelect === true || Boolean(value.targets?.length), {
+  message: "Choose target accounts or request automatic selection."
 });
 
 export function normalizeDomain(value: string): string {

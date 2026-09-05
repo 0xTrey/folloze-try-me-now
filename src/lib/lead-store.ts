@@ -4,8 +4,10 @@ import { neon } from "@neondatabase/serverless";
 import { BlobPreconditionFailedError, get, list, put } from "@vercel/blob";
 
 import { hasBlob, hasDatabase } from "@/lib/config";
+import { sessionScopedSql } from "@/lib/database-security";
 import type { TryMeSession } from "@/lib/types";
 import { assertBusinessEmail } from "@/lib/validation";
+import { protectJson, unprotectJson } from "@/lib/sensitive-storage";
 
 export interface LeadRecord {
   sessionId: string;
@@ -188,7 +190,7 @@ function leadFromSession(session: TryMeSession, email: string): LeadRecord {
 type BlobLeadSnapshot = { record: LeadRecord; etag: string };
 
 async function writeBlobLead(record: LeadRecord, ifMatch?: string): Promise<void> {
-  await put(blobPathFor(record.sessionId), JSON.stringify(record), {
+  await put(blobPathFor(record.sessionId), JSON.stringify(protectJson(record, { type: "lead", id: record.sessionId })), {
     access: "private",
     addRandomSuffix: false,
     allowOverwrite: Boolean(ifMatch),
@@ -202,7 +204,7 @@ async function readBlobLeadSnapshot(sessionId: string): Promise<BlobLeadSnapshot
   const result = await get(blobPathFor(sessionId), { access: "private", useCache: false });
   if (!result || result.statusCode !== 200) return undefined;
   return {
-    record: normalizedLead((await new Response(result.stream).json()) as LeadRecord),
+    record: normalizedLead(unprotectJson<LeadRecord>(await new Response(result.stream).json(), { type: "lead", id: sessionId })),
     etag: result.blob.etag.replace(/^W\//, "")
   };
 }
@@ -215,7 +217,7 @@ export async function recordLeadCapture(session: TryMeSession, email: string): P
   const record = leadFromSession(session, assertBusinessEmail(email));
   if (leadStoreMode === "neon-postgres") {
     await ensureLeadStoreReady();
-    const sql = getDatabase();
+    const sql = sessionScopedSql(getDatabase(), session.id);
     const rows = await sql`
       INSERT INTO try_me_leads (
         session_id, claim_attempt_id, claim_attempt_started_at,
@@ -302,7 +304,7 @@ export async function recordLeadCapture(session: TryMeSession, email: string): P
         )
       RETURNING session_id
     `;
-    const returnedRows = Array.isArray(rows) ? rows : rows.rows;
+    const returnedRows = rows;
     if (returnedRows.length !== 1) {
       throw new Error("This lead capture was superseded or belongs to a different business email.");
     }
@@ -390,7 +392,7 @@ export async function updateLeadOutcome(input: {
   const updatedAt = new Date().toISOString();
   if (leadStoreMode === "neon-postgres") {
     await ensureLeadStoreReady();
-    const sql = getDatabase();
+    const sql = sessionScopedSql(getDatabase(), input.sessionId);
     const nextSaveStatus =
       input.claimStatus === "claimed"
         ? "saved"
@@ -430,7 +432,7 @@ export async function updateLeadOutcome(input: {
         AND claim_attempt_id = ${input.claimAttemptId}
       RETURNING session_id
     `;
-    const returnedRows = Array.isArray(rows) ? rows : rows.rows;
+    const returnedRows = rows;
     if (returnedRows.length === 1) return true;
     const existing = await sql`
       SELECT claim_attempt_id
@@ -438,7 +440,7 @@ export async function updateLeadOutcome(input: {
       WHERE session_id = ${input.sessionId}
       LIMIT 1
     `;
-    const existingRows = Array.isArray(existing) ? existing : existing.rows;
+    const existingRows = existing;
     if (existingRows.length === 0) {
       throw new Error(`Lead outcome cannot be updated before capture: ${input.sessionId}`);
     }
@@ -506,7 +508,10 @@ export async function listLeadsNeedingReconciliation(limit = 100): Promise<strin
   const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
   if (leadStoreMode === "neon-postgres") {
     await ensureLeadStoreReady();
-    const sql = getDatabase();
+    if (process.env.DATABASE_RLS_ENABLED === "true" && !process.env.DATABASE_MAINTENANCE_URL) {
+      throw new Error("Database reconciliation requires its dedicated maintenance credential.");
+    }
+    const sql = process.env.DATABASE_MAINTENANCE_URL ? neon(process.env.DATABASE_MAINTENANCE_URL) : getDatabase();
     const rows = await sql`
       SELECT session_id
       FROM try_me_leads

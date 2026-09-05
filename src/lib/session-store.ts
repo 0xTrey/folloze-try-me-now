@@ -8,6 +8,7 @@ import { emitObservabilityLog, supportRefForTraceId } from "@/lib/observability"
 import { recordProductSessionSnapshot } from "@/lib/product-analytics";
 import { recordCommittedSessionEvents, traceIdForSession } from "@/lib/trace-store";
 import type { PublicTryMeSession, SessionAnswers, TryMeSession } from "@/lib/types";
+import { protectJson, unprotectJson } from "@/lib/sensitive-storage";
 
 type StoredEntry = { value: TryMeSession; expiresAt?: number };
 type BlobSnapshot = { entry: StoredEntry; etag: string };
@@ -151,7 +152,7 @@ function isExpiredAnonymousPreview(session: TryMeSession, now = Date.now()): boo
 async function readBlobSnapshot(id: string): Promise<BlobSnapshot | null> {
   const result = await get(blobPathFor(id), { access: "private", useCache: false });
   if (!result || result.statusCode !== 200) return null;
-  const entry = (await new Response(result.stream).json()) as StoredEntry;
+  const entry = unprotectJson<StoredEntry>(await new Response(result.stream).json(), { type: "session", id });
   if (
     (entry.expiresAt && entry.expiresAt <= Date.now()) ||
     isExpiredAnonymousPreview(entry.value)
@@ -176,7 +177,7 @@ async function writeBlobEntry(
   entry: StoredEntry,
   options: { ifMatch?: string } = {}
 ): Promise<void> {
-  await put(blobPathFor(id), JSON.stringify(entry), {
+  await put(blobPathFor(id), JSON.stringify(protectJson(entry, { type: "session", id })), {
     access: "private",
     addRandomSuffix: false,
     allowOverwrite: true,
@@ -194,10 +195,10 @@ async function writeSession(
   if (useRedisSessionStore) {
     const client = getRedis();
     if (options.persist) {
-      await client.set(keyFor(session.id), session);
+      await client.set(keyFor(session.id), protectJson(session, { type: "session", id: session.id }));
       await client.persist(keyFor(session.id));
     } else {
-      await client.set(keyFor(session.id), session, { ex: ttlSeconds });
+      await client.set(keyFor(session.id), protectJson(session, { type: "session", id: session.id }), { ex: ttlSeconds });
     }
     return;
   }
@@ -223,7 +224,8 @@ export async function putSession(
 
 export async function getSession(id: string): Promise<TryMeSession | null> {
   if (useRedisSessionStore) {
-    const session = (await getRedis().get<TryMeSession>(keyFor(id))) ?? null;
+    const stored = (await getRedis().get<unknown>(keyFor(id))) ?? null;
+    const session = stored ? unprotectJson<TryMeSession>(stored, { type: "session", id }) : null;
     if (!session) return null;
     if (isExpiredAnonymousPreview(session)) {
       await getRedis().del(keyFor(id));

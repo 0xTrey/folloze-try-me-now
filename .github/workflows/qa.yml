@@ -15,6 +15,19 @@ permissions:
   contents: read
 
 jobs:
+  secrets:
+    name: Redacted Git history secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan current code and history
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   verify:
     name: Lint, types, tests, and production builds
     runs-on: ubuntu-latest
@@ -34,6 +47,9 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci
+
+      - name: Scan dependency vulnerabilities
+        run: npm audit --audit-level=high
 
       - name: Run repository quality gate
         run: npm run qa
