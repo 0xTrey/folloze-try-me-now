@@ -2,11 +2,9 @@
 
 import {
   ArrowRight,
-  BarChart3,
   Check,
   Clock,
   Copy,
-  Eye,
   ExternalLink,
   FileText,
   Gauge,
@@ -892,15 +890,6 @@ export function AnalyticsSignalToast({ signal, open, onDismiss, onOpenPanel }: {
   );
 }
 
-const ANALYTICS_CAPABILITIES = [
-  { id: "attention", label: "Attention", detail: "What held attention, for how long, and whether the visitor returned.", icon: Eye },
-  { id: "journey", label: "Journey path", detail: "The order of sections and paths explored, not just a page view.", icon: Route },
-  { id: "topics", label: "Topics", detail: "The questions, themes, and decision lenses that earned a deeper look.", icon: Layers3 },
-  { id: "content", label: "Content", detail: "Which proof, resources, or experiences were opened.", icon: FileText },
-  { id: "intent", label: "Intent", detail: "The next step, CTA, or action the visitor showed interest in.", icon: MousePointerClick },
-  { id: "group", label: "Buying group", detail: "Engagement across people and roles in a live account.", icon: Users }
-] as const;
-
 function analyticsSignalTitle(signal: AnalyticsSignal): string {
   if (signal.action === "topic_select" && signal.context?.lensTitle) return `Selected ${signal.context.lensTitle}`;
   if (signal.action === "signature_select" && signal.context?.lensTitle) return `Chose ${signal.context.lensTitle}`;
@@ -965,28 +954,6 @@ function analyticsJourneyInsights(signals: AnalyticsSignal[]) {
   };
 }
 
-function analyticsSignalSummary(signals: AnalyticsSignal[]): { headline: string; detail: string } {
-  if (!signals.length) return { headline: "No live interest yet", detail: "Explore the experience and Folloze will show the sections that earn attention." };
-  const views = uniqueSignals(
-    signals.filter((signal) => ["section_view", "journey_complete"].includes(signal.action ?? "")),
-    (signal) => signal.context?.sectionTitle ?? signal.context?.sectionId ?? signal.label
-  ).length;
-  const choices = uniqueSignals(
-    signals.filter((signal) => ["topic_select", "signature_select", "question_select"].includes(signal.action ?? "")),
-    (signal) => signal.context?.lensTitle ?? signal.context?.lensId ?? signal.label
-  ).length;
-  const ctas = uniqueSignals(
-    signals.filter((signal) => signal.type === "cta" || signal.action === "cta_click"),
-    (signal) => signal.context?.ctaId ?? signal.label
-  ).length;
-  const completion = [...signals].reverse().find((signal) => signal.action === "journey_complete");
-  const latest = completion?.context?.sectionTitle
-    ? `Journey complete: ${completion.context.sectionTitle}`
-    : analyticsSignalTitle(signals[signals.length - 1]);
-  const parts = [views && `${views} journey stage${views === 1 ? "" : "s"}`, choices && `${choices} topic${choices === 1 ? "" : "s"} explored`, ctas && `${ctas} next-step action${ctas === 1 ? "" : "s"}`].filter(Boolean);
-  return { headline: latest, detail: parts.length ? parts.join(" · ") : `${signals.length} live signal${signals.length === 1 ? "" : "s"} captured from this preview.` };
-}
-
 export interface AnalyticsSignalPanelProps {
   open: boolean;
   signals: AnalyticsSignal[];
@@ -1018,7 +985,6 @@ export function AnalyticsSignalPanel({
     : []);
   if (!open) return null;
   const showCounters = engagedSeconds >= 15;
-  const interestSummary = analyticsSignalSummary(liveSignals);
   const journeyInsights = analyticsJourneyInsights(liveSignals);
   return (
     <div className={classes(styles.modalBackdrop, styles.signalBackdrop)} onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
@@ -1029,10 +995,6 @@ export function AnalyticsSignalPanel({
         ) : (
           <p className={styles.sparseSignalSummary}>{liveSignals.length ? "Live signals are captured. Engaged time appears after 15 foreground seconds." : "Explore the preview to see engagement appear here."}</p>
         )}
-        <section className={styles.signalSnapshot} aria-labelledby="signal-snapshot-title">
-          <div><span>Live journey snapshot</span><h3 id="signal-snapshot-title">{interestSummary.headline}</h3><p>{interestSummary.detail}</p></div>
-          <span className={styles.snapshotBadge}>{liveSignals.length ? "Based on this visit" : "Waiting for activity"}</span>
-        </section>
         <section className={styles.signalInsightGrid} aria-label="Engagement summary">
           <article>
             <span><Route size={16} />Journey</span>
@@ -1078,19 +1040,6 @@ export function AnalyticsSignalPanel({
             </details>
           )}
         </div>
-        <details className={styles.signalCapabilityDetails}>
-          <summary>See the full analytics picture <span>6 reporting lenses</span></summary>
-          <section className={styles.signalCapabilitySection} aria-labelledby="signal-capability-title">
-            <div className={styles.signalSectionHeading}><div><span>What Folloze reports</span><h3 id="signal-capability-title">A live campaign turns activity into usable context</h3></div></div>
-            <div className={styles.signalCapabilityGrid}>
-              {ANALYTICS_CAPABILITIES.map((capability) => {
-                const Icon = capability.icon;
-                return <article key={capability.id}><span><Icon size={15} /></span><div><strong>{capability.label}</strong><p>{capability.detail}</p></div></article>;
-              })}
-            </div>
-          </section>
-        </details>
-        <div className={styles.signalValue}><BarChart3 size={20} /><p>In a live campaign, these signals can route to campaign and sales systems so the next move starts with context.</p></div>
         {shouldShowEngagementFinale({ eventCount: liveSignals.length, isSaved }) && (
           <EngagementFeedFinale eventCount={liveSignals.length} isSaved={isSaved} />
         )}

@@ -59,6 +59,7 @@ import {
 } from "@/components/streaming-brief-composer";
 import { ThreeAccountConversion } from "@/components/three-account-conversion";
 import { EditBriefForm, ExperienceReady } from "@/components/experience-ready";
+import { experienceResumeTarget, parseExperienceHandoff } from "@/lib/experience-handoff";
 
 import type {
   AudienceRecommendation,
@@ -3183,6 +3184,28 @@ export function SaveExperienceDialog({
   );
 }
 
+export function ExperienceNextStepsDialog({ onClose, onAnalytics, onPersonalize, personalizationLabel }: {
+  onClose: () => void;
+  onAnalytics: () => void;
+  onPersonalize?: () => void;
+  personalizationLabel: string;
+}) {
+  const { dialogRef, onKeyDown } = useDialogBehavior(onClose);
+  return createPortal(
+    <div className="drawerBackdrop saveDialogBackdrop">
+      <section ref={dialogRef} className="saveExperienceDialog experienceNextSteps" role="dialog" aria-modal="true" aria-labelledby="experience-next-title" onKeyDown={onKeyDown}>
+        <button className="drawerClose" type="button" onClick={onClose} aria-label="Close next steps"><X size={20} /></button>
+        <h2 id="experience-next-title">What would you like to explore next?</h2>
+        <div className="experienceNextActions">
+          <button className="buttonPrimary" type="button" onClick={onAnalytics}>View Engagement Analytics</button>
+          {onPersonalize && <button className="buttonSecondary" type="button" onClick={onPersonalize}>{personalizationLabel}</button>}
+        </div>
+      </section>
+    </div>,
+    document.body
+  );
+}
+
 function MobileProcessDialog({ session, onClose }: { session: PublicTryMeSession; onClose: () => void }) {
   const { dialogRef, onKeyDown } = useDialogBehavior(onClose);
   return createPortal(
@@ -3262,6 +3285,10 @@ export function TryMeNowApp() {
   const [showProcess, setShowProcess] = useState(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showAnalyticsPanel, setShowAnalyticsPanel] = useState(false);
+  const [showNextSteps, setShowNextSteps] = useState(false);
+  const [resumeStatus, setResumeStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [resumeError, setResumeError] = useState("");
+  const [handoffEngagedSeconds, setHandoffEngagedSeconds] = useState(0);
   const [pdfUpload, setPdfUpload] = useState<PdfUploadFeedback>(idlePdfUpload);
   const [personalizationEmail, setPersonalizationEmail] = useState("");
   const [personalizationTargetDraft, setPersonalizationTargetDraft] = useState<PersonalizationTargetInput[]>([{ domain: "" }, { domain: "" }, { domain: "" }]);
@@ -3302,6 +3329,8 @@ export function TryMeNowApp() {
   );
   const resetSessionScopedRefs = useCallback(() => {
     setEditingBrief(false);
+    setShowNextSteps(false);
+    setHandoffEngagedSeconds(0);
     setPersonalizationTargetDraft([{ domain: "" }, { domain: "" }, { domain: "" }]);
     patchRequestRef.current = 0;
     startedDomain.current = undefined;
@@ -3319,6 +3348,48 @@ export function TryMeNowApp() {
     supportRefTracked.current = undefined;
     personalizationStatusTracked.current = undefined;
   }, []);
+
+  useEffect(() => {
+    const target = experienceResumeTarget(window.location.search);
+    if (!target) return;
+    const requestGeneration = resetGeneration.current;
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) setResumeStatus("loading"); });
+    void api<{ session: PublicTryMeSession; request?: PublicPersonalizationRequest }>(
+      `/api/sessions/${target.sessionId}/resume`, { signal: AbortSignal.timeout(15_000) }
+    ).then((result) => {
+      if (cancelled || isResetGenerationStale(requestGeneration)) return;
+      if (result.session.id !== target.sessionId) throw new Error("This link could not be reopened.");
+      const restored = result.session;
+      setSession(restored);
+      setUseCase(restored.useCase);
+      setDomain(restored.companyDomain);
+      setAnswers(restored.answers);
+      setCampaignEntryMode(restored.answers.campaignType === "event" ? "event" : "campaign");
+      setPersonalizationRequest(result.request);
+      try {
+        const key = `tmn_handoff_${target.sessionId}`;
+        const activity = parseExperienceHandoff(window.sessionStorage.getItem(key));
+        window.sessionStorage.removeItem(key);
+        setClientEvents(activity.events.map(event => ({ ...event, ...describePreviewAnalyticsEvent(event.action, event.context) })));
+        setHandoffEngagedSeconds(activity.engagedSeconds);
+      } catch { /* Unavailable tab storage never blocks the owned session. */ }
+      if (target.panel === "analytics") {
+        setShowAnalyticsPanel(true);
+        captureUnifiedProductEvent("analytics_panel_opened", { sessionId: restored.id, properties: { trigger: "journey_complete" } });
+      } else if (canOfferPersonalizationModal(restored)) {
+        setShowSavePrompt(true);
+        captureUnifiedProductEvent("personalization_offer_opened", { sessionId: restored.id, properties: { trigger: "preview_cta" } });
+      }
+      setResumeStatus("idle");
+    }).catch((error) => {
+      if (cancelled || isResetGenerationStale(requestGeneration)) return;
+      setResumeError(error instanceof Error ? error.message : "Try opening the link in the browser where you created this experience.");
+      setResumeStatus("error");
+    });
+    return () => { cancelled = true; };
+  }, [isResetGenerationStale]);
+
   const [preflightCoordinator] = useState(() => (
     new SellerBrandPreflightCoordinator(
       async (selectedUseCase, companyDomain) => {
@@ -3399,6 +3470,9 @@ export function TryMeNowApp() {
   }, [bumpResetGeneration, resetSessionScopedRefs]);
 
   const resetExperience = useCallback(() => {
+    window.history.replaceState(null, "", window.location.pathname);
+    setResumeStatus("idle");
+    setResumeError("");
     resetProductAnalyticsVisitor();
     bumpResetGeneration();
     resetSessionScopedRefs();
@@ -3618,7 +3692,7 @@ export function TryMeNowApp() {
       const revealTime = Date.now();
       setRevealedAt(revealTime);
       track("experience_revealed", { useCase: sessionUseCase });
-      setClientEvents([{
+      setClientEvents(current => current.length ? current : [{
         action: "preview_viewed",
         ...describePreviewAnalyticsEvent("preview_viewed", {}),
         at: revealTime
@@ -3637,6 +3711,7 @@ export function TryMeNowApp() {
       if (
         !session ||
         event.source !== previewFrameRef.current?.contentWindow ||
+        event.origin !== window.location.origin ||
         !event.data ||
         event.data.source !== "folloze-experience"
       ) return;
@@ -3696,11 +3771,7 @@ export function TryMeNowApp() {
       };
       if (event.data.action === "journey_complete") {
         journeyCompleteAnalyticsOpened.current = session.id;
-        setShowAnalyticsPanel(true);
-        captureUnifiedProductEvent("analytics_panel_opened", {
-          sessionId: session.id,
-          properties: { trigger: "journey_complete" }
-        });
+        setShowNextSteps(true);
       }
       const semanticKey = [next.action, context.ctaId, context.lensId, context.sectionId, context.targetId, context.area]
         .filter(Boolean)
@@ -4313,11 +4384,19 @@ export function TryMeNowApp() {
 
   const generationEligible = isSessionGenerationEligible(session);
   const engagementSeconds = usePreviewForegroundSeconds(
-    isReveal && revealedAt && session ? session.id : undefined
+    isReveal && revealedAt && session ? session.id : undefined,
+    showAnalyticsPanel || showSavePrompt || showNextSteps || showProcess || editingBrief
   );
   const lifecyclePhase = previewLifecyclePhase(session);
   const lifecycleCopy = previewLifecycleCopy(lifecyclePhase);
   const canPersonalizeExperience = canOfferPersonalizationModal(session);
+  const personalizationLabel = personalizationRequest
+    ? personalizationRequest.status === "awaiting_targets"
+      ? "Continue personalization"
+      : ["queued", "generating"].includes(personalizationRequest.status)
+        ? "View account request"
+        : "View account versions"
+    : "Personalize for 3 accounts";
   const saveDialogOpen = Boolean(showSavePrompt && session && canPersonalizeExperience);
   const buildPanelCopy = session ? getBuildPanelCopy(session) : undefined;
   const revealCopy = session ? getRevealCopy(session) : undefined;
@@ -4356,11 +4435,16 @@ export function TryMeNowApp() {
     </header>
     <main
       className={`appShell ${isReveal ? "revealMode" : ""}`}
-      aria-hidden={showProcess || saveDialogOpen || showAnalyticsPanel ? true : undefined}
-      inert={showProcess || saveDialogOpen || showAnalyticsPanel ? true : undefined}
+      aria-hidden={showProcess || saveDialogOpen || showAnalyticsPanel || showNextSteps ? true : undefined}
+      inert={showProcess || saveDialogOpen || showAnalyticsPanel || showNextSteps ? true : undefined}
     >
 
-      {!useCase && (
+      {resumeStatus !== "idle" && (
+        <section className="experienceResume" aria-live="polite">
+          {resumeStatus === "loading" ? <><LoaderCircle className="spin" size={30} /><h1>Opening your experience…</h1></> : <><h1>We couldn&apos;t reopen this experience.</h1><p role="alert">{resumeError}</p><button className="buttonPrimary" type="button" onClick={resetExperience}>Start a new experience</button></>}
+        </section>
+      )}
+      {!useCase && resumeStatus === "idle" && (
         <section className="entryStage">
           <div className="entryHero">
             <h1>Build personalized campaign pages from the tools you already use.</h1>
@@ -4586,13 +4670,7 @@ export function TryMeNowApp() {
           onEdit={() => { setError(""); setEditingBrief(true); }}
           onPersonalize={canPersonalizeExperience ? openSavePrompt : undefined}
           personalizationRef={personalizationTriggerRef}
-          personalizationLabel={personalizationRequest
-            ? personalizationRequest.status === "awaiting_targets"
-              ? "Continue personalization"
-              : ["queued", "generating"].includes(personalizationRequest.status)
-                ? "View account request"
-                : "View account versions"
-            : "Personalize for 3 accounts"}
+          personalizationLabel={personalizationLabel}
           publicationNote={lifecycleCopy.publicationNote}
           onAnalytics={() => {
             setShowAnalyticsPanel(true);
@@ -4606,6 +4684,16 @@ export function TryMeNowApp() {
 
       {showProcess && session && <MobileProcessDialog session={session} onClose={() => setShowProcess(false)} />}
     </main>
+    {showNextSteps && session && <ExperienceNextStepsDialog
+      onClose={() => setShowNextSteps(false)}
+      personalizationLabel={personalizationLabel}
+      onPersonalize={canPersonalizeExperience ? () => { setShowNextSteps(false); openSavePrompt(); } : undefined}
+      onAnalytics={() => {
+        setShowNextSteps(false);
+        setShowAnalyticsPanel(true);
+        captureUnifiedProductEvent("analytics_panel_opened", { sessionId: session.id, properties: { trigger: "journey_complete" } });
+      }}
+    />}
     {saveDialogOpen && session && (
       <SaveExperienceDialog
         open
@@ -4632,7 +4720,7 @@ export function TryMeNowApp() {
     <AnalyticsSignalPanel
       open={showAnalyticsPanel}
       signals={analyticsSignals}
-      engagedSeconds={engagementSeconds}
+      engagedSeconds={engagementSeconds + handoffEngagedSeconds}
       sessionId={session?.id}
       audienceLabel={answers.customAudience || answers.audience}
       isSaved={session?.status === "claimed"}

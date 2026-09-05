@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const TICK_INTERVAL_MS = 250;
 
@@ -10,8 +10,11 @@ const TICK_INTERVAL_MS = 250;
  * events or server timestamps.
  */
 export function usePreviewForegroundSeconds(
-  revealedSessionId: string | undefined
+  revealedSessionId: string | undefined,
+  paused = false
 ): number {
+  const pausedRef = useRef(paused);
+  const synchronizePause = useRef<(() => void) | undefined>(undefined);
   const [clock, setClock] = useState<{
     sessionId: string | undefined;
     seconds: number;
@@ -22,34 +25,42 @@ export function usePreviewForegroundSeconds(
 
     let accumulatedMs = 0;
     let visibleStartedAt =
-      document.visibilityState === "visible" ? Date.now() : undefined;
+      document.visibilityState === "visible" && !pausedRef.current ? Date.now() : undefined;
 
     const elapsedMs = () =>
       accumulatedMs +
       (visibleStartedAt === undefined ? 0 : Math.max(0, Date.now() - visibleStartedAt));
-    const update = () => setClock({
-      sessionId: revealedSessionId,
-      seconds: Math.floor(elapsedMs() / 1_000)
-    });
+    const update = () => {
+      const seconds = Math.floor(elapsedMs() / 1_000);
+      setClock(current => current.sessionId === revealedSessionId && current.seconds === seconds ? current : { sessionId: revealedSessionId, seconds });
+    };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
+      if (document.visibilityState === "hidden" || pausedRef.current) {
         if (visibleStartedAt !== undefined) {
           accumulatedMs += Math.max(0, Date.now() - visibleStartedAt);
           visibleStartedAt = undefined;
         }
-      } else if (visibleStartedAt === undefined) {
+      } else if (visibleStartedAt === undefined && !pausedRef.current) {
         visibleStartedAt = Date.now();
       }
       update();
     };
 
+    synchronizePause.current = handleVisibilityChange;
     document.addEventListener("visibilitychange", handleVisibilityChange);
     const timer = window.setInterval(update, TICK_INTERVAL_MS);
     return () => {
       window.clearInterval(timer);
+      synchronizePause.current = undefined;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [revealedSessionId]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+    if (!revealedSessionId) return;
+    synchronizePause.current?.();
+  }, [paused, revealedSessionId]);
 
   return clock.sessionId === revealedSessionId ? clock.seconds : 0;
 }

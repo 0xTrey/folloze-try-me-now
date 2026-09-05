@@ -1,19 +1,16 @@
-.ready { max-width: 1060px; margin: 0 auto; padding: clamp(36px, 8vh, 90px) 28px; display: grid; grid-template-columns: 1.2fr 1fr; align-items: center; gap: 48px; }
+.ready { width: 100%; margin: 0 auto; padding: clamp(32px, 5vh, 58px) clamp(22px, 3.6vw, 64px) 28px; display: grid; gap: 26px; }
 .copy h1, .editor h1 { margin: 0; color: var(--fz-ink); font: 620 clamp(36px, 4.5vw, 56px)/1.05 var(--font-display), sans-serif; letter-spacing: -.045em; }
-.copy p, .editor p { color: var(--fz-body); font-size: 17px; line-height: 1.6; margin: 22px 0 28px; }
-.copy > a { min-height: 52px; padding: 14px 25px; text-decoration: none; }
-.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; margin-top: 18px; }
+.copy p, .editor p { color: var(--fz-body); font-size: 17px; line-height: 1.6; margin: 22px 0 0; }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.actions a, .actions button { min-height: 48px; padding: 12px 19px; text-decoration: none; }
 .textButton { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 0; border: 0; background: transparent; color: var(--fz-ink); cursor: pointer; font: inherit; font-size: 14px; font-weight: 650; }
 .textButton:disabled { opacity: .5; cursor: not-allowed; }
 .textButton:hover { color: var(--fz-action); }
-.textButton:focus-visible, .thumbnail:focus-visible { outline: 3px solid var(--fz-action); outline-offset: 5px; }
-.thumbnail { display: block; min-width: 0; overflow: hidden; border: 1px solid var(--fz-border); border-radius: 18px; background: white; color: var(--fz-ink); text-decoration: none; box-shadow: 0 16px 40px #10264015; transition: transform .2s; }
-.thumbnail:hover { transform: translateY(-3px); }
-.thumbnailContent { height: 260px; overflow: hidden; pointer-events: none; }
-.thumbnailContent :global(.assembly) { width: 1080px; height: 690px; min-height: 0; margin: 0; border: 0; border-radius: 0; transform: scale(.4); transform-origin: top left; box-shadow: none; }
-.thumbnailContent :global(.browserBar) { display: none; }
-.thumbnailContent iframe { width: 100%; height: 100%; }
-.thumbnailCaption { padding: 16px 20px; display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--fz-border); font-size: 13px; font-weight: 600; }
+.textButton:focus-visible { outline: 3px solid var(--fz-action); outline-offset: 5px; }
+.preview { width: 100%; overflow: hidden; border: 1px solid var(--fz-border); border-radius: 18px; background: white; box-shadow: 0 16px 40px #10264015; }
+.preview :global(.assembly) { width: 100%; max-width: none; height: max(720px, 82svh); min-height: 0; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+.preview :global(.browserBar) { display: none; }
+.preview iframe { width: 100%; height: 100%; border: 0; }
 .footer { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 20px; border-top: 1px solid var(--fz-border); padding-top: 20px; color: var(--fz-muted-strong); font-size: 12px; }
 .editor { max-width: 760px; margin: 0 auto; padding: 36px 24px 72px; }
 .editor h1 { margin-top: 28px; }
@@ -23,5 +20,4 @@
 .editor textarea { min-height: 100px; resize: vertical; }
 .editor input:focus, .editor textarea:focus { outline: 2px solid var(--fz-action); outline-offset: 2px; }
 .editor [role=alert] { color: #b42318; margin: 0; }
-@media (max-width: 760px) { .ready { grid-template-columns: 1fr; gap: 30px; padding: 32px 22px; } .thumbnail { max-width: 430px; } .thumbnailContent { height: 200px; } .thumbnailContent :global(.assembly) { transform: scale(.34); } .footer { align-items: flex-start; flex-direction: column; gap: 8px; } }
-@media (prefers-reduced-motion: reduce) { .thumbnail { transition: none; } }
+@media (max-width: 760px) { .ready { gap: 22px; padding: 30px 16px 22px; } .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .actions a, .actions button { min-width: 0; padding: 12px 10px; font-size: 13px; } .preview :global(.assembly) { height: max(600px, 82svh); } .footer { align-items: flex-start; flex-direction: column; gap: 8px; } }

@@ -4,6 +4,7 @@ import { canRevealFinalExperience } from "@/lib/preview-lifecycle";
 import { getSession, toPublicSession } from "@/lib/session-store";
 
 import { experienceDocumentHeaders, nonceExperienceRuntime } from "./security-headers";
+import { appendOwnerHandoff } from "./owner-handoff";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -35,7 +36,8 @@ export async function GET(_request: Request, context: RouteContext) {
   // though its HTML is sitting right here.
   if (session.experience?.html && canRevealFinalExperience(toPublicSession(session))) {
     const nonce = randomBytes(18).toString("base64");
-    return new Response(nonceExperienceRuntime(session.experience.html, nonce), {
+    const html = appendOwnerHandoff(session.experience.html, id, nonce, new URL(_request.url).searchParams.get("embed") === "1");
+    return new Response(nonceExperienceRuntime(html, nonce), {
       status: 200,
       headers: experienceDocumentHeaders(nonce)
     });

@@ -517,9 +517,11 @@ describe("Try Me Now prospect enhancement components", () => {
     fireEvent.click(screen.getByText("Show a live-campaign example"));
     expect(screen.getByText("Not captured leads")).toBeInTheDocument();
     expect(screen.getByText("Simulated activity only. These placeholder names and actions demonstrate what Folloze can report in a live campaign.")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("See the full analytics picture"));
-    expect(screen.getByText("Journey path")).toBeInTheDocument();
-    expect(screen.getByText("Buying group")).toBeInTheDocument();
+    expect(screen.queryByText("See the full analytics picture")).not.toBeInTheDocument();
+    expect(screen.queryByText("Journey path")).not.toBeInTheDocument();
+    expect(screen.queryByText("Live journey snapshot")).not.toBeInTheDocument();
+    expect(screen.queryByText("Based on this visit")).not.toBeInTheDocument();
+    expect(screen.queryByText(/route to campaign and sales systems/)).not.toBeInTheDocument();
     expect(screen.getByText(/John Smith spent/)).toBeInTheDocument();
     expect(screen.getAllByText(/VP Enterprise Architecture/)).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: /See the journey/i }));
@@ -559,8 +561,6 @@ describe("Try Me Now prospect enhancement components", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "Journey complete: Choose the first workflow" })).toBeInTheDocument();
-    expect(screen.getByText(/^1 journey stage/)).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Topics explored" })).toHaveTextContent("Governance");
   });
 

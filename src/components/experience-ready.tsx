@@ -21,20 +21,17 @@ export function ExperienceReady({ companyName, domain, href, preview, onEdit, on
     <section className={styles.ready} aria-labelledby="experience-ready-title">
       <div className={styles.copy}>
         <h1 id="experience-ready-title">Your {companyName} experience is ready.</h1>
-        <p>Open your page to explore the full experience. Then see how it changes for three target accounts.</p>
-        <a className="buttonPrimary" href={href} target="_blank" rel="noopener">View experience<ExternalLink size={18} /></a>
-        <div className={styles.actions}>
-          {onPersonalize && <button ref={personalizationRef} className="buttonSecondary" onClick={onPersonalize} type="button"><Users size={17} />{personalizationLabel}</button>}
-          <button className={styles.textButton} onClick={onEdit} type="button"><PencilLine size={16} />Edit brief</button>
-        </div>
+        <p>Explore the full experience, then personalize it for three target accounts or review engagement.</p>
       </div>
-      <a className={styles.thumbnail} href={href} target="_blank" rel="noopener" aria-label={`Open ${companyName} experience in a new tab`}>
-        <div className={styles.thumbnailContent} inert aria-hidden="true">{preview}</div>
-        <span className={styles.thumbnailCaption}><span>{domain}</span><ExternalLink size={16} /></span>
-      </a>
+      <nav className={styles.actions} aria-label="Experience actions">
+        <a className="buttonPrimary" href={href} target="_blank" rel="noopener" title="Open the full experience in a new tab">View Experience<ExternalLink size={18} /></a>
+        {onPersonalize && <button ref={personalizationRef} className="buttonSecondary" onClick={onPersonalize} type="button"><Users size={17} />{personalizationLabel}</button>}
+        <button className="buttonSecondary" onClick={onEdit} type="button"><PencilLine size={16} />Edit Brief</button>
+        <button className="buttonSecondary" onClick={onAnalytics} type="button"><Gauge size={16} />View Engagement</button>
+      </nav>
+      <div className={styles.preview} aria-label={`${domain} experience preview`}>{preview}</div>
       <footer className={styles.footer}>
         <span>{publicationNote}</span>
-        <button className={styles.textButton} onClick={onAnalytics} type="button"><Gauge size={16} />View engagement</button>
       </footer>
     </section>
   );

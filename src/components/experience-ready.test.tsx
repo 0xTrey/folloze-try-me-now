@@ -11,11 +11,14 @@ describe("completed experience navigation", () => {
   it("opens the real experience separately and offers edit, personalization and secondary analytics", () => {
     const onEdit = vi.fn(), onPersonalize = vi.fn(), onAnalytics = vi.fn();
     render(<ExperienceReady companyName="Dynatrace" domain="dynatrace.com" href="/e/ready" preview={<span>Thumbnail</span>} onEdit={onEdit} onPersonalize={onPersonalize} personalizationLabel="Personalize for 3 accounts" onAnalytics={onAnalytics} publicationNote="Hosted test experience" />);
-    expect(screen.getByRole("link", { name: "View experience" })).toHaveAttribute("href", "/e/ready");
-    expect(screen.getByRole("link", { name: "View experience" })).toHaveAttribute("target", "_blank");
-    fireEvent.click(screen.getByRole("button", { name: "Edit brief" }));
+    expect(screen.getByRole("link", { name: "View Experience" })).toHaveAttribute("href", "/e/ready");
+    expect(screen.getByRole("link", { name: "View Experience" })).toHaveAttribute("target", "_blank");
+    expect(screen.getByLabelText("dynatrace.com experience preview")).toHaveTextContent("Thumbnail");
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Edit Brief" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Brief" }));
     fireEvent.click(screen.getByRole("button", { name: "Personalize for 3 accounts" }));
-    fireEvent.click(screen.getByRole("button", { name: "View engagement" }));
+    fireEvent.click(screen.getByRole("button", { name: "View Engagement" }));
     expect(onEdit).toHaveBeenCalledOnce();
     expect(onPersonalize).toHaveBeenCalledOnce();
     expect(onAnalytics).toHaveBeenCalledOnce();
