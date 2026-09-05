@@ -589,6 +589,8 @@ export interface BuildSectionContractsInput {
   strategy?: SectionStrategyBinding;
   /** Section jobs and movements from the selected page recipe, when one ran. */
   sectionJobs?: readonly SectionJobSource[];
+  /** Exact claim pools assigned by the buyer journey, keyed by section. */
+  evidenceRefsBySectionId?: Readonly<Record<string, readonly string[]>>;
 }
 
 /**
@@ -696,6 +698,7 @@ export function buildSectionWritingContracts(
 
   return input.decision.sectionPlan.map((slot, order) => {
     const promptSpec = SECTION_PROMPT_REGISTRY[slot.role];
+    const assignedRefs = input.evidenceRefsBySectionId?.[slot.id];
     const allowedKinds = new Set(slot.requiredEvidenceKinds);
     const allowedRoles = new Set(
       slot.requiredEvidenceKinds
@@ -706,7 +709,8 @@ export function buildSectionWritingContracts(
     // declared kind the section writes without asserting anything verifiable.
     const evidence = allowedKinds.size
       ? currentEvidence.filter((claim) =>
-          claim.kind ? allowedKinds.has(claim.kind) : allowedRoles.has(claim.sourceRole)
+          (!assignedRefs || assignedRefs.includes(claim.id)) &&
+          (claim.kind ? allowedKinds.has(claim.kind) : allowedRoles.has(claim.sourceRole))
         )
       : [];
     const writerSlot = adaptSectionSlotV2(

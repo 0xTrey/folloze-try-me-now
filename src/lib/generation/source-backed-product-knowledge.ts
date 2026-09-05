@@ -3,7 +3,7 @@ import type { ContentClaim, ContentProof, SourceArtifact } from "@/lib/content-i
 import { compilerEvidencePermissions, type CompilerEvidenceItem, type CompilerEvidenceType } from "./messaging-compiler-contracts";
 import { compilerDigest } from "./compiler-digest";
 
-const VERSION = "source-product-knowledge-v2";
+const VERSION = "source-product-knowledge-v3";
 const TTL_MS = 24 * 60 * 60_000;
 const MAX_ENTRIES = 32;
 const cache = new Map<string, { at: number; value: CompilerEvidenceItem[] }>();
@@ -47,14 +47,19 @@ export function compilerEvidenceFromProductSource(input: {
     const text = normalize(item.text);
     if (!text || text.length > 400 || unsafe.test(text) || item.confidence === "low") return;
     const sections = artifact.content.sections.filter((section) =>
-      section.citationIds.some((id) => item.citationIds.includes(id)));
+      section.citationIds.some((id) => item.citationIds.includes(id)) && normalize(section.text).includes(text));
     const citation = item.citationIds.map((id) => citations.get(id)).find((candidate) => candidate &&
       (normalize(candidate.excerpt).includes(text) || sections.some((section) =>
         section.citationIds.includes(candidate.id) && normalize(section.text).includes(text))));
     if (!citation || citation.locator.kind !== "url-block") return;
     try { if (new URL(citation.locator.sourceUrl).origin !== new URL(url).origin) return; } catch { return; }
-    const context = `${artifact.content.title ?? ""} ${sections.map((section) => `${section.title} ${section.text}`).join(" ")}`;
-    if (!` ${terms(context)} `.includes(` ${terms(offer)} `)) return;
+    const containsOffer = (value: string) => ` ${terms(value)} `.includes(` ${terms(offer)} `);
+    const adjacentOffer = sections.some((section) => containsOffer(`${section.title} ${section.text}`)) || containsOffer(text);
+    const productFocusedTitle = terms((artifact.content.title ?? "").split(/[|:]/)[0]!) === terms(offer);
+    // Outcome proof needs product scope in its own quote/section. A portfolio
+    // title or another section sharing a citation cannot establish that scope.
+    if (!adjacentOffer && (!productFocusedTitle || proofKind === "metric" || proofKind === "example")) return;
+    if (terms(offer) === terms(seller.companyName)) return;
     const headings = sections.map((section) => section.title).join(" ");
     let evidenceType: CompilerEvidenceType = proofKind === "mechanism" ? "workflow"
       : /\b(?:features?|capabilities)\b/i.test(headings) ? "capability"

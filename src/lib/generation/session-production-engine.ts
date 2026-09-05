@@ -895,11 +895,10 @@ export async function compileSessionProductionPage(input: {
   const objective =
     evidence?.fields.objective?.value ?? session.answers.objective ?? "Start a useful conversation";
   const cta = evidence?.fields.cta?.value ?? selectedCta(session);
-  const ledger = [...compileEvidenceLedger({
+  const rawLedger = [...compileEvidenceLedger({
     sessionEvidence: session.evidenceItems,
     liveBriefEvidence: evidence
   }), ...compilerEvidenceFromProductSource({ artifact: session.sourceArtifact, seller: brand, offer })];
-  const proofSignals = deriveWireframeEvidenceSignals(ledger);
   const ctaOffer = resolveBuyerCtaOffer({ intent: cta.type, label: cta.label,
     sourceUrl: session.answers.sourceUrl ?? session.answers.offerSourceUrl ?? session.answers.eventSource,
     meetingUrl: config.demoCtaUrl });
@@ -907,7 +906,11 @@ export async function compileSessionProductionPage(input: {
     session, seller: brand, resolvedOffer: offer, audience: audience.label,
     buyerJob: audience.buyerJob, objective, cta: { ...cta, label: ctaOffer.action.label,
       destination: ctaOffer.action.destination, expectation: ctaOffer.expectation }, now: completedAt
-  }, ledger);
+  }, rawLedger);
+  const approvedProofIds = new Set(buyerDecisionBrief.knowledge.proofClaims.map((item) => item.id));
+  const ledger = rawLedger.filter((item) =>
+    !["customer-outcome", "quantified-outcome"].includes(item.evidenceType ?? "") || approvedProofIds.has(item.id));
+  const proofSignals = deriveWireframeEvidenceSignals(ledger, offer);
   const framework = rankMessageFrameworks({
     motion: messageMotion(session),
     audience: audience.label,
@@ -1240,6 +1243,7 @@ export async function compileSessionProductionPage(input: {
         ...buyerDecisionBrief.knowledge.workflowContext,
         ...buyerDecisionBrief.knowledge.supportedCapabilityWorkflowClaims,
         ...buyerDecisionBrief.knowledge.proofClaims,
+        ...buyerDecisionBrief.knowledge.resources,
         ...Object.values(buyerDecisionBrief.knowledge.objections).flat()
       ].some((claim) => claim.id === item.id))
         .map((item) => ({

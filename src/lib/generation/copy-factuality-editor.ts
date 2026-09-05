@@ -832,7 +832,7 @@ export function editCopyForFactuality(
       ({ wordBudget }, index) =>
         !Number.isSafeInteger(wordBudget.min) ||
         !Number.isSafeInteger(wordBudget.max) ||
-        wordBudget.min < 1 ||
+        wordBudget.min < 0 ||
         wordBudget.min > wordBudget.max ||
         (input.slots[index]?.family !== undefined &&
           (!Number.isSafeInteger(input.slots[index]?.spineOrder) ||

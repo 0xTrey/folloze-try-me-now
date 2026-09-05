@@ -237,6 +237,43 @@ function renderPage(
 }
 
 describe("compileSessionProductionPage", () => {
+  it("renders sourced purchase answers and scopes the purchase writer to those claims", async () => {
+    const profile = brand();
+    const currentSession = session(profile);
+    currentSession.evidenceItems = [{
+      id: "price-approved", type: "public-positioning", label: "Published pricing",
+      text: "Acme Workflow Cloud costs $49 per user monthly.", sourceUrl: "https://acme.example/pricing",
+      signals: [], disposition: "available", entityRole: "seller", confidence: "high",
+      evidenceType: "pricing", subject: "Acme Workflow Cloud"
+    }];
+    const observed: SectionWritingContract[] = [];
+    const result = await compileSessionProductionPage({ session: currentSession, brand: profile,
+      providerStartedAtMs: 0, currentTimeMs: 10_000,
+      sectionModelClient: { writeSection: async (contract) => { observed.push(contract); return { sectionId: contract.sectionId, candidates: [] }; } }
+    });
+    expect(result.outcome, result.outcome === "production-page" ? "" : JSON.stringify(result.instruction)).toBe("production-page");
+    if (result.outcome !== "production-page") throw new Error("purchase_page_missing");
+    expect(observed.find((contract) => contract.sectionId === "buyer-purchase-questions")?.evidenceRefs).toEqual(["price-approved"]);
+    expect(renderPage(currentSession, profile, result.artifact.value!)).toContain("Acme Workflow Cloud costs $49 per user monthly.");
+  });
+
+  it("does not promote another product's outcome into the selected buyer journey", async () => {
+    const profile = brand();
+    const currentSession = session(profile);
+    currentSession.evidenceItems = [{
+      id: "crm-outcome", type: "public-positioning", label: "CRM customer result",
+      text: "A customer reduced processing time by 24%.", sourceUrl: "https://acme.example/crm/customer",
+      signals: [], disposition: "available", entityRole: "seller", confidence: "high",
+      evidenceType: "quantified-outcome", subject: "Acme CRM"
+    }];
+    const result = await compileSessionProductionPage({ session: currentSession, brand: profile,
+      providerStartedAtMs: 0, currentTimeMs: 10_000 });
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") throw new Error("scoped_proof_page_missing");
+    expect(result.buyerDecisionBrief?.knowledge.proofClaims).toEqual([]);
+    expect(renderPage(currentSession, profile, result.artifact.value!)).not.toContain("A customer reduced processing time by 24%.");
+  });
+
   it.each([
     {
       objective: "Explore a product use case",
@@ -368,7 +405,7 @@ describe("compileSessionProductionPage", () => {
       ([role, copy]) => copy !== googleCopy.get(role)
     );
 
-    expect([...ciscoCopy.keys()]).toEqual([
+    expect([...ciscoCopy.keys()], JSON.stringify([...ciscoCopy.keys()])).toEqual([
       "shared-priority",
       "account-relevance",
       "shared-opportunity",

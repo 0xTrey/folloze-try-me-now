@@ -16,13 +16,21 @@ describe("source backed product knowledge", () => {
     expect(compilerEvidenceFromProductSource({ artifact: artifact({ extraction: { ...artifact().extraction, truncated: true } }), seller, offer: "Acme Product" })).toEqual([]);
   });
   it("classifies cited workflow material for the matched offer", () => {
-    const a = artifact({ content: { ...artifact().content, sections: [{ id: "w", title: "How it works", level: 2, order: 1, text: "Acme Product automates workflow steps.", citationIds: ["c1"] }] } });
+    const a = artifact({ content: { ...artifact().content, sections: [{ id: "w", title: "How it works", level: 2, order: 1, text: "Acme Product supports workflow automation.", citationIds: ["c1"] }] } });
     expect(compilerEvidenceFromProductSource({ artifact: a, seller, offer: "Acme Product" })[0]).toMatchObject({ evidenceType: "workflow" });
   });
   it("accepts a matched customer metric as quantified outcome", () => {
     clearSourceBackedProductKnowledgeCacheForTests();
-    const a = artifact({ content: { ...artifact().content, sections: [{ id: "p", title: "Customer case study", level: 2, order: 1, text: "Acme Product helped a customer improve conversion by 24%.", citationIds: ["c1"] }], citations: [{ ...artifact().content.citations[0], excerpt: "Acme Product helped a customer improve conversion by 24%." }] }, understanding: { ...artifact().understanding, claims: [], proof: [{ id: "m", text: "Acme Product helped a customer improve conversion by 24%.", kind: "example", confidence: "high", citationIds: ["c1"] }] } });
-    expect(compilerEvidenceFromProductSource({ artifact: a, seller, offer: "Acme Product" })).toEqual(expect.arrayContaining([expect.objectContaining({ claim: "Acme Product helped a customer improve conversion by 24%.", entityRole: "seller" })]));
+    const text = "A customer improved conversion by 24% using Acme Product.";
+    const a = artifact({ content: { ...artifact().content, sections: [{ id: "p", title: "Customer case study", level: 2, order: 1, text, citationIds: ["c1"] }], citations: [{ ...artifact().content.citations[0], excerpt: text }] }, understanding: { ...artifact().understanding, claims: [], proof: [{ id: "m", text, kind: "metric", confidence: "high", citationIds: ["c1"] }] } });
+    expect(compilerEvidenceFromProductSource({ artifact: a, seller, offer: "Acme Product" })).toEqual(expect.arrayContaining([expect.objectContaining({ claim: text, entityRole: "seller", evidenceType: "quantified-outcome", subject: "Acme Product" })]));
+  });
+  it("rejects a shared citation when the claim belongs to an unrelated product section", () => {
+    const a = artifact({ content: { ...artifact().content, sections: [
+      { id: "features", title: "Acme Product Features", level: 2, order: 1, text: "Acme Product supports workflow automation.", citationIds: ["c1"] },
+      { id: "other", title: "Acme CRM", level: 2, order: 2, text: "Acme CRM improved conversion by 24%.", citationIds: ["c1"] }
+    ], citations: [{ ...artifact().content.citations[0], excerpt: "Acme CRM improved conversion by 24%." }] }, understanding: { ...artifact().understanding, claims: [], proof: [{ id: "other", text: "Acme CRM improved conversion by 24%.", kind: "example", confidence: "high", citationIds: ["c1"] }] } });
+    expect(compilerEvidenceFromProductSource({ artifact: a, seller, offer: "Acme Product" })).toEqual([]);
   });
   it.each([
     ["hypothetical metric", "Acme Product could improve conversion by 24%.", "claim"],

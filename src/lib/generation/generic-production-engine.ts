@@ -523,6 +523,9 @@ function sectionWritingContracts(
     decision,
     brief,
     evidence,
+    evidenceRefsBySectionId: Object.fromEntries((input.buyerAssignments ?? [])
+      .filter((assignment) => assignment.claimRefs.length)
+      .map((assignment) => [assignment.id, assignment.claimRefs])),
     ...(strategy ? { strategy } : {}),
     ...(sectionJobs ? { sectionJobs } : {})
   });
@@ -1326,7 +1329,7 @@ export async function compileGenericProductionPage(
     ...traceContext.evidenceIds,
     ...evidence.map(({ id }) => id)
   ]);
-  const slots = familySpine
+  let slots = familySpine
     ? writerSlotsFromFamilyMessageSpine(familySpine)
     : writerSlots(spine, selection);
   const objectiveField = evidenceValue.fields.objective;
@@ -1384,6 +1387,15 @@ export async function compileGenericProductionPage(
     objective: objectiveField.value,
     cta: { ...writerCta }
   } satisfies Omit<SectionWriterInput, "worker">;
+
+  // Deterministic and model writers share the same section evidence boundary.
+  // In particular, purchase answers must not inherit a generic strategy slot
+  // that drops the pricing, security, or implementation facts they were given.
+  const scopedContracts = sectionWritingContracts(input, evidence, baseWriterInput.brief);
+  slots = slots.map((slot) => input.buyerAssignments?.some((assignment) =>
+    assignment.id === slot.id && assignment.claimRefs.length)
+    ? { ...slot, evidenceRefs: scopedContracts.get(slot.id)?.evidenceRefs ?? [] } : slot);
+  baseWriterInput.slots = slots;
 
   const writers = { ...DEFAULT_WRITERS, ...dependencies.writers };
   const writerArtifacts = await Promise.all(

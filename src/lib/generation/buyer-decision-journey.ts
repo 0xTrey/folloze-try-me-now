@@ -74,7 +74,7 @@ export function deriveBuyerDecisionBrief(input: BuyerJourneyInput, ledger: reado
   const ctaType = input.cta?.type ?? input.session.answers.ctaType;
   const eligible = ledger.filter((item) => safe(item) && (item.entityRole === "seller" || item.entityRole === "source"))
     .sort((a, b) => a.id.localeCompare(b.id));
-  const proofIds = new Set(deriveWireframeEvidenceSignals(ledger).approvedProofRefs);
+  const proofIds = new Set(deriveWireframeEvidenceSignals(ledger, product.status === "exact" ? product.label : "").approvedProofRefs);
   const ofType = (...types: string[]) => eligible.filter((item) => types.includes(item.evidenceType ?? "")).map(claim);
   const voiceSourced = input.seller.source !== "fallback" && /^https:\/\//.test(input.seller.sourceUrl);
   const knowledge: BuyerDecisionBrief["knowledge"] = {
@@ -154,10 +154,15 @@ export function assignBuyerJourneySections(plan: readonly SectionSlotV2[], brief
   return earnedPlan.map((slot, index, all) => {
     const key = roleQuestion[slot.role];
     const pool = key === "proof" ? brief.knowledge.proofClaims : key === "risk" ? objections
-      : slot.role === "current-friction" ? brief.knowledge.workflowContext
+      : slot.role === "current-friction" ? [...brief.knowledge.workflowContext, ...brief.knowledge.targetAccountContext]
       : slot.role === "account-relevance" ? brief.knowledge.targetAccountContext
-      : slot.role === "resource" ? brief.knowledge.resources : brief.knowledge.supportedCapabilityWorkflowClaims;
+      : slot.role === "resource" ? brief.knowledge.resources
+      : key === "understand" ? [...brief.knowledge.productOffer, ...brief.knowledge.supportedCapabilityWorkflowClaims]
+      : brief.knowledge.supportedCapabilityWorkflowClaims;
     return { ...slot, buyerQuestion: brief.questions.find((item) => item.key === key)?.question ?? slot.buyerJob,
+      requiredEvidenceKinds: [...new Set([...slot.requiredEvidenceKinds, ...pool.map((item) =>
+        brief.knowledge.targetAccountContext.some((target) => target.id === item.id) ? "target_fact" as const
+          : brief.knowledge.proofClaims.some((proof) => proof.id === item.id) ? "proof" as const : "seller_fact" as const)])],
       desiredConclusion: slot.buyerJob, claimRefs: pool.map((item) => item.id),
       ...(key === "risk" ? { objection: objections.length ? objections.map((item) => item.claim).join(" ") : "Requirements are unknown; ask what must be established." } : {}),
       transition: index < all.length - 1 ? `Next: ${all[index + 1].navigationLabel}` : brief.cta.expectation ?? "Next: take the bounded next step" };

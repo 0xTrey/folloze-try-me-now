@@ -213,7 +213,7 @@ export function compileAccountPersonalization(
   const sellerClaims = (input.sellerEvidence ?? []).filter(usableSellerClaim).sort((a, b) => a.id.localeCompare(b.id));
   const capability = sellerClaims.find((item) => item.evidenceType === "workflow") ??
     sellerClaims.find((item) => item.evidenceType === "capability");
-  const proofRefs = sellerClaims.filter(evidenceSupportsProof).map((item) => item.id);
+  const proofRefs = sellerClaims.filter((item) => evidenceSupportsProof(item, offer)).map((item) => item.id);
   const directives: AccountPersonalizationDirectives = {
     tension: sentence(
       `${possessive(targetName)} public materials emphasize ${primarySignal}; the conversation should start there instead of with a generic product pitch`

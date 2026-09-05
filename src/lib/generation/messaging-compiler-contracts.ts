@@ -374,7 +374,15 @@ export function evidenceSupportsDeclarativeClaim(item: CompilerEvidenceItem): bo
 }
 
 /** True when this item may be presented as proof. */
-export function evidenceSupportsProof(item: CompilerEvidenceItem): boolean {
+export function evidenceSupportsProof(item: CompilerEvidenceItem, selectedOffer?: string): boolean {
+  if (selectedOffer !== undefined) {
+    const normalize = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    const offer = normalize(selectedOffer);
+    // Subject can name either the product or its customer. Customer evidence
+    // must identify the product in the actual claim, not only a shared source.
+    if (!offer || (normalize(item.subject ?? "") !== offer &&
+        !` ${normalize(item.claim)} `.includes(` ${offer} `))) return false;
+  }
   let publicSource = false;
   try {
     const url = new URL(item.sourceRef);

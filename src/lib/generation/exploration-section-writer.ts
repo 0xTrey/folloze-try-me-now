@@ -367,6 +367,27 @@ function candidateForSlot(
   slot: SectionWriterSlot
 ): { candidate?: SectionCopyCandidate; sparse: boolean } {
   const claims = currentClaimsForSlot(input, slot);
+  if (slot.v2Role === "evaluation-criteria" && claims.some((claim) => claim.kind === "seller_fact")) {
+    const selected: SectionEvidenceClaim[] = [];
+    const candidate: SectionCopyCandidate = {
+      sectionId: slot.id, role: slot.role, ...copyContractMetadata(slot), status: "complete",
+      headline: "What to know before you decide", body: "", evidenceRefs: [], wordCount: 0,
+      choices: [
+        { label: "Scope", body: "What does your team need?", evidenceRefs: [] },
+        { label: "Requirements", body: "Which requirements still need confirmation?", evidenceRefs: [] },
+        { label: "Next step", body: "Who can resolve the remaining questions?", evidenceRefs: [] }
+      ]
+    };
+    for (const claim of claims.filter((item) => item.kind === "seller_fact")) {
+      const nextBody = [...selected, claim].map((item) => normalizedText(item.text)).join(" ");
+      if (sectionCopyWordCount({ ...candidate, body: nextBody }) <= slot.wordBudget.max) selected.push(claim);
+    }
+    if (selected.length) {
+      candidate.body = selected.map((item) => normalizedText(item.text)).join(" ");
+      candidate.evidenceRefs = selected.map((item) => item.id);
+      return { candidate: fitCandidateToBudget(candidate, slot), sparse: false };
+    }
+  }
   const role = slot.role as OwnedRole;
   const build = (
     choices: [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice]

@@ -5,9 +5,9 @@ import { evidenceSupportsProof, type CompilerEvidenceItem } from "@/lib/generati
  * visitor context may inform structure, but only high-confidence facts with a
  * proof-point allowance count as approved proof.
  */
-export function deriveWireframeEvidenceSignals(items: readonly CompilerEvidenceItem[]) {
+export function deriveWireframeEvidenceSignals(items: readonly CompilerEvidenceItem[], selectedOffer?: string) {
   const approvedProofItems = items.filter(
-    evidenceSupportsProof
+    (item) => evidenceSupportsProof(item, selectedOffer)
   );
   const facts = items.filter((item) => item.kind === "fact");
   return {

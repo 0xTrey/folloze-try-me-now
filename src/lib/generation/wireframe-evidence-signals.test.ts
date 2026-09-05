@@ -25,4 +25,10 @@ describe("deriveWireframeEvidenceSignals", () => {
     ]);
     expect(result).toMatchObject({ approvedCustomerStory: true, approvedQuantifiedProof: false, approvedProofRefs: ["story", "story-number"] });
   });
+
+  it("isolates proof by selected offer and allows an explicit product mention in customer evidence", () => {
+    expect(deriveWireframeEvidenceSignals([item({ subject: "Acme CRM" })], "Acme Analytics").approvedProofItemCount).toBe(0);
+    expect(deriveWireframeEvidenceSignals([item({ subject: "Acme Analytics" })], "Acme Analytics").approvedProofItemCount).toBe(1);
+    expect(deriveWireframeEvidenceSignals([item({ subject: "Customer", claim: "A customer improved conversion by 24% using Acme Analytics" })], "Acme Analytics").approvedProofItemCount).toBe(1);
+  });
 });

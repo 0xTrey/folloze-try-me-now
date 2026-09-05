@@ -147,7 +147,9 @@ function completeCandidate(
   const headlineWords = words(headline).length;
   const bodyCapacity = slot.wordBudget.max - headlineWords;
   const contextualSeed = unique([tension, whyNow]);
-  const seed = supportedContext
+  const seed = slot.v2Role === "account-relevance" && targetEvidence.length && input.brief.sellerName
+    ? `${targetEvidence[0]!.replace(/[.!?]?$/, ".")} What should ${input.brief.sellerName} demonstrate for ${input.brief.targetName ?? "your team"}?`
+    : supportedContext
     ? contextualSeed.length > 0
       ? contextualSeed.join(" ")
       : slot.v2Role === "account-relevance"
