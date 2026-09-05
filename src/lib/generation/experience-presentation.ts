@@ -1,30 +1,52 @@
 /** Shared presentation rules for new renders and already-saved app previews. */
 export const EXPERIENCE_PRESENTATION_CSS = `
-.media.media{container-type:inline-size;min-width:0}
-.media.media:not(.has-asset){height:auto;min-height:280px;align-self:center}
-.media.media.hero-media:not(.has-asset){min-height:clamp(320px,36vw,520px)}
-.media.media>.media-fallback{position:relative;inset:auto;min-width:0;min-height:inherit;padding:clamp(22px,6cqw,40px);justify-content:center;gap:clamp(18px,4cqw,28px)}
-.media.media .media-fallback>strong{display:block;min-width:0;width:100%;max-width:none;font-size:clamp(24px,8cqw,48px);line-height:1.08;overflow-wrap:break-word;text-wrap:pretty}
-.media.media .media-fallback>.media-fallback-steps{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(10px,3cqw,20px);padding-top:18px;border-top:1px solid color-mix(in srgb,var(--brand-ink) 20%,transparent)}
-.media.media .media-fallback-steps i{min-width:0;font-size:clamp(10px,2.6cqw,12px);line-height:1.5;letter-spacing:.04em;overflow-wrap:anywhere}
+.media.media{min-width:0}
+.hero.hero:not(:has(>.hero-media)){grid-template-columns:minmax(0,980px);min-height:auto}
+.hero.hero:not(:has(>.hero-media)) .hero-copy{max-width:980px}
+.credibility-anchor.credibility-anchor:not(:has(>.framework-media)){grid-template-columns:minmax(0,980px)}
+.mechanism-section.mechanism-section:not(:has(>.framework-media)){grid-template-columns:minmax(0,1120px)}
+.lens-panel.lens-panel:not(:has(>.lens-media)){grid-template-columns:84px minmax(0,1fr);min-height:0;align-items:start;gap:clamp(24px,4vw,58px)}
+.lens-panel:not(:has(>.lens-media)) .lens-copy{max-width:980px}
+.lens-panel:not(:has(>.lens-media)) .lens-copy>p{max-width:760px}
+.composition-chapter-journey .lens-tabs button:before{content:counter(chapter) "  "}
+@media(max-width:620px){.lens-panel.lens-panel:not(:has(>.lens-media)){grid-template-columns:minmax(0,1fr);gap:24px}}
 `;
 
-const PRESENTATION_MARKER = 'data-flz-presentation="responsive-media-v1"';
+const PRESENTATION_MARKER = 'data-flz-presentation="content-led-media-v2"';
+const NUMBER_CLASSES = new Set(["lens-number", "journey-index", "signature-index", "step-index", "role-index"]);
+const classesOf = (attributes: string): string[] =>
+  attributes.match(/\bclass\s*=\s*["']([^"']*)["']/i)?.[1].split(/\s+/) ?? [];
 
 /**
- * Presentation-only compatibility for controlled renderer HTML. Stored copy,
- * assets, analytics, and release receipts are not rewritten or re-saved.
+ * Presentation-only compatibility for controlled renderer HTML. Main copy,
+ * approved images, analytics, and stored release receipts are unchanged.
+ * Script/style blocks are matched first and returned untouched.
  */
 export function upgradeStoredExperiencePresentation(html: string): string {
-  const withoutLabels = html.replace(
-    /<script\b[^>]*>[\s\S]*?<\/script\s*>|<style\b[^>]*>[\s\S]*?<\/style\s*>|<(p|span)\b([^>]*)>[^<]*<\/\1\s*>/gi,
-    (markup, tag: string | undefined, attributes: string | undefined) => {
-      if (!tag || !attributes) return markup;
-      const classes = attributes.match(/\bclass\s*=\s*["']([^"']*)["']/i)?.[1].split(/\s+/) ?? [];
-      return (tag.toLowerCase() === "p" && classes.includes("eyebrow"))
-        || (tag.toLowerCase() === "span" && classes.includes("media-fallback-kicker")) ? "" : markup;
+  const contentLed = html.replace(
+    /<script\b[^>]*>[\s\S]*?<\/script\s*>|<style\b[^>]*>[\s\S]*?<\/style\s*>|<figure\b([^>]*)>[\s\S]*?<\/figure\s*>/gi,
+    (markup, attributes: string | undefined) => {
+      if (attributes === undefined || !classesOf(attributes).includes("media")) return markup;
+      if (!/<img\b[^>]*\bsrc\s*=/i.test(markup)) return "";
+      // Renderer fallbacks contain only strong/span/i children, never nested divs.
+      const realImage = markup.replace(/<div\b[^>]*class=["'][^"']*\bmedia-fallback\b[^"']*["'][^>]*>[\s\S]*?<\/div\s*>/gi, "");
+      return /\bdata-no-fallback\b/i.test(attributes) ? realImage
+        : realImage.replace(/<figure\b/i, '<figure data-no-fallback="true"');
+    }
+  ).replace(
+    /<script\b[^>]*>[\s\S]*?<\/script\s*>|<style\b[^>]*>[\s\S]*?<\/style\s*>|<(p|span|div)\b([^>]*)>([^<]*)<\/\1\s*>/gi,
+    (markup, tag: string | undefined, attributes: string | undefined, content: string | undefined) => {
+      if (!tag || attributes === undefined || content === undefined) return markup;
+      const classes = classesOf(attributes);
+      if ((tag.toLowerCase() === "p" && classes.includes("eyebrow"))
+        || (tag.toLowerCase() === "span" && classes.includes("media-fallback-kicker"))) return "";
+      const numbered = classes.some(name => NUMBER_CLASSES.has(name));
+      const urgencyLabel = tag.toLowerCase() === "span" && /^0[1-3] · (?:The change|The consequence|The better path)$/.test(content.trim());
+      if (!numbered && !urgencyLabel) return markup;
+      const cleanNumber = content.replace(/^(\s*)0([1-9])(?=\s|$)/, "$1$2");
+      return `<${tag}${attributes}>${cleanNumber}</${tag}>`;
     }
   );
-  if (withoutLabels.includes(PRESENTATION_MARKER)) return withoutLabels;
-  return withoutLabels.replace(/<\/head\s*>/i, `<style ${PRESENTATION_MARKER}>${EXPERIENCE_PRESENTATION_CSS}</style></head>`);
+  if (contentLed.includes(PRESENTATION_MARKER)) return contentLed;
+  return contentLed.replace(/<\/head\s*>/i, `<style ${PRESENTATION_MARKER}>${EXPERIENCE_PRESENTATION_CSS}</style></head>`);
 }

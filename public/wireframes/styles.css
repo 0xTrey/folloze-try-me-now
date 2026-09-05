@@ -1226,7 +1226,7 @@ input:focus-visible,
 
 .section-map li::before {
   color: var(--accent, var(--campaign));
-  content: counter(sections, decimal-leading-zero);
+  content: counter(sections, decimal);
   font-family: var(--body);
   font-size: 9px;
   font-weight: 850;

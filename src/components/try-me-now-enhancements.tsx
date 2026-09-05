@@ -443,7 +443,7 @@ export function ContentSourceConfirmation({ source, confirmed = false, onConfirm
         <h3 id="source-confirmation-title">{source.title}</h3>
         <p>{source.sourceLabel}</p>
         <div className={styles.factList} aria-label="Extracted factual anchors">
-          {source.facts.slice(0, 5).map((fact, index) => <span key={`${fact}-${index}`}><i>{String(index + 1).padStart(2, "0")}</i>{fact}</span>)}
+          {source.facts.slice(0, 5).map((fact, index) => <span key={`${fact}-${index}`}><i>{index + 1}</i>{fact}</span>)}
         </div>
         <div className={styles.inlineActions}>
           <button type="button" className={styles.primaryAction} onClick={onConfirm}>{confirmed ? <Check size={16} /> : <ArrowRight size={16} />}{confirmed ? "Confirmed" : "Use this source"}</button>
@@ -645,7 +645,7 @@ export function ProgressiveArtifactStream({ artifacts, headline = "Your experien
       <ol className={styles.artifactList}>
         {artifacts.map((artifact, index) => (
           <li key={artifact.id} className={classes(styles.artifactRow, styles[`artifact${artifact.status}`])}>
-            <span className={styles.artifactIndex}>{String(index + 1).padStart(2, "0")}</span>
+            <span className={styles.artifactIndex}>{index + 1}</span>
             <span className={styles.artifactGlyph}>{artifact.status === "ready" ? <Check size={14} /> : artifact.status === "failed" ? <X size={14} /> : <i />}</span>
             <div><span>{artifact.phase}</span><strong>{artifact.title}</strong><p>{artifact.artifact || artifact.detail}</p></div>
             {artifact.status === "running" && <small>Working now</small>}

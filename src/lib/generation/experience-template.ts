@@ -13,7 +13,6 @@ import {
 } from "@/lib/generation/experience-renderers";
 import { sanitizeBuyerFacingLabel } from "@/lib/generation/message-spine";
 import { EXPERIENCE_PRESENTATION_CSS } from "@/lib/generation/experience-presentation";
-import type { VisualGrammar } from "@/lib/generation/visual-grammar";
 import type {
   WireframeSectionRole,
   WireframeSelectionV1
@@ -290,43 +289,15 @@ function imageFigure(
   alt: string,
   className: string,
   eager = false,
-  allowFallback = true,
   assetRole?: string,
   slot?: RenderAssetSlot
 ): string {
   const safeUrl = safeAssetUrl(url);
-  if (!safeUrl && !allowFallback) return "";
-  const showFallback = allowFallback || Boolean(safeUrl);
+  if (!safeUrl) return "";
   const roleClass = safeUrl && /diagram|architecture|marketecture|workflow|chart/i.test(safeUrl) ? " is-diagram" : "";
   const safeAssetRole = assetRole && /^[a-z-]{1,48}$/.test(assetRole) ? ` data-asset-role="${assetRole}"` : "";
-  return `<figure class="media ${className}${roleClass}"${showFallback ? "" : ' data-no-fallback="true"'}${safeAssetRole}${slotAttribute(slot)}>
-    ${showFallback ? `<div class="media-fallback"${allowFallback ? ' data-fallback-kind="experience-blueprint"' : ""} aria-hidden="true">
-      <strong>Context.<br>Proof.<br>Next step.</strong>
-      <span class="media-fallback-steps"><i>1</i><i>2</i><i>3</i></span>
-    </div>` : ""}
-    ${safeUrl ? `<img src="${escapeHtml(safeUrl)}" alt="${escapeHtml(alt)}" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>` : ""}
-  </figure>`;
-}
-
-function noAssetFigure(
-  grammar: VisualGrammar,
-  className: string,
-  slot?: RenderAssetSlot
-): string {
-  const copy: Record<VisualGrammar["noAssetTreatment"], { label: string; headline: string; steps: readonly string[] }> = {
-    "editorial-evidence": { label: "A considered point of view", headline: "The signal is clear.\nThe next move\nshould be too.", steps: ["Signal", "Meaning", "Action"] },
-    "proof-receipt": { label: "Evidence is being carried forward", headline: "A supported case.\nA decision worth\nmaking.", steps: ["Fact", "Context", "Decision"] },
-    "choice-map": { label: "Choose the useful way in", headline: "One promise.\nThree ways to\nmake it real.", steps: ["Explore", "Compare", "Act"] },
-    "system-map": { label: "A validation path", headline: "Map the system.\nValidate the\nfirst outcome.", steps: ["Input", "Flow", "Outcome"] },
-    "data-frame": { label: "The evidence frame", headline: "Read the finding.\nSee the pattern.\nChoose the implication.", steps: ["Finding", "Pattern", "Implication"] },
-    "chapter-index": { label: "The guided source", headline: "Start with the\nmoment that\nmatters most.", steps: ["Watch", "Learn", "Continue"] }
-  };
-  const treatment = copy[grammar.noAssetTreatment];
-  return `<figure class="media ${className} no-asset-treatment no-asset-${grammar.noAssetTreatment}" data-fallback-kind="${grammar.noAssetTreatment}" data-asset-role="${grammar.heroMediaRole}"${slotAttribute(slot)}>
-    <div class="media-fallback" aria-hidden="true">
-      <strong>${escapeHtml(treatment.headline).replace(/\n/g, "<br>")}</strong>
-      <span class="media-fallback-steps">${treatment.steps.map((step) => `<i>${escapeHtml(step)}</i>`).join("")}</span>
-    </div>
+  return `<figure class="media ${className}${roleClass}" data-no-fallback="true"${safeAssetRole}${slotAttribute(slot)}>
+    <img src="${escapeHtml(safeUrl)}" alt="${escapeHtml(alt)}" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>
   </figure>`;
 }
 
@@ -366,8 +337,8 @@ function createPlanAssetAllocator(plan: AssetRenderPlan): RenderAssetAllocator {
     placements.set(slotKey(placement), assetRef);
   }
   // One document may render a slot's location only once. A second request for
-  // the same slot is a repeated section, not a second asset, so it takes the
-  // designed treatment rather than duplicating the image.
+  // the same slot is a repeated section, not a second asset, so its content
+  // stands without a figure rather than duplicating the image.
   const claimed = new Set<string>();
   const claimedSubstantiveAssets = new Set<string>();
   return {
@@ -415,19 +386,14 @@ function frameworkImage(
   slot: RenderAssetSlot,
   brief: PersuasionFramework["opening"]["imageBrief"],
   className: string,
-  eager = false,
-  // Slots the plan left unfilled fall back to a designed treatment rather than
-  // repeating an already-placed asset.
-  grammar?: VisualGrammar
+  eager = false
 ): string {
   if (brief.source === "none" || brief.assetType === "typographic-treatment") {
-    return grammar && brief.assetType === "typographic-treatment"
-      ? noAssetFigure(grammar, className, slot)
-      : "";
+    return "";
   }
   const selected = allocator.claim(slot);
-  if (!selected) return grammar ? noAssetFigure(grammar, className, slot) : "";
-  return imageFigure(selected, brief.caption, className, eager, false, brief.assetType, slot);
+  if (!selected) return "";
+  return imageFigure(selected, brief.caption, className, eager, brief.assetType, slot);
 }
 
 type RenderStyleVariant = "standard" | "brand-led" | "editorial" | "technical" | "minimal";
@@ -789,23 +755,21 @@ export function renderExperienceHtml(input: {
                 mediaSlot,
                 frameworkChoices[index].imageBrief,
                 "lens-media",
-                false,
-                visualGrammar
+                false
               )
-            : noAssetFigure(visualGrammar, "lens-media")
+            : ""
           : (mediaSlot
               ? imageFigure(
                   assetAllocator.claim(mediaSlot),
                   `${brand.companyName}: ${label}`,
                   "lens-media",
                   false,
-                  false,
                   mediaSlot.semanticRole,
                   mediaSlot
                 )
-              : "") || noAssetFigure(visualGrammar, "lens-media", mediaSlot);
+              : "");
         return `<section class="lens-panel${media ? "" : " no-media"}" id="lens-panel-${index}" role="tabpanel" aria-labelledby="lens-tab-${index}" tabindex="0" ${index === 0 ? "" : "hidden"}>
-        <div class="lens-number" aria-hidden="true">0${index + 1}</div>
+        <div class="lens-number" aria-hidden="true">${index + 1}</div>
         <div class="lens-copy"><h2 ${editableBlock(`lens.${index}.headline`, "headline")}>${escapeHtml(headline)}</h2><p ${editableBlock(`lens.${index}.body`, "body")}>${escapeHtml(body)}</p>${question ? `<p class="validation-question"><strong>Question to answer</strong>${escapeHtml(question)}</p>` : ""}</div>
         ${media}
       </section>`;
@@ -841,7 +805,7 @@ export function renderExperienceHtml(input: {
           fallbackReason: "Legacy content item uses an in-experience detail."
         } satisfies ExperienceActionContract;
         return `<article class="journey-card resource-card" data-source-reference="${escapeHtml(sourceReference)}" data-content-item-id="${escapeHtml(item.id)}" data-content-item-kind="${escapeHtml(item.kind)}">
-        <div class="journey-index" aria-hidden="true">0${index + 1}</div>
+        <div class="journey-index" aria-hidden="true">${index + 1}</div>
         <div class="journey-copy"><h3 ${editableBlock(`resource.${index}.headline`, "proof-point")}>${escapeHtml(item.title)}</h3><p ${editableBlock(`resource.${index}.body`, "body")}>${escapeHtml(item.summary)}</p>${item.sourceLabel ? `<p class="source-citation">${escapeHtml(item.sourceLabel)}</p>` : ""}</div>
         ${actionControl(action, "journey-action", "", `${item.actionLabel} →`)}
       </article>`;
@@ -879,7 +843,7 @@ export function renderExperienceHtml(input: {
   const signatureButtons = draft.sections
     .map(
       (section, index) => `<button type="button" data-signature-lens-index="${index}" data-flz-cta-id="signature-${index}">
-        <span class="signature-index" aria-hidden="true">0${index + 1}</span>
+        <span class="signature-index" aria-hidden="true">${index + 1}</span>
         <span class="signature-item-copy"><strong ${editableBlock(`signature.${index}.label`, "eyebrow")}>${escapeHtml(section.eyebrow)}</strong><span ${editableBlock(`signature.${index}.copy`, "path-copy")}>${escapeHtml(section.headline)}</span></span>
       </button>`
     )
@@ -897,7 +861,7 @@ export function renderExperienceHtml(input: {
     !plannedRoles || roles.some((role) => plannedRoles.has(role));
   // Only the flow that reaches the document may claim assets. Building both and
   // discarding one would let the unused branch consume a slot and leave the
-  // rendered section with a treatment it did not earn.
+  // rendered section without the image allocated to it.
   const buildFrameworkFlow = () => framework
     ? `${rolePlanned("proof") ? `<section class="framework-section credibility-anchor" id="credibility-anchor" data-journey-section="credibility-anchor" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)} aria-labelledby="credibility-anchor-heading">
         <div class="framework-copy">
@@ -907,14 +871,14 @@ export function renderExperienceHtml(input: {
             <div><span>What it means</span><p ${editableBlock("credibility.implication", "body")}>${escapeHtml(framework.credibility.implication)}</p></div>
           </div>
         </div>
-        ${frameworkImage(assetAllocator, PROOF_MEDIA_SLOT, framework.credibility.imageBrief, "framework-media", false, visualGrammar)}
+        ${frameworkImage(assetAllocator, PROOF_MEDIA_SLOT, framework.credibility.imageBrief, "framework-media")}
       </section>` : ""}
       ${rolePlanned("context") ? `<section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)} aria-labelledby="why-change-now-heading">
         <header class="framework-heading"><h2 id="why-change-now-heading" ${editableBlock("urgency.headline", "headline")}>${escapeHtml(framework.urgency.headline)}</h2></header>
         <div class="argument-sequence">
-          <article><span>01 · The change</span><p ${editableBlock("urgency.change", "evidence")}>${escapeHtml(framework.urgency.change)}</p></article>
-          <article><span>02 · The consequence</span><p ${editableBlock("urgency.consequence", "body")}>${escapeHtml(framework.urgency.consequence)}</p></article>
-          <article><span>03 · The better path</span><p ${editableBlock("urgency.reframe", "body")}>${escapeHtml(framework.urgency.reframe)}</p></article>
+          <article><span>1 · The change</span><p ${editableBlock("urgency.change", "evidence")}>${escapeHtml(framework.urgency.change)}</p></article>
+          <article><span>2 · The consequence</span><p ${editableBlock("urgency.consequence", "body")}>${escapeHtml(framework.urgency.consequence)}</p></article>
+          <article><span>3 · The better path</span><p ${editableBlock("urgency.reframe", "body")}>${escapeHtml(framework.urgency.reframe)}</p></article>
         </div>
       </section>` : ""}
       ${rolePlanned("pathways", "agenda", "chapter-navigation", "decision-support") ? `<section class="lens-lab framework-starting-points" id="starting-points" data-journey-section="starting-points" data-template-primitive="starting-points" aria-labelledby="starting-points-heading">
@@ -928,17 +892,17 @@ export function renderExperienceHtml(input: {
           <p class="region-intro" ${editableBlock("mechanism.intro", "body")}>${escapeHtml(framework.mechanism.intro)}</p>
           <div class="mechanism-steps">${framework.mechanism.steps
             .map(
-              (step, index) => `<article ${evidenceAttribute(step.evidenceIds)}><span class="step-index">0${index + 1}</span><div><h3 ${editableBlock(`mechanism.${index}.action`, "headline")}>${escapeHtml(step.action)}</h3><p ${editableBlock(`mechanism.${index}.capability`, "body")}>${escapeHtml(step.capability)}</p><strong ${editableBlock(`mechanism.${index}.output`, "outcome")}>${escapeHtml(step.output)}</strong></div></article>`
+              (step, index) => `<article ${evidenceAttribute(step.evidenceIds)}><span class="step-index">${index + 1}</span><div><h3 ${editableBlock(`mechanism.${index}.action`, "headline")}>${escapeHtml(step.action)}</h3><p ${editableBlock(`mechanism.${index}.capability`, "body")}>${escapeHtml(step.capability)}</p><strong ${editableBlock(`mechanism.${index}.output`, "outcome")}>${escapeHtml(step.output)}</strong></div></article>`
             )
             .join("")}</div>
         </div>
-        ${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media", false, visualGrammar)}
+        ${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media")}
       </section>` : ""}
       ${rolePlanned("seller-validation") ? `<section class="framework-section team-value-section" id="team-value" data-journey-section="team-value" data-template-primitive="team-value" aria-labelledby="team-value-heading">
         <header class="framework-heading"><h2 id="team-value-heading" ${editableBlock("teamValue.headline", "headline")}>${escapeHtml(framework.teamValue.headline)}</h2><p class="region-intro" ${editableBlock("teamValue.intro", "body")}>${escapeHtml(framework.teamValue.intro)}</p></header>
         <div class="role-grid">${framework.teamValue.roles
           .map(
-            (role, index) => `<article ${evidenceAttribute(role.evidenceIds)}><span class="role-index">0${index + 1}</span><h3 ${editableBlock(`teamValue.${index}.role`, "role")}>${escapeHtml(role.role)}</h3><dl><div><dt>Decision</dt><dd ${editableBlock(`teamValue.${index}.decision`, "body")}>${escapeHtml(role.decision)}</dd></div><div><dt>Risk</dt><dd ${editableBlock(`teamValue.${index}.risk`, "body")}>${escapeHtml(role.risk)}</dd></div><div><dt>Value</dt><dd ${editableBlock(`teamValue.${index}.benefit`, "body")}>${escapeHtml(role.benefit)}</dd></div><div><dt>Evidence needed</dt><dd ${editableBlock(`teamValue.${index}.evidence`, "evidence")}>${escapeHtml(role.evidenceNeeded)}</dd></div></dl></article>`
+            (role, index) => `<article ${evidenceAttribute(role.evidenceIds)}><span class="role-index">${index + 1}</span><h3 ${editableBlock(`teamValue.${index}.role`, "role")}>${escapeHtml(role.role)}</h3><dl><div><dt>Decision</dt><dd ${editableBlock(`teamValue.${index}.decision`, "body")}>${escapeHtml(role.decision)}</dd></div><div><dt>Risk</dt><dd ${editableBlock(`teamValue.${index}.risk`, "body")}>${escapeHtml(role.risk)}</dd></div><div><dt>Value</dt><dd ${editableBlock(`teamValue.${index}.benefit`, "body")}>${escapeHtml(role.benefit)}</dd></div><div><dt>Evidence needed</dt><dd ${editableBlock(`teamValue.${index}.evidence`, "evidence")}>${escapeHtml(role.evidenceNeeded)}</dd></div></dl></article>`
           )
           .join("")}</div>
       </section>` : ""}${rolePlanned("resources") ? regions.resources() : ""}`
@@ -954,20 +918,20 @@ export function renderExperienceHtml(input: {
               return `<section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)}><header class="framework-heading"><h2>${escapeHtml(framework.urgency.headline)}</h2></header><p class="region-intro">${escapeHtml(framework.urgency.change)}</p></section>`;
             }
             if (section.role === "mechanism") {
-              return `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism"><div class="framework-copy"><h2>${escapeHtml(framework.mechanism.headline)}</h2><p class="region-intro">${escapeHtml(framework.mechanism.intro)}</p></div>${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media", false, visualGrammar)}</section>`;
+              return `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism"><div class="framework-copy"><h2>${escapeHtml(framework.mechanism.headline)}</h2><p class="region-intro">${escapeHtml(framework.mechanism.intro)}</p></div>${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media")}</section>`;
             }
             if (section.role === "proof") {
               const sectionId = anchorForRole(section.role, section.label);
               const headline = sectionId === "additional-evidence"
                 ? "More evidence to carry forward"
                 : framework.credibility.headline;
-              return `<section class="framework-section credibility-anchor" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)}><div class="framework-copy"><h2>${escapeHtml(headline)}</h2><p class="region-intro">${escapeHtml(framework.credibility.fact)}</p></div>${frameworkImage(assetAllocator, PROOF_MEDIA_SLOT, framework.credibility.imageBrief, "framework-media", false, visualGrammar)}</section>`;
+              return `<section class="framework-section credibility-anchor" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="credibility-anchor" ${evidenceAttribute(framework.credibility.evidenceIds)}><div class="framework-copy"><h2>${escapeHtml(headline)}</h2><p class="region-intro">${escapeHtml(framework.credibility.fact)}</p></div>${frameworkImage(assetAllocator, PROOF_MEDIA_SLOT, framework.credibility.imageBrief, "framework-media")}</section>`;
             }
             if (section.role === "decision-support") {
               const criteria = framework.startingPoints.choices
                 .map(
                   (choice, index) =>
-                    `<article><span class="lens-number">0${index + 1}</span><h3>${escapeHtml(choice.label)}</h3><p>${escapeHtml(choice.buyerJob)}</p></article>`
+                    `<article><span class="lens-number">${index + 1}</span><h3>${escapeHtml(choice.label)}</h3><p>${escapeHtml(choice.buyerJob)}</p></article>`
                 )
                 .join("");
               return `<section class="lens-lab framework-starting-points" id="starting-points" data-journey-section="starting-points" data-template-primitive="starting-points"><header class="region-heading"><h2>${escapeHtml(framework.startingPoints.headline)}</h2><p class="region-intro">${escapeHtml(framework.startingPoints.intro)}</p></header><div class="journey-grid">${criteria}</div></section>`;
@@ -976,7 +940,7 @@ export function renderExperienceHtml(input: {
               const paths = draft.sections
                 .map(
                   (path, index) =>
-                    `<article><span class="lens-number">0${index + 1}</span><h3>${escapeHtml(path.headline)}</h3><p>${escapeHtml(path.body)}</p></article>`
+                    `<article><span class="lens-number">${index + 1}</span><h3>${escapeHtml(path.headline)}</h3><p>${escapeHtml(path.body)}</p></article>`
                 )
                 .join("");
               return `<section class="lens-lab framework-starting-points" id="application-paths" data-journey-section="application-paths" data-template-primitive="starting-points"><header class="region-heading"><h2>${escapeHtml(draft.sectionLabels.lenses)}</h2></header><div class="journey-grid">${paths}</div></section>`;
@@ -1038,7 +1002,7 @@ export function renderExperienceHtml(input: {
     .composition-interactive-paths .framework-starting-points{background:color-mix(in srgb,var(--brand-accent) 8%,var(--brand-surface))}.composition-interactive-paths .lens-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--grid-gap);padding-bottom:var(--grid-gap)}.composition-interactive-paths .lens-tabs button{min-height:74px;padding:18px 20px;white-space:normal;text-align:left;border-radius:var(--card-radius);background:var(--brand-surface)}.composition-interactive-paths .lens-panel{padding:clamp(24px,4vw,48px);border:1px solid var(--line);border-radius:var(--card-radius);background:var(--brand-surface)}
     .composition-workflow-spine .hero{background-image:linear-gradient(color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--brand-ink) 5%,transparent) 1px,transparent 1px);background-size:38px 38px}.composition-workflow-spine .mechanism-section{grid-template-columns:1fr}.composition-workflow-spine .mechanism-media{display:none}.composition-workflow-spine .mechanism-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line)}.composition-workflow-spine .mechanism-steps article{position:relative;min-height:300px;padding:32px;display:flex;flex-direction:column;gap:38px;border:0;border-right:1px solid var(--line)}.composition-workflow-spine .mechanism-steps article:last-child{border-right:0}.composition-workflow-spine .mechanism-steps article:not(:last-child):after{content:"";position:absolute;right:-7px;top:50%;z-index:2;width:12px;height:12px;border:2px solid var(--brand-surface);border-radius:50%;background:var(--brand-accent)}
     .composition-data-story .hero{grid-template-columns:minmax(0,1.12fr) minmax(360px,.58fr);background:var(--soft)}.composition-data-story .hero h1{max-width:920px}.composition-data-story .credibility-anchor{grid-template-columns:minmax(320px,.64fr) minmax(0,1.1fr);background:var(--brand-surface)}.composition-data-story .fact-implication{grid-template-columns:1fr}.composition-data-story .fact-implication>div:first-child p{font-family:var(--display);font-size:clamp(28px,3vw,48px);font-weight:var(--heading-weight);line-height:1.05}.composition-data-story .role-grid article{position:relative;overflow:hidden}.composition-data-story .role-grid article:before{content:"";position:absolute;left:0;top:0;width:100%;height:5px;background:linear-gradient(90deg,var(--brand-accent) 0 66%,var(--line) 66%)}
-    .composition-chapter-journey .hero{min-height:72vh}.composition-chapter-journey .framework-starting-points{background:var(--brand-dark);color:var(--text-on-dark)}.composition-chapter-journey .framework-starting-points h2{color:var(--text-on-dark)}.composition-chapter-journey .framework-starting-points .eyebrow{color:var(--brand-accent)}.composition-chapter-journey .framework-starting-points .region-intro,.composition-chapter-journey .framework-starting-points li{color:var(--muted-on-dark)}.composition-chapter-journey .lens-tabs{counter-reset:chapter;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;padding:0;background:color-mix(in srgb,#fff 18%,transparent)}.composition-chapter-journey .lens-tabs button{counter-increment:chapter;min-height:92px;padding:18px 20px;border:0;background:var(--brand-dark);color:#fff;text-align:left;white-space:normal}.composition-chapter-journey .lens-tabs button:before{content:"0" counter(chapter) "  ";color:var(--brand-accent)}.composition-chapter-journey .lens-tabs button[aria-selected="true"]{background:var(--brand-accent);color:var(--brand-on-accent)}.composition-chapter-journey .lens-tabs button[aria-selected="true"]:before{color:currentColor}.composition-chapter-journey .lens-panel{padding:clamp(30px,5vw,64px) 0;color:var(--text-on-dark)}.composition-chapter-journey .lens-copy>p:not(.eyebrow){color:var(--muted-on-dark)}
+    .composition-chapter-journey .hero{min-height:72vh}.composition-chapter-journey .framework-starting-points{background:var(--brand-dark);color:var(--text-on-dark)}.composition-chapter-journey .framework-starting-points h2{color:var(--text-on-dark)}.composition-chapter-journey .framework-starting-points .eyebrow{color:var(--brand-accent)}.composition-chapter-journey .framework-starting-points .region-intro,.composition-chapter-journey .framework-starting-points li{color:var(--muted-on-dark)}.composition-chapter-journey .lens-tabs{counter-reset:chapter;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;padding:0;background:color-mix(in srgb,#fff 18%,transparent)}.composition-chapter-journey .lens-tabs button{counter-increment:chapter;min-height:92px;padding:18px 20px;border:0;background:var(--brand-dark);color:#fff;text-align:left;white-space:normal}.composition-chapter-journey .lens-tabs button:before{content:counter(chapter) "  ";color:var(--brand-accent)}.composition-chapter-journey .lens-tabs button[aria-selected="true"]{background:var(--brand-accent);color:var(--brand-on-accent)}.composition-chapter-journey .lens-tabs button[aria-selected="true"]:before{color:currentColor}.composition-chapter-journey .lens-panel{padding:clamp(30px,5vw,64px) 0;color:var(--text-on-dark)}.composition-chapter-journey .lens-copy>p:not(.eyebrow){color:var(--muted-on-dark)}
     @keyframes guided-arrival{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:no-preference){.motion-guided .hero-copy,.motion-guided .hero-media{animation:guided-arrival .48s cubic-bezier(.2,.8,.2,1) both}.motion-guided .hero-media{animation-delay:.08s}.motion-demonstrative .lens-tabs button{transition:transform .18s ease,background-color .18s ease,color .18s ease}.motion-demonstrative .lens-tabs button:hover{transform:translateY(-2px)}.motion-quiet .hero-media{box-shadow:var(--brand-card-shadow)}}
     body.cta-outline .primary{background:transparent;color:var(--brand-accent)}body.cta-outline .close .primary{background:transparent;border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.cta-text .primary{min-height:44px;padding:8px 0;border:0;border-bottom:2px solid currentColor;border-radius:0;background:transparent;color:var(--brand-accent)}body.cta-text .close .primary{color:#fff}.footer{padding:26px clamp(24px,6vw,96px);display:flex;justify-content:space-between;gap:24px;color:var(--muted);font-size:12px}.footer a{color:inherit;text-decoration:none}.footer a:hover,.footer a:focus-visible{color:var(--brand-accent)}.experience-region,.framework-section,.close,#next-step,.hero{scroll-margin-top:70px}
     html:fullscreen,html:fullscreen body,html:fullscreen .shell{width:100%;max-width:none;min-height:100%;background:var(--brand-surface)}body.is-fullscreen .shell{max-width:none}body.is-fullscreen .journey-nav{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}body.is-fullscreen .hero{min-height:calc(100dvh - 58px)}
@@ -1059,7 +1023,7 @@ export function renderExperienceHtml(input: {
     body.brand-hero-dark .hero .eyebrow,.close .eyebrow{color:var(--brand-accent)}
     .content-detail{width:min(620px,calc(100vw - 32px));padding:0;border:1px solid var(--line);border-radius:var(--card-radius);background:var(--brand-surface);color:var(--brand-ink);box-shadow:0 32px 96px color-mix(in srgb,var(--brand-ink) 30%,transparent)}.content-detail::backdrop{background:color-mix(in srgb,var(--brand-ink) 64%,transparent);backdrop-filter:blur(5px)}.content-detail form{position:relative;padding:clamp(28px,5vw,52px)}.content-detail h3{margin:0;font:var(--heading-weight) clamp(30px,4vw,48px)/1.05 var(--display);letter-spacing:var(--heading-tracking)}.content-detail p:not(.eyebrow){margin:20px 0;color:var(--text);font-size:17px}.content-detail .dialog-close{position:absolute;right:16px;top:14px;width:42px;height:42px;border:1px solid var(--line);border-radius:999px;background:var(--brand-surface);color:var(--brand-ink);cursor:pointer;font-size:24px}.content-detail .primary{margin-top:12px}
   </style>
-  <style data-flz-presentation="responsive-media-v1">${EXPERIENCE_PRESENTATION_CSS}</style>
+  <style data-flz-presentation="content-led-media-v2">${EXPERIENCE_PRESENTATION_CSS}</style>
 </head>
 <body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} visual-grammar-${visualGrammar.id} motion-${visualGrammar.motionProfile} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}${imageryTreatment ? ` imagery-${imageryTreatment}` : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}" data-visual-grammar="${visualGrammar.id}" data-motion-profile="${visualGrammar.motionProfile}" data-hero-media-role="${visualGrammar.heroMediaRole}" data-proof-device="${visualGrammar.proofDevice}" data-cadence="${visualGrammar.cadence}" data-close-treatment="${visualGrammar.closeTreatment}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-personalization-variant="${escapeHtml(activePersonalizationId)}"${imageryTreatment ? ` data-imagery-treatment="${escapeHtml(imageryTreatment)}"` : ""} data-brand-source="${escapeHtml(brand.source)}" data-brand-palette-treatment="${neutralPreview ? "neutral-fallback" : "verified-or-legacy"}"${neutralPreview ? ` data-brand-warning="palette-confidence-low" data-brand-warning-copy="${escapeHtml(neutralPreviewNotice)}"` : ""}${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
 <button class="skip-link" type="button" data-scroll-target="main-content">Skip to experience</button>
@@ -1093,9 +1057,8 @@ export function renderExperienceHtml(input: {
         <span class="context-note" ${editableBlock("hero.audience", "audience")}>For ${escapeHtml(draft.audienceLabel)}</span>
       </div>
       ${framework
-        ? frameworkHeroMedia || noAssetFigure(visualGrammar, "hero-media", HERO_MEDIA_SLOT)
-        : imageFigure(assetAllocator.claim(HERO_MEDIA_SLOT), `${brand.companyName} platform visual`, "hero-media", true, true, visualGrammar.heroMediaRole, HERO_MEDIA_SLOT)
-          || noAssetFigure(visualGrammar, "hero-media", HERO_MEDIA_SLOT)}
+        ? frameworkHeroMedia
+        : imageFigure(assetAllocator.claim(HERO_MEDIA_SLOT), `${brand.companyName} platform visual`, "hero-media", true, visualGrammar.heroMediaRole, HERO_MEDIA_SLOT)}
     </section>
     ${pageFlow}
     ${closeMarkup}

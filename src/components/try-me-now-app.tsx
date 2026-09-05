@@ -1369,7 +1369,7 @@ function LiveChecklist({ session, compact = false }: { session?: PublicTryMeSess
               <Icon size={17} />
             </div>
             <div className="checkCopy">
-              <span className="checkPhase">{String(index + 1).padStart(2, "0")} · {moment.phase}</span>
+              <span className="checkPhase">{index + 1} · {moment.phase}</span>
               <strong>{moment.title}</strong>
               {!compact && <span>{moment.artifact || moment.detail}</span>}
             </div>

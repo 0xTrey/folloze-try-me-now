@@ -12,7 +12,7 @@ describe("saved experience presentation delivery", () => {
     expect(response.status).toBe(200);
     expect(html).not.toContain('<p class="eyebrow">');
     expect(html).toContain("<h2>Existing headline</h2>");
-    expect(html).toContain('data-flz-presentation="responsive-media-v1"');
+    expect(html).toContain('data-flz-presentation="content-led-media-v2"');
     expect(html).toMatch(/<script data-flz-runtime nonce="[^"]+"/);
     expect(response.headers.get("content-security-policy")).toContain("script-src 'nonce-");
     expect(html.includes("data-flz-handoff")).toBe(!suffix);

@@ -32,9 +32,11 @@ it.each(wireframeLibrary)("keeps $id headline-led and shares responsive media ac
     expect(html).not.toMatch(/<p\b[^>]*class="[^"]*\beyebrow\b/);
     expect(html).not.toContain('<span class="media-fallback-kicker">');
     expect(html).toContain('id="experience-headline"');
-    expect(html).toContain('data-flz-presentation="responsive-media-v1"');
+    expect(html).toContain('data-flz-presentation="content-led-media-v2"');
     expect(html).toContain(`data-wireframe-archetype="${metadata.id}"`);
-    expect(html).toContain('class="media ');
+    expect(html).not.toMatch(/<figure\b/);
+    expect(html).not.toMatch(/class="(?:lens-number|journey-index|signature-index|step-index|role-index)"[^>]*>0[1-9]</);
+    expect(html).not.toContain('content:"0" counter(chapter)');
     if (framework && metadata.family !== "content") {
       expect(html).toContain("Verified fact");
       expect(html).toContain("What it means");

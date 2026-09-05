@@ -126,7 +126,7 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain("object-fit:cover");
   });
 
-  it("uses an intentional grammar-specific treatment when approved imagery is unavailable", () => {
+  it("uses a content-led layout when approved imagery is unavailable", () => {
     const withoutImages = renderExperienceHtml({
       draft,
       brand: { ...brand, imageUrls: [] },
@@ -134,10 +134,10 @@ describe("renderExperienceHtml", () => {
       answers: {}
     });
 
-    expect(withoutImages).toContain('data-fallback-kind="editorial-evidence"');
+    expect(withoutImages).not.toMatch(/<figure\b/);
     expect(withoutImages).not.toContain('<span class="media-fallback-kicker">');
-    expect(withoutImages).toContain("The signal is clear.<br>The next move<br>should be too.");
-    expect(withoutImages).toContain(".media.media .media-fallback:before,.media.media .media-fallback:after{display:none}");
+    expect(withoutImages).not.toContain("The signal is clear.<br>The next move<br>should be too.");
+    expect(withoutImages).toContain(".hero.hero:not(:has(>.hero-media))");
     expect(withoutImages).not.toContain("<div class=\"media-fallback\" aria-hidden=\"true\"><span></span><span></span><span></span></div>");
     expect(withoutImages).not.toMatch(/<figure[^>]*>\s*<img/i);
   });
@@ -154,7 +154,7 @@ describe("renderExperienceHtml", () => {
     );
   });
 
-  it("places each substantive image at most once and designs the remaining media slots", () => {
+  it("places each substantive image at most once and omits unfilled media slots", () => {
     const manySlots = renderExperienceHtml({
       draft,
       brand: {
@@ -173,7 +173,7 @@ describe("renderExperienceHtml", () => {
       const placements = manySlots.match(new RegExp(`src="[^"]*${asset}"`, "g")) ?? [];
       expect(placements.length).toBeLessThanOrEqual(1);
     }
-    expect(manySlots).toContain("no-asset-treatment");
+    expect(manySlots).not.toMatch(/<figure[^>]*no-asset-treatment/);
   });
 
   it("preserves the upstream allocation order instead of re-ranking assets by filename", () => {
@@ -261,7 +261,7 @@ describe("renderExperienceHtml", () => {
     expect(heroIndex).toBeGreaterThan(-1);
     expect(singleAsset.indexOf('HarmonyTitle-HeroImage-Ring.jpg', heroIndex + 1)).toBe(-1);
     expect(singleAsset).toMatch(
-      /class="lens-panel"[\s\S]*?<figure class="media lens-media no-asset-treatment/
+      /class="lens-panel no-media"/
     );
   });
 
@@ -474,7 +474,7 @@ describe("renderExperienceHtml", () => {
 
   it("includes three functional decision lenses, three source-backed resource cards, and analytics hooks", () => {
     expect(html.match(/<button[^>]*role="tab"/g)).toHaveLength(3);
-    expect(html.match(/class="lens-panel"/g)).toHaveLength(3);
+    expect(html.match(/class="lens-panel(?: no-media)?"/g)).toHaveLength(3);
     expect(html.match(/<article class="journey-card resource-card/g)).toHaveLength(3);
     expect(html).toContain("data-action-event=\"cta_click\"");
     expect(html).toContain("||'anchor_click'");
@@ -831,7 +831,7 @@ describe("renderExperienceHtml", () => {
       heroActions: output.match(/<div class="actions">([\s\S]*?)<\/div>/)?.[1].match(/<(?:button|a)\b/g)?.length,
       liveHeroLinks: output.match(/<div class="actions">([\s\S]*?)<\/div>/)?.[1].match(/<a\b/g)?.length ?? 0,
       lensTabs: output.match(/<button[^>]*role="tab"/g)?.length,
-      lensPanels: output.match(/class="lens-panel"/g)?.length,
+      lensPanels: output.match(/class="lens-panel(?: no-media)?"/g)?.length,
       resourceCards: output.match(/<article class="journey-card resource-card/g)?.length,
       sectionOrder: [...output.matchAll(/<section class="(?:thesis|lens-lab|journey) experience-region" id="([^"]+)"/g)].map((match) => match[1])
     });
@@ -959,7 +959,7 @@ describe("renderExperienceHtml", () => {
       sectionOrder: [...output.matchAll(/<section class="(?:thesis|lens-lab|journey) experience-region" id="([^"]+)"/g)].map((match) => match[1]),
       journeyOrder: [...output.matchAll(/<section[^>]+data-journey-section="([^"]+)"/g)].map((match) => match[1]),
       signatureButtons: output.match(/data-signature-lens-index=/g)?.length,
-      lensPanels: output.match(/class="lens-panel"/g)?.length,
+      lensPanels: output.match(/class="lens-panel(?: no-media)?"/g)?.length,
       resourceCards: output.match(/<article class="journey-card resource-card/g)?.length,
       heroActions: output.match(/<div class="actions">([\s\S]*?)<\/div>/)?.[1].match(/<(?:button|a)\b/g)?.length
     });
@@ -1170,7 +1170,7 @@ describe("compiled asset plan authority", () => {
     expect(placed.get("hero")).toBe(plan.placements[0]!.assetRef);
     expect([...placed.keys()]).toEqual(["hero"]);
     expect(renderedImages(html)).toEqual([plan.placements[0]!.assetRef]);
-    expect(html).toContain("no-asset-treatment");
+    expect(html).not.toMatch(/<figure[^>]*no-asset-treatment/);
   });
 
   it("renders exactly the planned assets and ignores brand images outside the plan", () => {
@@ -1232,7 +1232,7 @@ describe("compiled asset plan authority", () => {
     expect(renderedImages(html)).toEqual([plan.placements[0]!.assetRef]);
   });
 
-  it("renders a designed treatment rather than an eyebrow stack when no asset is planned", () => {
+  it("renders content without a fake image or eyebrow stack when no asset is planned", () => {
     const html = renderExperienceHtml({
       draft,
       brand: { ...brand, imageUrls: [] },
@@ -1242,10 +1242,10 @@ describe("compiled asset plan authority", () => {
     });
 
     expect(renderedImages(html)).toEqual([]);
-    expect(html).toContain("no-asset-treatment");
-    expect(html).toContain("min-height:clamp(220px,28vw,360px)");
-    expect(html).toMatch(/<figure class="media[^"]*no-asset-treatment/);
-    // A designed treatment is a composed figure, not a third stacked text block.
+    expect(html).not.toMatch(/<figure[^>]*no-asset-treatment/);
+    expect(html).toContain(".mechanism-section.mechanism-section:not(:has(>.framework-media))");
+    expect(html).not.toMatch(/<figure\b/);
+    // The actual section content carries the layout without decorative copy.
     expect(html).not.toMatch(/<p class="eyebrow">[\s\S]{0,200}?<h2>[\s\S]{0,200}?<p class="dek">/);
   });
 
@@ -1279,6 +1279,6 @@ describe("compiled asset plan authority", () => {
 
     expect(html).not.toContain("169.254.169.254");
     expect(html).not.toContain("summit-promo.png");
-    expect(html).toContain("no-asset-treatment");
+    expect(html).not.toMatch(/<figure[^>]*no-asset-treatment/);
   });
 });
