@@ -218,7 +218,7 @@ describe("writeTeamCtaSections", () => {
 
     expect(result.status).toBe("complete");
     expect(candidate?.headline).toBe("Plan a working session around secure networking");
-    expect(candidate?.body).toMatch(/evaluate workflow fit against the cited public context/i);
+    expect(candidate?.body).toMatch(/evaluate workflow fit\.\s+confirm priorities/i);
     expect(candidate?.evidenceRefs).toEqual(["target-focus"]);
     expectValidCandidates(input, result);
   });
@@ -241,7 +241,7 @@ describe("writeTeamCtaSections", () => {
       headline: "Set the validation questions",
       evidenceRefs: []
     });
-    expect(seller?.body).toMatch(/review the available evidence/i);
+    expect(seller?.body).toMatch(/examine the stated workflow/i);
     expect(seller?.body).not.toMatch(/Acme|guarantee|customer|percent|%/i);
     expectValidCandidates(input, result);
   });

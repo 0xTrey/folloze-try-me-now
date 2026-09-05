@@ -110,7 +110,6 @@ describe("writeOpeningSections", () => {
       sectionId: "section-1",
       role: "hero",
       status: "complete",
-      eyebrow: "Operations leaders",
       headline: "Evaluate workflow automation through governed steps across operating teams",
       cta: {
         type: "book-meeting",
@@ -167,7 +166,7 @@ describe("writeOpeningSections", () => {
     ).toEqual([]);
   });
 
-  it("uses a non-factual decision prompt to meet the budget with sparse evidence", () => {
+  it("uses a short buyer question instead of padding sparse evidence", () => {
     const sparseEvidence = [richEvidence[1]!];
     const source = input({
       evidence: sparseEvidence,
@@ -183,9 +182,10 @@ describe("writeOpeningSections", () => {
 
     expect(result.status).toBe("complete");
     expect(candidate?.evidenceRefs).toEqual(["offer-1"]);
-    expect(candidate?.wordCount).toBeGreaterThanOrEqual(35);
     expect(candidate?.wordCount).toBeLessThanOrEqual(40);
-    expect(candidate?.body).toMatch(/assess|evaluate/i);
+    expect(candidate?.wordCount).toBe(sectionCopyWordCount(candidate!));
+    expect(candidate?.body).toBe(richEvidence[1]!.text);
+    expect(candidate?.body).not.toMatch(/current evidence|approved sources|declarative claim/i);
     expect(
       validateSectionCopyCandidate(candidate!, source.slots[0]!, revision, source.evidence)
     ).toEqual([]);
@@ -206,6 +206,20 @@ describe("writeOpeningSections", () => {
     expect(
       validateSectionCopyCandidate(candidate!, source.slots[0]!, revision, source.evidence)
     ).toEqual([]);
+  });
+
+  it("never splits a body sentence to satisfy a maximum word count", () => {
+    const source = input({
+      slots: [heroSlot({ evidenceRefs: ["offer-1"], wordBudget: { min: 2, max: 15 } })],
+      evidence: [richEvidence[1]!]
+    });
+    const result = writeOpeningSections(source);
+    const candidate = result.value?.[0];
+
+    expect(result.status).toBe("complete");
+    expect(candidate?.body).toMatch(/[.!?]$/);
+    expect(candidate?.wordCount).toBeLessThanOrEqual(15);
+    expect(candidate?.evidenceRefs).toEqual(["offer-1"]);
   });
 
   it("ignores invalid and stale refs while retaining current evidence", () => {

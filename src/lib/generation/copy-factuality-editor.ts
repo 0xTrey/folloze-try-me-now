@@ -622,8 +622,7 @@ function candidateIssues(
     : 0;
   if (
     slot.headlineWordBudget &&
-    (headlineWordCount < slot.headlineWordBudget.min ||
-      headlineWordCount > slot.headlineWordBudget.max)
+    headlineWordCount > slot.headlineWordBudget.max
   ) {
     issues.push("headline_word_budget_violation");
   }
@@ -631,7 +630,6 @@ function candidateIssues(
   const actualWordCount = sectionCopyWordCount(candidate);
   if (candidate.wordCount !== actualWordCount) issues.push("word_count_mismatch");
   if (
-    actualWordCount < slot.wordBudget.min ||
     actualWordCount > slot.wordBudget.max
   ) {
     issues.push("word_budget_violation");

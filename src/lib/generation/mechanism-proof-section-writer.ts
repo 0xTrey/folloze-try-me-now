@@ -14,36 +14,6 @@ const OWNED_ROLES = new Set<SectionWriterSlot["role"]>(["mechanism", "proof"]);
 const UNSAFE_COPY_PATTERN =
   /<\/?[a-z][^>]*>|```|^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+\.\s)|\[[^\]]+\]\([^)]+\)|\b(?:const|let|var|function|class|interface|import|export)\s+[a-z_$]|[.#]?[a-z][\w-]*\s*\{[^}]*\}/im;
 
-const MECHANISM_PADDING = [
-  "Trace each supported element from input through action to output.",
-  "Confirm prerequisites, ownership, and handoffs against the actual workflow.",
-  "Treat implementation details outside the cited evidence as validation questions.",
-  "Check the described sequence against operating constraints before deciding fit.",
-  "Verify where each handoff begins, who owns it, and what it produces.",
-  "Test the supported mechanism with representative inputs before expanding its scope.",
-  "Keep unreferenced capabilities, integrations, and operating steps out of the conclusion.",
-  "Compare the supported sequence with current processes and document any unresolved gaps."
-] as const;
-
-const PROOF_PADDING = [
-  "Use the cited sources to confirm scope, context, and applicability.",
-  "Treat outcomes, customer examples, and quantities outside those sources as validation questions.",
-  "Check whether the evidence matches the intended audience and use case.",
-  "Confirm comparison terms and time periods before relying on them.",
-  "Separate what the source demonstrates from what still requires evaluation.",
-  "Review the source conditions before applying its conclusions to another team.",
-  "Validate relevance, repeatability, and operating fit with the people responsible for the decision.",
-  "Keep every conclusion bounded to the evidence available for this revision."
-] as const;
-
-const SHORT_PADDING = [
-  "Confirm scope.",
-  "Validate fit.",
-  "Review prerequisites.",
-  "Check applicability.",
-  "Verify."
-] as const;
-
 function words(value: string): number {
   return value.trim() ? value.trim().split(/\s+/).length : 0;
 }
@@ -141,26 +111,6 @@ function appendWithinBudget(
   return headlineWords + words(candidate) <= maxWords ? candidate : undefined;
 }
 
-function padToMinimum(
-  body: string,
-  headlineWords: number,
-  slot: SectionWriterSlot,
-  padding: readonly string[]
-): string | undefined {
-  let result = body;
-  for (const sentence of [...padding, ...SHORT_PADDING]) {
-    if (headlineWords + words(result) >= slot.wordBudget.min) break;
-    const appended = appendWithinBudget(
-      result,
-      sentence,
-      headlineWords,
-      slot.wordBudget.max
-    );
-    if (appended) result = appended;
-  }
-  return headlineWords + words(result) >= slot.wordBudget.min ? result : undefined;
-}
-
 function supportedBody(
   role: "mechanism" | "proof",
   claims: readonly SectionEvidenceClaim[],
@@ -168,13 +118,7 @@ function supportedBody(
   slot: SectionWriterSlot,
   directLead?: string
 ): { body: string; claims: SectionEvidenceClaim[] } | undefined {
-  const prefix = directLead
-    ? normalizedSentence(directLead)
-    :
-    role === "mechanism"
-      ? "Current evidence describes the operating mechanism:"
-      : "Current evidence supports these points:";
-  let body = prefix;
+  let body = directLead ? normalizedSentence(directLead) : "";
   const selected: SectionEvidenceClaim[] = [];
 
   for (const claim of claims) {
@@ -194,13 +138,7 @@ function supportedBody(
   }
 
   if (selected.length === 0) return undefined;
-  const padded = padToMinimum(
-    body,
-    headlineWords,
-    slot,
-    role === "mechanism" ? MECHANISM_PADDING : PROOF_PADDING
-  );
-  return padded ? { body: padded, claims: selected } : undefined;
+  return { body, claims: selected };
 }
 
 function validationBody(
@@ -210,15 +148,10 @@ function validationBody(
 ): string | undefined {
   const body =
     role === "mechanism"
-      ? "Current evidence does not establish an operating mechanism. Validate the inputs, actions, handoffs, and outputs before treating the approach as a fit."
-      : "Current evidence does not support a declarative proof claim. Validate the mechanism, expected outcome, applicability, and fit using approved sources before relying on them. Confirm any customer example, quantified result, timeline, or comparison separately; none is asserted here.";
+      ? "What workflow detail should be validated first?"
+      : "Which proof point should guide the next decision?";
   if (headlineWords + words(body) > slot.wordBudget.max) return undefined;
-  return padToMinimum(
-    body,
-    headlineWords,
-    slot,
-    role === "mechanism" ? MECHANISM_PADDING : PROOF_PADDING
-  );
+  return body;
 }
 
 function omittedCandidate(slot: SectionWriterSlot): SectionCopyCandidate {
@@ -241,7 +174,7 @@ function headlineForSlot(
     return "How the supported change works in practice";
   }
   if (slot.v2Role === "proof") {
-    return "What the available evidence supports now";
+    return "What the material supports now";
   }
   if (slot.v2Role === "solution-mapping") {
     return "How the solution answers each evaluation criterion";

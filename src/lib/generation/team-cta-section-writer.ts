@@ -24,17 +24,6 @@ const CTA_ACTION_COPY: Record<CtaType, string> = {
   custom: "Use this next step to address the selected objective"
 };
 
-const SELLER_PADDING = [
-  "Keep unsupported details framed as questions for review.",
-  "Separate current evidence from assumptions that still need confirmation.",
-  "Record which points require additional source support."
-] as const;
-
-const CTA_PADDING = [
-  "Review the current evidence and open questions before proceeding.",
-  "Keep the scope tied to this objective."
-] as const;
-
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => value.trim()))];
 }
@@ -68,20 +57,18 @@ function fitHeadline(value: string, slot: SectionWriterSlot): string {
 function fitBody(
   body: string,
   fixedWordCount: number,
-  slot: SectionWriterSlot,
-  padding: readonly string[]
+  slot: SectionWriterSlot
 ): string | undefined {
   const available = slot.wordBudget.max - fixedWordCount;
-  const required = Math.max(1, slot.wordBudget.min - fixedWordCount);
-  if (available < required) return undefined;
-
-  const bodyWords = words(body);
-  for (const sentence of padding) {
-    if (bodyWords.length >= required) break;
-    bodyWords.push(...words(sentence));
+  if (available < 1) return undefined;
+  const sentences = body.match(/[^.!?]+[.!?]+/g) ?? [];
+  let fitted = "";
+  for (const sentence of sentences) {
+    const candidate = `${fitted} ${sentence.trim()}`.trim();
+    if (words(candidate).length > available) break;
+    fitted = candidate;
   }
-  if (bodyWords.length < required) return undefined;
-  return bodyWords.slice(0, available).join(" ");
+  return fitted || undefined;
 }
 
 function failedArtifact(
@@ -117,7 +104,6 @@ function omittedCandidate(slot: SectionWriterSlot): SectionCopyCandidate {
 function completeCandidate(
   slot: SectionWriterSlot,
   draft: Omit<SectionCopyCandidate, "sectionId" | "role" | "status" | "wordCount">,
-  padding: readonly string[]
 ): SectionCopyCandidate | undefined {
   const candidateWithoutBody: SectionCopyCandidate = {
     sectionId: slot.id,
@@ -129,7 +115,7 @@ function completeCandidate(
     wordCount: 0
   };
   const fixedWordCount = sectionCopyWordCount(candidateWithoutBody);
-  const body = fitBody(draft.body ?? "", fixedWordCount, slot, padding);
+  const body = fitBody(draft.body ?? "", fixedWordCount, slot);
   if (!body) return undefined;
 
   const candidate: SectionCopyCandidate = {
@@ -179,19 +165,17 @@ function sellerValidationCandidate(
     .join(" ");
   const objective = plainText(input.objective);
   const body = supportedPoints
-    ? `For ${objective}, review these supported points with the team: ${supportedPoints} Compare each point with the decision criteria and keep unsupported details as questions.`
-    : `For ${objective}, review the available evidence, test the stated mechanism, and note what remains unknown. Use the validation questions to decide what the team needs before moving forward.`;
+    ? `For ${objective}, discuss these points with the team: ${supportedPoints} Compare each point with the decision criteria and keep gaps as questions.`
+    : `For ${objective}, examine the stated workflow and identify what still needs clarification before moving forward.`;
   const candidate = completeCandidate(
     slot,
     {
-      eyebrow: "Team validation",
       headline: currentClaims.length > 0
         ? "Evidence the team can review"
         : "Set the validation questions",
       body,
       evidenceRefs: currentClaims.map(({ id }) => id)
     },
-    SELLER_PADDING
   );
   return { candidate, usedEvidence: currentClaims };
 }
@@ -212,9 +196,9 @@ function nextActionCandidate(
       ? plainText(input.brief.nextAction)
       : "";
   const body = accountNextAction
-    ? `Use that session to ${objectiveAction} against the cited public context. Keep internal priorities, timing, and results as validation questions.`
+    ? `Use that session to ${objectiveAction}. Confirm priorities, timing, and results with the team.`
     : `${CTA_ACTION_COPY[input.cta.type]}: ${objective}. ` +
-      "Bring the current evidence and open questions into the next step.";
+      "Bring the relevant material and open questions into the next step.";
   const headline =
     accountNextAction
       ? fitHeadline(accountNextAction, slot)
@@ -228,7 +212,6 @@ function nextActionCandidate(
   return completeCandidate(
     slot,
     {
-      eyebrow: "Next action",
       headline,
       body,
       cta: {
@@ -238,7 +221,6 @@ function nextActionCandidate(
       },
       evidenceRefs: targetClaims.map(({ id }) => id)
     },
-    CTA_PADDING
   );
 }
 

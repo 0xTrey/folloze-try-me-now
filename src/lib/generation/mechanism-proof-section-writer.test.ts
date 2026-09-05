@@ -109,9 +109,6 @@ function expectValidBudgets(
   result.value?.forEach((candidate, index) => {
     if (candidate.status === "omitted") return;
     expect(candidate.wordCount).toBe(sectionCopyWordCount(candidate));
-    expect(candidate.wordCount).toBeGreaterThanOrEqual(
-      slots[index]!.wordBudget.min
-    );
     expect(candidate.wordCount).toBeLessThanOrEqual(
       slots[index]!.wordBudget.max
     );
@@ -156,7 +153,7 @@ describe("writeMechanismProofSections", () => {
     expectValidBudgets(result, [proofSlot]);
   });
 
-  it("frames proof-sparse gaps as validation instead of adding claims", () => {
+  it("keeps sparse proof copy limited to its cited claim", () => {
     const sparseSlot = {
       ...proofSlot,
       evidenceRefs: ["proof-1"]
@@ -167,7 +164,10 @@ describe("writeMechanismProofSections", () => {
 
     expect(result.status).toBe("complete");
     expect(result.value?.[0]?.evidenceRefs).toEqual(["proof-1"]);
-    expect(result.value?.[0]?.body).toMatch(/validation questions/i);
+    expect(result.value?.[0]?.body).toBe(
+      "The official product guide documents configurable workflow stages."
+    );
+    expect(result.value?.[0]?.body).not.toMatch(/current evidence|approved sources/i);
     expect(result.value?.[0]?.body).not.toMatch(/\d+%|\$\d+/);
     expectValidBudgets(result, [sparseSlot]);
   });
@@ -190,10 +190,10 @@ describe("writeMechanismProofSections", () => {
       status: "complete",
       evidenceRefs: []
     });
-    expect(result.value?.[0]?.body).toMatch(
-      /does not support a declarative proof claim/i
+    expect(result.value?.[0]?.body).toBe(
+      "Which proof point should guide the next decision?"
     );
-    expect(result.value?.[0]?.body).toMatch(/none is asserted here/i);
+    expect(result.value?.[0]?.body).not.toMatch(/declarative|evidence|proof claim/i);
     expectValidBudgets(result, [{ ...proofSlot, evidenceRefs: [] }]);
   });
 
@@ -275,5 +275,16 @@ describe("writeMechanismProofSections", () => {
     expect(result.value?.[0]?.body).not.toContain("Google describes responsible AI");
     expect(result.value?.[0]?.body).not.toMatch(/^Current evidence describes/);
     expect(result.value?.[0]?.evidenceRefs).toEqual(["target:focus"]);
+  });
+
+  it("never fragments supported sentences when the maximum budget is tight", () => {
+    const tightSlot = { ...proofSlot, wordBudget: { min: 2, max: 18 } };
+    const result = writeMechanismProofSections(input({ slots: [tightSlot] }));
+    const candidate = result.value?.[0];
+
+    expect(result.status).toBe("complete");
+    expect(candidate?.body).toMatch(/[.!?]$/);
+    expect(candidate?.wordCount).toBeLessThanOrEqual(tightSlot.wordBudget.max);
+    expect(candidate?.evidenceRefs).toEqual(["proof-1"]);
   });
 });

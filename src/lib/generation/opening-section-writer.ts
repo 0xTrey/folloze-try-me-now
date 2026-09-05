@@ -45,45 +45,24 @@ function truncateWords(value: string, limit: number): string {
     .replace(/[,;:-]+$/g, "");
 }
 
+function truncateBody(value: string, limit: number): string {
+  if (wordCount(value) <= limit) return value;
+  const sentences = value.match(/[^.!?]+[.!?]+/g) ?? [];
+  let result = "";
+  for (const sentence of sentences) {
+    const candidate = `${result} ${sentence.trim()}`.trim();
+    if (wordCount(candidate) > limit) break;
+    result = candidate;
+  }
+  return result;
+}
+
 function headlineForSlot(value: string, slot: SectionWriterSlot): string {
   if (!slot.headlineWordBudget) return value;
-  const { min, max } = slot.headlineWordBudget;
+  const { max } = slot.headlineWordBudget;
   let result = truncateWords(value, max);
-  const suffix = ["for", "the", "next", "buyer", "decision"];
-  let suffixIndex = 0;
-  while (wordCount(result) < min) {
-    result = `${result} ${suffix[suffixIndex % suffix.length]}`;
-    suffixIndex += 1;
-  }
-  return truncateWords(result, max);
+  return result;
 }
-
-const DECISION_PROMPTS: Record<number, string> = {
-  1: "Evaluate.",
-  2: "Assess fit.",
-  3: "Assess the fit.",
-  4: "Assess fit against priorities.",
-  5: "Assess the fit against priorities.",
-  6: "Assess the evidence against your priorities.",
-  7: "Assess the current evidence against your priorities.",
-  8: "Assess the current evidence against your stated priorities.",
-  9: "Assess the current evidence against your team's stated priorities.",
-  10: "Assess the current evidence against your team's priorities before proceeding.",
-  11: "Assess the evidence against your team's priorities before choosing next steps.",
-  12: "Assess the current evidence against your team's priorities before choosing next steps.",
-  13: "Assess the evidence against your team's priorities, then decide what needs validation next."
-};
-
-/**
- * Produces an exact-length, non-factual decision prompt. It can fill a narrow
- * composition budget without adding claims, proof, outcomes, or urgency.
- */
-function decisionPrompt(words: number): string {
-  if (words <= 0) return "";
-  if (words <= 13) return DECISION_PROMPTS[words]!;
-  return `${DECISION_PROMPTS[13]} ${decisionPrompt(words - 13)}`;
-}
-
 function fitCandidateToBudget(
   candidate: SectionCopyCandidate,
   slot: SectionWriterSlot
@@ -103,7 +82,9 @@ function fitCandidateToBudget(
   }
   if (fitted.wordCount > slot.wordBudget.max && fitted.body) {
     const excess = fitted.wordCount - slot.wordBudget.max;
-    fitted.body = truncateWords(fitted.body, Math.max(1, wordCount(fitted.body) - excess));
+    fitted.body =
+      truncateBody(fitted.body, Math.max(1, wordCount(fitted.body) - excess)) ||
+      "What should your team validate first?";
     fitted.wordCount = sectionCopyWordCount(fitted);
   }
   if (fitted.wordCount > slot.wordBudget.max && fitted.headline) {
@@ -116,12 +97,6 @@ function fitCandidateToBudget(
   }
   if (fitted.wordCount > slot.wordBudget.max || !fitted.headline || !fitted.body) {
     return undefined;
-  }
-
-  if (fitted.wordCount < slot.wordBudget.min) {
-    const missingWords = slot.wordBudget.min - fitted.wordCount;
-    fitted.body = `${fitted.body} ${decisionPrompt(missingWords)}`;
-    fitted.wordCount = sectionCopyWordCount(fitted);
   }
 
   return fitted.wordCount <= slot.wordBudget.max ? fitted : undefined;
@@ -171,8 +146,7 @@ function buildCandidate(
     slot.v2Role === "shared-priority"
       ? normalizeCopy(input.brief.whyNow ?? "")
       : undefined;
-  const body = accountWhyNow || claimText ||
-    "Assess the evidence against your priorities, then decide what needs validation next.";
+  const body = accountWhyNow || claimText || "What should your team validate first?";
   const ctaLabel = normalizeCopy(input.cta.label);
   const evidenceRefs = unique(safeClaims.map(({ claim }) => claim.id));
   const ctaAllowed =
@@ -185,7 +159,6 @@ function buildCandidate(
       role: "hero",
       ...copyContractMetadata(slot),
       status: "complete",
-      ...(audience ? { eyebrow: audience } : {}),
       headline: headlineForSlot(promise, slot),
       body,
       ...(ctaLabel && ctaAllowed

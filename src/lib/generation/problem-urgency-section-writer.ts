@@ -11,16 +11,6 @@ import {
 
 const WORKER = "problem-urgency-writer" as const;
 
-const neutralReviewLanguage = [
-  "Compare the available evidence with the stated objective.",
-  "Separate supported points from questions that still need validation.",
-  "Assess fit before choosing a next step.",
-  "Use the cited facts as the boundary for the discussion.",
-  "Treat unknowns as questions rather than assumptions.",
-  "Keep the review focused on the buyer's stated decision.",
-  "Identify what the evidence can establish and what remains open."
-].join(" ");
-
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => value.trim()))];
 }
@@ -133,18 +123,15 @@ function headlineForSlot(
 }
 
 function bodyFor(seed: string, targetWords: number): string {
-  const seedWords = words(seed);
-  const fillerWords = words(neutralReviewLanguage);
-  const result = seedWords.slice(0, targetWords);
-  let fillerIndex = 0;
-
-  while (result.length < targetWords) {
-    result.push(fillerWords[fillerIndex % fillerWords.length]!);
-    fillerIndex += 1;
+  const sentences = plainText(seed).match(/[^.!?]+[.!?]+/g) ?? [];
+  let body = "";
+  for (const sentence of sentences) {
+    const candidate = `${body} ${sentence.trim()}`.trim();
+    if (words(candidate).length > targetWords) break;
+    body = candidate;
   }
-
-  const body = result.join(" ").replace(/[,:;]$/, "");
-  return /[.!?]$/.test(body) ? body : `${body}.`;
+  if (body) return body;
+  return "What should the team validate before deciding?";
 }
 
 function completeCandidate(
@@ -166,19 +153,16 @@ function completeCandidate(
       : slot.v2Role === "account-relevance"
         ? unique(targetEvidence).join(" ")
         : ""
-    : neutralReviewLanguage;
+    : "What should the team validate before deciding?";
   const seedWordCount = words(seed).length;
-  const bodyWordCount = Math.min(
-    bodyCapacity,
-    Math.max(1, slot.wordBudget.min - headlineWords, seedWordCount)
-  );
+  const bodyWordCount = Math.min(bodyCapacity, Math.max(1, seedWordCount));
   const candidate: SectionCopyCandidate = {
     sectionId: slot.id,
     role: "context",
     ...copyContractMetadata(slot),
     status: "complete",
     headline,
-    body: bodyFor(seed || neutralReviewLanguage, bodyWordCount),
+    body: bodyFor(seed, bodyWordCount),
     evidenceRefs: [...evidenceRefs],
     wordCount: 0
   };

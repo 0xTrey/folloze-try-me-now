@@ -322,14 +322,12 @@ export function validateSectionCopyCandidate(
   const headlineWords = textWordCount(candidate.headline);
   if (
     slot.headlineWordBudget &&
-    (headlineWords < slot.headlineWordBudget.min ||
-      headlineWords > slot.headlineWordBudget.max)
+    headlineWords > slot.headlineWordBudget.max
   ) {
     issues.push("headline_word_budget_violation");
   }
   if (
     candidate.wordCount !== sectionCopyWordCount(candidate) ||
-    candidate.wordCount < slot.wordBudget.min ||
     candidate.wordCount > slot.wordBudget.max
   ) {
     issues.push("word_budget_violation");

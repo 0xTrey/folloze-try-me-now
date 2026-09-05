@@ -467,14 +467,13 @@ export function scoreSectionCandidate(
         + Math.round((2 * Math.min(scoped, candidate.evidenceRefs.length)) / scoped)
   );
 
-  const budget = contract.slot.wordBudget;
-  const span = Math.max(1, budget.max - budget.min);
-  const midpoint = budget.min + span / 2;
-  const drift = Math.abs(sectionCopyWordCount(candidate) - midpoint) / span;
+  // Minimum budgets are writing guidance, never a reason to manufacture copy.
+  // Reward readable complete thoughts, not proximity to a target word count.
+  const sentenceLength = meanSentenceWords(text);
   const clearLanguage = capped(
     "clearLanguage",
-    (drift <= 0.25 ? 2 : drift <= 0.5 ? 1 : 0)
-      + (meanSentenceWords(text) <= 24 && !FILLER_PATTERN.test(text) ? 1 : 0)
+    (sentenceLength <= 24 ? 2 : sentenceLength <= 32 ? 1 : 0)
+      + (!FILLER_PATTERN.test(text) ? 1 : 0)
   );
 
   // Scored only when the section owns the objection. A section that does not
@@ -689,7 +688,7 @@ export function repairDuplicateCopy(
     wordCount: 0
   };
   const counted = { ...repaired, wordCount: sectionCopyWordCount(repaired) };
-  if (counted.wordCount < contract.slot.wordBudget.min) return undefined;
+  if (!counted.body?.trim()) return undefined;
   return counted;
 }
 
