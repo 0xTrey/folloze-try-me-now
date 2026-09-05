@@ -167,11 +167,11 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
         };
       });
       const bodyText = document.body.innerText;
-      const darkRegions = [
-        ...document.querySelectorAll<HTMLElement>(
-          ".urgency-section, .composition-evidence-lead .credibility-anchor, .composition-chapter-journey .framework-starting-points"
-        )
-      ];
+      const darkRegions = [...document.querySelectorAll<HTMLElement>(
+        // Every family retains the dark next-step section. Earlier dark modules
+        // are optional when the buyer assignment does not earn those sections.
+        ".close, .urgency-section, .composition-evidence-lead .credibility-anchor, .composition-chapter-journey .framework-starting-points"
+      )];
       const darkTextContrast = darkRegions.flatMap((region) => {
         const background = getComputedStyle(region).backgroundColor;
         return [...region.querySelectorAll<HTMLElement>("h1,h2,h3,p,li,dd")]

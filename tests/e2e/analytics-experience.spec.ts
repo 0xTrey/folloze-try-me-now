@@ -169,7 +169,7 @@ test.describe("analytics experience completion contract", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
   });
 
-  test("opens once only at journey completion, uses the titled value proposition, and discloses simulation", async ({ page }, testInfo) => {
+  test("offers next steps once at journey completion, opens requested analytics, and discloses simulation", async ({ page }, testInfo) => {
     const errors: string[] = [];
     const consoleErrors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -199,6 +199,11 @@ test.describe("analytics experience completion contract", () => {
     const finalSection = previewFrame!.locator("[data-journey-section]").last();
     const finalSectionTitle = (await finalSection.locator("h1,h2,h3").first().innerText()).trim();
     await previewFrame!.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const nextSteps = page.getByRole("dialog", { name: "What would you like to explore next?" });
+    await expect(nextSteps).toBeVisible({ timeout: 5_000 });
+    await expect(dialog).toHaveCount(0);
+    await nextSteps.getByRole("button", { name: "View Engagement Analytics" }).click();
+    await expect(nextSteps).toHaveCount(0);
     await expect(dialog).toBeVisible({ timeout: 5_000 });
     await expect(dialog).toContainText(finalSectionTitle);
     await expect(dialog).toContainText(selectedLensTitle);
@@ -224,6 +229,7 @@ test.describe("analytics experience completion contract", () => {
       }
     }, "*"), { sectionTitle: finalSectionTitle, lensTitle: selectedLensTitle });
     await expect(dialog).toHaveCount(0);
+    await expect(nextSteps).toHaveCount(0);
     await expect.poll(() => previewOperations.filter((operation) => operation.event === "journey-complete").length).toBe(1);
     await engagement.click();
     await expect(dialog).toBeVisible();

@@ -318,7 +318,7 @@ test.describe("final-only visible shell", () => {
 
     const dialog = page.getByRole("dialog", { name: /See what buyers engage with/i });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: `Viewed ${sectionTitle}` })).toBeVisible();
+    await expect(dialog.getByLabel("Your activity in this preview").getByText(`Viewed ${sectionTitle}`, { exact: true })).toBeVisible();
     await expect(dialog.getByLabel("Your activity in this preview").getByText(sectionHeadline)).toBeVisible();
     await expect(dialog.getByText(/Live signals are captured. Engaged time appears after 15 foreground seconds./)).toBeVisible();
     await expect(dialog.getByText(/\b\d+s engaged\b/i)).toHaveCount(0);

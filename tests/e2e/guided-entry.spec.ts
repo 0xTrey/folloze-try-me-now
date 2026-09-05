@@ -842,7 +842,8 @@ test.describe("unified guided first-run experience", () => {
       companyDomain,
       status: "brand_help_required"
     }));
-    await startBuyerExperience(page, "northpeak.com");
+    // A preserved brand-help session resumes at source recovery, not question one.
+    await startBuyerExperience(page, "northpeak.com", { waitForBrief: false });
 
     await expect(page.getByRole("heading", { name: "Add a clearer brand source." })).toBeVisible();
     await expect(page.getByText(/research is preserved/i)).toBeVisible();
