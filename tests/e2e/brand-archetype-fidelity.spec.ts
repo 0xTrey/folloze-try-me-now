@@ -177,11 +177,12 @@ for (const archetype of BRAND_ARCHETYPE_FIXTURES) {
       expect(colorDistance(measured.bodyColor, semantics.colors.text.value))
         .toBeLessThanOrEqual(40);
 
-      // Substantive imagery is used at most once, and an unfilled slot carries a
-      // designed treatment rather than a repeat.
+      // Substantive imagery is used at most once. Unfilled slots are omitted,
+      // with the content keeping its shape without fabricated visual evidence.
       const substantive = measured.imageSources.filter(Boolean);
       expect(new Set(substantive).size).toBe(substantive.length);
-      if (!substantive.length) expect(measured.designedTreatments).toBeGreaterThan(0);
+      expect(measured.designedTreatments).toBe(0);
+      await expect(page.locator(".media:not(:has(img)), .media-fallback")).toHaveCount(0);
       expect(measured.sectionCount).toBeGreaterThanOrEqual(4);
 
       // The page holds its shape: nothing is pushed off the side at either width.

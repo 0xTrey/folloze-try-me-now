@@ -439,7 +439,7 @@ test.describe("generated 1:1 experience", () => {
     }
   });
 
-  test("falls back to accessible wordmarks and visual media when assets fail", async ({ page }) => {
+  test("keeps accessible wordmarks and removes failed media without placeholders", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.route(`${fixtureAssetOrigin}/**`, (route) => route.abort("failed"));
     await loadGeneratedExperience(page);
@@ -451,7 +451,9 @@ test.describe("generated 1:1 experience", () => {
     await expect(page.locator(".target-wordmark .wordmark-fallback")).toHaveText("Cisco");
     await expect(page.locator(".target-wordmark .wordmark-fallback")).toBeVisible();
     await expect(page.locator(".media.has-asset")).toHaveCount(0);
-    await expect(page.locator(".media-fallback").first()).toHaveCSS("opacity", "1");
+    await expect(page.locator(".media, .media-fallback")).toHaveCount(0);
+    await expect(page.locator(".hero h1")).toBeVisible();
+    await expect(page.locator(".hero h1")).toHaveText(experienceDraft.headline);
   });
 
   test("rejects unsafe asset URLs and renders fallbacks immediately", async ({ page }) => {
@@ -492,7 +494,12 @@ test.describe("generated 1:1 experience", () => {
       expect(visibleCopy, `forbidden copy found: ${phrase}`).not.toContain(phrase);
     }
 
-    await expect(page.locator(".close .primary")).toHaveText(experienceDraft.primaryCta);
+    // This fixture has no verified conversion destination, so every placement
+    // must share the safe on-page action instead of inheriting an old promise.
+    await expect(page.locator(".close .primary")).toHaveText("Explore the page");
+    await expect(page.locator(".hero .primary")).toHaveText("Explore the page");
+    await expect(page.locator(".close .primary")).toHaveAttribute("data-scroll-target", "next-step");
+    await expect(page.locator("#next-step")).toHaveCount(1);
     const carryForwardQuestions = await page.locator(".journey-card h3").allTextContents();
     expect(carryForwardQuestions).toHaveLength(3);
     expect(carryForwardQuestions.every((question) => question.trim().endsWith("?"))).toBe(true);

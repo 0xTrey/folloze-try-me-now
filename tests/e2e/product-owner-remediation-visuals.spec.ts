@@ -107,12 +107,11 @@ test.describe("product-owner remediation visual fixtures", () => {
     );
     await expect(page.getByText(/Brand colors are not yet verified/i)).toBeVisible();
     await expect(page.locator(".hero-media img")).toHaveCount(0);
-    await expect(page.locator(".hero-media .media-fallback")).toBeVisible();
+    await expect(page.locator(".hero-media, .media-fallback")).toHaveCount(0);
+    await expect(page.locator(".hero h1")).toBeVisible();
+    await expect(page.locator(".hero h1")).not.toHaveText("");
     await page.screenshot({
-      path:
-        process.env.CAPTURE_REVIEW_EVIDENCE === "1"
-          ? "output/product-owner-remediation/partial-unavailable-brand-fallback.png"
-          : testInfo.outputPath("partial-unavailable-brand-fallback.png"),
+      path: testInfo.outputPath("partial-unavailable-brand-fallback.png"),
       fullPage: true
     });
   });

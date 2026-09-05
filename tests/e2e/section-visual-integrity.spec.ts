@@ -67,8 +67,9 @@ test.describe("section visual integrity", () => {
     });
   }
 
-  test("keeps designed fallbacks when imagery is sparse", async ({ page }) => {
+  test("keeps readable content without placeholder figures when imagery is sparse", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
+    await fulfillFixtureAssets(page);
     const html = generatedExperienceHtml({
       seller: {
         ...sellerBrand,
@@ -85,11 +86,13 @@ test.describe("section visual integrity", () => {
     });
     await page.setContent(html, { waitUntil: "domcontentloaded" });
     await assertSectionVisualIntegrity(page);
-    await expect(page.locator(".media-fallback").first()).toBeVisible();
+    await expect(page.locator(".media-fallback, .media:not(:has(img))")).toHaveCount(0);
+    await expect(page.locator(".hero h1")).toBeVisible();
+    await expect(page.locator(".hero h1")).not.toHaveText("");
     await expect(page.locator(".media.has-asset img").count()).resolves.toBeLessThanOrEqual(1);
   });
 
-  test("collapses failed images into designed fallback blocks without empty media shells", async ({
+  test("removes failed images and keeps readable content without empty media shells", async ({
     page
   }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -104,11 +107,13 @@ test.describe("section visual integrity", () => {
     });
     await expect.poll(() => page.locator(".media img").count()).toBe(0);
     await expect(page.locator(".media.has-asset")).toHaveCount(0);
-    await expect(page.locator(".media-fallback").first()).toBeVisible();
+    await expect(page.locator(".media, .media-fallback")).toHaveCount(0);
+    await expect(page.locator(".hero h1")).toBeVisible();
+    await expect(page.locator(".hero h1")).not.toHaveText("");
     await assertSectionVisualIntegrity(page);
   });
 
-  test("gives each visible lens tab distinct media or an explicit fallback", async ({ page }) => {
+  test("gives each visible lens tab useful content and never repeats imagery", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await fulfillFixtureAssets(page);
     await page.setContent(generatedExperienceHtml(), { waitUntil: "domcontentloaded" });
@@ -120,15 +125,14 @@ test.describe("section visual integrity", () => {
       await tabs.nth(index).click();
       const panel = page.locator(`#lens-panel-${index}`);
       await expect(panel).toBeVisible();
+      await expect(panel.locator(".lens-copy h2")).toBeVisible();
+      await expect(panel.locator(".lens-copy p").first()).not.toHaveText("");
+      await expect(panel.locator(".media-fallback, .media:not(:has(img))")).toHaveCount(0);
       const signature = await panel.evaluate((node) => {
         const image = node.querySelector<HTMLImageElement>(".lens-media img");
-        const fallback = node.querySelector(".lens-media .media-fallback");
-        if (image?.src) return `img:${image.src}`;
-        if (fallback) return `fallback:${fallback.getAttribute("data-fallback-kind") ?? "designed"}`;
-        return "empty";
+        return image?.src ?? null;
       });
-      expect(signature).not.toBe("empty");
-      mediaSignatures.push(signature);
+      if (signature) mediaSignatures.push(signature);
     }
     expect(new Set(mediaSignatures).size).toBe(mediaSignatures.length);
     await assertSectionVisualIntegrity(page);

@@ -124,7 +124,7 @@ async function openFinalReveal(page: Page): Promise<Frame> {
   await mockReadyShell(page);
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await startBuild(page);
-  await expect(page.locator(".revealStage")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator("section[aria-labelledby='experience-ready-title']")).toBeVisible({ timeout: 10_000 });
   const iframe = page.locator('iframe[title="Generated buyer experience preview"]');
   await expect(iframe).toBeVisible();
   await expect(page.frameLocator('iframe[title="Generated buyer experience preview"]').locator(".shell")).toBeVisible();

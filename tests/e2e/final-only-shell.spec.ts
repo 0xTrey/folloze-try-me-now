@@ -217,8 +217,9 @@ test.describe("final-only visible shell", () => {
     await startBuild(page);
 
     await expect(page.locator("[data-build-shell]")).toHaveCount(0);
-    await expect(page.getByText("Live brief").first()).toBeVisible();
     await expect(page.getByRole("textbox", { name: /What are you taking to market/i })).toBeVisible();
+    await page.getByText("Review your answers", { exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Live Brief" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Edit Audience/i })).toContainText("Waiting");
     await expect(page.getByText("Queued", { exact: true })).toHaveCount(0);
   });
@@ -272,7 +273,7 @@ test.describe("final-only visible shell", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await startBuild(page);
 
-    await expect(page.locator(".revealStage")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("section[aria-labelledby='experience-ready-title']")).toBeVisible({ timeout: 10_000 });
     await expect(page.locator("[data-build-shell]")).toHaveCount(0);
     const frame = page.frameLocator('iframe[title="Generated buyer experience preview"]');
     await expect(frame.locator("section")).toContainText("Fixture experience");
@@ -280,7 +281,7 @@ test.describe("final-only visible shell", () => {
     await expect(page.locator("[data-final-only-reveal='true'] .previewReadinessStatus")).toHaveCount(0);
     await expect(page.getByText(/Save this preview|Preview ready|Temporary URL|Expires 30 minutes|Preview as/i)).toHaveCount(0);
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
-    await expect(page.locator(".revealStage")).toHaveCSS("opacity", "1", { timeout: 5_000 });
+    await expect(page.locator("section[aria-labelledby='experience-ready-title']")).toHaveCSS("opacity", "1", { timeout: 5_000 });
     await captureReleaseEvidence(page, "final-reveal");
   });
 
@@ -290,8 +291,8 @@ test.describe("final-only visible shell", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await startBuild(page);
 
-    await expect(page.locator(".revealStage")).toBeVisible({ timeout: 10_000 });
-    const engagementButton = page.getByRole("button", { name: /See live engagement/i });
+    await expect(page.locator("section[aria-labelledby='experience-ready-title']")).toBeVisible({ timeout: 10_000 });
+    const engagementButton = page.getByRole("button", { name: /View Engagement/i });
     await expect(engagementButton).toBeVisible();
     await expect(page.getByRole("button", { name: /Personalize for 3 accounts/i })).toBeVisible();
     await expect(page.getByText(/Preview ready|Temporary URL|Preview as/i)).toHaveCount(0);
@@ -334,7 +335,7 @@ test.describe("final-only visible shell", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await startBuild(page);
 
-    await expect(page.locator(".revealStage")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("section[aria-labelledby='experience-ready-title']")).toBeVisible({ timeout: 10_000 });
     const personalizeButton = page.getByRole("button", { name: /Personalize for 3 accounts/i });
     await expect(personalizeButton).toBeVisible();
     await personalizeButton.click();

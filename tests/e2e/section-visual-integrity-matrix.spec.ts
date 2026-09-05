@@ -88,9 +88,10 @@ test.describe("section visual integrity matrix", () => {
     }
   });
 
-  test("passes for sparse seller inventory with designed fallbacks", async ({ page }, testInfo) => {
+  test("passes for sparse seller inventory without placeholder figures", async ({ page }, testInfo) => {
     for (const viewport of viewports) {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await fulfillFixtureAssets(page);
       const html = generatedExperienceHtml({
         seller: {
           ...sellerBrand,
@@ -107,7 +108,9 @@ test.describe("section visual integrity matrix", () => {
       });
       await page.setContent(html, { waitUntil: "domcontentloaded" });
       await assertSectionVisualIntegrity(page);
-      await expect(page.locator(".media-fallback").first()).toBeVisible();
+      await expect(page.locator(".media-fallback, .media:not(:has(img))")).toHaveCount(0);
+      await expect(page.locator(".hero h1")).toBeVisible();
+      await expect(page.locator(".hero h1")).not.toHaveText("");
       await page.screenshot({ path: testInfo.outputPath(`sparse-${viewport.name}.png`), fullPage: true });
     }
   });
@@ -126,7 +129,7 @@ test.describe("section visual integrity matrix", () => {
     });
   }
 
-  test("removes failed imagery into designed fallbacks across the family matrix", async ({ page }, testInfo) => {
+  test("removes failed imagery without empty figures across the family matrix", async ({ page }, testInfo) => {
     for (const fixture of runtimeVisualFixtures) {
       const compiled = await compileRuntimeVisualFixture(fixture);
       for (const viewport of viewports) {
@@ -135,7 +138,9 @@ test.describe("section visual integrity matrix", () => {
         await page.setContent(compiled.html, { waitUntil: "domcontentloaded" });
         await expect.poll(() => page.locator(".media img").count()).toBe(0);
         await expect(page.locator(".media.has-asset")).toHaveCount(0);
-        await expect(page.locator(".media-fallback").first()).toBeVisible();
+        await expect(page.locator(".media, .media-fallback")).toHaveCount(0);
+        await expect(page.locator(".hero h1")).toBeVisible();
+        await expect(page.locator(".hero h1")).not.toHaveText("");
         await assertInteractiveLensTabs(page);
         await assertSectionVisualIntegrity(page);
         await page.screenshot({ path: testInfo.outputPath(`failed-${fixture.expectedFamily}-${viewport.name}.png`), fullPage: true });

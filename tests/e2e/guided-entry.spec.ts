@@ -198,7 +198,9 @@ async function startBuyerExperience(
   await expect(page.getByText(/Ready to match|Public brand scan/i).first()).toBeVisible();
   await page.getByRole("button", { name: /Use this company/i }).click();
   if (options.waitForBrief !== false) {
-    await expect(page.getByText(/Live brief/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByLabel(/What are you taking to market/i)).toBeVisible({ timeout: 10_000 });
+    // The approved compact composer keeps summary details collapsed until opened.
+    await page.getByText("Review your answers", { exact: true }).click();
   }
 }
 
@@ -206,7 +208,7 @@ async function expectFirstDoorStable(page: Page): Promise<void> {
   await expect(page.locator(".unifiedPrimaryCta")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Live Brief" })).toHaveCount(0);
   await expect(page.locator("[data-build-shell]")).toHaveCount(0);
-  await expect(page.locator(".revealStage")).toHaveCount(0);
+  await expect(page.locator("section[aria-labelledby='experience-ready-title']")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Start over/i })).toHaveCount(0);
 }
 
@@ -249,7 +251,7 @@ test.describe("unified guided first-run experience", () => {
 
     const example = page.getByRole("link", { name: /example personalized campaign page/i });
     await expect(example).toHaveCount(1);
-    await expect(example).toHaveAttribute("href", "https://engage.folloze.com/120367");
+    await expect(example).toHaveAttribute("href", "https://experience.folloze.com/northpeak-personalized-campaign-example");
     await expect(page.getByRole("link", { name: /Northpeak account experience/i })).toHaveCount(0);
 
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -342,7 +344,9 @@ test.describe("unified guided first-run experience", () => {
       updatedAt: new Date().toISOString()
     });
 
-    await expect(page.getByRole("heading", { name: "Live Brief" })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByLabel(/What are you taking to market/i)).toBeVisible({ timeout: 5_000 });
+    await page.getByText("Review your answers", { exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Live Brief" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Pipeline Command Center/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Governed Revenue Automation/i })).toBeVisible();
 
@@ -452,7 +456,7 @@ test.describe("unified guided first-run experience", () => {
     await page.getByLabel("Company domain").fill("northpeak.com");
     await page.getByRole("button", { name: /Use this company/i }).click();
 
-    const engagementButton = page.getByRole("button", { name: /See live engagement/i });
+    const engagementButton = page.getByRole("button", { name: /View Engagement/i });
     await expect(engagementButton).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("dialog", { name: /See what buyers engage with/i })).toHaveCount(0);
     const frame = page.frame({ url: /\/e\/e2e-ready-remediation/ });
@@ -469,7 +473,16 @@ test.describe("unified guided first-run experience", () => {
     await expect(page.getByRole("dialog", { name: /See what buyers engage with/i })).toHaveCount(0);
     await expect(page.getByText(/Evidence and activity|Build receipts|Account depth|Your exploration/i)).toHaveCount(0);
     await expect(page.getByText("Refine this experience", { exact: true })).toHaveCount(0);
-    await expect(page.locator(".revealGrid")).toHaveCSS("display", "block");
+    const preview = page.locator('section[aria-labelledby="experience-ready-title"] [aria-label="northpeak.com experience preview"]');
+    await expect(preview).toBeVisible();
+    const fullWidth = await preview.evaluate((node) => {
+      const ready = node.closest("section")!;
+      const style = getComputedStyle(ready);
+      const available = ready.getBoundingClientRect().width
+        - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+      return Math.abs(node.getBoundingClientRect().width - available) <= 2;
+    });
+    expect(fullWidth).toBe(true);
     await expect(page.locator(".revealRail, .revealEvidenceRail")).toHaveCount(0);
     await engagementButton.click();
     await expect(page.getByRole("dialog", { name: /See what buyers engage with/i })).toBeVisible();

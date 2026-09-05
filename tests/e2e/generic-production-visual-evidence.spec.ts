@@ -116,7 +116,14 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
       page.getByText(fixture.expectedOfferOrPriority, { exact: false }).first()
     ).toBeVisible();
 
-    const expectedNavigation = decision!.sectionPlan.map(({ navigationLabel }) => navigationLabel);
+    // The planner may propose optional modules, but only evidence-supported,
+    // retained writing artifacts are allowed to reach navigation and rendering.
+    const retainedIds = new Set(compiled.page.sections
+      .filter(({ status }) => status !== "omitted")
+      .map(({ sectionId }) => sectionId));
+    const expectedNavigation = decision!.sectionPlan
+      .filter(({ id }) => retainedIds.has(id))
+      .map(({ navigationLabel }) => navigationLabel);
     const renderedNavigation = (
       await page.locator("[data-flz-journey-nav] button[data-journey-link]").allTextContents()
     ).map((label) => label.trim());
@@ -138,9 +145,7 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
       const mediaFigures = [...document.querySelectorAll<HTMLElement>(
         "figure.hero-media[data-asset-role], figure.framework-media[data-asset-role], figure.lens-media[data-asset-role]"
       )];
-      // A slot with no credible asset renders a designed treatment rather than
-      // repeating a photograph, so only figures carrying an image are measured
-      // for delivery. The treatments are counted separately.
+      // A slot with no credible asset is omitted rather than repeating an image.
       const designedTreatments = mediaFigures.filter(
         (figure) => figure.classList.contains("no-asset-treatment") && !figure.querySelector("img")
       ).length;
@@ -253,12 +258,11 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
         )
       )
     ).toBe(true);
-    // Substantive imagery is allocated once per experience: a slot the
-    // allocator could not fill honestly must show a designed treatment, never
-    // a second copy of an image already used above it.
+    // Substantive imagery is allocated once. Unsupported slots stay absent.
     const placedSources = metrics.media.map(({ source }) => source);
     expect(new Set(placedSources).size).toBe(placedSources.length);
-    expect(metrics.designedTreatments).toBeGreaterThanOrEqual(0);
+    expect(metrics.designedTreatments).toBe(0);
+    await expect(page.locator(".media-fallback, .media:not(:has(img))")).toHaveCount(0);
     expect(metrics.brokenImages).toBe(0);
     expect(metrics.clippedImages).toBe(0);
     expect(metrics.horizontalOverflow).toBe(false);

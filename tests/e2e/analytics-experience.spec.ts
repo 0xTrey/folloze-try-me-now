@@ -184,7 +184,7 @@ test.describe("analytics experience completion contract", () => {
     await page.getByLabel("Company domain").fill("northpeak.com");
     await page.getByRole("button", { name: /Use this company/i }).click();
 
-    const engagement = page.getByRole("button", { name: /See live engagement/i });
+    const engagement = page.getByRole("button", { name: /View Engagement/i });
     await expect(engagement).toBeVisible({ timeout: 10_000 });
     const frame = page.locator("iframe");
     await expect(frame).toHaveCount(1);
