@@ -248,7 +248,7 @@ export function extractOfferEvidence(
   const push = (candidate: ExtractedOfferEvidence) => {
     const label = cleanLabel(candidate.label);
     if (label.length < 3 || isNavigationOnlyOfferLabel(label)) return;
-    const key = dedupeKey(label);
+    const key = `${dedupeKey(label)}|${candidate.sourceUrl ?? ""}`;
     if (!key || seen.has(key)) return;
     seen.add(key);
     results.push({ ...candidate, label });

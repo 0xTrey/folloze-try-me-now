@@ -964,6 +964,8 @@ export interface AnalyticsSignalPanelProps {
   exampleSignals?: AnalyticsSignal[];
   /** Set only after the visitor saves; it never gates the initial build. */
   isSaved?: boolean;
+  onPersonalize?: () => void;
+  personalizationLabel?: string;
   onClose: () => void;
 }
 
@@ -976,6 +978,8 @@ export function AnalyticsSignalPanel({
   audienceLabel,
   exampleSignals,
   isSaved = false,
+  onPersonalize,
+  personalizationLabel = "Personalize for 3 accounts",
   onClose
 }: AnalyticsSignalPanelProps) {
   const ref = useModalAccess(open, onClose);
@@ -989,7 +993,7 @@ export function AnalyticsSignalPanel({
   return (
     <div className={classes(styles.modalBackdrop, styles.signalBackdrop)} onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
       <aside ref={ref} className={styles.signalPanel} role="dialog" aria-modal="true" aria-labelledby="signal-panel-title" onKeyDown={(event) => trapModalFocus(event, ref.current)}>
-        <div className={styles.drawerHeader}><div><span>Live engagement</span><h2 id="signal-panel-title">See what buyers engage with.</h2><p>Your activity appears first. A live campaign can add account and buying-group context.</p></div><button type="button" onClick={onClose} aria-label="Close analytics signals"><X size={20} /></button></div>
+        <div className={styles.drawerHeader}><div><h2 id="signal-panel-title">See what buyers engage with.</h2><p>Your activity appears first. A live campaign can add account and buying-group context.</p></div><div className={styles.signalHeaderActions}>{onPersonalize && <button className={styles.signalPersonalizeAction} type="button" onClick={onPersonalize}><Users size={16} />{personalizationLabel}</button>}<button type="button" onClick={onClose} aria-label="Close analytics signals"><X size={20} /></button></div></div>
         {showCounters ? (
           <div className={styles.signalStats}><div><strong>1</strong><span>{visitorLabel}</span></div><div><strong>{liveSignals.length}</strong><span>meaningful interactions</span></div><div><strong>{engagedSeconds}s</strong><span>engaged</span></div></div>
         ) : (

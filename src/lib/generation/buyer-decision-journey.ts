@@ -72,7 +72,13 @@ export function deriveBuyerDecisionBrief(input: BuyerJourneyInput, ledger: reado
   const audience = text(input.audience) ?? text(input.session.answers.audience) ?? text(input.session.answers.customAudience) ?? "unknown";
   const buyerJob = text(input.buyerJob) ?? "unknown";
   const ctaType = input.cta?.type ?? input.session.answers.ctaType;
-  const eligible = ledger.filter((item) => safe(item) && (item.entityRole === "seller" || item.entityRole === "source"))
+  const sellerEvidence = ledger.filter((item) => safe(item) && (item.entityRole === "seller" || item.entityRole === "source"));
+  const subjectKey = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const selectedSubject = product.status === "exact" ? subjectKey(product.label ?? "") : "";
+  const scopedEvidence = sellerEvidence.filter((item) => selectedSubject && subjectKey(item.subject ?? "") === selectedSubject);
+  // Once offer-specific facts are available, portfolio homepage topics cannot
+  // become claims about that offer merely because they share a seller.
+  const eligible = (scopedEvidence.length ? scopedEvidence : sellerEvidence)
     .sort((a, b) => a.id.localeCompare(b.id));
   const proofIds = new Set(deriveWireframeEvidenceSignals(ledger, product.status === "exact" ? product.label : "").approvedProofRefs);
   const ofType = (...types: string[]) => eligible.filter((item) => types.includes(item.evidenceType ?? "")).map(claim);
@@ -116,7 +122,7 @@ export function deriveBuyerDecisionBrief(input: BuyerJourneyInput, ledger: reado
     ...(product.status !== "exact" ? { clarification: PRODUCT_CLARIFICATION } : {}), audience, buyerJob,
     trafficIntent: traffic ? { value: traffic, status: "known" } : { status: "unknown" },
     buyingStage, primaryBuyerQuestion, questions: stable.questions, cta, knowledge,
-    digest: compilerDigest("buyer-decision-journey-v2", stable), fetchedAt: validNow.toISOString(),
+    digest: compilerDigest("buyer-decision-journey-v3", stable), fetchedAt: validNow.toISOString(),
     expiresAt: new Date(validNow.getTime() + ttl).toISOString() };
 }
 
@@ -135,6 +141,11 @@ export function assignBuyerJourneySections(plan: readonly SectionSlotV2[], brief
     !(slot.optional && slot.role === "resource" && !brief.knowledge.resources.length))
     .map((slot): SectionSlotV2 => slot.role === "proof" && !brief.knowledge.proofClaims.length
       ? { ...slot, role: "validation-plan", claimType: "instruction", requiredEvidenceKinds: [], navigationLabel: "Validate fit", buyerJob: "Choose what to verify before taking the next step" } : slot);
+  if (!brief.knowledge.supportedCapabilityWorkflowClaims.length) {
+    earnedPlan = earnedPlan.map((slot) => ["mechanism", "solution-mapping"].includes(slot.role)
+      ? { ...slot, claimType: "instruction", requiredEvidenceKinds: [], buyerJob: "Confirm the inputs, work, and output before choosing an approach" }
+      : slot);
+  }
   if (objections.length && !earnedPlan.some((slot) => slot.role === "evaluation-criteria") && earnedPlan.length < 8) {
     earnedPlan.splice(Math.max(1, earnedPlan.length - 1), 0, {
       id: "buyer-purchase-questions", role: "evaluation-criteria", navigationLabel: "Purchase questions",

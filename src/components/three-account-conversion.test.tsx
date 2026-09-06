@@ -153,6 +153,7 @@ describe("ThreeAccountConversion", () => {
 
   it.each(["queued", "generating"] as const)("shows a concise %s confirmation without internal progress details", (state) => {
     const onDone = vi.fn();
+    const onViewEngagement = vi.fn();
     render(
       <ThreeAccountConversion
         {...baseProps}
@@ -160,13 +161,15 @@ describe("ThreeAccountConversion", () => {
         request={request(state, "representative")}
         status="polling"
         onDone={onDone}
+        onViewEngagement={onViewEngagement}
       />
     );
-    expect(screen.getByRole("heading", { name: "We're building all three versions for you." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "We're building your 3 accounts for you." })).toBeInTheDocument();
     expect(screen.getByText("Check your email in about 5 minutes to see what they look like.")).toBeInTheDocument();
     expect(screen.queryByText(/final readback|representative companies|app-hosted for testing|one\.com|two\.com|three\.com/i)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Back to your experience" }));
-    expect(onDone).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "View engagement" }));
+    expect(onViewEngagement).toHaveBeenCalledOnce();
+    expect(onDone).not.toHaveBeenCalled();
   });
 
   it("is honest when email delivery is not configured", () => {

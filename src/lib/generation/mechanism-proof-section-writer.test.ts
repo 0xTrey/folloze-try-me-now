@@ -116,6 +116,18 @@ function expectValidBudgets(
 }
 
 describe("writeMechanismProofSections", () => {
+  it("never treats an offer name and tagline as a complete solution explanation", () => {
+    const source = input({ slots: [{ ...mechanismSlot, v2Role: "solution-mapping", evidenceRefs: ["name", "tagline"] }],
+      brief: { ...input().brief, offerLabel: "Audit & Assurance Solutions" },
+      evidence: [claim("name", "Audit & Assurance Solutions", { evidenceType: "positioning" }),
+        claim("tagline", "Account for Anything", { evidenceType: "positioning" })] });
+    const result = writeMechanismProofSections(source);
+    expect(result.status).toBe("fallback");
+    expect(result.value?.[0]?.headline).toBe("Know what the work should deliver");
+    expect(result.value?.[0]?.body).toContain("what information is needed, who does the work, and what you receive");
+    expect(result.value?.[0]?.body).not.toContain("Account for Anything");
+  });
+
   it("writes the mechanism from current evidence with exact claim refs", () => {
     const result = writeMechanismProofSections(
       input({ slots: [mechanismSlot] })

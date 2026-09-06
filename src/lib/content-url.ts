@@ -1,3 +1,5 @@
+import { parse, serialize, type DefaultTreeAdapterTypes } from "parse5";
+
 import {
   cleanSourceText,
   createFailedSourceArtifact,
@@ -89,18 +91,27 @@ function canonicalUrl(html: string, base: URL): string | undefined {
 }
 
 function contentRegion(html: string): { html: string; usedFallback: boolean } {
-  const withoutNoise = html
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<(?:script|style|template|svg|noscript)\b[\s\S]*?<\/(?:script|style|template|svg|noscript)>/gi, " ")
-    .replace(/<(?:nav|header|footer|aside|form)\b[\s\S]*?<\/(?:nav|header|footer|aside|form)>/gi, " ");
-  const candidates = ["article", "main"]
-    .flatMap((tag) => [...withoutNoise.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, "gi"))])
-    .map((match) => match[1] ?? "")
+  // HTML from official sites is not always well formed. Use browser-compatible
+  // tree repair before selecting content, so an unclosed main cannot silently
+  // reduce the entire offer to a nested article or summary card.
+  const document = parse(html);
+  const excluded = new Set(["script", "style", "template", "svg", "noscript", "nav", "header", "footer", "aside", "form"]);
+  const regions: DefaultTreeAdapterTypes.Element[] = [];
+  const pending: DefaultTreeAdapterTypes.Node[] = [document];
+  while (pending.length) {
+    const node = pending.pop()!;
+    if (!("childNodes" in node)) continue;
+    node.childNodes = node.childNodes.filter((child) => child.nodeName !== "#comment" &&
+      !("tagName" in child && excluded.has(child.tagName)));
+    if ("tagName" in node && (node.tagName === "main" || node.tagName === "article")) regions.push(node);
+    pending.push(...node.childNodes);
+  }
+  const candidates = regions.map((node) => serialize(node))
     .filter((candidate) => stripTags(candidate).length >= 200)
     .sort((left, right) => stripTags(right).length - stripTags(left).length);
   return candidates[0]
     ? { html: candidates[0], usedFallback: false }
-    : { html: withoutNoise, usedFallback: true };
+    : { html: serialize(document), usedFallback: true };
 }
 
 interface HtmlBlock {

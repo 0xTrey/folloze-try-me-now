@@ -8,6 +8,30 @@ function artifact(overrides: Partial<SourceArtifact> = {}): SourceArtifact {
   return { version: 1, artifactId: "src_aaaaaaaaaaaaaaaaaaaaaaaa", digest: "a".repeat(64), createdAt: "2026-09-05T00:00:00.000Z", status: "ready", confidence: "high", source: { kind: "public-url", sourceUrl: "https://acme.test/product", finalUrl: "https://acme.test/product", mediaType: "text/html" }, extraction: { method: "html-static", status: "complete", truncated: false, ocr: { status: "not-required", pageNumbers: [], reason: "none" }, warnings: [] }, content: { title: "Product", text: "Acme Product", sections: [{ id: "features", title: "Features", level: 2, order: 1, text: "Acme Product supports workflow automation.", citationIds: ["c1"] }], links: [], assets: [], citations: [{ id: "c1", locator: { kind: "url-block", block: 1, label: "Product", sourceUrl: "https://acme.test/product" }, excerpt: "Acme Product supports workflow automation." }] }, understanding: { premise: "Acme Product", topics: [], claims: [{ id: "cap", text: "Acme Product supports workflow automation.", kind: "claim", confidence: "high", citationIds: ["c1"] }], proof: [], audiences: [], plannedAssets: [], experiencePlan: { pattern: "guided-brief", modules: [{ id: "m", kind: "summary", title: "Summary", sourceCitationIds: ["c1"] }] } }, diagnostics: { textLength: 40, sectionCount: 1, citationCount: 1, claimCount: 1, assetCount: 0, warnings: [] }, ...overrides } as SourceArtifact;
 }
 describe("source backed product knowledge", () => {
+  it("does not turn a generic page slogan into an offer claim", () => {
+    const a = artifact();
+    a.content.title = "Acme Product";
+    const text = "Every decision today shapes where your company goes next.";
+    a.content.sections = [{ id: "slogan", title: "Looking ahead", level: 2, order: 1, text, citationIds: ["c1"] }];
+    a.content.citations[0]!.excerpt = text;
+    a.understanding.claims = [{ id: "slogan", text, kind: "claim", confidence: "high", citationIds: ["c1"] }];
+    expect(compilerEvidenceFromProductSource({ artifact: a, seller, offer: "Acme Product" })).toEqual([]);
+  });
+  it("recognizes service explanations while excluding the page's related articles", () => {
+    const a = artifact();
+    a.content.title = "Acme Product | Acme";
+    a.content.sections[0]!.title = "Our Focus Areas";
+    a.content.sections.push({ id: "related", title: "The Latest from Acme", level: 2, order: 2,
+      text: "A Guide for Cloud Service Providers explains changing requirements.", citationIds: ["related"] });
+    a.content.citations.push({ id: "related", excerpt: a.content.sections[1]!.text,
+      locator: { kind: "url-block", block: 2, label: "Related article", sourceUrl: "https://acme.test/product" } });
+    a.understanding.claims.push({ id: "related", text: a.content.sections[1]!.text, kind: "claim", confidence: "high", citationIds: ["related"] });
+    const result = compilerEvidenceFromProductSource({ artifact: a, seller, offer: "Acme Product" });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.evidenceType).toBe("capability");
+    expect(result[0]?.claim).toContain("supports workflow automation");
+  });
+
   it("emits exact seller capability evidence and isolates cache mutations", () => {
     clearSourceBackedProductKnowledgeCacheForTests(); const input = { artifact: artifact(), seller, offer: "Acme Product", now: new Date("2026-09-05T00:00:00Z") }; const first = compilerEvidenceFromProductSource(input); expect(first[0]).toMatchObject({ evidenceType: "capability", entityRole: "seller" }); first.pop(); expect(compilerEvidenceFromProductSource(input)).toHaveLength(1);
   });

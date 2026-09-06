@@ -528,6 +528,23 @@ describe("bounded parallel section writing", () => {
       })
     ).toBeUndefined();
   });
+  it("rejects inline citation tokens before candidate selection", () => {
+    const [contract] = contracts(1);
+    expect(normalizeModelCandidate(contract!, {
+      headline: "A supported service explanation",
+      body: "The team reviews the records. [source:9b09d5cfd43efd9f504865c3]",
+      evidenceRefs: [...contract!.evidenceRefs]
+    })).toBeUndefined();
+  });
+  it("requires the choices that decision-support layouts render", () => {
+    const [contract] = contracts(1);
+    const choiceContract = { ...contract!, slot: { ...contract!.slot, role: "decision-support" as const } };
+    expect(normalizeModelCandidate(choiceContract, {
+      headline: "Set requirements before comparison",
+      body: "Define the operating requirements you need each provider to address.",
+      evidenceRefs: [...contract!.evidenceRefs]
+    })).toBeUndefined();
+  });
 
   it("rejects a candidate whose choice reaches outside the evidence contract", () => {
     const [contract] = contracts(1);

@@ -10,6 +10,7 @@ vi.mock("@/lib/content-url", async (importOriginal) => ({
 }));
 
 import { normalizePublicHtmlSource } from "@/lib/content-url";
+import { planEarlyResearch } from "@/lib/orchestration/research-plan";
 import {
   inferCampaignOfferTitle,
   patchSessionAnswers,
@@ -90,6 +91,62 @@ afterEach(async () => {
 });
 
 describe("campaign offer source intelligence", () => {
+  const offerLabel = "Audit & Assurance Solutions";
+  const officialOfferUrl = "https://www.aprio.com/audit-assurance/";
+  function discoveredCampaign(id: string): TryMeSession {
+    return {
+      ...campaignSession(id), companyDomain: "aprio.com",
+      answers: { campaignType: "demand" },
+      brand: { ...adpBrand(), domain: "aprio.com", canonicalDomain: "aprio.com", companyName: "Aprio",
+        sourceUrl: "https://www.aprio.com/", publicTopics: [offerLabel],
+        identity: { expectedDomain: "aprio.com", canonicalDomain: "aprio.com", canonicalName: "Aprio",
+          confidence: "high", confirmationStatus: "confirmed", reasons: [], provenance: [] } },
+      offerDiscoveryGraph: { origin: "https://www.aprio.com/", pages: [{ url: "https://www.aprio.com/",
+        html: `<main><h2>${offerLabel}</h2><nav><a href="${officialOfferUrl}">${offerLabel}</a></nav></main>` }] }
+    };
+  }
+
+  it("carries a suggested offer's official page into source research instead of homepage snippets", async () => {
+    const id = `discovered-offer-source-${Date.now()}`; ids.add(id);
+    await putSession(discoveredCampaign(id));
+    sourceMocks.fetchPublicUrlSourceArtifact.mockResolvedValue(artifact(officialOfferUrl, offerLabel));
+    await patchSessionAnswers(id, { promotedOffer: offerLabel, promotedOfferConfirmed: true });
+    const selected = (await getSession(id))!;
+    expect(selected.answers.offerSourceUrl).toBe(officialOfferUrl);
+    expect(selected.discoveredOfferSource).toEqual({ label: offerLabel, sourceUrl: officialOfferUrl });
+    expect(planEarlyResearch({ useCase: "campaign", companyDomain: selected.companyDomain, answers: selected.answers }).jobs)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ worker: "source-intelligence", key: officialOfferUrl, reason: "offer_source_url_stabilized" })]));
+    await runSourceIntelligenceStage(id, { resumeStory: false });
+    expect((await getSession(id))?.sourceArtifact?.source.finalUrl).toBe(officialOfferUrl);
+    expect(sourceMocks.fetchPublicUrlSourceArtifact).toHaveBeenCalledWith(officialOfferUrl, expect.any(Object));
+    expect(toPublicSession((await getSession(id))!)).not.toHaveProperty("discoveredOfferSource");
+  });
+
+  it("recovers old label-only sessions and removes inferred evidence when the offer changes", async () => {
+    const id = `old-discovered-offer-${Date.now()}`; ids.add(id);
+    const old = discoveredCampaign(id); old.answers.promotedOffer = offerLabel;
+    await putSession(old);
+    sourceMocks.fetchPublicUrlSourceArtifact.mockResolvedValue(artifact(officialOfferUrl, offerLabel));
+    await runSourceIntelligenceStage(id, { resumeStory: false });
+    expect((await getSession(id))?.answers.offerSourceUrl).toBe(officialOfferUrl);
+    await patchSessionAnswers(id, { promotedOffer: "An unrelated advisory offer" });
+    const changed = (await getSession(id))!;
+    expect(changed.answers.offerSourceUrl).toBeUndefined();
+    expect(changed.sourceArtifact).toBeUndefined();
+    expect(changed.discoveredOfferSource).toBeUndefined();
+  });
+
+  it("preserves an explicit source and respects an explicit removal", async () => {
+    const id = `explicit-discovered-offer-${Date.now()}`; ids.add(id);
+    const explicit = discoveredCampaign(id);
+    explicit.answers.offerSourceUrl = "https://www.aprio.com/selected-source/";
+    await putSession(explicit);
+    await patchSessionAnswers(id, { promotedOffer: offerLabel });
+    expect((await getSession(id))?.answers.offerSourceUrl).toBe(explicit.answers.offerSourceUrl);
+    await patchSessionAnswers(id, { promotedOffer: offerLabel, offerSourceUrl: "" });
+    expect((await getSession(id))?.answers.offerSourceUrl).toBeUndefined();
+  });
+
   it("refreshes the next audience suggestion from the selected offer in the same patch", async () => {
     const id = `offer-audience-refresh-${Date.now()}`;
     ids.add(id);

@@ -90,6 +90,7 @@ import type {
 } from "@/lib/orchestration/worker-types";
 import { harvestOfferDiscoveryGraph } from "@/lib/research/offer-discovery";
 import { extractOfferEvidence } from "@/lib/research/offer-evidence";
+import { selectedOfferSourceUrl } from "@/lib/research/selected-offer-source";
 import {
   isEvidenceBackedOfferEvidence,
   rankOfferRecommendations,
@@ -1947,7 +1948,31 @@ export async function runSourceIntelligenceStage(
   id: string,
   options: { resumeStory?: boolean } = {}
 ): Promise<void> {
-  const preflight = await getSession(id);
+  let preflight = await getSession(id);
+  if (
+    preflight?.useCase === "campaign" &&
+    preflight.answers.promotedOffer &&
+    !preflight.answers.offerSourceUrl
+  ) {
+    const recoveredOfferUrl = selectedOfferSourceUrl({
+      label: preflight.answers.promotedOffer,
+      evidence: offerEvidenceFor(preflight),
+      sellerDomains: verifiedSellerSourceDomains(preflight)
+    });
+    if (recoveredOfferUrl) {
+      await updateSession(id, (session) => {
+        if (
+          session.useCase === "campaign" &&
+          session.answers.promotedOffer === preflight!.answers.promotedOffer &&
+          !session.answers.offerSourceUrl
+        ) {
+          applyAnswerPatch(session, { promotedOffer: session.answers.promotedOffer });
+        }
+        return session;
+      });
+      preflight = await getSession(id);
+    }
+  }
   const sourceKind = preflight?.useCase === "content"
     ? "content"
     : preflight?.useCase === "campaign"
@@ -2219,11 +2244,31 @@ function applyAnswerPatch(session: TryMeSession, input: SessionAnswers): void {
     sourceTitleWasSupplied ||
     sourceUploadWasSupplied ||
     eventSourceWasSupplied;
-  const offerSourceUrlWasSupplied = Object.hasOwn(patch, "offerSourceUrl");
-  const offerSourceTitleWasSupplied = Object.hasOwn(patch, "offerSourceTitle");
   const previousOfferSourceUrl = session.answers.offerSourceUrl;
   const previousOfferSourceTitle = session.answers.offerSourceTitle;
   const previousSourceFingerprint = sourceFingerprintForAnswers(session.answers);
+  if (Object.hasOwn(input, "offerSourceUrl")) {
+    delete session.discoveredOfferSource;
+  } else if (session.useCase === "campaign" && patch.promotedOffer) {
+    const changedInferredOffer = Boolean(session.discoveredOfferSource) && session.discoveredOfferSource?.sourceUrl === session.answers.offerSourceUrl &&
+      normalizedOfferEvidenceLabel(session.discoveredOfferSource?.label ?? "") !== normalizedOfferEvidenceLabel(patch.promotedOffer);
+    if (!session.answers.offerSourceUrl || changedInferredOffer) {
+      const recoveredOfferUrl = selectedOfferSourceUrl({
+        label: patch.promotedOffer,
+        evidence: offerEvidenceFor({ ...session, answers: { ...session.answers, ...patch } }),
+        sellerDomains: verifiedSellerSourceDomains(session)
+      });
+      if (recoveredOfferUrl) {
+        patch.offerSourceUrl = recoveredOfferUrl;
+        session.discoveredOfferSource = { label: patch.promotedOffer, sourceUrl: recoveredOfferUrl };
+      } else if (changedInferredOffer) {
+        patch.offerSourceUrl = "";
+        delete session.discoveredOfferSource;
+      }
+    }
+  }
+  const offerSourceUrlWasSupplied = Object.hasOwn(patch, "offerSourceUrl");
+  const offerSourceTitleWasSupplied = Object.hasOwn(patch, "offerSourceTitle");
   if (patch.targetDomain) patch.targetDomain = normalizeDomain(patch.targetDomain);
   if (patch.brandSourceUrl) {
     try {
@@ -2991,7 +3036,11 @@ export async function runStoryStage(id: string): Promise<void> {
   }
   if (
     preflight?.useCase === "campaign" &&
-    preflight.answers.offerSourceUrl &&
+    (preflight.answers.offerSourceUrl || selectedOfferSourceUrl({
+      label: preflight.answers.promotedOffer,
+      evidence: offerEvidenceFor(preflight),
+      sellerDomains: verifiedSellerSourceDomains(preflight)
+    })) &&
     !preflight.sourceArtifact
   ) {
     if (!mayStartExternal) {

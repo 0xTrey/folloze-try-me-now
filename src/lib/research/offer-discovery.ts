@@ -473,7 +473,7 @@ export function discoverOfferEvidenceFromPages(
     const label = cleanLabel(candidate.label);
     const accepted = acceptDiscoveredLabel(label, candidate.sourceUrl);
     if (!accepted) return;
-    const key = dedupeKey(accepted);
+    const key = `${dedupeKey(accepted)}|${candidate.sourceUrl ?? ""}`;
     if (!key || seen.has(key)) return;
     seen.add(key);
     results.push({ ...candidate, label: accepted });

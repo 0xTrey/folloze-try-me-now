@@ -1248,6 +1248,7 @@ export async function compileSessionProductionPage(input: {
       ].some((claim) => claim.id === item.id))
         .map((item) => ({
           id: item.id, text: item.claim, revision,
+          evidenceType: item.evidenceType,
           confidence: item.confidence === "high" ? 0.9 : 0.65,
           sourceRole: item.entityRole as "seller" | "source",
           kind: proofSignals.approvedProofRefs.includes(item.id) ? "proof" as const : "seller_fact" as const

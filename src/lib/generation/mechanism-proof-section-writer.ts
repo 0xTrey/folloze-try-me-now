@@ -19,7 +19,7 @@ function words(value: string): number {
 }
 
 function normalizedSentence(value: string): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
+  const normalized = value.replace(/\s+/g, " ").trim().replace(/[:,;]$/, "");
   return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
 }
 
@@ -99,6 +99,9 @@ function currentClaimsForSlot(
   return [...new Set(slot.evidenceRefs)]
     .map((id) => currentById.get(id))
     .filter((claim): claim is SectionEvidenceClaim => claim !== undefined)
+    .filter((claim) => slot.role !== "mechanism" ||
+      (claim.evidenceType !== "resource" &&
+        (words(claim.text) >= 6 || claim.evidenceType === "capability" || claim.evidenceType === "workflow")))
     .filter((claim) => slot.role !== "proof" || !slot.family || claim.kind === "proof");
 }
 
@@ -145,11 +148,12 @@ function supportedBody(
 function validationBody(
   role: "mechanism" | "proof",
   headlineWords: number,
-  slot: SectionWriterSlot
+  slot: SectionWriterSlot,
+  offerLabel?: string
 ): string | undefined {
   const body =
     role === "mechanism"
-      ? "What workflow detail should be validated first?"
+      ? `Start with one task you need ${offerLabel ?? "the solution"} to support. Ask what information is needed, who does the work, and what you receive. Compare those answers with your requirements before choosing an approach.`
       : "Ask to see the workflow, its output, and the requirements your team needs to validate.";
   if (headlineWords + words(body) > slot.wordBudget.max) return undefined;
   return body;
@@ -303,7 +307,8 @@ export function writeMechanismProofSections(
       candidates.push(omittedCandidate(slot));
       continue;
     }
-    const body = validationBody(role, words(headline), slot);
+    const fallbackHeadline = role === "mechanism" ? "Know what the work should deliver" : headline;
+    const body = validationBody(role, words(fallbackHeadline), slot, input.brief.offerLabel);
     if (!body) {
       return failedArtifact(
         input,
@@ -311,7 +316,7 @@ export function writeMechanismProofSections(
         "mechanism_proof_writer_word_budget_unusable"
       );
     }
-    candidates.push(completeCandidate(slot, role, body, []));
+    candidates.push(completeCandidate(slot, role, body, [], fallbackHeadline));
   }
 
   if (

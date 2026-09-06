@@ -1117,6 +1117,8 @@ export interface TryMeSession {
   campaignOfferSource?: CampaignOfferSource;
   /** Server-only bounded HTML graph harvested during brand stage for offer discovery. */
   offerDiscoveryGraph?: OfferDiscoveryPageGraph;
+  /** Server-only provenance so an inferred URL cannot follow a changed offer. */
+  discoveredOfferSource?: { label: string; sourceUrl: string };
   curatedSections?: CuratedSectionControl[];
   experienceSpecRevision?: number;
   experienceSpec?: ExperienceSpec;

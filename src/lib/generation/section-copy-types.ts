@@ -32,6 +32,8 @@ export interface SectionEvidenceClaim {
    * role alone lets unrelated third-party context in as if it were proof.
    */
   kind?: EvidenceKindV2;
+  /** Preserve semantic use restrictions when a ledger claim reaches a writer. */
+  evidenceType?: import("./messaging-compiler-contracts").CompilerEvidenceType;
 }
 
 export interface SectionWriterSlot {
@@ -59,6 +61,7 @@ export interface SectionWriterSlot {
 
 export interface SectionWriterBrief {
   family?: WireframeFamilyV2;
+  offerLabel?: string;
   sellerName?: string;
   targetName?: string;
   audience: string;

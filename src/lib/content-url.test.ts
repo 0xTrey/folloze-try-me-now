@@ -62,6 +62,21 @@ afterEach(() => {
 });
 
 describe("public source content normalization", () => {
+  it("keeps the complete offer when its main element is unclosed around a nested article", () => {
+    const artifact = normalizePublicHtmlSource({ sourceUrl: "https://example.com/audit-assurance/",
+      html: `<html><head><title>Audit services | Acme</title></head><body><main><h1>Audit &amp; Assurance Solutions</h1>
+        <p>Acme reviews financial records and reports findings to the stakeholders responsible for the decision.</p>
+        <article><h2>Account for the next decision</h2><p>Our advisors explain reporting requirements and the audit scope before the work begins. The team reviews records with the people responsible for them and discusses the resulting findings with the stakeholders who need to act.</p></article>
+        <h2>Our Focus Areas</h2><p>Financial audits review the records supporting the financial statements. Controls reviews examine how those records are prepared and checked.</p>
+        <footer><p>Unrelated navigation must stay out of the source.</p></footer></body></html>` });
+    expect(artifact.content.sections.map(({ title }) => title)).toEqual([
+      "Audit & Assurance Solutions", "Account for the next decision", "Our Focus Areas"
+    ]);
+    expect(artifact.content.text).toContain("Controls reviews examine");
+    expect(artifact.content.text).not.toContain("Unrelated navigation");
+    expect(artifact.extraction.truncated).toBe(false);
+  });
+
   it("turns a golden HTML article into a cited source artifact", async () => {
     const { html, expected } = await articleFixture();
     const artifact = normalizePublicHtmlSource({

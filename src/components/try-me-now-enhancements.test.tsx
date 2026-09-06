@@ -532,6 +532,21 @@ describe("Try Me Now prospect enhancement components", () => {
     expect(closePanel).toHaveBeenCalledOnce();
   });
 
+  it("keeps personalization available at the top of live engagement", () => {
+    const onPersonalize = vi.fn();
+    render(
+      <AnalyticsSignalPanel
+        open
+        signals={[]}
+        onClose={vi.fn()}
+        onPersonalize={onPersonalize}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalize for 3 accounts" }));
+    expect(onPersonalize).toHaveBeenCalledOnce();
+  });
+
   it("uses non-numeric engagement copy below fifteen foreground seconds", () => {
     render(
       <AnalyticsSignalPanel

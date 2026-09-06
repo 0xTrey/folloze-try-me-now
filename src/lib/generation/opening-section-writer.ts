@@ -35,16 +35,6 @@ function wordCount(value: string | undefined): number {
   return value?.trim() ? value.trim().split(/\s+/).length : 0;
 }
 
-function truncateWords(value: string, limit: number): string {
-  if (limit <= 0) return "";
-  const words = value.trim().split(/\s+/);
-  if (words.length <= limit) return value;
-  return words
-    .slice(0, limit)
-    .join(" ")
-    .replace(/[,;:-]+$/g, "");
-}
-
 function truncateBody(value: string, limit: number): string {
   if (wordCount(value) <= limit) return value;
   const sentences = value.match(/[^.!?]+[.!?]+/g) ?? [];
@@ -57,11 +47,22 @@ function truncateBody(value: string, limit: number): string {
   return result;
 }
 
-function headlineForSlot(value: string, slot: SectionWriterSlot): string {
+function boundedHeadline(value: string, limit: number): string {
+  if (wordCount(value) <= limit) return value;
+  const sentence = value.match(/[^.!?]+[.!?]+/)?.[0]?.trim();
+  return sentence && wordCount(sentence) <= limit ? sentence : "Explore this offer";
+}
+
+function headlineForSlot(value: string, slot: SectionWriterSlot, offerLabel?: string): string {
   if (!slot.headlineWordBudget) return value;
   const { max } = slot.headlineWordBudget;
-  const result = truncateWords(value, max);
-  return result;
+  if (wordCount(value) <= max) return value;
+  const sentences = value.match(/[^.!?]+[.!?]+/g)?.map((sentence) => sentence.trim()) ?? [];
+  const complete = sentences.find((sentence) => wordCount(sentence) <= max);
+  if (complete) return complete;
+  const label = normalizeCopy(offerLabel ?? "");
+  const fallback = label ? `Explore ${label}` : "Explore this offer";
+  return wordCount(fallback) <= max ? fallback : "Explore this offer";
 }
 function fitCandidateToBudget(
   candidate: SectionCopyCandidate,
@@ -71,6 +72,7 @@ function fitCandidateToBudget(
     ...candidate,
     wordCount: sectionCopyWordCount(candidate)
   };
+  const originalBody = fitted.body;
 
   if (fitted.wordCount > slot.wordBudget.max && fitted.cta) {
     delete fitted.cta;
@@ -89,10 +91,14 @@ function fitCandidateToBudget(
   }
   if (fitted.wordCount > slot.wordBudget.max && fitted.headline) {
     const excess = fitted.wordCount - slot.wordBudget.max;
-    fitted.headline = truncateWords(
+    fitted.headline = boundedHeadline(
       fitted.headline,
       Math.max(1, wordCount(fitted.headline) - excess)
     );
+    if (originalBody && fitted.body) {
+      const bodyLimit = slot.wordBudget.max - wordCount(fitted.headline);
+      fitted.body = truncateBody(originalBody, Math.max(1, bodyLimit)) || fitted.body;
+    }
     fitted.wordCount = sectionCopyWordCount(fitted);
   }
   if (fitted.wordCount > slot.wordBudget.max || !fitted.headline || !fitted.body) {
@@ -136,12 +142,14 @@ function buildCandidate(
   const claimText = unique(
     safeClaims
       .filter(({ claim }) => !input.brief.family || claim.sourceRole === "seller" || claim.sourceRole === "source")
-      .map(({ text }) => text)
       .filter(
-        (text) =>
+        ({ text }) =>
           text.toLocaleLowerCase() !== promise.toLocaleLowerCase() &&
           text.toLocaleLowerCase() !== audience?.toLocaleLowerCase()
       )
+      .filter(({ claim }) => claim.evidenceType !== "resource")
+      .filter(({ text }) => wordCount(text) >= 4)
+      .map(({ text }) => text.replace(/[:,;]$/, ""))
   ).map((text) => /[.!?]$/.test(text) ? text : `${text}.`).join(" ");
   const accountWhyNow =
     slot.v2Role === "shared-priority"
@@ -160,7 +168,7 @@ function buildCandidate(
       role: "hero",
       ...copyContractMetadata(slot),
       status: "complete",
-      headline: headlineForSlot(promise, slot),
+      headline: headlineForSlot(promise, slot, input.brief.offerLabel),
       body,
       ...(ctaLabel && ctaAllowed
         ? {

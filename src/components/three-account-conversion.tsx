@@ -28,6 +28,7 @@ export type ThreeAccountConversionProps = {
   targetDraft?: PersonalizationTargetInput[];
   onTargetDraftChange?: (targets: PersonalizationTargetInput[]) => void;
   onDone?: () => void;
+  onViewEngagement?: () => void;
   onAutoSelectTargets?: () => void | Promise<void>;
   onOpenLink?: (position: number) => void;
 };
@@ -84,6 +85,7 @@ export function ThreeAccountConversion({
   targetDraft,
   onTargetDraftChange,
   onDone,
+  onViewEngagement,
   onAutoSelectTargets,
   onOpenLink
 }: ThreeAccountConversionProps) {
@@ -107,14 +109,14 @@ export function ThreeAccountConversion({
     const emailReady = request?.delivery.status !== "not_configured";
     return (
       <div className={`${styles.panel} ${styles.confirmationPanel}`}>
-        <h2 id="personalization-dialog-title">We&apos;re building all three versions for you.</h2>
+        <h2 id="personalization-dialog-title">We&apos;re building your 3 accounts for you.</h2>
         <p className={styles.confirmation} role="status" aria-live="polite">
           {emailReady
             ? "Check your email in about 5 minutes to see what they look like."
             : "Your email delivery is not connected in this environment. You can return to your experience while the build continues."}
         </p>
         <p className={styles.confirmationNote}>{emailReady ? "You don't need to keep this page open." : "Return to your experience to check the finished versions here."}</p>
-        {onDone && <button className={styles.doneButton} type="button" onClick={onDone}>Back to your experience</button>}
+        {(onViewEngagement || onDone) && <button className={styles.doneButton} type="button" onClick={onViewEngagement ?? onDone}>View engagement</button>}
         {error && <p className={styles.error} role="alert">{error}</p>}
       </div>
     );

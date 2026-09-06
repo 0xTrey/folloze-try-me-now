@@ -3154,7 +3154,8 @@ export function SaveExperienceDialog({
   onTargetDraftChange,
   onOpenLink,
   returnFocusRef,
-  onClose
+  onClose,
+  onViewEngagement
 }: {
   open: boolean;
   email: string;
@@ -3170,6 +3171,7 @@ export function SaveExperienceDialog({
   onOpenLink?: (position: number) => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
+  onViewEngagement?: () => void;
 }) {
   const { dialogRef, onKeyDown } = useDialogBehavior(onClose, returnFocusRef);
   if (!open) return null;
@@ -3189,6 +3191,7 @@ export function SaveExperienceDialog({
           targetDraft={targetDraft}
           onTargetDraftChange={onTargetDraftChange}
           onDone={onClose}
+          onViewEngagement={onViewEngagement}
           onOpenLink={onOpenLink}
         />
       </section>
@@ -4730,6 +4733,11 @@ export function TryMeNowApp() {
           });
         }}
         onClose={() => setShowSavePrompt(false)}
+        onViewEngagement={() => {
+          setShowSavePrompt(false);
+          setShowAnalyticsPanel(true);
+          captureUnifiedProductEvent("analytics_panel_opened", { sessionId: session.id, properties: { trigger: "personalization_confirmation" } });
+        }}
       />
     )}
     <AnalyticsSignalPanel
@@ -4740,6 +4748,8 @@ export function TryMeNowApp() {
       audienceLabel={answers.customAudience || answers.audience}
       isSaved={session?.status === "claimed"}
       onClose={closeAnalyticsPanel}
+      onPersonalize={canPersonalizeExperience ? () => { setShowAnalyticsPanel(false); openSavePrompt(); } : undefined}
+      personalizationLabel={personalizationLabel}
     />
     </>
   );

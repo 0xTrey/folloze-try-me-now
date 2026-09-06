@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as sectionSelection from "@/lib/generation/section-candidate-review";
+import { sectionCopyWordCount } from "@/lib/generation/section-copy-types";
 
 import { config } from "@/lib/config";
 import { buildExperienceSpec } from "@/lib/experience-contract";
@@ -953,6 +955,30 @@ describe("dedicated section writers reach the rendered page", () => {
       result.compileReceipts.find(({ stage }) => stage === "section-writers")
     ).toMatchObject({ sessionId: session(profile).id, revision: 7 });
   });
+
+  it("restores only rejected model copy before the final page gates", async () => {
+    const select = sectionSelection.selectSectionCopy;
+    const spy = vi.spyOn(sectionSelection, "selectSectionCopy").mockImplementation((entries) =>
+      select(entries).map((selection) => {
+        if (selection.candidate?.role !== "hero") return selection;
+        // Inject a failure after the earlier selector to exercise the separate
+        // final factuality boundary, rather than testing that selector again.
+        const candidate = { ...selection.candidate, body: "This service cuts operating costs by 94 percent." };
+        candidate.wordCount = sectionCopyWordCount(candidate);
+        return { ...selection, candidate };
+      }));
+    try {
+      const profile = brand();
+      const { target, result } = await modelAssistedCompile(profile);
+      expect(result.outcome).toBe("production-page");
+      expect(result.compileReceipts).toEqual(expect.arrayContaining([expect.objectContaining({ detailCode: "rejected_model_sections_restored", artifactCount: 1 })]));
+      if (result.outcome !== "production-page") throw new Error("page_not_compiled");
+      expect(result.artifact.value?.sections.find(({ sectionId }) => sectionId === target.sectionId)?.body).toBe(target.body);
+      expect(renderPage(session(profile), profile, result.artifact.value!)).not.toContain("94 percent");
+      expect(result.buildTrace.sections.find(({ sectionId }) => sectionId === target.sectionId)?.writerMode).toBe("deterministic");
+    } finally { spy.mockRestore(); }
+  });
+
 
   it("keeps deterministic copy when the provider answers after the deadline", async () => {
     const profile = brand();

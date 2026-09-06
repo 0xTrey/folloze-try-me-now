@@ -9,6 +9,20 @@ const session = (revision = 2, id = "s-1") => ({ id, revision, answers: { promot
 const evidence = (id: string, evidenceType: CompilerEvidenceItem["evidenceType"], overrides: Partial<CompilerEvidenceItem> = {}): CompilerEvidenceItem => ({ id, kind: "fact", claim: id, sourceAuthority: "Acme source", sourceRef: `https://acme.test/${id}`, confidence: "high", allowedUses: ["credibility"], prohibitedUses: [], evidenceType, entityRole: "seller", ...overrides });
 
 describe("buyer decision journey contract", () => {
+  it("prefers selected-offer facts over unrelated homepage articles", () => {
+    const offer = "Audit & Assurance Solutions";
+    const brief = deriveBuyerDecisionBrief({ session: session(), seller, resolvedOffer: offer }, [
+      evidence("homepage-article", "positioning", { claim: "A guide to cloud certification" }),
+      evidence("other-product", "capability", { subject: "Cloud Services", claim: "Cloud migration support" }),
+      evidence("audit-service", "capability", { subject: offer, claim: "The audit team reviews financial records and internal controls." })
+    ]);
+    expect(brief.knowledge.productOffer).toEqual([]);
+    expect(brief.knowledge.supportedCapabilityWorkflowClaims.map(({ id }) => id)).toEqual(["audit-service"]);
+  });
+  it("asks for validation when no supported mechanism is available", () => {
+    const plan = assignBuyerJourneySections(defaultSectionPlanV2("guide"), deriveBuyerDecisionBrief({ session: session(), seller }));
+    expect(plan.find(({ id }) => id === "guide-4")).toMatchObject({ role: "solution-mapping", claimType: "instruction", claimRefs: [] });
+  });
   it("keeps a generic category distinct from an exact product", () => {
     expect(deriveBuyerDecisionBrief({ session: session(), resolvedOffer: "Computers & Electronics", seller }, []).clarification).toBeTruthy();
     expect(deriveBuyerDecisionBrief({ session: session(), seller }, []).product.status).toBe("exact");

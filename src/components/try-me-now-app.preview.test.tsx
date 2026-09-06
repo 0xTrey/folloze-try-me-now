@@ -433,7 +433,7 @@ describe("PreviewUpdateNotice", () => {
 
 describe("SaveExperienceDialog", () => {
   it("lets visitors leave the submitted confirmation without resubmitting their request", () => {
-    const onClose = vi.fn(), onSubmitTargets = vi.fn();
+    const onClose = vi.fn(), onViewEngagement = vi.fn(), onSubmitTargets = vi.fn();
     render(<SaveExperienceDialog
       open email="buyer@example.com" status="polling"
       request={{
@@ -442,11 +442,12 @@ describe("SaveExperienceDialog", () => {
         targets: ["one.com", "two.com", "three.com"].map((domain, index) => ({ id: domain, domain, position: index + 1, status: "pending" })),
         delivery: { status: "pending" }, createdAt: "2026-09-05T12:00:00Z", updatedAt: "2026-09-05T12:00:00Z", expiresAt: "2026-10-05T12:00:00Z"
       }}
-      onEmailChange={vi.fn()} onSubmitEmail={vi.fn()} onSubmitTargets={onSubmitTargets} onClose={onClose}
+      onEmailChange={vi.fn()} onSubmitEmail={vi.fn()} onSubmitTargets={onSubmitTargets} onClose={onClose} onViewEngagement={onViewEngagement}
     />);
     expect(screen.getByRole("dialog")).toHaveClass("personalizationConfirmation");
-    fireEvent.click(screen.getByRole("button", { name: "Back to your experience" }));
-    expect(onClose).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "View engagement" }));
+    expect(onViewEngagement).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
     expect(onSubmitTargets).not.toHaveBeenCalled();
   });
 

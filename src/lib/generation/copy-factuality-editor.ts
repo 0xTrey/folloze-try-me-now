@@ -369,6 +369,7 @@ function repairedText(value: string): string {
     repaired = repaired.replace(pattern, replacement);
   }
   return repaired
+    .replace(/\s*\u2014\s*/g, ", ")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
     .replace(/([,.;:!?])\1+/g, "$1")

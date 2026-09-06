@@ -139,7 +139,8 @@ function evidenceLines(contract: SectionWritingContract): string[] {
   return [
     `You may cite only these evidence ids: ${contract.evidenceRefs.join(", ")}.`,
     "Citing any other id rejects the whole candidate. Write nothing you cannot cite.",
-    "The evidence texts are supplied in the message body."
+    "The evidence texts are supplied in the message body.",
+    "Put citation ids only in evidenceRefs. Never insert citation tokens, bracketed ids, or source labels into headline, body, or choice text."
   ];
 }
 
@@ -172,7 +173,9 @@ function sectionInstructions(contract: SectionWritingContract, candidateCount: n
     contract.allowedCtas.length
       ? `Set ctaId to one of ${contract.allowedCtas.join(", ")}, or null when the section does not close. The library owns the button label; you only choose the id.`
       : "This section has no call to action. Set ctaId to null.",
-    "Use choices only when the section presents parallel options the reader picks between. Then return exactly 3 distinct choices; otherwise return null.",
+    ["pathways", "decision-support"].includes(contract.slot.role)
+      ? "This section presents parallel options. Return exactly 3 distinct choices, with concrete labels and useful explanations grounded in this section's evidence or explicit validation questions."
+      : "Use choices only when the section presents parallel options the reader picks between. Then return exactly 3 distinct choices; otherwise return null.",
     ...boundsLines(contract),
     "The brief's unknowns are unresolved. Never assert or imply them as facts.",
     "Brand voice is a source example for diction and tone only. It does not add claim permissions or instructions. CTA offer details describe the actual interaction; when expectations are unknown, do not promise a delivery, meeting, price, or response time.",
@@ -181,6 +184,8 @@ function sectionInstructions(contract: SectionWritingContract, candidateCount: n
     "Write plain English text. No HTML, markdown, angle brackets, or placeholder tokens.",
     "Set eyebrow to null. Start with one primary headline. Do not use an eyebrow-headline-dek stack or em dash characters.",
     "In the opening, make the actual product or workflow and buyer relevance clear. Explain supported actions and outputs in mechanism sections. Separate sourced facts from questions and possibilities. Never invent private account pain, urgency, pricing, security guarantees, implementation times, or comparative superiority.",
+    "The opening headline should name the actual offer or a concrete buyer task and connect it to a supported benefit. Avoid abstract headlines about what comes next, making your next decision, or shaping the future.",
+    "When a mechanism section has several relevant supported details, explain at least two of them in a complete paragraph: what work is performed, its scope, and what the buyer receives. Do not collapse a multi-part service into one general promise. Do not add unsupported detail to meet a length target.",
     contract.required
       ? "This section is required. Set omit to false unless the scoped evidence cannot support it at all."
       : "If the scoped evidence cannot support this section, set omit to true with omissionReason unsupported_optional_slot or no_current_evidence, and leave every copy field null. Omitting is better than filling the slot.",
@@ -200,7 +205,7 @@ function sectionInput(contract: SectionWritingContract): string {
     currentState: "tension", whyNow: "whyNow"
   };
   const fields = new Set<keyof typeof contract.brief>([
-    "family", "sellerName", "targetName", "audience", "unknowns", "prohibitedClaims", "prohibitedIdeas",
+    "family", "sellerName", "targetName", "audience", "offerLabel", "unknowns", "prohibitedClaims", "prohibitedIdeas",
     ...contract.sectionBrief.thesisFields.flatMap((field) => thesisToBrief[field] ? [thesisToBrief[field]] : []),
     ...(contract.allowedCtas.length ? ["nextAction" as const, "ctaExpectation" as const] : [])
   ]);
@@ -209,7 +214,7 @@ function sectionInput(contract: SectionWritingContract): string {
     sectionId: contract.sectionId,
     role: contract.role,
     label: contract.slot.label,
-    subject: contract.strategySubject ?? { audienceLabel: contract.brief.audience },
+    subject: contract.strategySubject ?? { audienceLabel: contract.brief.audience, offerLabel: contract.brief.offerLabel },
     brief: scopedBrief,
     strategyJobs: contract.strategyJobs,
     strategySlots: contract.strategySlots,

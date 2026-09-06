@@ -6,7 +6,7 @@ import type { GenericProductionPage } from "@/lib/generation/generic-production-
 
 const evidenceIdPattern = /^[a-z0-9][a-z0-9._:-]{1,71}$/i;
 
-function bounded(
+export function bounded(
   value: string | undefined,
   min: number,
   max: number,
@@ -22,13 +22,8 @@ function bounded(
     candidate.lastIndexOf("!"),
     candidate.lastIndexOf("?")
   );
-  const wordBoundary = candidate.lastIndexOf(" ");
-  const boundary = sentenceBoundary >= min
-    ? sentenceBoundary + 1
-    : wordBoundary >= min
-      ? wordBoundary
-      : max;
-  const excerpt = candidate.slice(0, boundary).trim().replace(/[,;:]+$/, "");
+  if (sentenceBoundary < min) return fallback;
+  const excerpt = candidate.slice(0, sentenceBoundary + 1).trim();
   return excerpt.length >= min ? excerpt : fallback;
 }
 

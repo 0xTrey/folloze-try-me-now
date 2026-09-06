@@ -1357,6 +1357,9 @@ export async function compileGenericProductionPage(
     completedAt: input.completedAt,
     slots,
     brief: {
+      ...(input.buyerDecisionBrief?.product.label
+        ? { offerLabel: input.buyerDecisionBrief.product.label }
+        : {}),
       ...(familySpine
         ? {
             family: familySpine.family,
@@ -1523,6 +1526,35 @@ export async function compileGenericProductionPage(
         evidence.length
       )
     );
+  }
+
+  // A rejected model paragraph must not evict an otherwise usable section.
+  // Restore only that section's original candidate, then run the unchanged
+  // whole-page and final factuality gates over the resulting page.
+  const modeledIds = new Set(sectionWriting.run?.results
+    .filter((result) => result.outcome === "model" || result.outcome === "model_partial")
+    .map((result) => result.sectionId) ?? []);
+  if (modeledIds.size) {
+    const preflight = editCopyForFactuality({
+      sessionId: input.sessionId, revision: input.revision, activeRevision: input.revision,
+      startedAt: input.startedAt, completedAt: input.completedAt,
+      slots, evidence, objective: objectiveField.value, cta: { ...writerCta },
+      ...(familySpine ? { familyContext: {
+        family: familySpine.family,
+        sellerName: familySpine.entities?.sellerName ?? String(evidenceValue.fields.companyName?.value ?? ""),
+        ...(familySpine.entities?.targetName ? { targetName: familySpine.entities.targetName } : {})
+      } } : {}),
+      writerArtifacts: composedWriterArtifacts
+    });
+    const restoreIds = new Set(preflight.value?.rejectedSectionIds.filter((id) => modeledIds.has(id)) ?? []);
+    if (restoreIds.size) {
+      const originals = new Map(writerArtifacts.flatMap((artifact) => artifact.value ?? []).map((section) => [section.sectionId, section]));
+      composedWriterArtifacts = composedWriterArtifacts.map((artifact) => artifact.value ? {
+        ...artifact,
+        value: artifact.value.map((section) => restoreIds.has(section.sectionId) ? originals.get(section.sectionId) ?? section : section)
+      } : artifact);
+      compileReceipts.push(compileReceipt(input, "factuality", "fallback", "rejected_model_sections_restored", restoreIds.size, evidence.length));
+    }
   }
 
   const reviewClient = dependencies.sectionModelClient?.reviewPage

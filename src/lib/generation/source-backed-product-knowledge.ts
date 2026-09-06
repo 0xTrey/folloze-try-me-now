@@ -3,7 +3,7 @@ import type { ContentClaim, ContentProof, SourceArtifact } from "@/lib/content-i
 import { compilerEvidencePermissions, type CompilerEvidenceItem, type CompilerEvidenceType } from "./messaging-compiler-contracts";
 import { compilerDigest } from "./compiler-digest";
 
-const VERSION = "source-product-knowledge-v3";
+const VERSION = "source-product-knowledge-v4";
 const TTL_MS = 24 * 60 * 60_000;
 const MAX_ENTRIES = 32;
 const cache = new Map<string, { at: number; value: CompilerEvidenceItem[] }>();
@@ -55,18 +55,24 @@ export function compilerEvidenceFromProductSource(input: {
     try { if (new URL(citation.locator.sourceUrl).origin !== new URL(url).origin) return; } catch { return; }
     const containsOffer = (value: string) => ` ${terms(value)} `.includes(` ${terms(offer)} `);
     const adjacentOffer = sections.some((section) => containsOffer(`${section.title} ${section.text}`)) || containsOffer(text);
-    const productFocusedTitle = terms((artifact.content.title ?? "").split(/[|:]/)[0]!) === terms(offer);
+    const productFocusedTitle = terms((artifact.content.title ?? "").split(/[|:]/)[0]!) === terms(offer) ||
+      artifact.content.sections.some((section) => section.level === 1 && terms(section.title) === terms(offer));
     // Outcome proof needs product scope in its own quote/section. A portfolio
     // title or another section sharing a citation cannot establish that scope.
     if (!adjacentOffer && (!productFocusedTitle || proofKind === "metric" || proofKind === "example")) return;
     if (terms(offer) === terms(seller.companyName)) return;
     const headings = sections.map((section) => section.title).join(" ");
+    // Related articles and site navigation are not descriptions of this offer.
+    // A product-focused page title must not promote those blocks into product facts.
+    if (/\b(?:latest from|related (?:articles|insights|resources)|upcoming (?:events|webinars)|newsroom)\b/i.test(headings)) return;
     let evidenceType: CompilerEvidenceType = proofKind === "mechanism" ? "workflow"
-      : /\b(?:features?|capabilities)\b/i.test(headings) ? "capability"
+      : /\b(?:features?|capabilities|focus areas|our (?:services|solutions))\b/i.test(headings) ? "capability"
       : /\b(?:pricing|plans? and pricing)\b/i.test(headings) ? "pricing"
       : /\b(?:security|compliance)\b/i.test(headings) ? "security"
       : /\b(?:implementation|deployment|migration|integration)\b/i.test(headings) ? "implementation"
-      : /\b(?:how it works|workflow)\b/i.test(headings) ? "workflow" : "positioning";
+      : /\b(?:how it works|workflow)\b/i.test(headings) ? "workflow"
+      : /\b(?:provid(?:es?|ing)|deliver(?:s|ing)?|supports?|helps?|enables?|connects?|assess(?:es)?|reviews?|includes?)\b/i.test(text) ? "capability" : "positioning";
+    if (evidenceType === "positioning" && !adjacentOffer) return;
     const confidence = artifact.confidence === "high" && item.confidence === "high" ? "high" : "medium";
     const customerContext = /\b(?:customer|client|case study)\b/i.test(`${headings} ${text}`);
     const pastOutcome = /\b(?:increased|decreased|reduced|improved|saved|grew|achieved)\b/i.test(text);

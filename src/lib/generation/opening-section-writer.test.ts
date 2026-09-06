@@ -222,6 +222,30 @@ describe("writeOpeningSections", () => {
     expect(candidate?.evidenceRefs).toEqual(["offer-1"]);
   });
 
+  it("keeps deterministic hero headlines complete when the promise exceeds its budget", () => {
+    const source = input({
+      brief: { ...input().brief, offerLabel: "Aprio", promise: "Connect your teams with clearer operating context for every decision" },
+      slots: [heroSlot({ headlineWordBudget: { min: 3, max: 5 }, wordBudget: { min: 12, max: 30 } })]
+    });
+    const result = writeOpeningSections(source);
+    expect(result.value?.[0]?.headline).toBe("Explore Aprio");
+    expect(result.value?.[0]?.headline).not.toContain("clearer");
+  });
+
+  it("does not use resource titles or short seller labels as hero body evidence", () => {
+    const source = input({
+      slots: [heroSlot({ evidenceRefs: ["offer-1", "resource-1", "label-1"], wordBudget: { min: 10, max: 30 } })],
+      evidence: [
+        richEvidence[1]!,
+        { ...richEvidence[1]!, id: "resource-1", text: "Workflow guide", evidenceType: "resource" },
+        { ...richEvidence[1]!, id: "label-1", text: "Aprio", evidenceType: "positioning" }
+      ]
+    });
+    const result = writeOpeningSections(source);
+    expect(result.value?.[0]?.body).not.toContain("Workflow guide");
+    expect(result.value?.[0]?.body).not.toContain("Aprio");
+  });
+
   it("ignores invalid and stale refs while retaining current evidence", () => {
     const staleClaim: SectionEvidenceClaim = {
       id: "stale-1",

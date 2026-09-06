@@ -35,7 +35,7 @@ export const SECTION_MODEL_BOUNDS = {
 } as const;
 
 /** Markup, control characters, and replacement characters are never copy. */
-const UNSAFE_COPY = /[<>]|[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]|\uFFFD/;
+const UNSAFE_COPY = /[<>]|[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]|\uFFFD|\[(?:source|ev|evidence|brief|visitor)[:-][^\]]+\]/i;
 
 const ALLOWED_CANDIDATE_FIELDS = new Set([
   "eyebrow",
@@ -245,6 +245,7 @@ export function normalizeModelCandidate(
 
   const choices = normalizeChoices(candidate, allowedRefs);
   if (choices === "invalid") return undefined;
+  if (["pathways", "decision-support"].includes(contract.slot.role) && !choices) return undefined;
 
   const shaped: SectionCopyCandidate = {
     ...base,

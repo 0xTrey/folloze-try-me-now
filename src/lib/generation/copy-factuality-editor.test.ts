@@ -139,6 +139,12 @@ function threeChoices(
 }
 
 describe("editCopyForFactuality", () => {
+  it("normalizes source punctuation without changing its supported claim", () => {
+    const hero = slot("punctuation", "hero", ["offer"]);
+    const text = "The platform connects records\u2014then routes them to the next owner.";
+    const result = editCopyForFactuality(input([hero], [artifact("opening-writer", [candidate(hero, { body: text })])], [claim("offer", text)]));
+    expect(result.value?.acceptedSections[0]?.body).toBe("The platform connects records, then routes them to the next owner.");
+  });
   it("accepts clean current-revision copy in slot order and maps claims to evidence", () => {
     const evidence = [
       claim("offer-1", "Acme documents governed workflow stages."),
