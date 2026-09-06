@@ -53,14 +53,20 @@ function boundedHeadline(value: string, limit: number): string {
   return sentence && wordCount(sentence) <= limit ? sentence : "Explore this offer";
 }
 
-function headlineForSlot(value: string, slot: SectionWriterSlot, offerLabel?: string): string {
+function headlineForSlot(value: string, slot: SectionWriterSlot, brief: SectionWriterInput["brief"]): string {
   if (!slot.headlineWordBudget) return value;
   const { max } = slot.headlineWordBudget;
   if (wordCount(value) <= max) return value;
   const sentences = value.match(/[^.!?]+[.!?]+/g)?.map((sentence) => sentence.trim()) ?? [];
   const complete = sentences.find((sentence) => wordCount(sentence) <= max);
   if (complete) return complete;
-  const label = normalizeCopy(offerLabel ?? "");
+  const seller = normalizeCopy(brief.sellerName ?? "");
+  const target = normalizeCopy(brief.targetName ?? "");
+  if (slot.family === "align" && seller && target) {
+    const accountHeadline = `Evaluate ${seller} for ${target}`;
+    if (wordCount(accountHeadline) <= max) return accountHeadline;
+  }
+  const label = normalizeCopy(brief.offerLabel ?? "");
   const fallback = label ? `Explore ${label}` : "Explore this offer";
   return wordCount(fallback) <= max ? fallback : "Explore this offer";
 }
@@ -168,7 +174,7 @@ function buildCandidate(
       role: "hero",
       ...copyContractMetadata(slot),
       status: "complete",
-      headline: headlineForSlot(promise, slot, input.brief.offerLabel),
+      headline: headlineForSlot(promise, slot, input.brief),
       body,
       ...(ctaLabel && ctaAllowed
         ? {
