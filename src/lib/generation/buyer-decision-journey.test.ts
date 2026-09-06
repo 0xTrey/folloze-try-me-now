@@ -18,6 +18,9 @@ describe("buyer decision journey contract", () => {
     ]);
     expect(brief.knowledge.productOffer).toEqual([]);
     expect(brief.knowledge.supportedCapabilityWorkflowClaims.map(({ id }) => id)).toEqual(["audit-service"]);
+    const assigned = assignBuyerJourneySections(defaultSectionPlanV2("guide"), brief);
+    expect(assigned.find(({ role }) => role === "evaluation-criteria")?.claimRefs).toEqual(["audit-service"]);
+    expect(assigned.find(({ role }) => role === "applications")?.claimRefs).toEqual(["audit-service"]);
   });
   it("asks for validation when no supported mechanism is available", () => {
     const plan = assignBuyerJourneySections(defaultSectionPlanV2("guide"), deriveBuyerDecisionBrief({ session: session(), seller }));

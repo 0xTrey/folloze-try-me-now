@@ -122,7 +122,7 @@ export function deriveBuyerDecisionBrief(input: BuyerJourneyInput, ledger: reado
     ...(product.status !== "exact" ? { clarification: PRODUCT_CLARIFICATION } : {}), audience, buyerJob,
     trafficIntent: traffic ? { value: traffic, status: "known" } : { status: "unknown" },
     buyingStage, primaryBuyerQuestion, questions: stable.questions, cta, knowledge,
-    digest: compilerDigest("buyer-decision-journey-v3", stable), fetchedAt: validNow.toISOString(),
+    digest: compilerDigest("buyer-decision-journey-v4", stable), fetchedAt: validNow.toISOString(),
     expiresAt: new Date(validNow.getTime() + ttl).toISOString() };
 }
 
@@ -164,7 +164,8 @@ export function assignBuyerJourneySections(plan: readonly SectionSlotV2[], brief
   }
   return earnedPlan.map((slot, index, all) => {
     const key = roleQuestion[slot.role];
-    const pool = key === "proof" ? brief.knowledge.proofClaims : key === "risk" ? objections
+    const pool = key === "proof" ? brief.knowledge.proofClaims : key === "risk"
+      ? objections.length ? objections : brief.knowledge.supportedCapabilityWorkflowClaims
       : slot.role === "current-friction" ? [...brief.knowledge.workflowContext, ...brief.knowledge.targetAccountContext]
       : slot.role === "account-relevance" ? brief.knowledge.targetAccountContext
       : slot.role === "resource" ? brief.knowledge.resources

@@ -10,6 +10,7 @@ The September 6 repair addresses thin campaign copy and two navigation gaps repo
 - Headlines retain complete sentence boundaries. Model instructions receive the selected offer explicitly and request concrete service detail. Source punctuation is normalized to the shared voice rules.
 - Model candidates with embedded citation IDs or missing required choice cards are rejected before selection. A later factuality rejection can restore only that section's original fallback, which still passes the normal whole-page and final checks.
 - A required mechanism with no supported capability facts becomes an instruction to validate the work, not a fabricated capability claim.
+- Long choice-card evidence never becomes internal placeholder wording. Evaluation and application sections can retain complete, cited service facts in a paragraph, followed by concise buyer questions. Evaluation criteria use supported capabilities when no specific objection evidence is available.
 - The engagement panel now has the existing account-personalization action near its heading. Its label follows request status. The account-building confirmation uses **View engagement**, which opens engagement without submitting another request.
 
 ## Verification
@@ -24,4 +25,9 @@ The September 6 repair addresses thin campaign copy and two navigation gaps repo
 
 ## Release state
 
-Implementation and final local verification are complete. Remote CI, deployment, and anonymous live verification receipts will be recorded separately after completion. Existing saved HTML does not automatically regenerate when the application is deployed.
+- Code is saved and pushed through `2edda36b1a837687b0147b49364ab7edf891c371` on `codex/buyer-journey-security`.
+- [Remote quality gate](https://github.com/0xTrey/folloze-try-me-now/actions/runs/34040281433) passed: 1,935 tests with one skipped, 101 desktop browser checks, lint, type checking, both production builds, dependency audit, and the redacted history scan.
+- Candidate `dpl_2sUAW5VAwwYeocm3z1uKt7RErsuN` was built from a clean detached worktree. Its homepage and health route returned HTTP 200 before promotion.
+- The candidate was promoted to [the canonical production URL](https://folloze-try-me-now.vercel.app/). Deployment inspection resolved that URL to the candidate. Anonymous homepage and health checks returned HTTP 200; required production services were ready. No environment or database changes were made.
+- The previous release, `dpl_4txynfL9EKGoEFvsBfuXDnTCthb6`, remains the rollback reference. The rejected first candidate was not promoted to the canonical URL.
+- Existing saved HTML does not automatically regenerate when the application is deployed. The reported Aprio session and its account requests were not overwritten.

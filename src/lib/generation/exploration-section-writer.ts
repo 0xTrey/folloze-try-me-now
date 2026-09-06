@@ -85,24 +85,25 @@ function normalizedText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function safeClaimText(claim: SectionEvidenceClaim): string | undefined {
+function safeClaimText(claim: SectionEvidenceClaim, maxWords = 18): string | undefined {
   const text = normalizedText(claim.text);
   if (!text || unsafeCopyPattern.test(text) || bannedCopyPattern.test(text)) {
     return undefined;
   }
   const words = text.split(/\s+/);
-  if (words.length <= 18) return text.replace(/[.?!]+$/, "");
+  if (words.length <= maxWords) return text.replace(/[.?!]+$/, "");
 
   const firstSentence = text.split(/(?<=[.?!])\s+/, 1)[0];
-  if (firstSentence && firstSentence.split(/\s+/).length <= 18) {
+  if (firstSentence && firstSentence.split(/\s+/).length <= maxWords) {
     return firstSentence.replace(/[.?!]+$/, "");
   }
-  return `the referenced ${claim.sourceRole} evidence`;
+  return undefined;
 }
 
 function currentClaimsForSlot(
   input: SectionWriterInput,
-  slot: SectionWriterSlot
+  slot: SectionWriterSlot,
+  maxWords = 18
 ): SectionEvidenceClaim[] {
   const allowedRefs = new Set(slot.evidenceRefs);
   const seenText = new Set<string>();
@@ -110,7 +111,7 @@ function currentClaimsForSlot(
 
   for (const claim of input.evidence) {
     if (claim.revision !== input.revision || !allowedRefs.has(claim.id)) continue;
-    const safeText = safeClaimText(claim);
+    const safeText = safeClaimText(claim, maxWords);
     if (!safeText) continue;
     const key = safeText.toLocaleLowerCase();
     if (seenText.has(key)) continue;
@@ -366,19 +367,23 @@ function candidateForSlot(
   input: SectionWriterInput,
   slot: SectionWriterSlot
 ): { candidate?: SectionCopyCandidate; sparse: boolean } {
-  const claims = currentClaimsForSlot(input, slot);
-  if (slot.v2Role === "evaluation-criteria" && claims.some((claim) => claim.kind === "seller_fact")) {
+  const paragraphClaims = currentClaimsForSlot(input, slot, 60)
+    .filter((claim) => claim.kind === "seller_fact");
+  if (["evaluation-criteria", "applications", "use-cases"].includes(slot.v2Role ?? "") && paragraphClaims.length) {
     const selected: SectionEvidenceClaim[] = [];
     const candidate: SectionCopyCandidate = {
       sectionId: slot.id, role: slot.role, ...copyContractMetadata(slot), status: "complete",
-      headline: "What to know before you decide", body: "", evidenceRefs: [], wordCount: 0,
+      headline: slot.v2Role === "evaluation-criteria"
+        ? "What to know before you decide"
+        : "Choose where the work should begin",
+      body: "", evidenceRefs: [], wordCount: 0,
       choices: [
         { label: "Scope", body: "What does your team need?", evidenceRefs: [] },
         { label: "Requirements", body: "Which requirements still need confirmation?", evidenceRefs: [] },
         { label: "Next step", body: "Who can resolve the remaining questions?", evidenceRefs: [] }
       ]
     };
-    for (const claim of claims.filter((item) => item.kind === "seller_fact")) {
+    for (const claim of paragraphClaims) {
       const nextBody = [...selected, claim].map((item) => normalizedText(item.text)).join(" ");
       if (sectionCopyWordCount({ ...candidate, body: nextBody }) <= slot.wordBudget.max) selected.push(claim);
     }
@@ -388,6 +393,7 @@ function candidateForSlot(
       return { candidate: fitCandidateToBudget(candidate, slot), sparse: false };
     }
   }
+  const claims = currentClaimsForSlot(input, slot);
   const role = slot.role as OwnedRole;
   const build = (
     choices: [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice]

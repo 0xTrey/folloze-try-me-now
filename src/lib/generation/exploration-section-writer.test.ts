@@ -79,6 +79,26 @@ function input(
 }
 
 describe("writeExplorationSections", () => {
+  it("never replaces an overlong visitor claim with internal evidence wording", () => {
+    const evidence = [claim("long-visitor", "The visitor wants a careful evaluation of many operating requirements across finance and accounting teams before choosing which workflow to review next", { sourceRole: "visitor" })];
+    const result = writeExplorationSections(input([slot("decision-support", ["long-visitor"])], evidence));
+    expect(result.value?.[0]?.choices).toHaveLength(3);
+    expect(JSON.stringify(result.value)).not.toContain("referenced visitor evidence");
+    expect(result.value?.[0]?.evidenceRefs).toEqual([]);
+  });
+
+  it("keeps a complete service fact in applications when it cannot fit in a short card", () => {
+    const statement = "The audit service reviews financial records and internal controls to help finance teams understand their reporting requirements and prepare for the next reporting cycle.";
+    const evidence = [claim("service-scope", statement, { kind: "seller_fact", evidenceType: "capability" })];
+    const application = slot("pathways", ["service-scope"], { family: "guide", v2Role: "applications", claimType: "implication", wordBudget: { min: 30, max: 72 } });
+    const result = writeExplorationSections(input([application], evidence));
+    expect(result.value?.[0]?.body).toBe(statement);
+    expect(result.value?.[0]?.evidenceRefs).toEqual(["service-scope"]);
+    expect(result.value?.[0]?.choices).toHaveLength(3);
+    expect(result.value?.[0]?.wordCount).toBeLessThanOrEqual(72);
+    expect(JSON.stringify(result.value)).not.toContain("referenced source evidence");
+  });
+
   it("returns exactly three distinct evidence-mapped choices within the slot budget", () => {
     const evidence = [
       claim("source-outcome", "The source defines the intended workflow outcome"),
