@@ -28,7 +28,7 @@ export function resolveBuyerCtaOffer(input: { intent: CtaType; label: string; so
     : input.intent === "download" ? "Read the resource" : "Explore product details";
   const label = destination ? usesSource ? sourceLabel : input.label : "Explore the page";
   const expectation = destination ? "Opens the linked page in a new tab. No form is submitted here."
-    : "Moves to the next-step section on this page. No meeting or registration is booked.";
+    : "Opens the next step below. It does not book a meeting or register you.";
   const action: ExperienceActionContract = {
     id: "primary-conversion", purpose: destination ? "primary-conversion" : "guided-exploration",
     label, actionType: destination ? "external-link" : "scroll", destination: destination ?? "#next-step",

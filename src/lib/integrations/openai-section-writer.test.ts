@@ -157,7 +157,7 @@ describe("sectionModelClient", () => {
 });
 
 describe("createSectionModelClient", () => {
-  it("reuses unchanged section input across revisions but invalidates changed claims and sessions", async () => {
+  it("reuses unchanged dependencies across revisions and slot ids, but isolates sessions", async () => {
     const fake = provider(respondWith({ candidates: [providerCandidate()] }));
     const client = createSectionModelClient({ provider: fake, cacheResponses: true });
     const section = { ...contract(), sessionId: "cache-isolation-fixture" };
@@ -166,9 +166,13 @@ describe("createSectionModelClient", () => {
     const reused = await client.writeSection({ ...section, revision: revision + 1,
       brief: { ...section.brief, nextAction: "Read the public guide" } }, signal);
     expect(reused.cacheHit).toBe(true);
+    expect(reused.sectionId).toBe(section.sectionId);
     expect(fake.calls).toHaveLength(1);
     expect(JSON.parse(fake.calls[0]!.request.input).brief).not.toHaveProperty("nextAction");
     await client.writeSection({ ...section, brief: { ...section.brief, promise: "Changed supported outcome" } }, signal);
+    const rebound = await client.writeSection({ ...section, sectionId: "section-renamed" }, signal);
+    expect(rebound.cacheHit).toBe(true);
+    expect(rebound.sectionId).toBe("section-renamed");
     await client.writeSection({ ...section, sessionId: "different-private-session" }, signal);
     expect(fake.calls).toHaveLength(3);
   });

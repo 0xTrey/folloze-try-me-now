@@ -1,0 +1,133 @@
+{
+  "generatedFor": "local visual QA only",
+  "syntheticData": true,
+  "browserQACompleted": false,
+  "humanVisualScores": null,
+  "pages": [
+    {
+      "page": "adp-launch.html",
+      "family": "launch",
+      "brand": "ADP",
+      "targetBrand": null,
+      "sourceLabels": [
+        "Payroll operations",
+        "Workforce management",
+        "Payroll workflow",
+        "Implementation requirements",
+        "Workforce operating model"
+      ],
+      "actionLabels": [
+        "Explore the page",
+        "Explore this signal",
+        "Explore this signal",
+        "Choose this next step"
+      ],
+      "localAssets": [
+        "adp-logo.svg",
+        "adp-product-ui.svg"
+      ],
+      "desktopViewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "mobileViewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "page": "apple-guide.html",
+      "family": "guide",
+      "brand": "Apple",
+      "targetBrand": null,
+      "sourceLabels": [
+        "Automated Device Enrollment",
+        "Managed Apple Accounts",
+        "Deployment sequence",
+        "Deployment requirements",
+        "Enterprise mobility"
+      ],
+      "actionLabels": [
+        "Read the resource",
+        "Explore this chapter",
+        "Explore this chapter",
+        "Explore this chapter"
+      ],
+      "localAssets": [
+        "apple-logo.svg",
+        "apple-product-ui.svg"
+      ],
+      "desktopViewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "mobileViewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "page": "servicetitan-align.html",
+      "family": "align",
+      "brand": "ServiceTitan",
+      "targetBrand": "Apex Home Services",
+      "sourceLabels": [
+        "Field service operations",
+        "Dispatch operations",
+        "Dispatch workflow",
+        "Implementation requirements",
+        "Dispatch consistency",
+        "Technician capacity"
+      ],
+      "actionLabels": [
+        "Explore the page",
+        "Explore this signal",
+        "Explore this signal",
+        "Choose this next step"
+      ],
+      "localAssets": [
+        "apex-logo.svg",
+        "servicetitan-logo.svg",
+        "servicetitan-product-ui.svg"
+      ],
+      "desktopViewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "mobileViewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "page": "sparse-logo-only-launch.html",
+      "family": "launch",
+      "brand": "Archetype Company",
+      "targetBrand": null,
+      "sourceLabels": [
+        "Workflow operations",
+        "Workflow operations",
+        "Review sequence",
+        "Implementation requirements",
+        "Distributed operations"
+      ],
+      "actionLabels": [
+        "Explore the page",
+        "Explore this signal",
+        "Explore this signal",
+        "Choose this next step"
+      ],
+      "localAssets": [
+        "sparse-logo-only-launch-logo.svg"
+      ],
+      "desktopViewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "mobileViewport": {
+        "width": 390,
+        "height": 844
+      }
+    }
+  ]
+}

@@ -19,6 +19,7 @@ import { deterministicDraft } from "@/lib/integrations/openai";
 import type { BrandProfile, SessionEvidenceItem, TryMeSession } from "@/lib/types";
 
 import { compileSessionProductionPage } from "./session-production-engine";
+import { syntheticOfferEvidence } from "../../../tests/fixtures/offer-evidence";
 
 const now = "2026-08-22T18:00:00.000Z";
 
@@ -87,7 +88,9 @@ const approvalQueueEvidence: SessionEvidenceItem = {
   signals: ["approval queue"],
   disposition: "available",
   entityRole: "seller",
-  confidence: "high"
+  confidence: "high",
+  evidenceType: "workflow-context",
+  subject: "Acme Workflow Cloud"
 };
 
 function session(options: {
@@ -120,7 +123,15 @@ function session(options: {
     brand: brand(),
     audienceSuggestions: ["Operations leaders"],
     audienceRecommendations: [],
-    evidenceItems: options.evidenceItems ?? [],
+    // The production compiler only builds a product argument from facts that
+    // explicitly name the selected offer. Keep the scenario evidence additive
+    // so every positive-path assertion exercises that real boundary.
+    evidenceItems: [
+      ...syntheticOfferEvidence(options.offer ?? "Acme Workflow Cloud", "acme.example").filter(
+        ({ evidenceType }) => evidenceType !== "workflow-context"
+      ),
+      ...(options.evidenceItems ?? [])
+    ],
     events: []
   };
 }

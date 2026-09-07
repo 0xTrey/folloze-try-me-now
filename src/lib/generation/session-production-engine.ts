@@ -55,6 +55,8 @@ import { deriveWireframeEvidenceSignals } from "@/lib/generation/wireframe-evide
 import { assignBuyerJourneySections, deriveBuyerDecisionBrief } from "@/lib/generation/buyer-decision-journey";
 import { compilerEvidenceFromProductSource } from "@/lib/generation/source-backed-product-knowledge";
 import { resolveBuyerCtaOffer, selectedBuyerCta } from "@/lib/cta-offer-contract";
+import { compileBuildExperiencePlan } from "@/lib/generation/build-experience-plan";
+import { compilerEvidenceFromSelectedContentSource } from "./content-source-knowledge";
 import { config } from "@/lib/config";
 import type { SectionModelClient } from "@/lib/generation/section-model-writer";
 import type { SectionStrategyBinding } from "@/lib/generation/section-writing-contract";
@@ -421,6 +423,7 @@ function familyArgument(input: {
   objective: string;
   publicContext?: string;
   ctaId: CtaIdV2;
+  ctaLabel?: string;
   heroEvidenceRef?: string;
   accountPersonalization?: AccountPersonalizationCompilerResult;
 }): RequiredProductionArgument {
@@ -533,7 +536,9 @@ function familyArgument(input: {
       unknowns: [...base.decisionHelp.unknowns]
     },
     nextAction: {
-      directive: accountDirective("nextAction") ?? `${cta.label} to ${objective}.`,
+      directive: accountDirective("nextAction")
+        ? `${input.ctaLabel ?? cta.label}: ${accountDirective("nextAction")}`
+        : `${input.ctaLabel ?? cta.label} to ${objective}.`,
       evidenceRefs: [
         ...new Set([...accountRefs("nextAction"), ...base.nextAction.evidenceRefs])
       ],
@@ -895,10 +900,18 @@ export async function compileSessionProductionPage(input: {
   const objective =
     evidence?.fields.objective?.value ?? session.answers.objective ?? "Start a useful conversation";
   const cta = evidence?.fields.cta?.value ?? selectedCta(session);
+  const contentSourceEvidence = session.useCase === "content" && session.sourceArtifact
+    ? compilerEvidenceFromSelectedContentSource({
+        artifact: session.sourceArtifact,
+        offer,
+        sourceUrl: session.answers.sourceUrl
+      })
+    : [];
   const rawLedger = [...compileEvidenceLedger({
     sessionEvidence: session.evidenceItems,
     liveBriefEvidence: evidence
-  }), ...compilerEvidenceFromProductSource({ artifact: session.sourceArtifact, seller: brand, offer })];
+  }), ...compilerEvidenceFromProductSource({ artifact: session.sourceArtifact, seller: brand, offer }),
+    ...contentSourceEvidence];
   const ctaOffer = resolveBuyerCtaOffer({ intent: cta.type, label: cta.label,
     sourceUrl: session.answers.sourceUrl ?? session.answers.offerSourceUrl ?? session.answers.eventSource,
     meetingUrl: config.demoCtaUrl });
@@ -1098,6 +1111,7 @@ export async function compileSessionProductionPage(input: {
       objective,
       publicContext: brand.publicContext,
       ctaId,
+      ctaLabel: cta.label,
       heroEvidenceRef: buyerDecisionBrief.knowledge.supportedCapabilityWorkflowClaims[0]?.id
         ?? buyerDecisionBrief.knowledge.productOffer[0]?.id,
       ...(selectedFamilyDecision.family === "align"
@@ -1210,9 +1224,20 @@ export async function compileSessionProductionPage(input: {
     audienceLabel: audience.label,
     offerLabel: offer
   });
+  const buildPlan = compileBuildExperiencePlan({
+    sessionId: session.id, revision, brand, brief: buyerDecisionBrief,
+    contentSource: {
+      required: session.useCase === "content",
+      ready: contentSourceEvidence.length > 0
+    },
+    assignments: buyerAssignments, decision: selectedFamilyDecision, composition: selection,
+    ...(sectionStrategy ? { strategy: sectionStrategy } : {}),
+    ...(thesisStrategy ? { strategySelection: thesisStrategy } : {})
+  });
 
   return compileGenericProductionPage({
     sessionId: session.id,
+    buildPlan,
     buyerDecisionBrief,
     buyerAssignments,
     revision,
@@ -1244,6 +1269,8 @@ export async function compileSessionProductionPage(input: {
         ...buyerDecisionBrief.knowledge.supportedCapabilityWorkflowClaims,
         ...buyerDecisionBrief.knowledge.proofClaims,
         ...buyerDecisionBrief.knowledge.resources,
+        ...(buyerDecisionBrief.knowledge.contentInsights ?? []),
+        ...(buyerDecisionBrief.knowledge.eventDetails ?? []),
         ...Object.values(buyerDecisionBrief.knowledge.objections).flat()
       ].some((claim) => claim.id === item.id))
         .map((item) => ({

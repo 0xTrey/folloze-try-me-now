@@ -32,6 +32,7 @@ import {
   type SectionWritingContract,
   type StrategySlotKey
 } from "@/lib/generation/section-writing-contract";
+import { hasSubstantiveEvidenceUse } from "./build-quality-policy";
 
 /** Jaccard similarity at or above this rejects the later section as duplicate. */
 export const NEAR_DUPLICATE_THRESHOLD = 0.6;
@@ -58,6 +59,7 @@ export type CandidateRejectionCode =
   | "invented_urgency"
   | "prohibited_claim_asserted"
   | "prohibited_idea_used"
+  | "insufficient_specificity"
   | "unsafe_copy";
 
 /**
@@ -179,6 +181,32 @@ function citedRefs(candidate: SectionCopyCandidate): string[] {
   ];
 }
 
+const CTA_OR_QUESTION_ROLES = new Set([
+  "next-move",
+  "evaluation-close",
+  "first-decision",
+  "resource"
+]);
+
+/**
+ * Supported-fact sections need to explain a permitted fact, not just attach a
+ * citation to otherwise generic copy. CTA and buyer-question interactions are
+ * intentionally excluded because their job is to move the buyer, not restate
+ * the evidence.
+ */
+function requiresSubstantiveEvidence(contract: SectionWritingContract): boolean {
+  return contract.buildDesign?.evidenceMode === "supported-facts" &&
+    contract.claimType === "fact" &&
+    !CTA_OR_QUESTION_ROLES.has(contract.role);
+}
+
+function candidateEvidenceText(candidate: SectionCopyCandidate): string {
+  return [
+    candidate.body,
+    ...(candidate.choices ?? []).flatMap((choice) => [choice.label, choice.body])
+  ].filter((value): value is string => Boolean(value?.trim())).join(" ");
+}
+
 export interface HardGateResult {
   rejections: CandidateRejectionCode[];
   reasons: string[];
@@ -262,6 +290,20 @@ export function hardGateRejections(
   ) {
     rejections.push("required_evidence_uncited");
     reasons.push("fact_section_cited_no_required_evidence");
+  }
+
+  if (requiresSubstantiveEvidence(contract)) {
+    const cited = new Set(citedRefs(candidate));
+    const permittedEvidence = contract.evidence.filter(({ id }) => cited.has(id));
+    const offer = contract.strategySubject?.offerLabel ?? contract.brief.sellerName ?? "";
+    if (!permittedEvidence.length || !hasSubstantiveEvidenceUse(
+      candidateEvidenceText(candidate),
+      permittedEvidence,
+      offer
+    )) {
+      rejections.push("insufficient_specificity");
+      reasons.push("supported_fact_section_does_not_explain_a_permitted_claim");
+    }
   }
 
   const unsupported = unsupportedCopyClaims({

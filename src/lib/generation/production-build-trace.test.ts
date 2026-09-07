@@ -17,6 +17,7 @@ import { traceIdForSession } from "@/lib/trace-store";
 import { compileSessionProductionPage } from "@/lib/generation/session-production-engine";
 import { productionTraceIdentity } from "@/lib/generation/production-build-trace";
 import type { BrandProfile, TryMeSession } from "@/lib/types";
+import { syntheticOfferEvidence } from "../../../tests/fixtures/offer-evidence";
 
 const NOW = "2026-08-27T10:00:00.000Z";
 
@@ -69,6 +70,7 @@ function session(overrides: Partial<TryMeSession> = {}): TryMeSession {
     updatedAt: NOW,
     audienceSuggestions: ["Regional carrier operations leaders"],
     events: [],
+    evidenceItems: syntheticOfferEvidence("Dwell Time Control", "northwind-logistics.example"),
     stages: {
       brand: { status: "complete", startedAt: NOW, completedAt: NOW },
       audience: { status: "complete", startedAt: NOW, completedAt: NOW },

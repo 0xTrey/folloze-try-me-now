@@ -17,7 +17,7 @@ import {
 import type { CtaIdV2 } from "@/lib/generation/three-family-contract";
 import { logServerError } from "@/lib/http";
 import { semanticReviewOutputSchema } from "@/lib/generation/whole-page-semantic-review";
-import { compilerDigest } from "@/lib/generation/compiler-digest";
+import { sectionCacheKey } from "@/lib/generation/section-cache-policy";
 
 /**
  * The provider payload for one section.
@@ -219,6 +219,8 @@ function sectionInput(contract: SectionWritingContract): string {
     strategyJobs: contract.strategyJobs,
     strategySlots: contract.strategySlots,
     buyerAssignment: contract.buyerAssignment,
+    buildDesign: contract.buildDesign,
+    approvedLearningHints: contract.approvedLearningHints,
     brandVoice: contract.brandVoice,
     ctaOffer: contract.allowedCtas.length ? contract.ctaOffer : undefined,
     repairFeedback: contract.repairFeedback,
@@ -309,12 +311,16 @@ export function createSectionModelClient(deps: SectionModelClientDeps): SectionM
       );
       const instructions = sectionInstructions(contract, candidateCount);
       const input = sectionInput(contract);
-      const cacheKey = compilerDigest("section-cache-v1", {
-        sessionId: contract.sessionId, model: config.openAIModel, instructions, input
+      const cacheKey = sectionCacheKey({
+        contract, model: config.openAIModel, schemaVersion: "section-candidates-v1",
+        instructions, requestInput: input
       });
-      const cached = deps.cacheResponses ? sectionResponseCache.get(cacheKey) : undefined;
-      if (cached && cached.expiresAt > Date.now()) return { ...structuredClone(cached.response), cacheHit: true };
-      if (cached) sectionResponseCache.delete(cacheKey);
+      const reusableCacheKey = cacheKey;
+      const cached = deps.cacheResponses && cacheKey ? sectionResponseCache.get(cacheKey) : undefined;
+      if (cached && cached.expiresAt > Date.now()) {
+        return { ...structuredClone(cached.response), sectionId: contract.sectionId, cacheHit: true };
+      }
+      if (cached && reusableCacheKey) sectionResponseCache.delete(reusableCacheKey);
       const abort = abortRace(signal);
       try {
         const response = await Promise.race([
@@ -340,11 +346,11 @@ export function createSectionModelClient(deps: SectionModelClientDeps): SectionM
             .slice(0, candidateCount)
             .map((candidate) => toModelCandidate(contract, candidate))
         };
-        if (deps.cacheResponses && !signal.aborted) {
+        if (deps.cacheResponses && reusableCacheKey && !signal.aborted) {
           while (sectionResponseCache.size >= CACHE_MAX_ENTRIES) {
             sectionResponseCache.delete(sectionResponseCache.keys().next().value!);
           }
-          sectionResponseCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, response: structuredClone(result) });
+          sectionResponseCache.set(reusableCacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, response: structuredClone(result) });
         }
         return result;
       } catch (error) {

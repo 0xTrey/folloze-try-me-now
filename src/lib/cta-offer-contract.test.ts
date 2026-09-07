@@ -5,7 +5,7 @@ describe("CTA offer continuity", () => {
   it("never calls a scroll fallback a booked meeting", () => {
     const result = resolveBuyerCtaOffer({ intent: "book-meeting", label: "Book a demo" });
     expect(result.action).toMatchObject({ actionType: "scroll", label: "Explore the page", verification: "fallback" });
-    expect(result.expectation).toContain("No meeting");
+    expect(result.expectation).toContain("does not book a meeting or register you");
     expect(result.action.destination).toBe("#next-step");
   });
   it("does not substitute a meeting destination for a missing download", () => {

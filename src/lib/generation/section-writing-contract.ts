@@ -476,6 +476,18 @@ export interface SectionWritingContract {
   /** Present only when a strategy was bound. Gates the review specificity checks. */
   strategySubject?: { audienceLabel: string; offerLabel: string };
   repairFeedback?: readonly string[];
+  /** Explicitly approved examples remain untrusted data, never new evidence. */
+  approvedLearningHints?: readonly import("./approved-build-learning").ApprovedBuildLearningHint[];
+  /** Internal shared copy/layout plan. Values remain untrusted prompt data. */
+  buildDesign?: {
+    offerKind?: "product-service" | "content" | "event";
+    dependencyDigest: string;
+    visualRole: string;
+    mobileIntent: string;
+    evidenceMode: "supported-facts" | "buyer-question" | "omit-if-unearned";
+    artDirection: string;
+    density: string;
+  };
   brandVoice?: { description: string; source: string };
   ctaOffer?: { action?: string; benefit?: string; destination?: string; expectation?: string; expectations: "known" | "unknown" };
   buyerAssignment?: Pick<import("@/lib/generation/buyer-decision-journey").BuyerSectionAssignment,

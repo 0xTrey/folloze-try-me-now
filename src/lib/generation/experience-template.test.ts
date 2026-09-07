@@ -12,6 +12,7 @@ import { deterministicDraft } from "@/lib/integrations/openai";
 import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 import { selectWireframe } from "@/lib/generation/wireframe-library";
+import type { BuildRenderDesign } from "@/lib/generation/build-render-design";
 
 const brand: BrandProfile = {
   domain: "jitterbit.com",
@@ -270,6 +271,54 @@ describe("renderExperienceHtml", () => {
     expect(html).toContain('data-close-treatment="working-session"');
     expect(html).toContain("Connect systems. Automate workflows. Keep AI accountable.");
     expect(html).toContain('data-experience-action="primary-conversion"');
+  });
+
+  it("applies the optional public build design through live desktop and mobile selectors only", () => {
+    const design: BuildRenderDesign = {
+      version: "build-render-design-v1",
+      digest: "public-design-digest",
+      artDirection: "product-led",
+      density: "dense",
+      sections: [
+        {
+          id: "hero",
+          target: "hero",
+          visualRole: "hero-image-or-type",
+          occupancy: { headline: [6, 12], body: [16, 40] },
+          mobileIntent: "copy-first-stack-visual-second"
+        },
+        {
+          id: "proof",
+          target: "proof",
+          visualRole: "proof-artifact",
+          occupancy: { headline: [4, 10], body: [12, 48] },
+          mobileIntent: "evidence-first"
+        }
+      ]
+    };
+    const designed = renderExperienceHtml({ draft, brand, useCase: "campaign", answers: {}, buildDesign: design });
+    const legacy = renderExperienceHtml({ draft, brand, useCase: "campaign", answers: {} });
+    const typeLed = renderExperienceHtml({
+      draft, brand, useCase: "campaign", answers: {},
+      buildDesign: { ...design, artDirection: "type-led", density: "open" }
+    });
+
+    expect(designed).toContain("build-art-product-led build-density-dense");
+    expect(designed).toContain('data-build-art-direction="product-led"');
+    expect(designed).toContain(".build-art-product-led .hero-media");
+    expect(designed).toContain(".build-density-dense .signature");
+    expect(designed).toContain('@media(max-width:620px){:is(.hero){grid-template-areas:"copy" "media"}');
+    expect(designed).toContain(':is(.credibility-anchor,.journey) :is(h1,h2,h3){max-inline-size:');
+    expect(designed).not.toContain('.credibility-anchor,.journey :is(h1,h2,h3){max-inline-size:');
+    expect(designed).toContain('id="experience-overview"');
+    expect(designed).toContain('id="decision-path"');
+    expect(designed).toContain('id="supporting-resources"');
+    expect(designed).toContain('id="next-step"');
+    expect(designed).toContain('data-experience-action="primary-conversion"');
+    expect(designed).not.toContain("private-source");
+    expect(legacy).not.toContain("data-build-design");
+    expect(typeLed).toContain("build-art-type-led build-density-open");
+    expect(typeLed).not.toContain("build-art-product-led build-density-dense");
   });
 
   it("does not repeat the hero asset as a generic lens placeholder", () => {

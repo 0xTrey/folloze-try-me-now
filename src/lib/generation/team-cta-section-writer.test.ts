@@ -161,6 +161,29 @@ describe("writeTeamCtaSections", () => {
     expectValidCandidates(input, result);
   });
 
+  it("names the resource-reading action instead of promising a working session", () => {
+    const evaluationClose = {
+      ...nextActionSlot,
+      family: "guide" as const,
+      v2Role: "evaluation-close" as const,
+      claimType: "instruction" as const
+    };
+    const input = writerInput({
+      slots: [evaluationClose],
+      objective: "Review the Apple support guide",
+      cta: { type: "download", label: "Read the resource" }
+    });
+    const result = writeTeamCtaSections(input);
+    const candidate = result.value?.[0];
+
+    expect(candidate).toMatchObject({
+      headline: "Read the resource",
+      cta: { type: "download", label: "Read the resource" }
+    });
+    expect(candidate?.headline).not.toMatch(/working session|meeting/i);
+    expectValidCandidates(input, result);
+  });
+
   it("keeps the ABM working-session action aligned to the selected objective", () => {
     const input = writerInput({
       slots: [nextActionSlot],

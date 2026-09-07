@@ -10,16 +10,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET as experienceDocument } from "@/app/e/[id]/route";
-import { generateExperienceDraft } from "@/lib/integrations/openai";
+import { sectionModelClient } from "@/lib/integrations/openai-section-writer";
 import { runStoryStage } from "@/lib/orchestrator";
 import { canRevealFinalExperience } from "@/lib/preview-lifecycle";
 import { deleteSession, getSession, putSession, toPublicSession } from "@/lib/session-store";
 import type { BrandProfile, TryMeSession } from "@/lib/types";
+import { syntheticOfferEvidence } from "../../tests/fixtures/offer-evidence";
 
-vi.mock("@/lib/integrations/openai", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/integrations/openai")>()),
-  generateExperienceDraft: vi.fn()
-}));
+vi.mock("@/lib/integrations/openai-section-writer", () => ({ sectionModelClient: vi.fn() }));
 
 const sessionIds = new Set<string>();
 
@@ -107,30 +105,7 @@ function session(id: string): TryMeSession {
     },
     brand,
     audienceSuggestions: [],
-    evidenceItems: [
-      {
-        id: "evidence:signal-graph",
-        type: "public-positioning",
-        label: "Signal graph",
-        text: "Northwind Signals unifies pipeline and account signals into one graph.",
-        sourceUrl: "https://northwind-signals.com/product",
-        signals: ["Signal instrumentation"],
-        disposition: "available",
-        entityRole: "seller",
-        confidence: "high"
-      },
-      {
-        id: "evidence:revops-owner",
-        type: "public-focus-area",
-        label: "Revenue operations",
-        text: "Revenue operations leaders own forecast accuracy and territory coverage.",
-        sourceUrl: "https://northwind-signals.com/solutions/revenue-operations",
-        signals: ["Account scoring"],
-        disposition: "available",
-        entityRole: "seller",
-        confidence: "high"
-      }
-    ],
+    evidenceItems: syntheticOfferEvidence("Northwind Signal Graph", "northwind-signals.com"),
     events: []
   };
 }
@@ -144,7 +119,8 @@ describe("final-only lifecycle invariants", () => {
     // fetch keeps the lifecycle assertions hermetic and exercises the same
     // degraded-enrichment branch a blocked egress would.
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network disabled in test"));
-    vi.mocked(generateExperienceDraft).mockResolvedValue({
+    vi.mocked(sectionModelClient).mockReturnValue(undefined);
+    /* vi.mocked(generateExperienceDraft).mockResolvedValue({
       draft: {
         campaignRegister: "campaign-product",
         designRegister: "source-brand-technical",
@@ -192,7 +168,7 @@ describe("final-only lifecycle invariants", () => {
       },
       source: "openai",
       durationMs: 1_200
-    });
+    }); */
   });
 
   afterEach(async () => {
@@ -337,13 +313,15 @@ describe("final-only lifecycle invariants", () => {
     const pending = session("final-only-stale-revision");
     await putSession(pending);
 
-    let releaseGeneration!: () => void;
-    vi.mocked(generateExperienceDraft).mockImplementationOnce(async () => {
-      await new Promise<void>((resolve) => {
-        releaseGeneration = resolve;
-      });
-      throw new Error("unreachable");
+    let releaseBarrier!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      releaseBarrier = resolve;
     });
+    vi.mocked(sectionModelClient).mockImplementationOnce(() => ({ writeSection: async (contract) => {
+      await barrier;
+      return { sectionId: contract.sectionId, candidates: [] };
+    } }));
+    const releaseGeneration = releaseBarrier;
 
     const completion = runStoryStage(pending.id);
     await vi.waitFor(async () => {

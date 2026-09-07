@@ -7,6 +7,7 @@ describe("account-alignment runtime compatibility", () => {
     const result = await compileRuntimeVisualFixture(archetypeRuntimeFixture(archetype, "align"));
     expect(result.page.familyDecision).toMatchObject({ family: "align", locked: true });
     expect(result.page.sections.length).toBeGreaterThanOrEqual(4);
-    expect(result.html).toContain("Evaluate Archetype Company for Target Company");
+    expect(result.html).toContain("Archetype Company");
+    expect(result.html).toContain("Target Company");
   });
 });

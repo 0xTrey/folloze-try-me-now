@@ -19,7 +19,11 @@ import {
   timingMetaForGenerationBudget,
   type GenerationBudget
 } from "@/lib/generation-budget";
-import { BUILD_PHASE_COPY, BUILD_PHASE_ORDER } from "@/lib/preview-lifecycle";
+import {
+  BUILD_PHASE_COPY,
+  BUILD_PHASE_ORDER,
+  canRevealFinalExperience
+} from "@/lib/preview-lifecycle";
 import { fetchPublicUrlSourceArtifact } from "@/lib/content-url";
 import {
   buildExperienceSpec,
@@ -39,6 +43,7 @@ import {
   type ObjectiveCtaMotion
 } from "@/lib/generation/objective-cta-recommendations";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
+import { buildRenderDesign } from "@/lib/generation/build-render-design";
 import type { GenericProductionEngineResult } from "@/lib/generation/generic-production-engine";
 import { applyProductionPageToDraft } from "@/lib/generation/production-draft-adapter";
 import { retainCommittedBuildTrace } from "@/lib/build-trace-retention";
@@ -59,11 +64,12 @@ import {
 import { sendClaimEmail } from "@/lib/integrations/email";
 import {
   deterministicDraft,
-  generateExperienceDraft,
+  type generateExperienceDraft,
   openAIErrorDiagnostics,
   SourceFetchError
 } from "@/lib/integrations/openai";
 import { sectionModelClient } from "@/lib/integrations/openai-section-writer";
+import { getPublicOfferSourceCache, putPublicOfferSourceCache } from "@/lib/public-offer-source-cache";
 import { leadStoreMode, recordLeadCapture, updateLeadOutcome } from "@/lib/lead-store";
 import { emitObservabilityLog } from "@/lib/observability";
 import {
@@ -1080,7 +1086,7 @@ async function assembleExperienceArtifact(input: {
     currentTimeMs: Date.now(),
     traceId: traceIdForSession(input.session),
     ...(input.attemptId ? { attemptId: input.attemptId } : {}),
-    ...(sectionWriterDeadlineMs !== undefined && sectionWriterDeadlineMs > 0
+    ...(sectionWriterDeadlineMs !== undefined
       ? { sectionWriterDeadlineMs }
       : {}),
     ...(sectionWriter ? { sectionModelClient: sectionWriter } : {}),
@@ -1149,6 +1155,7 @@ async function assembleExperienceArtifact(input: {
     actions: experienceSpec.actions,
     wireframeSelection: experienceSpec.wireframeSelection,
     productionSections: experienceSpec.production?.sections,
+    ...(productionResult.buildPlan && productionPage ? { buildDesign: buildRenderDesign(productionResult.buildPlan, productionPage.sections) } : {}),
     ...(productionResult.assetPlan
       ? {
           assetPlan: renderPlanWithFirstPartyImages(
@@ -1186,9 +1193,27 @@ function recordProductionEngineResult(
   reveal: "withheld" | "final"
 ): void {
   session.workerReceipts = structuredClone([...result.workerReceipts]);
+  appendEvent(session, "build_compile_result", {
+    outcome: result.outcome, reveal,
+    reasonCodes: [...new Set(result.compileReceipts.filter((receipt) => receipt.status !== "completed")
+      .map((receipt) => receipt.detailCode))].join(",")
+  });
+  if (result.buildPlanReceipt) {
+    const receipt = result.buildPlanReceipt;
+    appendEvent(session, "build_experience_plan", {
+      version: receipt.version, digest: receipt.digest, brandKitDigest: receipt.brandKitDigest,
+      evidenceDigest: receipt.evidenceDigest, evidenceVersion: receipt.evidenceVersion,
+      readiness: receipt.readiness, reasonCodes: receipt.reasonCodes.join(","),
+      offerFactCount: receipt.offerFactCount, proofCount: receipt.proofCount,
+      conceptCount: receipt.conceptCount, sectionCount: receipt.sectionCount,
+      selectedStrategyId: receipt.selectedStrategyId ?? null,
+      sectionDependencies: JSON.stringify(receipt.sectionDependencies)
+    });
+  }
   if (result.buyerReadyPerformance) {
     appendEvent(session, "buyer_ready_performance", { ...result.buyerReadyPerformance });
   }
+  if (result.buildQualityReceipt) appendEvent(session, "build_quality", { ...result.buildQualityReceipt });
   if (result.buyerDecisionBrief) {
     const brief = result.buyerDecisionBrief;
     appendEvent(session, "buyer_decision_brief", {
@@ -2031,12 +2056,31 @@ export async function runSourceIntelligenceStage(
     // so begin both immediately instead of adding their latency in series.
     // Each branch has its own bounded timeout and the shared URL fence below
     // prevents stale results from surviving an edited answer.
+    const cacheScope = sourceKind === "campaign-offer" && preflight.brand && preflight.answers.promotedOffer
+      ? { sellerDomain: preflight.brand.canonicalDomain ?? preflight.brand.domain,
+          offer: preflight.answers.promotedOffer, sourceUrl }
+      : undefined;
+    let sourceCacheStatus = "not-eligible";
+    let sourceCacheDurationMs = 0;
+    const sourcePromise = (async () => {
+      if (cacheScope) {
+        const cacheStartedAt = Date.now();
+        const cached = await getPublicOfferSourceCache(cacheScope);
+        sourceCacheDurationMs = Date.now() - cacheStartedAt;
+        sourceCacheStatus = cached.status;
+        if (cached.artifact && cached.status === "hit") return cached.artifact;
+      }
+      const artifact = await fetchSourceArtifactSingleFlight(sourceUrl, {
+        signal: controller.signal, timeoutMs: 12_000, maxBytes: 2_000_000
+      });
+      if (cacheScope && !controller.signal.aborted) {
+        // Best-effort public-only persistence never delays generation.
+        void putPublicOfferSourceCache({ ...cacheScope, artifact });
+      }
+      return artifact;
+    })();
     const [sourceArtifact, offerDiscoveryGraph] = await Promise.all([
-      fetchSourceArtifactSingleFlight(sourceUrl, {
-        signal: controller.signal,
-        timeoutMs: 12_000,
-        maxBytes: 2_000_000
-      }),
+      sourcePromise,
       sourceKind === "campaign-offer"
         ? harvestOfferDiscoveryGraph({
             origin: preflight.brand?.sourceUrl ?? sourceUrl,
@@ -2099,6 +2143,8 @@ export async function runSourceIntelligenceStage(
         claimCount: sourceArtifact.diagnostics.claimCount,
         citationCount: sourceArtifact.diagnostics.citationCount
       });
+      appendEvent(session, "source_knowledge_cache", { version: "public-offer-source-v1", status: sourceCacheStatus,
+        sourceKind, sourceDigest, durationMs: sourceCacheDurationMs });
       shouldResumeStory = isGenerationReady(
         session.useCase,
         session.answers
@@ -3483,27 +3529,21 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
     );
     const refinementSkipped =
       !canStartOptionalRefinement(refinementBudget, 1) || draftBudgetMs <= 0;
-    let generated = refinementSkipped
-      ? {
-          draft: deterministicDraft({
-            brand: selectedBrands.brand,
-            targetBrand: selectedBrands.targetBrand,
-            useCase: latest.useCase,
-            answers: normalizedAnswersFor(latest),
-            sourceArtifact: latest.sourceArtifact
-          }),
-          source: "deterministic-fallback" as const,
-          durationMs: 0,
-          fallbackReason: "generation_budget_reserved_finalization"
-        }
-      : await generateExperienceDraft({
+    // Layout fields have a deterministic seed. The bounded, evidence-scoped
+    // section wave below is the only drafting authority; no duplicate global
+    // model call consumes the same finalization budget.
+    let generated: Awaited<ReturnType<typeof generateExperienceDraft>> = {
+        draft: deterministicDraft({
           brand: selectedBrands.brand,
           targetBrand: selectedBrands.targetBrand,
           useCase: latest.useCase,
           answers: normalizedAnswersFor(latest),
-          sourceArtifact: latest.sourceArtifact,
-          timeoutMs: draftBudgetMs
-        });
+          sourceArtifact: latest.sourceArtifact
+        }),
+        source: "deterministic-fallback",
+        durationMs: 0,
+        fallbackReason: refinementSkipped ? "generation_budget_reserved_finalization" : "section_writer_fallback"
+      };
     const trustFallbackReason = generationTrustFailureFor({
       draft: generated.draft,
       brand: selectedBrands.brand,
@@ -3623,6 +3663,13 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
       }
     });
     const finalSourceRevision = latest.revision;
+    const sectionPerformance = finalArtifact.productionResult.buyerReadyPerformance;
+    if (sectionPerformance) generated = {
+      ...generated,
+      source: sectionPerformance.modelSections > 0 ? "openai" : "deterministic-fallback",
+      durationMs: sectionPerformance.writerDurationMs,
+      fallbackReason: sectionPerformance.modelSections > 0 ? undefined : generated.fallbackReason
+    };
     // A complete design-DNA pass is valuable enrichment, but it must not erase
     // a usable page after the seller's identity, official logo, source
     // evidence, and semantic palette have been verified. The strict gate stays
@@ -3671,6 +3718,9 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
           ["identity", "copy", "claims"].includes(check.id) && check.status === "warning"
       )
       .map((check) => check.id);
+    if (finalArtifact.productionResult.buildPlan && finalArtifact.productionResult.outcome !== "production-page") {
+      truthGateFailures.push("copy");
+    }
     const truthGatePassed = truthGateFailures.length === 0;
     let committed = await updateSession(
       id,
@@ -3743,30 +3793,52 @@ async function runStoryStageUnlocked(id: string): Promise<boolean> {
             : !truthGatePassed
               ? `final_truth_gate_failed_${truthGateFailures.join("_")}`
               : "brief_no_longer_generation_ready";
-          session.experience = undefined;
-          session.experienceSpec = undefined;
-          session.experienceSpecRevision = undefined;
-          session.qualityReceipt = undefined;
-          session.finalArtifact = undefined;
-          session.status = "generation_failed";
+          // A replacement must be atomic. The current session is temporarily
+          // `generating`, so evaluate the retained revision using the status
+          // it had when it was legitimately revealable. This deliberately
+          // reuses the public reveal gate: the old page survives only when its
+          // digest, revision, structural/truth gates, and material brief still
+          // agree. Never retain an unreceipted or mismatched artifact.
+          const retainedFinal = canRevealFinalExperience({
+            useCase: session.useCase,
+            answers: session.answers,
+            experience: session.experience ? { ...session.experience, ready: true } : undefined,
+            finalArtifact: session.finalArtifact,
+            status: "preview_ready_unclaimed"
+          });
+          if (!retainedFinal) {
+            session.experience = undefined;
+            session.experienceSpec = undefined;
+            session.experienceSpecRevision = undefined;
+            session.qualityReceipt = undefined;
+            session.finalArtifact = undefined;
+          }
+          session.status = retainedFinal ? "preview_ready_unclaimed" : "generation_failed";
           session.stages.story = {
             status: "failed",
             startedAt: session.stages.story.startedAt,
             completedAt: new Date().toISOString(),
             detail:
-              "We could not finish an experience we would stand behind. Your inputs are safe and ready to retry.",
+              retainedFinal
+                ? "We could not finish the replacement experience. Your finished experience is safe and remains available while you retry."
+                : "We could not finish an experience we would stand behind. Your inputs are safe and ready to retry.",
             errorCode: code
           };
           advanceBuildProgress(session, {
             completed: ["queued", "researching", "planning", "writing", "checking"],
-            phase: "failed",
+            phase: retainedFinal ? "ready" : "failed",
             budget: refinementBudget,
-            failure: {
-              code,
-              nextAction: "Retry the build, or adjust the offer and audience and retry.",
-              retryable: true
-            }
+            ...(retainedFinal
+              ? {}
+              : {
+                  failure: {
+                    code,
+                    nextAction: "Retry the build, or adjust the offer and audience and retry.",
+                    retryable: true
+                  }
+                })
           });
+          recordProductionEngineResult(session, finalArtifact.productionResult, "withheld");
           appendEvent(session, "final_artifact_rejected", {
             attemptId,
             code,

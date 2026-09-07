@@ -35,6 +35,7 @@ import {
   brandDesignDNAFor,
   brandPresentationFor
 } from "@/lib/verified-brand-profiles";
+import type { BuildRenderDesign, RenderDesignTarget } from "./build-render-design";
 
 const escapeHtml = (value: string) =>
   value.replace(
@@ -406,6 +407,68 @@ function compactText(value: unknown, maxLength: number): string | undefined {
   return normalized ? normalized.slice(0, maxLength) : undefined;
 }
 
+const RENDER_DESIGN_TARGETS: Record<RenderDesignTarget, string> = {
+  hero: ".hero",
+  context: ".urgency-section,.thesis",
+  mechanism: ".mechanism-section,.lens-lab",
+  proof: ".credibility-anchor,.journey",
+  paths: ".lens-lab,.signature",
+  resources: ".journey",
+  close: ".close"
+};
+
+const RENDER_ART_DIRECTIONS = new Set<BuildRenderDesign["artDirection"]>([
+  "type-led", "editorial", "product-led", "evidence-led"
+]);
+const RENDER_DENSITIES = new Set<BuildRenderDesign["density"]>([
+  "open", "balanced", "dense", "unknown"
+]);
+const RENDER_MOBILE_INTENTS = new Set<BuildRenderDesign["sections"][number]["mobileIntent"]>([
+  "copy-first-stack-visual-second", "evidence-first", "steps-in-source-order",
+  "choices-after-context", "context-before-action", "criteria-in-reading-order",
+  "scenario-in-reading-order", "observations-in-reading-order"
+]);
+
+function safeRenderDesign(value: BuildRenderDesign | undefined): BuildRenderDesign | undefined {
+  if (!value || value.version !== "build-render-design-v1" ||
+    !RENDER_ART_DIRECTIONS.has(value.artDirection) || !RENDER_DENSITIES.has(value.density)) return undefined;
+  const sections = value.sections.filter((section) =>
+    /^[a-z][a-z0-9-]{0,63}$/.test(section.id) &&
+    Object.hasOwn(RENDER_DESIGN_TARGETS, section.target) &&
+    RENDER_MOBILE_INTENTS.has(section.mobileIntent) &&
+    section.occupancy.headline.every((count) => Number.isInteger(count) && count >= 0 && count <= 24) &&
+    section.occupancy.body.every((count) => Number.isInteger(count) && count >= 0 && count <= 96)
+  );
+  return { ...value, sections };
+}
+
+function renderDesignCss(design: BuildRenderDesign | undefined): string {
+  if (!design) return "";
+  const densityCss = design.density === "dense"
+    ? ".build-density-dense .signature,.build-density-dense .thesis,.build-density-dense .lens-lab,.build-density-dense .journey,.build-density-dense .framework-section{padding-top:clamp(42px,5vw,72px);padding-bottom:clamp(42px,5vw,72px)}"
+    : design.density === "open"
+      ? ".build-density-open .signature,.build-density-open .thesis,.build-density-open .lens-lab,.build-density-open .journey,.build-density-open .framework-section{padding-top:clamp(72px,8vw,132px);padding-bottom:clamp(72px,8vw,132px)}"
+      : "";
+  const artCss: Record<BuildRenderDesign["artDirection"], string> = {
+    "type-led": ".build-art-type-led .hero-copy,.build-art-type-led .framework-copy{max-width:860px}.build-art-type-led .hero-media{max-height:480px}",
+    editorial: ".build-art-editorial .hero h1,.build-art-editorial .thesis h2,.build-art-editorial .framework-heading h2{max-width:18ch}.build-art-editorial .region-intro{max-width:62ch}",
+    "product-led": ".build-art-product-led .hero-media,.build-art-product-led .framework-media{border-width:1px;box-shadow:var(--brand-card-shadow)}.build-art-product-led .mechanism-section{align-items:center}",
+    "evidence-led": ".build-art-evidence-led .credibility-anchor,.build-art-evidence-led .journey-card{border-color:color-mix(in srgb,var(--brand-accent) 34%,var(--line))}.build-art-evidence-led .journey-header{max-width:72ch}"
+  };
+  const sectionCss = design.sections.map((section) => {
+    const selector = `:is(${RENDER_DESIGN_TARGETS[section.target]})`;
+    const headlineChars = Math.min(72, Math.max(18, section.occupancy.headline[1] * 4));
+    const bodyChars = Math.min(82, Math.max(30, section.occupancy.body[1] * 1.5));
+    const mobileCss = section.mobileIntent === "copy-first-stack-visual-second"
+      ? `@media(max-width:620px){${selector}{grid-template-areas:"copy" "media"}.hero-copy{grid-area:copy}.hero-media{grid-area:media;order:2}}`
+      : section.mobileIntent === "evidence-first"
+        ? `@media(max-width:620px){${selector} .framework-copy,${selector} .lens-copy,${selector} .journey-copy{order:1}${selector} .framework-media,${selector} .lens-media{order:2}}`
+        : `@media(max-width:620px){${selector} .journey-grid,${selector} .role-grid,${selector} .mechanism-steps{grid-template-columns:1fr}}`;
+    return `${selector} :is(h1,h2,h3){max-inline-size:min(100%,${headlineChars}ch)}${selector} :is(.subhead,.region-intro,.lens-copy>p,.journey-copy>p,.close>div>p){max-inline-size:min(100%,${bodyChars}ch)}${mobileCss}`;
+  }).join("");
+  return `${densityCss}${artCss[design.artDirection]}${sectionCss}`;
+}
+
 function styleVariant(answers: SessionAnswers): RenderStyleVariant {
   const runtimeAnswers = answers as SessionAnswers & Record<string, unknown>;
   const requested = compactText(runtimeAnswers.styleVariant, 32)?.toLowerCase();
@@ -460,8 +523,12 @@ export function renderExperienceHtml(input: {
   personalizationVariantId?: PersonalizationVariantId | string;
   /** The compiled allocation plan. Compiled from the brand imagery when absent. */
   assetPlan?: AssetRenderPlan;
+  /** Optional public-safe projection of the canonical build plan. */
+  buildDesign?: BuildRenderDesign;
 }): string {
   const brand = input.brand;
+  const buildDesign = safeRenderDesign(input.buildDesign);
+  const buildDesignCss = renderDesignCss(buildDesign);
   const targetBrand = input.targetBrand;
   // Also protect rendering of older stored campaign/content plans that still
   // contain the legacy seller-category overwrite.
@@ -1019,7 +1086,7 @@ export function renderExperienceHtml(input: {
     body[data-edit-mode="true"] [data-flz-editable]{cursor:text;outline:1px dashed color-mix(in srgb,var(--brand-accent) 62%,transparent);outline-offset:5px}
     body.design-source-brand-technical .lens-tabs button{border-radius:6px}body.design-source-brand-editorial .hero h1,body.design-source-brand-editorial .thesis h2,body.design-source-brand-editorial .region-heading h2{letter-spacing:-.028em}body.design-neutral-fallback .hero-media{box-shadow:none}
     body.brand-hero-dark .nav{border-color:color-mix(in srgb,#fff 15%,transparent);background:var(--brand-dark)}body.brand-hero-dark .wordmark,body.brand-hero-dark .nav-action{color:#fff}body.brand-hero-dark .lockup-divider{color:color-mix(in srgb,#fff 64%,transparent)}body.brand-hero-dark .journey-nav{border-color:color-mix(in srgb,#fff 14%,transparent);background:color-mix(in srgb,var(--brand-dark) 94%,transparent);box-shadow:0 12px 34px color-mix(in srgb,#000 24%,transparent)}body.brand-hero-dark .journey-nav-title,body.brand-hero-dark .journey-links button,body.brand-hero-dark .fullscreen-control{color:color-mix(in srgb,#fff 72%,transparent)}body.brand-hero-dark .journey-links button:hover,body.brand-hero-dark .journey-links button:focus-visible,body.brand-hero-dark .journey-links button[aria-current="location"]{color:#fff}body.brand-hero-dark .fullscreen-control{border-color:color-mix(in srgb,#fff 30%,transparent);background:transparent}body.brand-hero-dark .hero{background:radial-gradient(ellipse 80% 48% at 3% 100%,color-mix(in srgb,var(--brand-accent) 48%,transparent) 0,transparent 72%),radial-gradient(ellipse 72% 60% at 100% 0,color-mix(in srgb,var(--brand-support) 46%,transparent) 0,transparent 72%),var(--brand-dark);color:#fff}body.brand-hero-dark .hero h1{background:none;-webkit-text-fill-color:currentColor;color:#fff}body.brand-hero-dark .hero h1::first-line{-webkit-text-fill-color:var(--brand-accent);color:var(--brand-accent)}body.brand-hero-dark .hero .subhead{color:color-mix(in srgb,#fff 84%,transparent)}body.brand-hero-dark .hero .eyebrow{color:var(--brand-accent)}body.brand-hero-dark .hero .context-note{border-color:color-mix(in srgb,#fff 30%,transparent);color:color-mix(in srgb,#fff 78%,transparent)}body.brand-hero-dark .hero-media{border-color:color-mix(in srgb,#fff 20%,transparent);background:color-mix(in srgb,#fff 7%,transparent);box-shadow:0 36px 110px color-mix(in srgb,#000 34%,transparent)}body.brand-hero-dark .media.media .media-fallback{background:linear-gradient(145deg,color-mix(in srgb,var(--brand-accent) 22%,var(--brand-dark)),var(--brand-dark) 58%,color-mix(in srgb,var(--brand-support) 22%,var(--brand-dark)));color:#fff}body.brand-hero-dark .close{background:radial-gradient(circle at 90% 10%,color-mix(in srgb,var(--brand-support) 44%,transparent),transparent 32%),var(--brand-dark)}body.brand-hero-dark.cta-outline .hero .primary{border-color:var(--brand-secondary-border);color:var(--brand-secondary-text)}body.brand-hero-dark.cta-text .hero .primary{color:var(--brand-accent)}
-    ${designDnaCss}body.brand-motif-soft-gradient .hero{background-image:linear-gradient(132deg,color-mix(in srgb,var(--brand-accent) 12%,var(--brand-surface)),var(--brand-surface) 58%,var(--brand-soft-surface))}body.brand-motif-radial-glow .hero{background-image:radial-gradient(circle at 85% 12%,color-mix(in srgb,var(--brand-support) 28%,transparent),transparent 46%),radial-gradient(circle at 4% 96%,color-mix(in srgb,var(--brand-accent) 22%,transparent),transparent 42%)}body.brand-motif-technical-grid .hero{background-image:linear-gradient(color-mix(in srgb,var(--brand-ink) 6%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--brand-ink) 6%,transparent) 1px,transparent 1px);background-size:42px 42px}
+    ${designDnaCss}${buildDesignCss}body.brand-motif-soft-gradient .hero{background-image:linear-gradient(132deg,color-mix(in srgb,var(--brand-accent) 12%,var(--brand-surface)),var(--brand-surface) 58%,var(--brand-soft-surface))}body.brand-motif-radial-glow .hero{background-image:radial-gradient(circle at 85% 12%,color-mix(in srgb,var(--brand-support) 28%,transparent),transparent 46%),radial-gradient(circle at 4% 96%,color-mix(in srgb,var(--brand-accent) 22%,transparent),transparent 42%)}body.brand-motif-technical-grid .hero{background-image:linear-gradient(color-mix(in srgb,var(--brand-ink) 6%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--brand-ink) 6%,transparent) 1px,transparent 1px);background-size:42px 42px}
     .composition-chapter-journey .lens-panel{color:var(--brand-ink)}.composition-chapter-journey .lens-copy>p:not(.eyebrow){color:var(--text)}
     button:focus-visible,a:focus-visible{outline:3px solid color-mix(in srgb,var(--brand-focus) 68%,transparent);outline-offset:4px}
     @media(max-width:980px){.hero,.composition-evidence-lead .hero,.composition-data-story .hero{grid-template-columns:1fr;min-height:auto}.hero-media{height:clamp(380px,58vw,540px)}.signature-canonical{grid-template-columns:1fr}.lens-panel{grid-template-columns:90px 1fr}.lens-media{grid-column:2}.journey-grid{grid-template-columns:1fr}.journey-card{min-height:230px}.journey-copy{margin-top:30px}.close{grid-template-columns:1fr;align-items:start}.journey-nav-inner{grid-template-columns:minmax(0,1fr) auto;gap:12px}.journey-nav-title{display:none}.journey-links{justify-content:flex-start}.credibility-anchor,.composition-data-story .credibility-anchor,.mechanism-section{grid-template-columns:1fr}.fact-implication,.argument-sequence,.role-grid{grid-template-columns:1fr}.argument-sequence article{min-height:0;border-right:0;border-bottom:1px solid color-mix(in srgb,#fff 20%,transparent)}.role-grid h3{min-height:0}.framework-close{grid-template-columns:1fr}.framework-media{min-height:360px}.composition-workflow-spine .mechanism-steps{grid-template-columns:1fr}.composition-workflow-spine .mechanism-steps article{min-height:0;border-right:0;border-bottom:1px solid var(--line)}.composition-workflow-spine .mechanism-steps article:not(:last-child):after{left:38px;right:auto;top:auto;bottom:-7px}.composition-interactive-paths .lens-tabs,.composition-chapter-journey .lens-tabs{grid-template-columns:1fr}}
@@ -1034,7 +1101,7 @@ export function renderExperienceHtml(input: {
   </style>
   <style data-flz-presentation="content-led-media-v2">${EXPERIENCE_PRESENTATION_CSS}</style>
 </head>
-<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} visual-grammar-${visualGrammar.id} motion-${visualGrammar.motionProfile} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}${imageryTreatment ? ` imagery-${imageryTreatment}` : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}" data-visual-grammar="${visualGrammar.id}" data-motion-profile="${visualGrammar.motionProfile}" data-hero-media-role="${visualGrammar.heroMediaRole}" data-proof-device="${visualGrammar.proofDevice}" data-cadence="${visualGrammar.cadence}" data-close-treatment="${visualGrammar.closeTreatment}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-personalization-variant="${escapeHtml(activePersonalizationId)}"${imageryTreatment ? ` data-imagery-treatment="${escapeHtml(imageryTreatment)}"` : ""} data-brand-source="${escapeHtml(brand.source)}" data-brand-palette-treatment="${neutralPreview ? "neutral-fallback" : "verified-or-legacy"}"${neutralPreview ? ` data-brand-warning="palette-confidence-low" data-brand-warning-copy="${escapeHtml(neutralPreviewNotice)}"` : ""}${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}>
+<body class="register-${escapeHtml(draft.campaignRegister)} design-${escapeHtml(draft.designRegister)} template-${template.family} archetype-${template.archetypeId} composition-${template.compositionId} visual-grammar-${visualGrammar.id} motion-${visualGrammar.motionProfile} variant-${selectedVariant} style-${selectedStyle} cta-${selectedCtaStyle} brand-hero-${heroTheme}${designDna ? ` brand-design-dna brand-motif-${motif}` : ""}${framework ? " framework-seven" : ""}${imageryTreatment ? ` imagery-${imageryTreatment}` : ""}${buildDesign ? ` build-art-${buildDesign.artDirection} build-density-${buildDesign.density}` : ""}" data-wireframe="${escapeHtml(draft.wireframeName)}" data-wireframe-archetype="${template.archetypeId}" data-composition-grammar="${template.compositionId}" data-visual-grammar="${visualGrammar.id}" data-motion-profile="${visualGrammar.motionProfile}" data-hero-media-role="${visualGrammar.heroMediaRole}" data-proof-device="${visualGrammar.proofDevice}" data-cadence="${visualGrammar.cadence}" data-close-treatment="${visualGrammar.closeTreatment}"${input.wireframeSelection ? ` data-wireframe-reason="${escapeHtml(input.wireframeSelection.reasonCode)}" data-wireframe-locked="${input.wireframeSelection.locked}"` : ""} data-experience-shape="${escapeHtml(draft.experienceShape)}" data-template-family="${template.family}" data-template-fingerprint="${templateFingerprint}" data-shared-primitives="${SHARED_EXPERIENCE_PRIMITIVES.join(",")}" data-experience-register="${escapeHtml(draft.campaignRegister)}" data-layout-variant="${selectedVariant}" data-style-variant="${selectedStyle}" data-cta-style="${selectedCtaStyle}" data-hero-theme="${heroTheme}" data-personalization-variant="${escapeHtml(activePersonalizationId)}"${imageryTreatment ? ` data-imagery-treatment="${escapeHtml(imageryTreatment)}"` : ""} data-brand-source="${escapeHtml(brand.source)}" data-brand-palette-treatment="${neutralPreview ? "neutral-fallback" : "verified-or-legacy"}"${neutralPreview ? ` data-brand-warning="palette-confidence-low" data-brand-warning-copy="${escapeHtml(neutralPreviewNotice)}"` : ""}${designDna ? ` data-brand-design-source="${designDna.source}" data-brand-design-confidence="${designDna.confidence}" data-brand-design-fields="${escapeHtml(designDnaFields.join(","))}"` : ""}${buildDesign ? ` data-build-design="v1" data-build-art-direction="${buildDesign.artDirection}" data-build-density="${buildDesign.density}"` : ""}>
 <button class="skip-link" type="button" data-scroll-target="main-content">Skip to experience</button>
 <div class="shell">
   <header class="nav">

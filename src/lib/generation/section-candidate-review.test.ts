@@ -542,3 +542,64 @@ describe("strategy-bound specificity review", () => {
     expect(evaluation.rejections).toEqual([]);
   });
 });
+
+describe("build-plan specificity boundary", () => {
+  function supportedFactsContract(role: SectionRoleV2 = "buyer-outcome") {
+    const [contract] = contractsFor([slot("specificity", role)]);
+    if (!contract) throw new Error("specificity_contract_missing");
+    contract.buildDesign = {
+      dependencyDigest: "specificity-fixture",
+      visualRole: "evidence-type",
+      mobileIntent: "copy-first",
+      evidenceMode: "supported-facts",
+      artDirection: "fixture",
+      density: "balanced"
+    };
+    return contract;
+  }
+
+  it("rejects a supported-facts candidate that cites evidence without explaining it", () => {
+    const evaluation = evaluateCandidate(
+      supportedFactsContract(),
+      candidate(
+        "specificity",
+        "Reliability teams reported fewer unplanned stops",
+        "Use this review to decide what your team wants to discuss next."
+      ),
+      0
+    );
+
+    expect(evaluation.accepted).toBe(false);
+    expect(evaluation.rejections).toContain("insufficient_specificity");
+  });
+
+  it("accepts a supported-facts candidate that explains a permitted cited claim", () => {
+    const evaluation = evaluateCandidate(
+      supportedFactsContract(),
+      candidate(
+        "specificity",
+        "Fewer unplanned line stops this quarter",
+        "Reliability teams reported 30% fewer unplanned stops in the first quarter."
+      ),
+      0
+    );
+
+    expect(evaluation.accepted).toBe(true);
+    expect(evaluation.rejections).not.toContain("insufficient_specificity");
+  });
+
+  it("does not apply declarative specificity rejection to CTA interactions", () => {
+    const evaluation = evaluateCandidate(
+      supportedFactsContract("next-move"),
+      candidate(
+        "specificity",
+        "Book a working session",
+        "Choose a time to review the next maintenance decision.",
+        { role: "next-action", v2Role: "next-move" }
+      ),
+      0
+    );
+
+    expect(evaluation.rejections).not.toContain("insufficient_specificity");
+  });
+});

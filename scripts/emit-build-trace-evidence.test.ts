@@ -21,6 +21,7 @@ import { renderBuildTraceTimeline } from "./lib/build-trace-timeline.mjs";
 import { compileSessionProductionPage } from "@/lib/generation/session-production-engine";
 import { supportRefForTraceId } from "@/lib/observability";
 import type { BrandProfile, TryMeSession } from "@/lib/types";
+import { syntheticOfferEvidence } from "../tests/fixtures/offer-evidence";
 
 const SHOULD_WRITE = process.env.EMIT_BUILD_TRACE_EVIDENCE === "1";
 
@@ -78,6 +79,7 @@ function session(overrides: Partial<TryMeSession> = {}): TryMeSession {
     updatedAt: NOW,
     audienceSuggestions: ["Regional carrier operations leaders"],
     events: [],
+    evidenceItems: syntheticOfferEvidence("Dwell Time Control", "northwind-logistics.example"),
     stages: {
       brand: { status: "complete", startedAt: NOW, completedAt: NOW },
       audience: { status: "complete", startedAt: NOW, completedAt: NOW },

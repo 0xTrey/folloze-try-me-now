@@ -3,6 +3,8 @@ import type { Page } from "@playwright/test";
 import type { AssetRenderPlan } from "../../src/lib/asset-allocation";
 
 import { renderExperienceHtml } from "../../src/lib/generation/experience-template";
+import { buildRenderDesign } from "../../src/lib/generation/build-render-design";
+import { createSourceArtifact, type SourceArtifact } from "../../src/lib/content-intelligence";
 import type { PersuasionFramework } from "../../src/lib/generation/experience-schema";
 import type { GenericProductionPage } from "../../src/lib/generation/generic-production-engine";
 import { applyProductionPageToDraft } from "../../src/lib/generation/production-draft-adapter";
@@ -268,7 +270,9 @@ function evidence(
   entityRole: "seller" | "target",
   text: string,
   sourceUrl: string,
-  signals: string[]
+  signals: string[],
+  evidenceType: NonNullable<SessionEvidenceItem["evidenceType"]> = "capability",
+  subject?: string
 ): SessionEvidenceItem {
   return {
     id,
@@ -278,7 +282,9 @@ function evidence(
     sourceUrl,
     signals,
     disposition: "available",
-    entityRole
+    entityRole,
+    evidenceType,
+    ...(subject ? { subject } : {})
   };
 }
 
@@ -289,6 +295,7 @@ function sessionFixture(input: {
   targetBrand?: BrandProfile;
   answers: TryMeSession["answers"];
   evidenceItems: SessionEvidenceItem[];
+  sourceArtifact?: SourceArtifact;
 }): TryMeSession {
   return {
     id: input.id,
@@ -311,8 +318,36 @@ function sessionFixture(input: {
     audienceSuggestions: [],
     audienceRecommendations: [],
     evidenceItems: input.evidenceItems,
+    ...(input.sourceArtifact ? { sourceArtifact: input.sourceArtifact } : {}),
     events: []
   };
+}
+
+function citedContentArtifact(input: {
+  sourceUrl: string;
+  title: string;
+  audience: string;
+  offer: string;
+}): SourceArtifact {
+  const sections = [
+    `${input.offer} explains the decision scope and evidence ${input.audience} should review before changing ownership.`,
+    `The guide sequences inputs, reviewers, a documented decision, and validation criteria.`,
+    `The guide distinguishes a bounded recommendation from a verified operating outcome.`
+  ];
+  return createSourceArtifact({
+    source: { kind: "public-url", mediaType: "text/html", sourceUrl: input.sourceUrl, finalUrl: input.sourceUrl },
+    extraction: { method: "html-static", status: "complete", truncated: false, ocr: { status: "not-required", pageNumbers: [], reason: "HTML source requires no OCR." }, warnings: [] },
+    content: {
+      title: input.title,
+      description: `Cited explanatory content for ${input.audience}.`,
+      text: sections.join(" "),
+      sections: sections.map((text, index) => ({ id: `section-${index + 1}`, title: ["Scope", "Sequence", "Limits"][index]!, level: 2, order: index, text, citationIds: [`citation-${index + 1}`] })),
+      links: [],
+      assets: [],
+      citations: sections.map((excerpt, index) => ({ id: `citation-${index + 1}`, locator: { kind: "url-block" as const, block: index + 1, label: `Guide section ${index + 1}`, sourceUrl: input.sourceUrl }, excerpt }))
+    },
+    createdAt: now
+  });
 }
 
 export type RuntimeVisualFixture = {
@@ -410,18 +445,49 @@ export const runtimeVisualFixtures: RuntimeVisualFixture[] = [
       },
       evidenceItems: [
         evidence(
-          "adp-payroll-operations",
+          "adp-workforce-now-positioning",
           "seller",
           "ADP Workforce Now brings payroll, HR, time, talent, and benefits administration into one workforce platform.",
           "https://adp.com/what-we-offer/products/adp-workforce-now",
-          ["Payroll operations", "Workforce platform"]
+          ["Payroll operations", "Workforce platform"],
+          "positioning",
+          "ADP Workforce Now"
         ),
         evidence(
-          "adp-workforce-management",
+          "adp-workforce-now-capability",
           "seller",
-          "Workforce management evidence covers time, attendance, scheduling, and labor visibility.",
-          "https://adp.com/what-we-offer/time-and-attendance",
-          ["Workforce management", "Time and attendance"]
+          "ADP Workforce Now supports payroll and HR teams with connected time, attendance, scheduling, and labor visibility.",
+          "https://adp.com/what-we-offer/products/adp-workforce-now",
+          ["Workforce management", "Time and attendance"],
+          "capability",
+          "ADP Workforce Now"
+        ),
+        evidence(
+          "adp-workforce-now-workflow",
+          "seller",
+          "Payroll and HR operations can review time and attendance inputs before completing workforce administration work in ADP Workforce Now.",
+          "https://adp.com/what-we-offer/products/adp-workforce-now",
+          ["Payroll workflow", "Time review"],
+          "workflow",
+          "ADP Workforce Now"
+        ),
+        evidence(
+          "adp-workforce-now-implementation",
+          "seller",
+          "A workforce operating review needs named payroll and HR owners, defined time data inputs, and validation criteria before implementation.",
+          "https://adp.com/what-we-offer/products/adp-workforce-now",
+          ["Implementation requirements", "Payroll ownership"],
+          "implementation",
+          "ADP Workforce Now"
+        ),
+        evidence(
+          "adp-workforce-now-context",
+          "seller",
+          "Payroll and HR operations leaders need one bounded workforce operating model rather than a portfolio-level promise.",
+          "https://adp.com/what-we-offer/products/adp-workforce-now",
+          ["Workforce operating model"],
+          "workflow-context",
+          "ADP Workforce Now"
         )
       ]
     })
@@ -454,16 +520,53 @@ export const runtimeVisualFixtures: RuntimeVisualFixture[] = [
           "seller",
           "Apple deployment guidance covers automated enrollment and device supervision.",
           "https://support.apple.com/guide/deployment/automated-device-enrollment",
-          ["Automated Device Enrollment", "Device supervision"]
+          ["Automated Device Enrollment", "Device supervision"],
+          "resource",
+          "Apple Platform Deployment"
         ),
         evidence(
           "apple-managed-identity",
           "seller",
           "Managed Apple Accounts connect organizational identity with managed services.",
           "https://support.apple.com/guide/deployment/managed-apple-accounts",
-          ["Managed Apple Accounts", "Enterprise identity"]
+          ["Managed Apple Accounts", "Enterprise identity"],
+          "resource",
+          "Apple Platform Deployment"
+        ),
+        evidence(
+          "apple-deployment-sequence",
+          "seller",
+          "The deployment guide explains a review sequence for enrollment, identity, application distribution, and validation.",
+          "https://support.apple.com/guide/deployment/welcome/web",
+          ["Deployment sequence", "Validation"],
+          "workflow-context",
+          "Apple Platform Deployment"
+        ),
+        evidence(
+          "apple-deployment-requirements",
+          "seller",
+          "The guide requires an organization to define enrollment, identity, and application distribution decisions before deployment.",
+          "https://support.apple.com/guide/deployment/welcome/web",
+          ["Deployment requirements"],
+          "implementation",
+          "Apple Platform Deployment"
+        ),
+        evidence(
+          "apple-deployment-audience",
+          "seller",
+          "Apple Platform Deployment is explanatory content for enterprise mobility architects planning a reviewable deployment path.",
+          "https://support.apple.com/guide/deployment/welcome/web",
+          ["Enterprise mobility", "Deployment guidance"],
+          "resource",
+          "Apple Platform Deployment"
         )
-      ]
+      ],
+      sourceArtifact: citedContentArtifact({
+        sourceUrl: "https://support.apple.com/guide/deployment/welcome/web",
+        title: "Apple Platform Deployment",
+        audience: "Enterprise mobility architects",
+        offer: "Apple Platform Deployment"
+      })
     })
   },
   {
@@ -492,18 +595,58 @@ export const runtimeVisualFixtures: RuntimeVisualFixture[] = [
       },
       evidenceItems: [
         evidence(
+          "servicetitan-platform-positioning",
+          "seller",
+          "ServiceTitan Operations Platform is the selected offer for field service operations leaders.",
+          "https://servicetitan.com/platform",
+          ["Field service operations"],
+          "positioning",
+          "ServiceTitan Operations Platform"
+        ),
+        evidence(
+          "servicetitan-platform-capability",
+          "seller",
+          "ServiceTitan Operations Platform supports dispatch teams with a shared view of technician schedules and service work.",
+          "https://servicetitan.com/platform",
+          ["Dispatch operations", "Technician schedules"],
+          "capability",
+          "ServiceTitan Operations Platform"
+        ),
+        evidence(
+          "servicetitan-platform-workflow",
+          "seller",
+          "Dispatch teams use the platform to review service work, assign technicians, and resolve scheduling exceptions with accountable owners.",
+          "https://servicetitan.com/platform",
+          ["Dispatch workflow", "Scheduling exceptions"],
+          "workflow",
+          "ServiceTitan Operations Platform"
+        ),
+        evidence(
+          "servicetitan-platform-implementation",
+          "seller",
+          "A dispatch implementation requires a defined service territory, named dispatch owners, and validation criteria for technician capacity.",
+          "https://servicetitan.com/platform",
+          ["Implementation requirements", "Service territory"],
+          "implementation",
+          "ServiceTitan Operations Platform"
+        ),
+        evidence(
           "apex-dispatch-priority",
           "target",
           "Apex is evaluating dispatch consistency across service territories.",
           "https://apexhomeservices.example/operations",
-          ["Dispatch consistency", "Service territories"]
+          ["Dispatch consistency", "Service territories"],
+          "account-context",
+          "Apex Home Services"
         ),
         evidence(
           "apex-technician-capacity",
           "target",
           "Apex is evaluating technician capacity and schedule utilization.",
           "https://apexhomeservices.example/operations",
-          ["Technician capacity", "Schedule utilization"]
+          ["Technician capacity", "Schedule utilization"],
+          "account-context",
+          "Apex Home Services"
         )
       ]
     })
@@ -643,20 +786,70 @@ export function archetypeRuntimeFixture(
       },
       evidenceItems: [
         evidence(
+          `${id}-positioning`,
+          "seller",
+          `${motion.offer} is the selected offer for ${motion.persona}.`,
+          `https://${domain}/platform`,
+          ["Workflow operations", "Offer scope"],
+          family === "guide" ? "resource" : "positioning",
+          motion.offer
+        ),
+        evidence(
           `${id}-capability`,
           "seller",
-          "Governed workflow steps route approvals to the accountable owner.",
-          `https://${domain}/platform`,
-          ["Workflow operations", "Approval routing"]
+          family === "guide"
+            ? `The deployment guide explains the evidence ${motion.persona} should review before changing enrollment or identity ownership.`
+            : `${motion.offer} routes governed workflow approvals to the accountable owner.`,
+          family === "guide" ? `https://${domain}/guide` : `https://${domain}/platform`,
+          ["Workflow operations", "Approval routing"],
+          family === "guide" ? "resource" : "capability",
+          motion.offer
+        ),
+        evidence(
+          `${id}-workflow`,
+          "seller",
+          family === "guide"
+            ? "The guide presents a sequence for enrollment, identity, application distribution, and validation."
+            : `Teams initiate ${motion.offer}, route exceptions to a named reviewer, and retain the decision record.`,
+          family === "guide" ? `https://${domain}/guide` : `https://${domain}/platform`,
+          ["Review sequence", "Validation"],
+          family === "guide" ? "workflow-context" : "workflow",
+          motion.offer
+        ),
+        evidence(
+          `${id}-requirement`,
+          "seller",
+          family === "guide"
+            ? "The guide requires a named owner, bounded scope, and documented validation criteria for its recommended review."
+            : `${motion.offer} requires a named owner, defined review scope, and documented validation criteria before implementation.`,
+          family === "guide" ? `https://${domain}/guide` : `https://${domain}/platform`,
+          ["Implementation requirements"],
+          "implementation",
+          motion.offer
         ),
         evidence(
           `${id}-context`,
           family === "align" ? "target" : "seller",
-          "Distributed teams coordinate the same operating steps across regions.",
-          `https://${domain}/operations`,
+          family === "align"
+            ? "Target Company is evaluating dispatch consistency across territories."
+            : "Distributed teams coordinate the same operating steps across regions.",
+          family === "align" ? `https://${targetBrand!.domain}/operations` : `https://${domain}/operations`,
           ["Distributed operations", "Coordination"]
+          ,
+          family === "align" ? "account-context" : "workflow-context",
+          family === "align" ? targetBrand!.companyName : motion.offer
         )
-      ]
+      ],
+      ...(family === "guide"
+        ? {
+            sourceArtifact: citedContentArtifact({
+              sourceUrl: `https://${domain}/guide`,
+              title: "Deployment guide",
+              audience: motion.persona,
+              offer: motion.offer
+            })
+          }
+        : {})
     })
   };
 }
@@ -698,6 +891,7 @@ export async function compileRuntimeVisualFixture(fixture: RuntimeVisualFixture)
     useCase: fixture.session.useCase,
     answers: fixture.session.answers,
     wireframeSelection: page.composition,
+    ...(result.buildPlan ? { buildDesign: buildRenderDesign(result.buildPlan, page.sections) } : {}),
     ...(result.assetPlan ? { assetPlan: result.assetPlan } : {}),
     productionSections: page.sections.map((section) => ({
       id: section.sectionId,

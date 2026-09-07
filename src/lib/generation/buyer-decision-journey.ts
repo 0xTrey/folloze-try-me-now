@@ -4,6 +4,7 @@ import { compilerDigest } from "./compiler-digest";
 import type { SectionRoleV2, SectionSlotV2 } from "./three-family-contract";
 import { deriveWireframeEvidenceSignals } from "./wireframe-evidence-signals";
 import { isBroadProductCategory, PRODUCT_CLARIFICATION } from "@/lib/product-identity";
+import { isPrivateHost } from "@/lib/asset-allocation";
 
 export type ProductIdentity = { status: "exact" | "unresolved" | "broad-category"; label?: string; category?: string };
 type BuyerStage = "awareness" | "consideration" | "evaluation" | "decision" | "unknown";
@@ -17,12 +18,15 @@ export type BuyerJourneyInput = {
 };
 export type BuyerClaim = { id: string; claim: string; sourceRef: string; sourceAuthority: string; confidence: CompilerEvidenceItem["confidence"] };
 export type BuyerDecisionBrief = {
+  offerKind?: "product-service" | "content" | "event";
   schemaVersion: "buyer-decision-journey-v1"; product: ProductIdentity; clarification?: string;
   audience: string; buyerJob: string; trafficIntent: { value?: string; status: "known" | "unknown" };
   buyingStage: { value: BuyerStage; source: string };
   primaryBuyerQuestion: string; questions: { key: QuestionKey; question: string }[];
   cta: { action?: string; benefit?: string; destination?: string; expectation?: string; expectations: "known" | "unknown" };
   knowledge: {
+    contentInsights?: BuyerClaim[];
+    eventDetails?: BuyerClaim[];
     productOffer: BuyerClaim[]; workflowContext: BuyerClaim[]; supportedCapabilityWorkflowClaims: BuyerClaim[]; proofClaims: BuyerClaim[]; resources: BuyerClaim[];
     objections: Record<"pricing" | "security" | "implementation", BuyerClaim[]>;
     targetAccountContext: BuyerClaim[];
@@ -36,10 +40,20 @@ export type BuyerSectionAssignment = SectionSlotV2 & {
 const text = (value: unknown) => typeof value === "string" && value.trim() ? value.trim() : undefined;
 const claim = (item: CompilerEvidenceItem): BuyerClaim => ({ id: item.id, claim: item.claim, sourceRef: item.sourceRef, sourceAuthority: item.sourceAuthority, confidence: item.confidence });
 function safe(item: CompilerEvidenceItem) {
+  const permitted = item.kind === "fact" && item.confidence !== "low" &&
+    item.allowedUses.includes("credibility") && !item.prohibitedUses.includes("declarative-claim") &&
+    !/<[^>]*>|```|\b(?:ignore|disregard)\b.{0,80}\b(?:instructions?|rules?)\b|system prompt|developer message|api key|password|secret token/i.test(item.claim);
+  if (!permitted) return false;
+  // Complete uploaded content is cited by its private artifact digest, never
+  // an invented public URL. Only the dedicated citation compiler emits this.
+  if (item.sourceAuthority === "content-source" && item.id.startsWith("content:") &&
+    item.evidenceType === "resource" && item.entityRole === "source" && /^source-artifact:[a-f0-9]{16,64}$/.test(item.sourceRef)) return true;
   try {
     const url = new URL(item.sourceRef);
     return item.kind === "fact" && item.confidence !== "low" && url.protocol === "https:" &&
-      !url.username && !url.password && !url.port && item.allowedUses.includes("credibility") &&
+      !url.username && !url.password && !url.port && !isPrivateHost(url.hostname) &&
+      !/<[^>]*>|```|\b(?:ignore|disregard)\b.{0,80}\b(?:instructions?|rules?)\b|system prompt|developer message|api key|password|secret token/i.test(item.claim) &&
+      item.allowedUses.includes("credibility") &&
       !item.prohibitedUses.includes("declarative-claim");
   } catch { return false; }
 }
@@ -69,21 +83,26 @@ function stage(input: BuyerJourneyInput, cta?: string): BuyerDecisionBrief["buyi
 
 export function deriveBuyerDecisionBrief(input: BuyerJourneyInput, ledger: readonly CompilerEvidenceItem[] = []): BuyerDecisionBrief {
   const product = identity(input);
+  const offerKind = input.session.useCase === "content" ? "content" as const
+    : input.session.answers.campaignType === "event" ? "event" as const : "product-service" as const;
   const audience = text(input.audience) ?? text(input.session.answers.audience) ?? text(input.session.answers.customAudience) ?? "unknown";
   const buyerJob = text(input.buyerJob) ?? "unknown";
   const ctaType = input.cta?.type ?? input.session.answers.ctaType;
   const sellerEvidence = ledger.filter((item) => safe(item) && (item.entityRole === "seller" || item.entityRole === "source"));
   const subjectKey = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const selectedSubject = product.status === "exact" ? subjectKey(product.label ?? "") : "";
-  const scopedEvidence = sellerEvidence.filter((item) => selectedSubject && subjectKey(item.subject ?? "") === selectedSubject);
-  // Once offer-specific facts are available, portfolio homepage topics cannot
-  // become claims about that offer merely because they share a seller.
-  const eligible = (scopedEvidence.length ? scopedEvidence : sellerEvidence)
+  // An explicitly different subject never becomes offer evidence, even when
+  // no exact-offer facts exist. Unlabelled legacy facts retain their original
+  // permission checks; a corporate identity alone cannot explain an offer.
+  const exactOfferEvidence = sellerEvidence.filter((item) => selectedSubject && subjectKey(item.subject ?? "") === selectedSubject);
+  const eligible = (exactOfferEvidence.length ? exactOfferEvidence : sellerEvidence.filter((item) => !item.subject?.trim()))
     .sort((a, b) => a.id.localeCompare(b.id));
   const proofIds = new Set(deriveWireframeEvidenceSignals(ledger, product.status === "exact" ? product.label : "").approvedProofRefs);
   const ofType = (...types: string[]) => eligible.filter((item) => types.includes(item.evidenceType ?? "")).map(claim);
   const voiceSourced = input.seller.source !== "fallback" && /^https:\/\//.test(input.seller.sourceUrl);
   const knowledge: BuyerDecisionBrief["knowledge"] = {
+    contentInsights: offerKind === "content" ? eligible.filter((item) => item.sourceAuthority === "content-source" && item.id.startsWith("content:")).map(claim) : [],
+    eventDetails: offerKind === "event" ? ofType("resource") : [],
     productOffer: ofType("positioning"), workflowContext: ofType("workflow-context"), supportedCapabilityWorkflowClaims: ofType("capability", "workflow"),
     proofClaims: eligible.filter((item) => proofIds.has(item.id)).map(claim), resources: ofType("resource"),
     objections: { pricing: ofType("pricing"), security: ofType("security"), implementation: ofType("implementation") },
@@ -103,7 +122,9 @@ export function deriveBuyerDecisionBrief(input: BuyerJourneyInput, ledger: reado
     : ["understand", "context", "mechanism", "proof", "risk", "action"];
   const questionsByKey: Record<QuestionKey, string> = {
     understand: primaryBuyerQuestion, context: "Which situation or priority makes this relevant?",
-    mechanism: "What goes in, what does the product do, and what comes out?",
+    mechanism: offerKind === "content" ? "What does the source explain, and how can the reader apply it?"
+      : offerKind === "event" ? "What will the session cover, and how will it run?"
+      : "What goes in, what does the product do, and what comes out?",
     proof: knowledge.proofClaims.length ? "What comparable result has been demonstrated, and under what conditions?" : "What should a product walkthrough demonstrate?",
     risk: "What are the known implementation, security, or cost requirements?", action: "What happens after clicking?"
   };
@@ -116,9 +137,9 @@ export function deriveBuyerDecisionBrief(input: BuyerJourneyInput, ledger: reado
     expectation: input.cta?.expectation,
     expectations: input.cta?.destination && input.cta.expectation ? "known" : "unknown"
   };
-  const stable = { product, seller: { companyName: input.seller.companyName, domain: input.seller.domain },
+  const stable = { product, offerKind, seller: { companyName: input.seller.companyName, domain: input.seller.domain },
     audience, buyerJob, traffic, buyingStage, cta, knowledge, questions: order.map((key) => ({ key, question: questionsByKey[key] })) };
-  return { schemaVersion: "buyer-decision-journey-v1", product,
+  return { schemaVersion: "buyer-decision-journey-v1", product, offerKind,
     ...(product.status !== "exact" ? { clarification: PRODUCT_CLARIFICATION } : {}), audience, buyerJob,
     trafficIntent: traffic ? { value: traffic, status: "known" } : { status: "unknown" },
     buyingStage, primaryBuyerQuestion, questions: stable.questions, cta, knowledge,
@@ -136,12 +157,14 @@ const roleQuestion: Partial<Record<SectionRoleV2, QuestionKey>> = {
 
 export function assignBuyerJourneySections(plan: readonly SectionSlotV2[], brief: BuyerDecisionBrief): BuyerSectionAssignment[] {
   const objections = Object.values(brief.knowledge.objections).flat();
+  const explanation = brief.offerKind === "content" ? brief.knowledge.contentInsights ?? []
+    : brief.offerKind === "event" ? brief.knowledge.eventDetails ?? [] : brief.knowledge.supportedCapabilityWorkflowClaims;
   let earnedPlan = plan.filter((slot) => !(slot.optional && slot.role === "proof-depth" && !brief.knowledge.proofClaims.length) &&
     !(slot.role === "current-friction" && !brief.knowledge.workflowContext.length && !brief.knowledge.targetAccountContext.length) &&
     !(slot.optional && slot.role === "resource" && !brief.knowledge.resources.length))
     .map((slot): SectionSlotV2 => slot.role === "proof" && !brief.knowledge.proofClaims.length
       ? { ...slot, role: "validation-plan", claimType: "instruction", requiredEvidenceKinds: [], navigationLabel: "Validate fit", buyerJob: "Choose what to verify before taking the next step" } : slot);
-  if (!brief.knowledge.supportedCapabilityWorkflowClaims.length) {
+  if (!explanation.length) {
     earnedPlan = earnedPlan.map((slot) => ["mechanism", "solution-mapping"].includes(slot.role)
       ? { ...slot, claimType: "instruction", requiredEvidenceKinds: [], buyerJob: "Confirm the inputs, work, and output before choosing an approach" }
       : slot);
@@ -165,12 +188,13 @@ export function assignBuyerJourneySections(plan: readonly SectionSlotV2[], brief
   return earnedPlan.map((slot, index, all) => {
     const key = roleQuestion[slot.role];
     const pool = key === "proof" ? brief.knowledge.proofClaims : key === "risk"
-      ? objections.length ? objections : brief.knowledge.supportedCapabilityWorkflowClaims
-      : slot.role === "current-friction" ? [...brief.knowledge.workflowContext, ...brief.knowledge.targetAccountContext]
+      ? objections.length ? objections : explanation
+      : slot.role === "current-friction" || slot.role === "stakes" ? [...brief.knowledge.workflowContext, ...brief.knowledge.targetAccountContext]
       : slot.role === "account-relevance" ? brief.knowledge.targetAccountContext
       : slot.role === "resource" ? brief.knowledge.resources
-      : key === "understand" ? [...brief.knowledge.productOffer, ...brief.knowledge.supportedCapabilityWorkflowClaims]
-      : brief.knowledge.supportedCapabilityWorkflowClaims;
+      : slot.role === "first-decision" ? [...explanation, ...brief.knowledge.targetAccountContext]
+      : key === "understand" ? [...brief.knowledge.productOffer, ...explanation]
+      : explanation;
     return { ...slot, buyerQuestion: brief.questions.find((item) => item.key === key)?.question ?? slot.buyerJob,
       requiredEvidenceKinds: [...new Set([...slot.requiredEvidenceKinds, ...pool.map((item) =>
         brief.knowledge.targetAccountContext.some((target) => target.id === item.id) ? "target_fact" as const

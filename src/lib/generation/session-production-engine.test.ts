@@ -16,6 +16,7 @@ import {
 import type { BrandProfile, SessionEvidenceItem, TryMeSession } from "@/lib/types";
 
 import { compileSessionProductionPage } from "./session-production-engine";
+import { syntheticOfferEvidence } from "../../../tests/fixtures/offer-evidence";
 
 const now = "2026-08-22T18:00:00.000Z";
 const originalCtaUrl = config.demoCtaUrl;
@@ -127,7 +128,7 @@ function session(
     brand: profile,
     audienceSuggestions: [answers.audience!],
     audienceRecommendations: [],
-    evidenceItems: [],
+    evidenceItems: syntheticOfferEvidence(answers.promotedOffer!, profile.domain),
     events: []
   };
 }
@@ -172,6 +173,7 @@ function namedTarget(input: {
 
 function accountEvidence(
   domain: string,
+  name: string,
   focus: string,
   operatingContext: string
 ): SessionEvidenceItem[] {
@@ -185,7 +187,9 @@ function accountEvidence(
       signals: [focus.split(/\s+/).slice(0, 5).join(" ")],
       disposition: "available",
       entityRole: "target",
-      confidence: "high"
+      confidence: "high",
+      evidenceType: "account-context",
+      subject: name
     },
     {
       id: `${domain}:operations`,
@@ -196,7 +200,9 @@ function accountEvidence(
       signals: [operatingContext.split(/\s+/).slice(0, 5).join(" ")],
       disposition: "available",
       entityRole: "target",
-      confidence: "high"
+      confidence: "high",
+      evidenceType: "account-context",
+      subject: name
     }
   ];
 }
@@ -242,7 +248,7 @@ describe("compileSessionProductionPage", () => {
   it("renders sourced purchase answers and scopes the purchase writer to those claims", async () => {
     const profile = brand();
     const currentSession = session(profile);
-    currentSession.evidenceItems = [{
+    currentSession.evidenceItems = [...currentSession.evidenceItems!, {
       id: "price-approved", type: "public-positioning", label: "Published pricing",
       text: "Acme Workflow Cloud costs $49 per user monthly.", sourceUrl: "https://acme.example/pricing",
       signals: [], disposition: "available", entityRole: "seller", confidence: "high",
@@ -262,7 +268,7 @@ describe("compileSessionProductionPage", () => {
   it("does not promote another product's outcome into the selected buyer journey", async () => {
     const profile = brand();
     const currentSession = session(profile);
-    currentSession.evidenceItems = [{
+    currentSession.evidenceItems = [...currentSession.evidenceItems!, {
       id: "crm-outcome", type: "public-positioning", label: "CRM customer result",
       text: "A customer reduced processing time by 24%.", sourceUrl: "https://acme.example/crm/customer",
       signals: [], disposition: "available", entityRole: "seller", confidence: "high",
@@ -363,7 +369,7 @@ describe("compileSessionProductionPage", () => {
       const currentSession = session(profile, "align");
       currentSession.answers.targetDomain = target.domain;
       currentSession.answers.messageBelief = undefined;
-      currentSession.evidenceItems = evidenceItems;
+      currentSession.evidenceItems = [...currentSession.evidenceItems!, ...evidenceItems];
       const result = await compileSessionProductionPage({
         session: currentSession,
         brand: profile,
@@ -382,6 +388,7 @@ describe("compileSessionProductionPage", () => {
       cisco,
       accountEvidence(
         cisco.domain,
+        cisco.companyName,
         "Secure networking across hybrid infrastructure",
         "Observability programs connect network, security, and operations teams"
       )
@@ -390,6 +397,7 @@ describe("compileSessionProductionPage", () => {
       google,
       accountEvidence(
         google.domain,
+        google.companyName,
         "Responsible AI across enterprise platforms",
         "Cloud security programs connect governance, models, and data teams"
       )
@@ -471,11 +479,28 @@ describe("compileSessionProductionPage", () => {
     currentSession.answers.promotedOffer = "Acme Operations Summit";
     currentSession.answers.objective = "Register for the summit";
     currentSession.answers.ctaType = "register";
-    currentSession.evidenceItems = accountEvidence(
-      target.domain,
-      "Secure networking across hybrid infrastructure",
-      "Observability programs connect network, security, and operations teams"
-    );
+    currentSession.evidenceItems = [
+      ...syntheticOfferEvidence("Acme Operations Summit", profile.domain),
+      {
+        id: "summit-agenda",
+        type: "public-positioning",
+        label: "Summit agenda",
+        text: "Acme Operations Summit provides an agenda for approval workflow leaders.",
+        sourceUrl: "https://acme.example/summit",
+        signals: ["approval workflow leaders"],
+        disposition: "available",
+        entityRole: "seller",
+        confidence: "high",
+        evidenceType: "resource",
+        subject: "Acme Operations Summit"
+      },
+      ...accountEvidence(
+        target.domain,
+        target.companyName,
+        "Secure networking across hybrid infrastructure",
+        "Observability programs connect network, security, and operations teams"
+      )
+    ];
 
     const result = await compileSessionProductionPage({
       session: currentSession,
@@ -547,7 +572,7 @@ describe("compileSessionProductionPage", () => {
     expect(spec.schemaVersion).toBe("2.0");
     expect(spec.production?.sections).toHaveLength(page.sections.length);
     expect(html.match(/data-journey-section=/g)).toHaveLength(page.sections.length);
-    expect(html).toContain("How the supported change works in practice");
+    expect(html).toContain("Acme Workflow Cloud");
     expect(html).toContain(">Book a meeting</a>");
   });
 
@@ -573,6 +598,7 @@ describe("compileSessionProductionPage", () => {
     const plan = result.artifact.value!.familyDecision!.sectionPlan;
     expect(plan.map(({ id, role }) => ({ id, role }))).toEqual([
       { id: "recognize-buyer-outcome", role: "buyer-outcome" },
+      { id: "name-constraint", role: "current-friction" },
       { id: "distinct-mechanism", role: "mechanism" },
       { id: "relevant-use-cases", role: "use-cases" },
       { id: "proof-or-validation", role: "validation-plan" },
@@ -583,6 +609,7 @@ describe("compileSessionProductionPage", () => {
     );
     expect(observed.map(({ sectionBrief }) => sectionBrief.semanticJob)).toEqual([
       "recognize the buyer and the promised outcome",
+      "name the current constraint in the buyer's language",
       "explain the seller's distinct mechanism",
       "show the most relevant use cases or workflow",
       "Choose what to verify before taking the next step",
@@ -609,6 +636,7 @@ describe("compileSessionProductionPage", () => {
       audience: "Revenue orchestration leaders",
       objective: "route high-intent signals into named account work"
     };
+    rightSession.evidenceItems = syntheticOfferEvidence("Signal Router", rightProfile.domain);
     const privateOnlyInput = "unpublished-free-form-brief-phrase-493";
     rightSession.answers.messageBelief = privateOnlyInput;
 
@@ -658,8 +686,8 @@ describe("compileSessionProductionPage", () => {
         "next-step"
       ],
       copy: [
-        "How the supported change works in practice",
-        "Choose the buyer job that matters most"
+        "Acme Workflow Cloud assigns request reviewers",
+        "Acme Workflow Cloud gives operations leaders a governed way"
       ],
       cta: "Book a meeting"
     },
@@ -682,8 +710,8 @@ describe("compileSessionProductionPage", () => {
         "next-step"
       ],
       copy: [
-        "Evaluate the solution against observable criteria",
-        "How the solution answers each evaluation criterion"
+        "Acme Workflow Governance assigns request reviewers",
+        "Acme Workflow Governance gives operations leaders a governed way"
       ],
       cta: "Book a working session"
     },
@@ -706,8 +734,8 @@ describe("compileSessionProductionPage", () => {
         "next-step"
       ],
       copy: [
-        "TargetCo and Acme can validate",
-        "Turn the shared priority into practical workstreams"
+        "TargetCo is prioritizing governed workflow ownership",
+        "Acme Workflow Governance assigns request reviewers"
       ],
       cta: "Plan a validation session"
     }
@@ -717,6 +745,17 @@ describe("compileSessionProductionPage", () => {
       const profile = brand();
       const currentSession = session(profile, family);
       const target = family === "align" ? targetBrand() : undefined;
+      if (target) {
+        currentSession.evidenceItems = [
+          ...currentSession.evidenceItems!,
+          ...accountEvidence(
+            target.domain,
+            target.companyName,
+            "TargetCo is prioritizing governed workflow ownership",
+            "TargetCo operates distributed revenue workflows"
+          )
+        ];
+      }
       const result = await compileSessionProductionPage({
         session: currentSession,
         brand: profile,
@@ -976,6 +1015,8 @@ describe("dedicated section writers reach the rendered page", () => {
       expect(result.artifact.value?.sections.find(({ sectionId }) => sectionId === target.sectionId)?.body).toBe(target.body);
       expect(renderPage(session(profile), profile, result.artifact.value!)).not.toContain("94 percent");
       expect(result.buildTrace.sections.find(({ sectionId }) => sectionId === target.sectionId)?.writerMode).toBe("deterministic");
+      expect(result.buyerReadyPerformance).toMatchObject({ modelSections: 0,
+        fallbackSections: result.artifact.value!.sections.length });
     } finally { spy.mockRestore(); }
   });
 

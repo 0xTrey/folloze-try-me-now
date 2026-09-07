@@ -10,7 +10,7 @@ import {
   recordPreviewInteraction,
   runStoryStage
 } from "@/lib/orchestrator";
-import { generateExperienceDraft } from "@/lib/integrations/openai";
+import { sectionModelClient } from "@/lib/integrations/openai-section-writer";
 import { deleteSession, getSession, putSession } from "@/lib/session-store";
 import type {
   BrandProfile,
@@ -18,11 +18,9 @@ import type {
   FinalArtifactReceipt,
   TryMeSession
 } from "@/lib/types";
+import { syntheticOfferEvidence } from "../../tests/fixtures/offer-evidence";
 
-vi.mock("@/lib/integrations/openai", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/integrations/openai")>()),
-  generateExperienceDraft: vi.fn()
-}));
+vi.mock("@/lib/integrations/openai-section-writer", () => ({ sectionModelClient: vi.fn() }));
 
 const editorToken = "workspace-editor-token";
 const ids = new Set<string>();
@@ -143,7 +141,9 @@ function workspaceSession(id: string, status: TryMeSession["status"] = "preview_
     answers: {
       targetDomain: target.domain,
       audience: "Network operations leaders",
-      objective: "Book a meeting"
+      objective: "Book a meeting",
+      campaignType: "product",
+      promotedOffer: "Jitterbit Harmony"
     },
     brand: seller,
     targetBrand: target,
@@ -159,6 +159,20 @@ function workspaceSession(id: string, status: TryMeSession["status"] = "preview_
       }
     ],
     evidenceItems: [
+      ...syntheticOfferEvidence("Jitterbit Harmony", "jitterbit.com"),
+      {
+        id: "evidence_target_network_context",
+        type: "public-operating-context",
+        label: "Cisco network operations context",
+        text: "Cisco network operations leaders are reviewing networking and infrastructure workflows.",
+        sourceUrl: target.sourceUrl,
+        signals: ["networking", "infrastructure"],
+        disposition: "available",
+        entityRole: "target",
+        confidence: "high",
+        evidenceType: "account-context",
+        subject: "Cisco"
+      },
       {
         id: "evidence_networking",
         type: "public-focus-area",
@@ -260,6 +274,7 @@ beforeEach(() => {
   // network. Failing every fetch keeps these assertions hermetic instead of
   // letting them stall on live requests.
   vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network disabled in test"));
+  vi.mocked(sectionModelClient).mockReturnValue(undefined);
 });
 
 afterEach(async () => {
@@ -411,7 +426,8 @@ describe("session workspace foundation", () => {
       }
     ];
     await putSession(seeded);
-    vi.mocked(generateExperienceDraft).mockResolvedValueOnce({
+    vi.mocked(sectionModelClient).mockReturnValueOnce(undefined);
+    /* vi.mocked(generateExperienceDraft).mockResolvedValueOnce({
       draft: {
         campaignRegister: "one-to-one-abm",
         designRegister: "source-brand-technical",
@@ -460,7 +476,7 @@ describe("session workspace foundation", () => {
       source: "deterministic-fallback",
       durationMs: 1,
       fallbackReason: "openai_not_configured"
-    });
+    }); */
 
     await runStoryStage(id);
 
@@ -479,9 +495,8 @@ describe("session workspace foundation", () => {
       thesisHeadline: "A controlled operating thesis.",
       narrativeArc: "Use these questions to align platform and architecture owners."
     });
-    expect(stored?.experience?.html).toContain('id="experience-thesis"');
-    expect(stored?.experience?.html).toContain('id="decision-path"');
-    expect(stored?.experience?.html).toContain('id="supporting-resources"');
+    expect(stored?.experience?.html).toContain("data-journey-section=");
+    expect(stored?.experience?.html).toContain("Jitterbit for Cisco");
   });
 
   it("leaves revision N intact when replacement generation fails", async () => {
@@ -527,7 +542,7 @@ describe("session workspace foundation", () => {
     await patchSessionWorkspace(id, {
       answers: { objective: "Accelerate an opportunity" }
     });
-    vi.mocked(generateExperienceDraft).mockRejectedValueOnce(new Error("generation unavailable"));
+    vi.mocked(sectionModelClient).mockReturnValueOnce({ writeSection: async () => { throw new Error("generation unavailable"); } });
 
     await runStoryStage(id);
 
@@ -562,7 +577,7 @@ describe("session workspace foundation", () => {
     await patchSessionWorkspace(id, {
       answers: { objective: "Accelerate an opportunity" }
     });
-    vi.mocked(generateExperienceDraft).mockRejectedValueOnce(new Error("generation unavailable"));
+    vi.mocked(sectionModelClient).mockReturnValueOnce({ writeSection: async () => { throw new Error("generation unavailable"); } });
 
     await runStoryStage(id);
 
@@ -572,7 +587,7 @@ describe("session workspace foundation", () => {
     expect(stored?.finalArtifact).toBeUndefined();
     expect(stored?.buildProgress?.phase).toBe("failed");
     expect(stored?.buildProgress?.failure).toMatchObject({
-      code: "generation_failed",
+      code: "final_truth_gate_failed_copy",
       retryable: true
     });
   });

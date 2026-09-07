@@ -776,13 +776,13 @@ export function compileFamilyProductionMessageSpine(
   }
 
   const omissions = (["tension", "whyNow"] as const).filter(
-    (role) => !(role in input.argument)
+    (role) => !input.argument[role]
   );
   const sections = input.decision.sectionPlan.map(
     (slot, index): FamilyProductionMessageSpineSectionSlot => {
       const requestedRoles = V2_ROLE_ARGUMENTS[slot.role];
       const argumentRoles = requestedRoles.filter(
-        (role) => role in input.argument
+        (role) => Boolean(input.argument[role])
       ) as ProductionArgumentRole[];
       const boundedSlots = argumentRoles.map((role) => input.argument[role]!);
       return {

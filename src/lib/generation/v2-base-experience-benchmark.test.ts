@@ -86,6 +86,10 @@ function session(fixture: Fixture): TryMeSession {
     answers: {
       campaignType: "product",
       promotedOffer: fixture.offer,
+      promotedOfferConfirmed: true,
+      offerSourceUrl: `https://${profile.domain}/offers/${slug(fixture.offer)}`,
+      offerSourceTitle: `${fixture.offer} offer overview`,
+      offerSourceConfirmed: true,
       audience: fixture.buyer,
       objective: fixture.job,
       ctaType: "book-meeting",
@@ -94,15 +98,68 @@ function session(fixture: Fixture): TryMeSession {
     brand: profile,
     audienceSuggestions: [fixture.buyer],
     audienceRecommendations: [],
-    evidenceItems: Array.from({ length: fixture.evidence }, (_, index) => ({
-      id: `evidence-${fixture.id}-${index}`,
+    evidenceItems: [
+      {
+      id: `evidence-${fixture.id}-positioning`,
       type: "public-positioning",
-      label: `${fixture.offer} evidence`,
-      text: `${fixture.seller} publishes information about ${fixture.offer}`,
-      sourceUrl: `https://${profile.domain}/`,
+      label: `${fixture.offer} offer overview`,
+      text: `${fixture.offer} is the selected offer for ${fixture.buyer}.`,
+      sourceUrl: `https://${profile.domain}/offers/${slug(fixture.offer)}`,
       signals: [fixture.offer],
-      disposition: "available"
-    })),
+      disposition: "available",
+      entityRole: "seller" as const,
+      evidenceType: "positioning" as const,
+      subject: fixture.offer
+    },
+    {
+      id: `evidence-${fixture.id}-capability`,
+      type: "public-focus-area",
+      label: `${fixture.offer} capability`,
+      text: `${fixture.offer} supports ${fixture.buyer} with the specific operating work needed to ${fixture.job}.`,
+      sourceUrl: `https://${profile.domain}/offers/${slug(fixture.offer)}`,
+      signals: [fixture.offer, "Capability"],
+      disposition: "available",
+      entityRole: "seller" as const,
+      evidenceType: "capability" as const,
+      subject: fixture.offer
+    },
+    {
+      id: `evidence-${fixture.id}-workflow`,
+      type: "public-focus-area",
+      label: `${fixture.offer} workflow`,
+      text: `${fixture.buyer} use ${fixture.offer} to review inputs, assign an accountable owner, and validate the operating decision.`,
+      sourceUrl: `https://${profile.domain}/offers/${slug(fixture.offer)}`,
+      signals: [fixture.offer, "Workflow"],
+      disposition: "available",
+      entityRole: "seller" as const,
+      evidenceType: "workflow" as const,
+      subject: fixture.offer
+    },
+    {
+      id: `evidence-${fixture.id}-requirement`,
+      type: "public-operating-context",
+      label: `${fixture.offer} implementation requirement`,
+      text: `A ${fixture.offer} evaluation requires a named owner, defined scope, and validation criteria before implementation.`,
+      sourceUrl: `https://${profile.domain}/offers/${slug(fixture.offer)}`,
+      signals: [fixture.offer, "Implementation"],
+      disposition: "available",
+      entityRole: "seller" as const,
+      evidenceType: "implementation" as const,
+      subject: fixture.offer
+    },
+    {
+      id: `evidence-${fixture.id}-context`,
+      type: "public-operating-context",
+      label: `${fixture.offer} buyer context`,
+      text: `${fixture.buyer} need a bounded decision about ${fixture.offer}, not a portfolio-level promise.`,
+      sourceUrl: `https://${profile.domain}/offers/${slug(fixture.offer)}`,
+      signals: [fixture.offer, "Buyer context"],
+      disposition: "available",
+      entityRole: "seller" as const,
+      evidenceType: "workflow-context" as const,
+      subject: fixture.offer
+    }
+    ].slice(0, Math.max(5, fixture.evidence)),
     events: []
   } as TryMeSession;
 }

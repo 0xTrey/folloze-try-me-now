@@ -1,0 +1,28 @@
+{
+  "version": "build-flow-browser-qa-v1",
+  "date": "2026-09-07",
+  "scope": "local synthetic compiler and renderer fixtures",
+  "browser": "Codex in-app browser",
+  "fixtures": ["adp-launch.html", "apple-guide.html", "servicetitan-align.html", "sparse-logo-only-launch.html"],
+  "fixedFrameViewports": [{"width":1440,"height":960},{"width":390,"height":844}],
+  "framesChecked": 8,
+  "observedDesktopClientWidth": 1423,
+  "observedMobileClientWidth": 373,
+  "scrollbarWidth": 17,
+  "horizontalOverflowFrames": 0,
+  "missingImageFrames": 0,
+  "duplicateH1Frames": 0,
+  "copyOutsideSectionBounds": 0,
+  "actions": [
+    {"page":"adp-launch.html","action":"How it works navigation","result":"mechanism in viewport"},
+    {"page":"adp-launch.html","action":"Explore the page","result":"next-step panel in viewport"},
+    {"page":"apple-guide.html","action":"Read the resource","result":"opened new tab","destination":"https://support.apple.com/guide/deployment/welcome/web","destinationTitle":"Apple Platform Deployment - Apple Support"},
+    {"page":"servicetitan-align.html","action":"Explore the page in fixed mobile frame","result":"next-step panel top 227px inside frame"},
+    {"page":"sparse-logo-only-launch.html","action":"Use cases in fixed mobile frame","result":"application-paths top 58px inside frame"}
+  ],
+  "repairsVerified": ["duplicate guide explanation omitted","resource close names reading action","grouped CSS selectors constrain copy rather than whole sections"],
+  "humanApproval": null,
+  "realModelQualityMeasured": false,
+  "productionDeploymentVerified": false,
+  "captureLimitation": "Some full-page PNGs after external-tab interaction show compositor scaling artifacts. Fixed-size iframe DOM geometry checks independently verified all eight layouts; diagnostic PNGs are not human visual approval."
+}

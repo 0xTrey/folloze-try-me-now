@@ -24,6 +24,12 @@ const CTA_ACTION_COPY: Record<CtaType, string> = {
   custom: "Use this next step to address the selected objective"
 };
 
+const CTA_HEADLINE_COPY: Partial<Record<CtaType, string>> = {
+  "contact-sales": "Contact the team about this evaluation",
+  download: "Read the resource",
+  explore: "Explore the available material"
+};
+
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => value.trim()))];
 }
@@ -199,8 +205,12 @@ function nextActionCandidate(
     ? `Use that session to ${objectiveAction}. Confirm priorities, timing, and results with the team.`
     : `${CTA_ACTION_COPY[input.cta.type]}: ${objective}. ` +
       "Bring the relevant material and open questions into the next step.");
+  const actionHeadline = CTA_HEADLINE_COPY[input.cta.type] ??
+    (input.cta.type === "register" ? input.cta.label : undefined);
   const headline =
-    accountNextAction
+    actionHeadline
+      ? fitHeadline(actionHeadline, slot)
+      : accountNextAction
       ? fitHeadline(accountNextAction, slot)
       : slot.v2Role === "next-move"
       ? "Take the next useful step toward this outcome"

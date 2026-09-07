@@ -54,6 +54,9 @@ import {
   type SectionStrategyBinding
 } from "@/lib/generation/section-writing-contract";
 import type { PageRecipeSelection } from "@/lib/generation/page-recipes";
+import { buildExperiencePlanReceipt, type BuildExperiencePlan } from "@/lib/generation/build-experience-plan";
+import { repairBuildFallbacks } from "./build-fallbacks";
+import { evaluateBuildQuality, buildQualityReceipt, type BuildQualityReport } from "./build-quality-policy";
 import { writeTeamCtaSections } from "@/lib/generation/team-cta-section-writer";
 import type { WireframeSelectionV1 } from "@/lib/generation/wireframe-library";
 import type {
@@ -141,14 +144,17 @@ export type GenericProductionFallbackCode =
   | "GPE_PROVIDER_DEADLINE_REACHED"
   | "GPE_WRITER_RESULT_INVALID"
   | "GPE_FACTUALITY_REJECTED"
+  | "GPE_BUILD_QUALITY_REJECTED"
   | "GPE_MINIMUM_SECTIONS_UNAVAILABLE";
 
 export type GenericProductionCompileStage =
   | "artifact-validation"
+  | "experience-plan"
   | "provider-deadline"
   | "writer-wave"
   | "section-writers"
   | "factuality"
+  | "build-quality"
   | "section-compile"
   | "final-reveal";
 
@@ -204,6 +210,8 @@ export interface GenericProductionSafeFallbackInstruction {
 
 export interface GenericProductionEngineInput {
   sessionId: string;
+  /** The private, canonical creative plan. Never part of a public response. */
+  buildPlan?: BuildExperiencePlan;
   buyerDecisionBrief?: import("@/lib/generation/buyer-decision-journey").BuyerDecisionBrief;
   buyerAssignments?: readonly import("@/lib/generation/buyer-decision-journey").BuyerSectionAssignment[];
   revision: number;
@@ -270,6 +278,10 @@ export interface GenericProductionEngineDependencies {
 }
 
 interface GenericProductionResultBase {
+  buildQuality?: BuildQualityReport;
+  buildQualityReceipt?: ReturnType<typeof buildQualityReceipt>;
+  buildPlan?: BuildExperiencePlan;
+  buildPlanReceipt?: ReturnType<typeof buildExperiencePlanReceipt>;
   /** Source-backed brief is private. Public projections never include this receipt. */
   buyerDecisionBrief?: import("@/lib/generation/buyer-decision-journey").BuyerDecisionBrief;
   buyerReadyPerformance?: { writerDurationMs: number; modelSections: number; fallbackSections: number; cachedSections: number; semanticReviewStatus: SemanticReviewReceipt["status"] };
@@ -507,7 +519,8 @@ function sectionWritingContracts(
   // deliberately not used as a second strategy source: falling back from a
   // rejected thesis strategy to a different selected argument would make the
   // trace and rendered copy disagree about what won.
-  const strategy = input.sectionStrategy;
+  const strategy = input.buildPlan ? input.buildPlan.strategy.binding : input.sectionStrategy;
+  const assignments = input.buildPlan?.sections ?? input.buyerAssignments;
   const sectionJobs: SectionJobSource[] | undefined = input.recipeSelection?.activated
     ? input.recipeSelection.sections.map((section) => ({
         slotId: section.slotId,
@@ -523,8 +536,8 @@ function sectionWritingContracts(
     decision,
     brief,
     evidence,
-    evidenceRefsBySectionId: Object.fromEntries((input.buyerAssignments ?? [])
-      .filter((assignment) => assignment.claimRefs.length)
+    evidenceRefsBySectionId: Object.fromEntries((assignments ?? [])
+      .filter((assignment) => input.buildPlan || assignment.claimRefs.length)
       .map((assignment) => [assignment.id, assignment.claimRefs])),
     ...(strategy ? { strategy } : {}),
     ...(sectionJobs ? { sectionJobs } : {})
@@ -535,19 +548,57 @@ function sectionWritingContracts(
       description: voice.description, source: voice.provenance
     };
     if (contract.allowedCtas.length) contract.ctaOffer = input.buyerDecisionBrief?.cta;
-    const assignment = input.buyerAssignments?.find((item) => item.id === contract.sectionId);
+    const assignment = assignments?.find((item) => item.id === contract.sectionId);
     if (assignment && !contract.strategyJobs.length) contract.strategyJobs = [assignment.desiredConclusion];
     if (assignment) contract.buyerAssignment = {
       buyerQuestion: assignment.buyerQuestion, desiredConclusion: assignment.desiredConclusion,
       claimRefs: assignment.claimRefs.filter((ref) => contract.evidenceRefs.includes(ref)),
       objection: assignment.objection, transition: assignment.transition
     };
+    const planned = input.buildPlan?.sections.find((section) => section.id === contract.sectionId);
+    if (planned && input.buildPlan) {
+      // One plan supplies the writer's meaning and its eventual visual role.
+      // Keep scoped evidence, including an empty scope, authoritative.
+      const allowed = new Set(planned.claimRefs);
+      contract.evidence = contract.evidence.filter((claim) => allowed.has(claim.id));
+      contract.evidenceRefs = contract.evidence.map(({ id }) => id);
+      contract.slot = { ...contract.slot, evidenceRefs: contract.evidenceRefs };
+      contract.buyerAssignment = {
+        buyerQuestion: planned.buyerQuestion, desiredConclusion: planned.desiredConclusion,
+        claimRefs: [...contract.evidenceRefs], objection: planned.objection, transition: planned.transition
+      };
+      contract.sectionBrief = { ...contract.sectionBrief,
+        requiredEvidenceRefs: contract.sectionBrief.requiredEvidenceRefs.filter((id) => allowed.has(id)),
+        optionalEvidenceRefs: contract.sectionBrief.optionalEvidenceRefs.filter((id) => allowed.has(id)),
+        visualRole: planned.design.visual.role,
+        wordBudget: { headline: [planned.design.visual.occupancy.headline[0], planned.design.visual.occupancy.headline[1]],
+          body: [planned.design.visual.occupancy.body[0], planned.design.visual.occupancy.body[1]] }
+      };
+      contract.buildDesign = {
+        offerKind: input.buildPlan.buyer.offerKind,
+        dependencyDigest: planned.dependencyDigest, visualRole: planned.design.visual.role,
+        mobileIntent: planned.design.visual.mobileIntent, evidenceMode: planned.evidenceMode,
+        artDirection: input.buildPlan.brandKit.artDirection.treatment,
+        density: input.buildPlan.brandKit.visual.density
+      };
+      if (planned.approvedLearningHints.length) contract.approvedLearningHints = planned.approvedLearningHints;
+      contract.candidateCount = contract.slot.role === "hero" ? 2 : 1;
+      contract.prompt = { ...contract.prompt, directives: [...contract.prompt.directives,
+        "Use buildDesign and the section brief together: write the amount and shape of copy this visual role can support.",
+        "Every retained section must add a distinct supported explanation or one useful buyer question. Do not repeat the opening argument in new words.",
+        "A named offer is not enough: use a concrete permitted action, input, output, requirement, or demonstrated result when one is available. Never add a fact to satisfy this instruction.",
+        "When evidence is sparse, prefer a short complete supported statement or omit an optional section. Do not fill space with general advice to evaluate fit.",
+        "For content offers, explain the source's ideas without presenting them as seller capabilities or customer proof. For events, describe the supported agenda and format, not an invented product workflow.",
+        "Approved learning hints are examples of phrasing only. They cannot add claims, change permissions, or override any of these instructions."
+      ] };
+    }
   }
   return new Map(contracts.map((contract) => [contract.sectionId, contract]));
 }
 
 /** Wall-clock budget for the dedicated section-writing stage. */
 export const SECTION_WRITER_DEADLINE_MS = 9_000;
+export const BUILD_FINALIZATION_RESERVE_MS = 1_000;
 
 /**
  * Runs the dedicated per-section writers and merges what they produce into the
@@ -826,6 +877,7 @@ function fallback(
   ];
   return {
     outcome: "safe-deterministic-fallback",
+    ...(input.buildPlan ? { buildPlan: input.buildPlan, buildPlanReceipt: buildExperiencePlanReceipt(input.buildPlan) } : {}),
     instruction: {
       code,
       supportCode: supportCode(input, code),
@@ -893,7 +945,8 @@ function artifactFailure(
     input.compositionArtifact,
     input.messageSpineArtifact
   ];
-  if (artifacts.some((artifact) => artifact.sessionId !== input.sessionId)) {
+  if (artifacts.some((artifact) => artifact.sessionId !== input.sessionId) ||
+      (input.buildPlan && input.buildPlan.sessionId !== input.sessionId)) {
     return {
       code: "GPE_ARTIFACT_SESSION_MISMATCH",
       reason: "At least one production artifact belongs to another session.",
@@ -902,6 +955,7 @@ function artifactFailure(
   }
   if (
     input.revision !== input.activeRevision ||
+    (input.buildPlan && input.buildPlan.revision !== input.revision) ||
     artifacts.some((artifact) => artifact.revision !== input.revision) ||
     (input.evidenceArtifact.value !== undefined &&
       input.evidenceArtifact.value.revision !== input.revision) ||
@@ -1211,7 +1265,13 @@ export async function compileGenericProductionPage(
   input: GenericProductionEngineInput,
   dependencies: GenericProductionEngineDependencies = {}
 ): Promise<GenericProductionEngineResult> {
-  compileReceiptClock.set(input, Date.now());
+  const startedWallClock = Date.now();
+  compileReceiptClock.set(input, startedWallClock);
+  const clock = dependencies.currentTimeMs ?? (() => input.providerWindow.currentTimeMs + Math.max(0, Date.now() - startedWallClock));
+  const providerDeadline = hardDeadlineAt(input) - BUILD_FINALIZATION_RESERVE_MS;
+  dependencies = { ...dependencies, currentTimeMs: clock,
+    sectionWriterDeadlineMs: Math.max(0, Math.min(dependencies.sectionWriterDeadlineMs ?? SECTION_WRITER_DEADLINE_MS,
+      providerDeadline - clock())) };
   const dependencyArtifacts = [
     input.evidenceArtifact,
     input.brandArtifact,
@@ -1278,6 +1338,13 @@ export async function compileGenericProductionPage(
       input.evidenceArtifact.evidenceRefs.length
     )
   );
+  if (input.buildPlan) compileReceipts.push(compileReceipt(input, "experience-plan", "completed",
+    `experience_plan_${input.buildPlan.readiness.state}`, input.buildPlan.sections.length, input.buildPlan.claims.length));
+  if (input.buildPlan?.readiness.state === "insufficient") {
+    compileReceipts.push(compileReceipt(input, "build-quality", "failed", "build_readiness_insufficient", 0, input.buildPlan.claims.length));
+    return fallback(input, "GPE_BUILD_QUALITY_REJECTED", "Existing evidence cannot support a complete buyer-facing explanation.",
+      "compile_safe_deterministic_experience_spec", "failed", workerReceipts, compileReceipts, traceContext);
+  }
 
   const now = dependencies.currentTimeMs?.() ??
     input.providerWindow.currentTimeMs;
@@ -1395,17 +1462,21 @@ export async function compileGenericProductionPage(
   // In particular, purchase answers must not inherit a generic strategy slot
   // that drops the pricing, security, or implementation facts they were given.
   const scopedContracts = sectionWritingContracts(input, evidence, baseWriterInput.brief);
-  slots = slots.map((slot) => input.buyerAssignments?.some((assignment) =>
-    assignment.id === slot.id && assignment.claimRefs.length)
+  slots = slots.map((slot) => (input.buildPlan?.sections ?? input.buyerAssignments)?.some((assignment) =>
+    assignment.id === slot.id && (input.buildPlan || assignment.claimRefs.length))
     ? { ...slot, evidenceRefs: scopedContracts.get(slot.id)?.evidenceRefs ?? [] } : slot);
   baseWriterInput.slots = slots;
 
   const writers = { ...DEFAULT_WRITERS, ...dependencies.writers };
-  const writerArtifacts = await Promise.all(
+  const initialWriterArtifacts = await Promise.all(
     WRITER_KINDS.map((worker) =>
       Promise.resolve(writers[worker]({ ...baseWriterInput, worker }))
     )
   );
+  const writerArtifacts = input.buildPlan ? repairBuildFallbacks({
+    plan: input.buildPlan, artifacts: initialWriterArtifacts, slots, evidence,
+    targetName: familySpine?.entities?.targetName, sellerName: familySpine?.entities?.sellerName
+  }) : initialWriterArtifacts;
   workerReceipts.push(
     ...writerArtifacts.map((artifact) =>
       workerReceipt(artifact, [
@@ -1511,6 +1582,8 @@ export async function compileGenericProductionPage(
     writerArtifacts
   });
   let composedWriterArtifacts = sectionWriting.writerArtifacts;
+  let provenanceRun = sectionWriting.run;
+  let repairWriterDurationMs = 0;
   if (sectionWriting.run) {
     compileReceipts.push(
       compileReceipt(
@@ -1554,10 +1627,14 @@ export async function compileGenericProductionPage(
         value: artifact.value.map((section) => restoreIds.has(section.sectionId) ? originals.get(section.sectionId) ?? section : section)
       } : artifact);
       compileReceipts.push(compileReceipt(input, "factuality", "fallback", "rejected_model_sections_restored", restoreIds.size, evidence.length));
+      if (provenanceRun) provenanceRun = { ...provenanceRun, results: provenanceRun.results.map((result) =>
+        restoreIds.has(result.sectionId) ? { ...result, outcome: "quality_rejected" as const,
+          candidate: originals.get(result.sectionId) ?? result.candidate } : result) };
     }
   }
 
-  const reviewClient = dependencies.sectionModelClient?.reviewPage
+  const reviewClient = dependencies.sectionModelClient?.reviewPage && clock() < providerDeadline &&
+    (dependencies.sectionWriterDeadlineMs ?? 0) > 0
     ? { reviewPage: dependencies.sectionModelClient.reviewPage.bind(dependencies.sectionModelClient) }
     : undefined;
   const reviewPage = () => runWholePageSemanticReview({
@@ -1576,10 +1653,11 @@ export async function compileGenericProductionPage(
       buyerJob: input.buyerDecisionBrief?.buyerJob ?? "unknown",
       cta: writerCta.label
     }
-  }, reviewClient, Math.max(1, Math.min(SEMANTIC_REVIEW_TIMEOUT_MS, deadlineAt - (dependencies.currentTimeMs?.() ?? Date.now()))));
+  }, clock() < providerDeadline ? reviewClient : undefined,
+  Math.max(1, Math.min(SEMANTIC_REVIEW_TIMEOUT_MS, providerDeadline - clock())));
   let semanticReview = await reviewPage();
   if (semanticReview.status === "reviewed" && semanticReview.sectionsNeedingRepair.length &&
-      dependencies.sectionModelClient && deadlineAt - (dependencies.currentTimeMs?.() ?? Date.now()) > SEMANTIC_REVIEW_TIMEOUT_MS + 1000) {
+      dependencies.sectionModelClient && providerDeadline - clock() > SEMANTIC_REVIEW_TIMEOUT_MS + 1000) {
     const contracts = sectionWritingContracts(input, evidence, baseWriterInput.brief);
     const current = new Map(composedWriterArtifacts.flatMap((artifact) => artifact.value ?? [])
       .map((section) => [section.sectionId, section]));
@@ -1594,11 +1672,16 @@ export async function compileGenericProductionPage(
     const repair = await runSectionWriters({
       contracts: repairContracts, client: dependencies.sectionModelClient,
       fallback: (contract) => current.get(contract.sectionId)!,
-      deadlineMs: Math.max(1, Math.min(2500, deadlineAt - (dependencies.currentTimeMs?.() ?? Date.now()) - SEMANTIC_REVIEW_TIMEOUT_MS))
+      deadlineMs: Math.max(1, Math.min(2500, providerDeadline - clock() - SEMANTIC_REVIEW_TIMEOUT_MS))
     });
+    repairWriterDurationMs += repair.durationMs;
     const repaired = new Map(repair.results.filter((item) => item.outcome === "model" || item.outcome === "model_partial")
       .map((item) => [item.sectionId, item.candidate]));
     if (repaired.size) {
+      if (provenanceRun) provenanceRun = { ...provenanceRun, results: provenanceRun.results.map((result) => {
+        const updated = repair.results.find((item) => item.sectionId === result.sectionId && repaired.has(item.sectionId));
+        return updated ? { ...updated, durationMs: result.durationMs + updated.durationMs } : result;
+      }) };
       composedWriterArtifacts = composedWriterArtifacts.map((artifact) => ({ ...artifact,
         value: artifact.value?.map((section) => repaired.get(section.sectionId) ?? section)
       }));
@@ -1658,6 +1741,11 @@ export async function compileGenericProductionPage(
   workerReceipts.push(
     workerReceipt(editorArtifact, [...WRITER_KINDS])
   );
+  for (const issue of editorArtifact.value?.issueReceipts ?? []) {
+    if (issue.outcome !== "rejected") continue;
+    for (const code of issue.after) compileReceipts.push(compileReceipt(input,
+      "factuality", "fallback", `copy_${code}`, 1, 0));
+  }
 
   if (
     (dependencies.currentRevision?.() ?? input.activeRevision) !== input.revision ||
@@ -1735,7 +1823,7 @@ export async function compileGenericProductionPage(
     sections,
     writerArtifacts: composedWriterArtifacts,
     contracts: sectionWritingContracts(input, evidence),
-    ...(sectionWriting.run ? { run: sectionWriting.run } : {}),
+    ...(provenanceRun ? { run: provenanceRun } : {}),
     startedAt: input.startedAt,
     completedAt: input.completedAt
   });
@@ -1768,7 +1856,21 @@ export async function compileGenericProductionPage(
     );
   }
 
-  const currentTime = dependencies.currentTimeMs?.() ?? now;
+  const buildQuality = input.buildPlan ? evaluateBuildQuality({ plan: input.buildPlan, brand,
+    sections, evidence, factualityPassed: true }) : undefined;
+  if (buildQuality) {
+    compileReceipts.push(compileReceipt(input, "build-quality", buildQuality.accepted ? "completed" : "failed",
+      buildQuality.accepted ? "build_quality_passed" : "build_quality_rejected", sections.length, evidence.length));
+    if (!buildQuality.accepted) return {
+      ...fallback(input, "GPE_BUILD_QUALITY_REJECTED", "The final page did not meet the build quality policy.",
+        "compile_safe_deterministic_experience_spec", "failed", workerReceipts, compileReceipts, traceContext),
+      buildQuality, buildQualityReceipt: buildQualityReceipt(buildQuality), semanticReview
+    };
+  }
+  const currentTime = clock();
+  if (currentTime >= deadlineAt) return fallback(input, "GPE_PROVIDER_DEADLINE_REACHED",
+    "The final current-revision check exceeded the shared deadline.", "reveal_existing_current_revision",
+    "timed_out", workerReceipts, compileReceipts, traceContext);
   const allowVisualRepair =
     input.allowVisualRepair === true && currentTime < deadlineAt;
   const partial =
@@ -1868,12 +1970,14 @@ export async function compileGenericProductionPage(
   ]);
   return {
     outcome: "production-page",
+    ...(buildQuality ? { buildQuality, buildQualityReceipt: buildQualityReceipt(buildQuality) } : {}),
+    ...(input.buildPlan ? { buildPlan: input.buildPlan, buildPlanReceipt: buildExperiencePlanReceipt(input.buildPlan) } : {}),
     ...(input.buyerDecisionBrief ? { buyerDecisionBrief: input.buyerDecisionBrief } : {}),
     semanticReview,
     ...(sectionWriting.run ? { buyerReadyPerformance: {
-      writerDurationMs: sectionWriting.run.durationMs,
-      modelSections: sectionWriting.run.modelSectionCount,
-      fallbackSections: sectionWriting.run.fallbackSectionCount,
+      writerDurationMs: sectionWriting.run.durationMs + repairWriterDurationMs,
+      modelSections: traceContext.sections.filter((section) => section.writerMode === "model").length,
+      fallbackSections: sections.length - traceContext.sections.filter((section) => section.writerMode === "model").length,
       cachedSections: sectionWriting.run.cachedSectionCount ?? 0,
       semanticReviewStatus: semanticReview.status
     } } : {}),

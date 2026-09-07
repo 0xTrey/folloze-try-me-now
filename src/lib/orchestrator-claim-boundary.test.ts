@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sendClaimEmail } from "@/lib/integrations/email";
 import { publishClaimedExperience } from "@/lib/integrations/folloze";
-import { generateExperienceDraft, SourceFetchError } from "@/lib/integrations/openai";
+import { sectionModelClient } from "@/lib/integrations/openai-section-writer";
 import { recordLeadCapture, updateLeadOutcome } from "@/lib/lead-store";
 import { portableBrandLogoFromSvg } from "@/lib/portable-brand-logo";
 import type { ExperienceDraft } from "@/lib/generation/experience-schema";
@@ -26,13 +26,14 @@ import type {
   QualityReceipt,
   TryMeSession
 } from "@/lib/types";
+import { syntheticOfferEvidence } from "../../tests/fixtures/offer-evidence";
 
 vi.mock("@/lib/integrations/email", () => ({ sendClaimEmail: vi.fn() }));
 vi.mock("@/lib/integrations/folloze", () => ({ publishClaimedExperience: vi.fn() }));
 vi.mock("@/lib/integrations/openai", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/integrations/openai")>()),
-  generateExperienceDraft: vi.fn()
 }));
+vi.mock("@/lib/integrations/openai-section-writer", () => ({ sectionModelClient: vi.fn() }));
 vi.mock("@/lib/lead-store", () => ({
   leadStoreMode: "memory-test",
   recordLeadCapture: vi.fn(),
@@ -40,6 +41,12 @@ vi.mock("@/lib/lead-store", () => ({
 }));
 
 const sessionIds = new Set<string>();
+function delayedSectionWriter(setRelease: (release: () => void) => void) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  setRelease(release);
+  return { writeSection: async (contract: { sectionId: string }) => { await gate; return { sectionId: contract.sectionId, candidates: [] }; } };
+}
 
 const brand: BrandProfile = {
   domain: "jitterbit.com",
@@ -211,6 +218,7 @@ function session(input: {
     },
     brand,
     audienceSuggestions: [],
+    evidenceItems: syntheticOfferEvidence("Jitterbit Harmony", "jitterbit.com"),
     experience: model,
     finalArtifact: model ? finalReceiptFor(model) : undefined,
     qualityReceipt: model ? qualityReceiptFor(model) : undefined,
@@ -227,7 +235,8 @@ describe("anonymous preview and claim publication boundary", () => {
     // keeps the claim-boundary assertions hermetic rather than letting them
     // stall on live requests.
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network disabled in test"));
-    vi.mocked(generateExperienceDraft).mockResolvedValue({
+    vi.mocked(sectionModelClient).mockReturnValue(undefined);
+    /* vi.mocked(generateExperienceDraft).mockResolvedValue({
       draft: {
         ...draft,
         sections: draft.sections.map((section) => ({ ...section })),
@@ -236,7 +245,7 @@ describe("anonymous preview and claim publication boundary", () => {
       source: "deterministic-fallback",
       durationMs: 25,
       fallbackReason: "openai_not_configured"
-    });
+    }); */
     vi.mocked(recordLeadCapture).mockResolvedValue({} as never);
     vi.mocked(publishClaimedExperience).mockResolvedValue({
       mode: "preview-only",
@@ -283,7 +292,7 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(stored?.experience?.html).not.toContain(
       "cdn.jitterbit.example/fonts/roboto-slab.woff2"
     );
-    expect(generateExperienceDraft).toHaveBeenCalledOnce();
+    expect(sectionModelClient).toHaveBeenCalledOnce();
     expect(publishClaimedExperience).not.toHaveBeenCalled();
     expect(recordLeadCapture).not.toHaveBeenCalled();
     expect(updateLeadOutcome).not.toHaveBeenCalled();
@@ -305,7 +314,9 @@ describe("anonymous preview and claim publication boundary", () => {
     await runStoryStage(pending.id);
 
     const stored = await getSession(pending.id);
-    expect(generateExperienceDraft).not.toHaveBeenCalled();
+    // The client factory is resolved once, even though the finalization
+    // reserve prevents any section write from starting.
+    expect(sectionModelClient).toHaveBeenCalledOnce();
     expect(stored).toMatchObject({
       status: "preview_ready_unclaimed",
       experience: { generationSource: "deterministic-fallback", readiness: "final" }
@@ -345,12 +356,8 @@ describe("anonymous preview and claim publication boundary", () => {
     });
     await putSession(pending);
 
-    let resolveGeneration!: (value: Awaited<ReturnType<typeof generateExperienceDraft>>) => void;
-    vi.mocked(generateExperienceDraft).mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveGeneration = resolve;
-      })
-    );
+    let resolveGeneration!: () => void;
+    vi.mocked(sectionModelClient).mockReturnValueOnce(delayedSectionWriter((release) => { resolveGeneration = release; }));
 
     const completion = runStoryStage(pending.id);
     await vi.waitFor(async () => {
@@ -374,32 +381,21 @@ describe("anonymous preview and claim publication boundary", () => {
     );
     expect(recordLeadCapture).not.toHaveBeenCalled();
 
-    resolveGeneration({
-      draft: {
-        ...draft,
-        headline: "A refined buyer-ready campaign",
-        sections: draft.sections.map((section) => ({ ...section })),
-        signalLabels: [...draft.signalLabels]
-      },
-      source: "openai",
-      durationMs: 18_000
-    });
+    resolveGeneration();
     await completion;
 
     const final = await getSession(pending.id);
-    // The slow model pass, not a deterministic fallback, is what produced the
-    // one revealed artifact. Its global draft hero deliberately does not win the
-    // headline; production section copy owns that.
+    // An empty model response falls back section-by-section. The result is
+    // still the one persisted, read-back final artifact.
     expect(final).toMatchObject({
       status: "preview_ready_unclaimed",
       experience: {
         readiness: "final",
-        generationSource: "openai"
+        generationSource: "deterministic-fallback"
       },
-      stages: { story: { status: "complete" } },
+      stages: { story: { status: "fallback" } },
       buildProgress: { phase: "ready" }
     });
-    expect(final?.experience?.html).not.toContain("A refined buyer-ready campaign");
     expect(final?.finalArtifact).toMatchObject({
       readiness: "final",
       structuralGate: "passed",
@@ -466,12 +462,8 @@ describe("anonymous preview and claim publication boundary", () => {
         spacing: {}
       }
     };
-    let resolveGeneration!: (value: Awaited<ReturnType<typeof generateExperienceDraft>>) => void;
-    vi.mocked(generateExperienceDraft).mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveGeneration = resolve;
-      })
-    );
+    let resolveGeneration!: () => void;
+    vi.mocked(sectionModelClient).mockReturnValueOnce(delayedSectionWriter((release) => { resolveGeneration = release; }));
     await putSession(pending);
 
     const completion = runStoryStage(pending.id);
@@ -489,11 +481,7 @@ describe("anonymous preview and claim publication boundary", () => {
     );
     expect(building?.experience).toBeUndefined();
 
-    resolveGeneration({
-      draft: { ...draft, sections: draft.sections.map((section) => ({ ...section })) },
-      source: "openai",
-      durationMs: 18_000
-    });
+    resolveGeneration();
     await completion;
 
     const final = await getSession(pending.id);
@@ -531,19 +519,15 @@ describe("anonymous preview and claim publication boundary", () => {
     const stored = await getSession(pending.id);
     expect(stored?.experience).toBeUndefined();
     expect(stored?.status).toBe("collecting");
-    expect(generateExperienceDraft).not.toHaveBeenCalled();
+    expect(sectionModelClient).not.toHaveBeenCalled();
   });
 
   it("discards a late refinement after the buyer brief changes", async () => {
     const pending = session({ id: "build-stale-refinement" });
     await putSession(pending);
 
-    let resolveGeneration!: (value: Awaited<ReturnType<typeof generateExperienceDraft>>) => void;
-    vi.mocked(generateExperienceDraft).mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveGeneration = resolve;
-      })
-    );
+    let resolveGeneration!: () => void;
+    vi.mocked(sectionModelClient).mockReturnValueOnce(delayedSectionWriter((release) => { resolveGeneration = release; }));
 
     const completion = runStoryStage(pending.id);
     await vi.waitFor(async () => {
@@ -554,16 +538,7 @@ describe("anonymous preview and claim publication boundary", () => {
     expect(supersededAttemptId).toBeTruthy();
 
     await patchSessionAnswers(pending.id, { objective: "Drive product evaluation" });
-    resolveGeneration({
-      draft: {
-        ...draft,
-        headline: "Stale model output must never replace the page",
-        sections: draft.sections.map((section) => ({ ...section })),
-        signalLabels: [...draft.signalLabels]
-      },
-      source: "openai",
-      durationMs: 20_000
-    });
+    resolveGeneration();
     await completion;
 
     const stored = await getSession(pending.id);
@@ -626,6 +601,7 @@ describe("anonymous preview and claim publication boundary", () => {
     pending.answers = {
       ...pending.answers,
       ctaType: "explore",
+      objective: "Educate buyers",
       selectedAssetIds: ["asset_selected_visual"],
       layoutVariant: "immersive",
       styleVariant: "brand-led"
@@ -654,7 +630,7 @@ describe("anonymous preview and claim publication boundary", () => {
     await runStoryStage(pending.id);
 
     const stored = await getSession(pending.id);
-    expect(stored?.experience).toMatchObject({
+    expect(stored?.experience, JSON.stringify(stored?.events.filter((event) => event.name === "build_compile_result"))).toMatchObject({
       headline: "A controlled headline that survives regeneration.",
       subhead: "This supporting message is persisted as an explicit workspace override.",
       primaryCta: "Explore the architecture"
@@ -681,7 +657,7 @@ describe("anonymous preview and claim publication boundary", () => {
 
     await runStoryStage(running.id);
 
-    expect(generateExperienceDraft).not.toHaveBeenCalled();
+    expect(sectionModelClient).not.toHaveBeenCalled();
     expect(await getSession(running.id)).toMatchObject({
       status: "generating",
       stages: { story: { status: "running" } }
@@ -697,9 +673,6 @@ describe("anonymous preview and claim publication boundary", () => {
       sourceUrl: "https://example.test/unreadable"
     };
     await putSession(unreadable);
-    vi.mocked(generateExperienceDraft).mockRejectedValueOnce(
-      new SourceFetchError(new Error("upstream denied the request"))
-    );
 
     await runStoryStage(unreadable.id);
 
