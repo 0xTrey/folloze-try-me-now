@@ -328,11 +328,13 @@ function citedContentArtifact(input: {
   title: string;
   audience: string;
   offer: string;
+  additionalDetails?: readonly { title: string; text: string }[];
 }): SourceArtifact {
   const sections = [
     `${input.offer} explains the decision scope and evidence ${input.audience} should review before changing ownership.`,
     `The guide sequences inputs, reviewers, a documented decision, and validation criteria.`,
-    `The guide distinguishes a bounded recommendation from a verified operating outcome.`
+    `The guide distinguishes a bounded recommendation from a verified operating outcome.`,
+    ...(input.additionalDetails ?? []).map(({ text }) => text)
   ];
   return createSourceArtifact({
     source: { kind: "public-url", mediaType: "text/html", sourceUrl: input.sourceUrl, finalUrl: input.sourceUrl },
@@ -341,7 +343,7 @@ function citedContentArtifact(input: {
       title: input.title,
       description: `Cited explanatory content for ${input.audience}.`,
       text: sections.join(" "),
-      sections: sections.map((text, index) => ({ id: `section-${index + 1}`, title: ["Scope", "Sequence", "Limits"][index]!, level: 2, order: index, text, citationIds: [`citation-${index + 1}`] })),
+      sections: sections.map((text, index) => ({ id: `section-${index + 1}`, title: ["Scope", "Sequence", "Limits", ...(input.additionalDetails ?? []).map(({ title }) => title)][index]!, level: 2, order: index, text, citationIds: [`citation-${index + 1}`] })),
       links: [],
       assets: [],
       citations: sections.map((excerpt, index) => ({ id: `citation-${index + 1}`, locator: { kind: "url-block" as const, block: index + 1, label: `Guide section ${index + 1}`, sourceUrl: input.sourceUrl }, excerpt }))
@@ -785,6 +787,15 @@ export function archetypeRuntimeFixture(
         ctaStyle: "solid"
       },
       evidenceItems: [
+        // Geometry checks need earned cards, not generic prompts occupying a
+        // grid. These independent synthetic details supply that content while
+        // the existing scope, citation, and copy-quality gates remain active.
+        ...[
+          ["escalation", "Escalation notices identify overdue reviews and notify the assigned supervisor."],
+          ["exports", "Audit exports package approval timestamps and reviewer decisions for compliance teams."],
+          ["routing", "Routing rules assign incoming requests by territory and service category."]
+        ].map(([key, text]) => evidence(`${id}-${key}`, "seller", text!,
+          `https://${domain}/platform`, [key!], "capability", motion.offer)),
         evidence(
           `${id}-positioning`,
           "seller",
@@ -846,7 +857,12 @@ export function archetypeRuntimeFixture(
               sourceUrl: `https://${domain}/guide`,
               title: "Deployment guide",
               audience: motion.persona,
-              offer: motion.offer
+              offer: motion.offer,
+              additionalDetails: [
+                { title: "Enrollment checks", text: "Enrollment checks compare serial-number ownership with the purchasing record." },
+                { title: "Identity review", text: "Identity review maps required access permissions to the assigned employee role." },
+                { title: "Application rollout", text: "Application rollout groups devices by department before distributing approved software." }
+              ]
             })
           }
         : {})
@@ -867,7 +883,11 @@ export async function compileRuntimeVisualFixture(fixture: RuntimeVisualFixture)
     currentTimeMs: 10_000
   });
   if (result.outcome !== "production-page" || !result.artifact.value) {
-    throw new Error(`Runtime fixture ${fixture.id} did not produce a page: ${result.outcome}`);
+    throw new Error(`Runtime fixture ${fixture.id} did not produce a page: ${result.outcome}; ${JSON.stringify({
+      receipts: result.compileReceipts.filter((receipt) => receipt.status !== "completed").map((receipt) => receipt.detailCode),
+      quality: result.buildQualityReceipt,
+      rejectedSections: result.buildTrace.sections.filter((section) => section.status !== "completed").map((section) => ({ id: section.sectionId, role: section.role, code: section.fallbackCode }))
+    })}`);
   }
   const page = result.artifact.value;
   const draft = {

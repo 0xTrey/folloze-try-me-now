@@ -97,4 +97,6 @@ These local runs use in-memory persistence with external lead delivery, Folloze 
 
 Browser verification is pending because the Mac is locked. An API result or saved HTML is not a desktop/mobile visual approval.
 
+Remote run `34182338521` passed repository QA, dependency checks, and the secret scan, but 36 brand-fidelity browser cases failed because their shared fixture no longer produced a card; 65 other browser tests passed. The fixture had depended on generic filler to supply its grid. It now includes distinct synthetic, cited details and retains all existing geometry assertions. A compile-level matrix checks that each archetype/family earns substantive cards before browser measurement. This also exposed and fixed an opening fallback that could repeat a short source sentence as both headline and body. The follow-up passes 2,055 local tests with one skipped, typecheck, and focused lint. Remote checks must pass on the follow-up commit before release.
+
 Production was not changed by this repair. The prior release receipt remains in `docs/messaging-buildflow-30.md`; recheck the live alias before any future deployment.

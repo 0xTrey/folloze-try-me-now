@@ -103,7 +103,8 @@ export function repairBuildFallbacks(input: {
       const body = `${context}${text}${/[.!?]$/.test(text) ? "" : "."}${relevanceQuestion}`;
       const candidate: SectionCopyCandidate = {
         sectionId: slot.id, role: slot.role, ...copyContractMetadata(slot), status: "complete",
-        headline: slot.v2Role === "validation-plan" && claim.sourceSectionTitle && safe(claim.sourceSectionTitle) &&
+        headline: slot.role === "hero" && normalized(headline).replace(/[.!?]+$/, "").toLowerCase() === text.replace(/[.!?]+$/, "").toLowerCase()
+          ? offer : slot.v2Role === "validation-plan" && claim.sourceSectionTitle && safe(claim.sourceSectionTitle) &&
           !claim.sourceSectionTitle.includes("?") &&
           count(claim.sourceSectionTitle) <= (slot.headlineWordBudget?.max ?? 10) ? claim.sourceSectionTitle : headline, body,
         ...(current.cta ? { cta: current.cta } : {}), evidenceRefs: [claim.id], wordCount: 0
