@@ -68,6 +68,16 @@ Analyze an already registered offline experiment with `npm run build-flow:analyz
 
 ## Release boundary
 
-The implementation does not add user inputs, screens, questions, controls, or API request fields. No visitor experiment, feedback rule, email, Folloze publication, remote push, or production deployment was activated by this work. Release requires a separate decision and fresh production verification. Previously saved HTML does not regenerate merely because new code is deployed.
+The implementation does not add user inputs, screens, questions, controls, or API request fields. At the implementation handoff, no visitor experiment, feedback rule, email, Folloze publication, remote push, or production deployment had been activated. The separately authorized production release is recorded below. Previously saved HTML does not regenerate merely because new code is deployed.
 
 Initial product targets remain targets: 80 percent of benchmark pages approved without substantive editing, and 95 percent of eligible builds reaching a final page within 60 seconds. Automated results must not be described as human approval or measured production performance.
+
+## Production release: September 7, 2026
+
+Trey separately authorized the release with "Push live so I can try it." Runtime commit `24e4caef91cc735426620930513e9edc04963c70` is pushed to both `codex/messaging-buildflow-30` and `production`. It contains the completed implementation plus the explicit JSON import declaration required by native module runners. The initial hosted browser run caught that declaration issue before production changed.
+
+[GitHub quality gate 34174174330](https://github.com/0xTrey/folloze-try-me-now/actions/runs/34174174330) passed at the released commit: 2,003 tests passed, one skipped, all 101 desktop browser tests passed, both production builds passed, and the dependency and Git-history secret scans passed.
+
+At 19:46 CDT, production deployment `dpl_GSjaxNAysim6ivLsyKSsm8Yy5Vi7` was READY and owned [the canonical app address](https://folloze-try-me-now.vercel.app). The public page returned HTTP 200 with the existing security headers. `/api/health` reported `productionCapable: true`, connected OpenAI generation, durable sessions and leads, distributed limits, and no required blockers. A fresh browser load and actual build-button click reached the company-domain intake. Bounded deployment-specific error and 5xx queries returned no logs; this is an immediate smoke check, not ongoing monitoring.
+
+This release did not regenerate saved experience HTML, submit a new campaign, create a lead, send email, publish to Folloze, activate feedback rules, or enroll an experiment. New builds use the upgraded flow. Production model quality, the 60-second performance target, human approval, and conversion lift remain unmeasured. The prior production deployment `dpl_Fovds3QZ1RASDD3firx6xhniTFPx` remains the release recovery reference. The three pre-existing screenshot edits remain unstaged and untouched.
