@@ -2,7 +2,7 @@
  * This is deliberately a build-only reader. Production defaults to no rules;
  * callers must supply a separately validated, versioned artifact from a trusted ledger.
  */
-import productionRegistry from "./approved-build-learning-registry.json";
+import productionRegistry from "./approved-build-learning-registry.json" with { type: "json" };
 
 export const APPROVED_BUILD_LEARNING_VERSION = "build-flow-learning-v2";
 const MAX_RULES = 100;
