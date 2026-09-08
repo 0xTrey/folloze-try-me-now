@@ -100,7 +100,7 @@ function currentClaimsForSlot(
     .map((id) => currentById.get(id))
     .filter((claim): claim is SectionEvidenceClaim => claim !== undefined)
     .filter((claim) => slot.role !== "mechanism" ||
-      (claim.evidenceType !== "resource" &&
+      ((claim.evidenceType !== "resource" || input.brief.offerKind === "event") &&
         (words(claim.text) >= 6 || claim.evidenceType === "capability" || claim.evidenceType === "workflow")))
     .filter((claim) => slot.role !== "proof" || !slot.family || claim.kind === "proof");
 }

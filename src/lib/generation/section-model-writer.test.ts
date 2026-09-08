@@ -536,13 +536,35 @@ describe("bounded parallel section writing", () => {
       evidenceRefs: [...contract!.evidenceRefs]
     })).toBeUndefined();
   });
-  it("requires the choices that decision-support layouts render", () => {
+  it("allows a supported single fact to remain a paragraph in a decision-support layout", () => {
     const [contract] = contracts(1);
     const choiceContract = { ...contract!, slot: { ...contract!.slot, role: "decision-support" as const } };
-    expect(normalizeModelCandidate(choiceContract, {
+    const normalized = normalizeModelCandidate(choiceContract, {
       headline: "Set requirements before comparison",
       body: "Define the operating requirements you need each provider to address.",
       evidenceRefs: [...contract!.evidenceRefs]
+    });
+    expect(normalized).toMatchObject({ status: "complete" });
+    expect(normalized?.choices).toBeUndefined();
+  });
+
+  it("accepts two cited cards without an intro, but rejects one, empty, or over-limit cards", () => {
+    const [contract] = contracts(1);
+    const cards = [
+      { label: "Referral routing", body: "Referral triage routes 30% more appointments within the same week.", evidenceRefs: ["ev-seller-1"] },
+      { label: "Capacity review", body: "Open capacity is reviewed before the next appointment is assigned.", evidenceRefs: ["ev-seller-1"] }
+    ] as const;
+    expect(normalizeModelCandidate(contract!, {
+      headline: "Two operational details", choices: cards, evidenceRefs: []
+    })?.choices).toHaveLength(2);
+    expect(normalizeModelCandidate(contract!, {
+      headline: "One card", choices: [cards[0]!] as never, evidenceRefs: []
+    })).toBeUndefined();
+    expect(normalizeModelCandidate(contract!, {
+      headline: "Empty card", choices: [cards[0]!, { ...cards[1]!, body: "" }], evidenceRefs: []
+    })).toBeUndefined();
+    expect(normalizeModelCandidate(contract!, {
+      headline: "Long card", choices: [cards[0]!, { ...cards[1]!, body: "detail ".repeat(SECTION_MODEL_BOUNDS.choiceBodyChars) }], evidenceRefs: []
     })).toBeUndefined();
   });
 

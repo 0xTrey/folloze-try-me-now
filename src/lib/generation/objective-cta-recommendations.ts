@@ -84,11 +84,7 @@ export interface ObjectiveCtaCandidate {
 export interface ObjectiveCtaRecommendationSet {
   revision: number;
   motion: ObjectiveCtaMotion;
-  candidates: readonly [
-    ObjectiveCtaCandidate,
-    ObjectiveCtaCandidate,
-    ObjectiveCtaCandidate
-  ];
+  candidates: readonly ObjectiveCtaCandidate[];
   recommendedCandidateId: string;
   reasonCodes: readonly ObjectiveCtaReasonCode[];
 }
@@ -99,6 +95,8 @@ export interface ObjectiveCtaRecommendationInput {
   activeRevision: number;
   motion: ObjectiveCtaMotion;
   offerLabel?: string;
+  /** A verified public resource URL, when one exists for the product. */
+  resourceUrl?: string;
   evidence?: readonly ObjectiveCtaEvidence[];
   startedAt: string;
   completedAt: string;
@@ -113,7 +111,7 @@ type CandidateSeed = {
 };
 
 type RecommendationPlan = {
-  candidates: readonly [CandidateSeed, CandidateSeed, CandidateSeed];
+  candidates: readonly CandidateSeed[];
   recommendedId: string;
   reasonCodes: readonly ObjectiveCtaReasonCode[];
   supportingEvidence: readonly ObjectiveCtaEvidence[];
@@ -534,7 +532,23 @@ function planFor(input: ObjectiveCtaRecommendationInput): RecommendationPlan {
     "visitor-input",
     "official-seller-page"
   ]);
-  return defaultPlan(input.motion, supportingEvidence, supportingEvidence.length ? reasonCode : undefined);
+  const plan = defaultPlan(input.motion, supportingEvidence, supportingEvidence.length ? reasonCode : undefined);
+  if (input.motion !== "product") return plan;
+  const productCandidates = plan.candidates.map((candidate) => {
+    if (candidate.id === "product-explore-use-case") {
+      return { ...candidate, objective: "Build product awareness", ctaLabel: "Explore the product use case" };
+    }
+    if (candidate.id === "product-book-walkthrough") {
+      return { ...candidate, objective: "Generate sales conversations", ctaLabel: "Start a product conversation" };
+    }
+    return { ...candidate, objective: "Drive resource engagement", ctaLabel: "Read the product resource" };
+  });
+  return {
+    ...plan,
+    candidates: input.resourceUrl
+      ? productCandidates
+      : productCandidates.filter((candidate) => candidate.id !== "product-download-brief")
+  };
 }
 
 function candidateConfidence(
@@ -611,11 +625,9 @@ export function recommendObjectiveCtas(
     revision: input.revision,
     evidenceRefs
   });
-  const candidates: ObjectiveCtaRecommendationSet["candidates"] = [
-    candidateFor(candidateInput(plan.candidates[0])),
-    candidateFor(candidateInput(plan.candidates[1])),
-    candidateFor(candidateInput(plan.candidates[2]))
-  ];
+  const candidates: ObjectiveCtaRecommendationSet["candidates"] = plan.candidates.map((seed) =>
+    candidateFor(candidateInput(seed))
+  );
   const confidence = candidates.find((candidate) => candidate.recommended)?.confidence ?? 0;
 
   return {

@@ -76,7 +76,10 @@ export const contentClaimSchema = z.object({
   text: z.string().min(1).max(420),
   kind: z.enum(["claim", "metric", "recommendation"]),
   confidence: confidenceSchema,
-  citationIds: z.array(z.string().min(1).max(80)).min(1).max(8)
+  citationIds: z.array(z.string().min(1).max(80)).min(1).max(8),
+  /** Optional source-section ownership retained from structured extraction. */
+  sourceSectionId: z.string().min(1).max(80).optional(),
+  sourceSectionTitle: z.string().min(1).max(180).optional()
 });
 
 export type ContentClaim = z.infer<typeof contentClaimSchema>;
@@ -86,7 +89,10 @@ export const contentProofSchema = z.object({
   text: z.string().min(1).max(420),
   kind: z.enum(["metric", "example", "mechanism", "attribution"]),
   confidence: confidenceSchema,
-  citationIds: z.array(z.string().min(1).max(80)).min(1).max(8)
+  citationIds: z.array(z.string().min(1).max(80)).min(1).max(8),
+  /** Optional source-section ownership retained from structured extraction. */
+  sourceSectionId: z.string().min(1).max(80).optional(),
+  sourceSectionTitle: z.string().min(1).max(180).optional()
 });
 
 export type ContentProof = z.infer<typeof contentProofSchema>;
@@ -293,20 +299,36 @@ function extractTopics(content: SourceContent): string[] {
   return dedupeByMeaning([...headingTopics.slice(0, 4), ...repeated], (topic) => topic).slice(0, 10);
 }
 
-function candidateSentences(content: SourceContent): Array<{ text: string; citationIds: string[] }> {
+function candidateSentences(content: SourceContent): Array<{
+  text: string;
+  citationIds: string[];
+  sourceSectionId: string;
+  sourceSectionTitle: string;
+}> {
   return dedupeByMeaning(
     content.sections.flatMap((section) =>
-      sentences(section.text).map((text) => ({
-        text,
-        citationIds: citationForSection(content, section)
-      }))
+      sentences(section.text).flatMap((text) => {
+        // Claims must fit inside a retained citation excerpt. Later sentences
+        // in a long block cannot be re-verified after the excerpt cap, so keep
+        // the earlier, actually cited source statement instead of producing a
+        // claim that downstream evidence validation must discard.
+        const citationIds = citationForSection(content, section).filter((id) => {
+          const citation = content.citations.find((candidate) => candidate.id === id);
+          return citation && normalizeCitationText(citation.excerpt).includes(normalizeCitationText(text));
+        });
+        return citationIds.length ? [{ text, citationIds, sourceSectionId: section.id, sourceSectionTitle: section.title }] : [];
+      })
     ).filter((candidate) => candidate.citationIds.length > 0),
     (candidate) => candidate.text
   );
 }
 
+function normalizeCitationText(value: string): string {
+  return cleanSourceText(value).replace(/\s+/g, " ").trim();
+}
+
 function deriveClaims(content: SourceContent): ContentClaim[] {
-  return candidateSentences(content)
+  const ranked = candidateSentences(content)
     .map((candidate) => {
       const kind: ContentClaim["kind"] = metricLanguage.test(candidate.text)
         ? "metric"
@@ -320,14 +342,34 @@ function deriveClaims(content: SourceContent): ContentClaim[] {
         Math.min(candidate.text.length, 220) / 12;
       return { ...candidate, kind, score };
     })
-    .sort((left, right) => right.score - left.score)
-    .slice(0, 8)
+    .sort((left, right) => right.score - left.score);
+  // A page-wide score can otherwise crowd a plainly stated, lower-scoring
+  // service-card description out of the claim ledger. Preserve one sentence
+  // from each distinct extracted section when capacity permits; this is a
+  // structural ownership rule, not a vocabulary or seller-specific exception.
+  const selected: typeof ranked = [];
+  const selectedSections = new Set<string>();
+  for (const candidate of ranked) {
+    if (selected.length >= 12) break;
+    if (selectedSections.has(candidate.sourceSectionId)) continue;
+    selected.push(candidate);
+    selectedSections.add(candidate.sourceSectionId);
+  }
+  // Preserve the section-diversity allocation, then use remaining capacity
+  // for independently cited details from richer sections.
+  for (const candidate of ranked) {
+    if (selected.length >= 12) break;
+    if (!selected.includes(candidate)) selected.push(candidate);
+  }
+  return selected
     .map((candidate) => ({
       id: stableId("claim", candidate.text),
       text: candidate.text,
       kind: candidate.kind,
       confidence: candidate.kind === "metric" || evidenceLanguage.test(candidate.text) ? "high" : "medium",
-      citationIds: candidate.citationIds.slice(0, 8)
+      citationIds: candidate.citationIds.slice(0, 8),
+      sourceSectionId: candidate.sourceSectionId,
+      sourceSectionTitle: candidate.sourceSectionTitle
     }));
 }
 
@@ -348,7 +390,9 @@ function deriveProof(content: SourceContent): ContentProof[] {
         text: candidate.text,
         kind,
         confidence: kind === "metric" || kind === "attribution" ? "high" : "medium",
-        citationIds: candidate.citationIds.slice(0, 8)
+        citationIds: candidate.citationIds.slice(0, 8),
+        sourceSectionId: candidate.sourceSectionId,
+        sourceSectionTitle: candidate.sourceSectionTitle
       };
     });
 }

@@ -72,6 +72,9 @@ export interface CompilerEvidenceItem {
   evidenceType?: CompilerEvidenceType;
   subject?: string;
   entityRole?: "seller" | "target" | "source" | "visitor";
+  /** Exact structured source section when the evidence originated in one. */
+  sourceSectionId?: string;
+  sourceSectionTitle?: string;
 }
 
 export interface MessageStrategyCandidate {

@@ -124,25 +124,31 @@ export function applyProductionPageToDraft(
       (section) =>
         section.status === "complete" && section.role === "decision-support"
     );
-  if (pathExploration?.choices?.length === 3) {
+  if (pathExploration?.choices && pathExploration.choices.length >= 2) {
     next.sectionLabels.lenses = bounded(
       pathExploration.headline,
       6,
       100,
       next.sectionLabels.lenses
     );
-    next.sections = pathExploration.choices.map((choice, index) => ({
-      eyebrow: bounded(choice.label, 2, 44, next.sections[index]!.eyebrow),
-      headline: bounded(choice.label, 6, 100, next.sections[index]!.headline),
-      body: bounded(choice.body, 12, 320, next.sections[index]!.body),
-      proof: bounded(choice.body, 8, 180, next.sections[index]!.proof)
-    })) as ExperienceDraft["sections"];
-    next.signalLabels = pathExploration.choices.map((choice, index) =>
-      bounded(choice.label, 2, 56, next.signalLabels[index]!)
-    ) as ExperienceDraft["signalLabels"];
+    next.sections = next.sections.map((section, index) => {
+      const choice = pathExploration.choices?.[index];
+      return choice
+        ? {
+            eyebrow: bounded(choice.label, 2, 44, section.eyebrow),
+            headline: bounded(choice.label, 6, 100, section.headline),
+            body: bounded(choice.body, 12, 320, section.body),
+            proof: bounded(choice.body, 8, 180, section.proof)
+          }
+        : section;
+    }) as ExperienceDraft["sections"];
+    next.signalLabels = next.signalLabels.map((label, index) => {
+      const choice = pathExploration.choices?.[index];
+      return choice ? bounded(choice.label, 2, 56, label) : label;
+    }) as ExperienceDraft["signalLabels"];
   }
   const frameworkExploration = criteriaExploration ?? pathExploration;
-  if (frameworkExploration?.choices?.length === 3 && framework) {
+  if (frameworkExploration?.choices && frameworkExploration.choices.length >= 2 && framework) {
       framework.startingPoints.eyebrow = bounded(
         frameworkExploration.eyebrow,
         2,
@@ -161,25 +167,17 @@ export function applyProductionPageToDraft(
         220,
         framework.startingPoints.intro
       );
-      framework.startingPoints.choices = frameworkExploration.choices.map((choice, index) => ({
-        ...framework.startingPoints.choices[index]!,
-        label: bounded(
-          choice.label,
-          2,
-          48,
-          framework.startingPoints.choices[index]!.label
-        ),
-        buyerJob: bounded(
-          choice.body,
-          8,
-          150,
-          framework.startingPoints.choices[index]!.buyerJob
-        ),
-        evidenceIds: evidenceIds(
-          choice.evidenceRefs,
-          framework.startingPoints.choices[index]!.evidenceIds
-        )
-      })) as typeof framework.startingPoints.choices;
+      framework.startingPoints.choices = framework.startingPoints.choices.map((existing, index) => {
+        const choice = frameworkExploration.choices?.[index];
+        return choice
+          ? {
+              ...existing,
+              label: bounded(choice.label, 2, 48, existing.label),
+              buyerJob: bounded(choice.body, 8, 150, existing.buyerJob),
+              evidenceIds: evidenceIds(choice.evidenceRefs, existing.evidenceIds)
+            }
+          : existing;
+      }) as typeof framework.startingPoints.choices;
   }
 
   const mechanism = byRole.get("mechanism");

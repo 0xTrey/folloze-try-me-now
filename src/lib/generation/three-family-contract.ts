@@ -453,6 +453,7 @@ export function applyV2SectionPlanToLegacySelection(
 ): WireframeSelectionV1 {
   assertWireframeDecisionV2(decision);
   const sections = decision.sectionPlan.map((section) => ({
+    sectionId: section.id,
     role: legacyRoleByV2Role[section.role],
     label: section.navigationLabel,
     wordBudget: {

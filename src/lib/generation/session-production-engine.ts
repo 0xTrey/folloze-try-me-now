@@ -54,7 +54,7 @@ import { boundedCtaV2 } from "@/lib/generation/section-copy-types";
 import { deriveWireframeEvidenceSignals } from "@/lib/generation/wireframe-evidence-signals";
 import { assignBuyerJourneySections, deriveBuyerDecisionBrief } from "@/lib/generation/buyer-decision-journey";
 import { compilerEvidenceFromProductSource } from "@/lib/generation/source-backed-product-knowledge";
-import { resolveBuyerCtaOffer, selectedBuyerCta } from "@/lib/cta-offer-contract";
+import { resolveBuyerCtaOffer, selectedBuyerCta, verifiedProductResourceUrl } from "@/lib/cta-offer-contract";
 import { compileBuildExperiencePlan } from "@/lib/generation/build-experience-plan";
 import { compilerEvidenceFromSelectedContentSource } from "./content-source-knowledge";
 import { config } from "@/lib/config";
@@ -913,7 +913,8 @@ export async function compileSessionProductionPage(input: {
   }), ...compilerEvidenceFromProductSource({ artifact: session.sourceArtifact, seller: brand, offer }),
     ...contentSourceEvidence];
   const ctaOffer = resolveBuyerCtaOffer({ intent: cta.type, label: cta.label,
-    sourceUrl: session.answers.sourceUrl ?? session.answers.offerSourceUrl ?? session.answers.eventSource,
+    sourceUrl: cta.type === "download" ? verifiedProductResourceUrl(session)
+      : session.answers.sourceUrl ?? session.answers.offerSourceUrl ?? session.answers.eventSource,
     meetingUrl: config.demoCtaUrl });
   const buyerDecisionBrief = deriveBuyerDecisionBrief({
     session, seller: brand, resolvedOffer: offer, audience: audience.label,
@@ -1278,7 +1279,10 @@ export async function compileSessionProductionPage(input: {
           evidenceType: item.evidenceType,
           confidence: item.confidence === "high" ? 0.9 : 0.65,
           sourceRole: item.entityRole as "seller" | "source",
-          kind: proofSignals.approvedProofRefs.includes(item.id) ? "proof" as const : "seller_fact" as const
+          kind: proofSignals.approvedProofRefs.includes(item.id) ? "proof" as const : "seller_fact" as const,
+          ...(item.sourceSectionId && item.sourceSectionTitle
+            ? { sourceSectionId: item.sourceSectionId, sourceSectionTitle: item.sourceSectionTitle }
+            : {})
         })),
       ...(selectedFamilyDecision.family === "align" ? accountPersonalization.claims : [])
     ],

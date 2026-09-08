@@ -1,3 +1,4 @@
+import { isPrivateHost } from "@/lib/asset-allocation";
 import type { CtaType, ExperienceActionContract, TryMeSession } from "@/lib/types";
 
 function publicDestination(value?: string) {
@@ -8,6 +9,25 @@ function publicDestination(value?: string) {
     // Keep query parameters that a real registration or resource link requires.
     return url.href;
   } catch { return undefined; }
+}
+
+function normalizedSubject(value: string): string {
+  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+/** Returns only a verified, same-offer resource destination. */
+export function verifiedProductResourceUrl(session: Pick<TryMeSession, "answers" | "evidenceItems">): string | undefined {
+  const subject = normalizedSubject(session.answers.promotedOffer ?? "");
+  if (!subject) return undefined;
+  const offerSource = publicDestination(session.answers.offerSourceUrl ?? session.answers.sourceUrl);
+  const match = session.evidenceItems?.find((item) => {
+    if (item.disposition === "excluded" || item.evidenceType !== "resource" || !item.subject ||
+        !["high", "medium"].includes(item.confidence ?? "") || normalizedSubject(item.subject) !== subject) return false;
+    const url = publicDestination(item.sourceUrl);
+    if (!url || url === offerSource) return false;
+    try { return !isPrivateHost(new URL(url).hostname); } catch { return false; }
+  });
+  return match ? publicDestination(match.sourceUrl) : undefined;
 }
 
 export function selectedBuyerCta(session: Pick<TryMeSession, "answers" | "objectiveRecommendations">): { type: CtaType; label: string } {

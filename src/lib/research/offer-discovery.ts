@@ -48,7 +48,7 @@ const htmlEntityMap: Record<string, string> = {
 };
 
 const offerHeadingPattern =
-  /\b(?:services?|solutions?|products?|platforms?|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth management|managed services|digital transformation|erp|webinar|summit|conference)\b/i;
+  /\b(?:services?|solutions?|products?|platforms?|processors?|processor|cpu|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth management|managed services|digital transformation|erp|webinar|summit|conference)\b/i;
 
 const companyDescriptorPattern = /\b(?:firm|company|provider)\b/i;
 
@@ -62,7 +62,7 @@ const offerIndexPathPattern =
   /\/(?:all-)?(?:services?|solutions?|products?|offerings?)(?:\/|$)/i;
 
 const explicitOfferLabelPattern =
-  /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth management|managed services|digital transformation|automation|headsets?|cameras?|devices?|erp)\b/i;
+  /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application|processors?|cpu|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth management|managed services|digital transformation|automation|headsets?|cameras?|devices?|erp)\b/i;
 
 const editorialLabelPattern =
   /\b(?:insights?|research|trends?|blog|articles?|stories|news|updates?|resources?|podcasts?|videos?|reports?|guides?|case studies|events?)\b/i;
@@ -313,7 +313,7 @@ function inferKind(label: string, motion: OfferCampaignMotion): OfferEvidenceKin
     return "industry";
   }
   if (
-    /\b(?:product|platform|device|headset|camera|microphone|spectrometer|software suite|application)\b/.test(
+    /\b(?:product|platform|device|processor|cpu|headset|camera|microphone|spectrometer|software suite|application)\b/.test(
       value
     )
   ) {

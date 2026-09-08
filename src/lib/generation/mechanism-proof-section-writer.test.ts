@@ -9,6 +9,18 @@ import {
 
 import { writeMechanismProofSections } from "./mechanism-proof-section-writer";
 
+describe("selected event explanation", () => {
+  it("allows an assigned event statement to explain the session", () => {
+    const current = input();
+    current.brief.offerKind = "event";
+    current.slots = [{ ...mechanismSlot, wordBudget: { min: 0, max: 100 }, claimType: "fact", evidenceRefs: ["source-detail"] }];
+    current.evidence = [claim("source-detail", "The session explains the request review sequence and the decision record produced at each step.", { evidenceType: "resource" })];
+    const result = writeMechanismProofSections(current);
+    expect(result.value?.[0]).toMatchObject({ status: "complete", evidenceRefs: ["source-detail"] });
+    expect(result.value?.[0]?.body).toContain(current.evidence[0]!.text);
+  });
+});
+
 const revision = 12;
 const startedAt = "2026-08-22T18:20:00.000Z";
 const completedAt = "2026-08-22T18:20:01.000Z";

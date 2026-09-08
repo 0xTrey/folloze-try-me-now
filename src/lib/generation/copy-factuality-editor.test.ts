@@ -138,7 +138,37 @@ function threeChoices(
   ];
 }
 
+function twoChoices(
+  evidenceRefs: readonly [string, string]
+): [SectionCopyChoice, SectionCopyChoice] {
+  return [
+    {
+      label: "Outcome fit",
+      body: "Compare the intended outcome with the first supported point.",
+      evidenceRefs: [evidenceRefs[0]]
+    },
+    {
+      label: "Operating fit",
+      body: "Compare operating requirements with the second supported point.",
+      evidenceRefs: [evidenceRefs[1]]
+    }
+  ];
+}
+
 describe("editCopyForFactuality", () => {
+  it.each([
+    ["Explore Intel® Core™ Ultra Series 3 Processors", false],
+    ["Intel® Core™ Ultra Series 3 Processors save 3 hours", true],
+    ["Explore Intel® Core™ Ultra Series 30 Processors", true],
+    ["Explore Intel® Core™ Ultra Series 3 Processors with 50% more graphics cores", true]
+  ])("separates exact numeric product identities from metrics: %s", (headline, rejected) => {
+    const hero = slot("numeric-product", "hero", ["offer"]);
+    const body = "Intel Core Ultra processors include AI capabilities aimed at improving everyday experiences.";
+    const result = editCopyForFactuality(input([hero], [artifact("opening-writer", [candidate(hero, { headline, body })])],
+      [claim("offer", body)], { familyContext: { family: "launch", sellerName: "Intel", offerName: "Intel® Core™ Ultra Series 3 Processors" } }));
+    expect(result.value?.issueReceipts[0]?.after.includes("unsupported_numeric_claim")).toBe(rejected);
+    expect(result.value?.acceptedSections).toHaveLength(rejected ? 0 : 1);
+  });
   it("normalizes source punctuation without changing its supported claim", () => {
     const hero = slot("punctuation", "hero", ["offer"]);
     const text = "The platform connects records\u2014then routes them to the next owner.";
@@ -210,6 +240,42 @@ describe("editCopyForFactuality", () => {
         sourceRole: "seller"
       }
     ]);
+  });
+
+  it("accepts two individually cited cards without an unnecessary paragraph", () => {
+    const evidence = [
+      claim("path-1", "The guide identifies the intended workflow outcome."),
+      claim("path-2", "The guide describes operating requirements.")
+    ];
+    const pathways = slot("section-paths", "pathways", ["path-1", "path-2"], {
+      claimType: "fact"
+    });
+    const draft = candidate(pathways, {
+      headline: "Choose what to evaluate first",
+      body: undefined,
+      choices: twoChoices(["path-1", "path-2"]),
+      evidenceRefs: []
+    });
+    draft.wordCount = sectionCopyWordCount(draft);
+
+    const result = editCopyForFactuality(
+      input([pathways], [artifact("exploration-writer", [draft])], evidence)
+    );
+
+    expect(result.value?.acceptedSections).toHaveLength(1);
+    expect(result.value?.issueReceipts[0]?.after).toEqual([]);
+    expect(result.value?.claimToEvidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          claimId: "section-paths:choice.1.body",
+          evidence: [expect.objectContaining({ id: "path-1" })]
+        }),
+        expect.objectContaining({
+          claimId: "section-paths:choice.2.body",
+          evidence: [expect.objectContaining({ id: "path-2" })]
+        })
+      ])
+    );
   });
 
   it("repairs deterministic filler and buyer-facing strategy jargon", () => {
@@ -414,7 +480,7 @@ describe("editCopyForFactuality", () => {
     );
   });
 
-  it("enforces assigned evidence, word budgets, and three distinct choices", () => {
+  it("enforces assigned evidence, word budgets, and distinct choices", () => {
     const evidence = [
       claim("path-1", "The guide identifies an outcome."),
       claim("other", "An unrelated source identifies another point.")
@@ -451,7 +517,7 @@ describe("editCopyForFactuality", () => {
       expect.arrayContaining([
         "word_budget_violation",
         "choice_evidence_mismatch",
-        "choice_count_invalid"
+        "duplicate_choice"
       ])
     );
   });

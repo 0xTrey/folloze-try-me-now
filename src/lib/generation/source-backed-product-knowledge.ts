@@ -23,6 +23,40 @@ function sourceUrl(artifact: SourceArtifact, seller: BrandProfile): string | und
   } catch { return undefined; }
 }
 
+/**
+ * A linked-card child section owns its description, while its nearest prior
+ * shallower section supplies the page's stated grouping. Keeping both avoids
+ * losing a visible "Focus Areas" or "Capabilities" classification merely
+ * because extraction correctly separated sibling cards.
+ */
+function sectionHeadingsWithContext(artifact: SourceArtifact, sections: readonly SourceArtifact["content"]["sections"][number][]): string {
+  const headings = new Set<string>();
+  for (const section of sections) {
+    headings.add(section.title);
+    const index = artifact.content.sections.findIndex((candidate) => candidate.id === section.id);
+    const parent = artifact.content.sections.slice(0, index).reverse()
+      .find((candidate) => candidate.level < section.level);
+    if (parent) headings.add(parent.title);
+  }
+  return [...headings].join(" ");
+}
+
+function sectionHasQuestionAnswerShape(sections: readonly SourceArtifact["content"]["sections"][number][]): boolean {
+  return sections.some((section) => /\?\s*$/.test(section.title));
+}
+
+function nonNarrativeSection(sections: readonly SourceArtifact["content"]["sections"][number][]): boolean {
+  return sections.some((section) =>
+    /\b(?:footnotes?|disclaimers?|filters?)\b/i.test(section.title) || /\|/.test(section.text)
+  );
+}
+
+function normalizedContains(value: string | undefined, phrase: string): boolean {
+  const haystack = terms(value ?? "");
+  const needle = terms(phrase);
+  return Boolean(needle) && haystack.includes(needle);
+}
+
 export function clearSourceBackedProductKnowledgeCacheForTests() { cache.clear(); }
 
 /** Public, already-extracted seller material only. No new network/model calls. */
@@ -46,25 +80,40 @@ export function compilerEvidenceFromProductSource(input: {
   const add = (item: ContentClaim | ContentProof, proofKind?: ContentProof["kind"]) => {
     const text = normalize(item.text);
     if (!text || text.length > 400 || unsafe.test(text) || item.confidence === "low") return;
-    const sections = artifact.content.sections.filter((section) =>
+    const carriesOwnership = item.sourceSectionId !== undefined || item.sourceSectionTitle !== undefined;
+    if (carriesOwnership && (!item.sourceSectionId || !item.sourceSectionTitle)) return;
+    const ownedSection = carriesOwnership
+      ? artifact.content.sections.find((section) =>
+        section.id === item.sourceSectionId && normalize(section.title) === normalize(item.sourceSectionTitle!) &&
+        normalize(section.text).includes(text) &&
+        section.citationIds.some((id) => item.citationIds.includes(id)))
+      : undefined;
+    // Metadata is a restriction, never a hint. When it is present, accepting
+    // a different section would let a sibling card borrow the wrong service's
+    // description through a shared or stale citation id.
+    if (carriesOwnership && !ownedSection) return;
+    const sections = ownedSection ? [ownedSection] : artifact.content.sections.filter((section) =>
       section.citationIds.some((id) => item.citationIds.includes(id)) && normalize(section.text).includes(text));
-    const citation = item.citationIds.map((id) => citations.get(id)).find((candidate) => candidate &&
-      (normalize(candidate.excerpt).includes(text) || sections.some((section) =>
-        section.citationIds.includes(candidate.id) && normalize(section.text).includes(text))));
+    const citation = item.citationIds.map((id) => citations.get(id)).find((candidate) => candidate && sections.some((section) =>
+      section.citationIds.includes(candidate.id) && normalize(section.text).includes(text) &&
+      normalize(candidate.excerpt).includes(text)));
     if (!citation || citation.locator.kind !== "url-block") return;
     try { if (new URL(citation.locator.sourceUrl).origin !== new URL(url).origin) return; } catch { return; }
     const containsOffer = (value: string) => ` ${terms(value)} `.includes(` ${terms(offer)} `);
     const adjacentOffer = sections.some((section) => containsOffer(`${section.title} ${section.text}`)) || containsOffer(text);
-    const productFocusedTitle = terms((artifact.content.title ?? "").split(/[|:]/)[0]!) === terms(offer) ||
-      artifact.content.sections.some((section) => section.level === 1 && terms(section.title) === terms(offer));
+    const productFocusedTitle = normalizedContains((artifact.content.title ?? "").split(/[|:]/)[0], offer) ||
+      artifact.content.sections.some((section) => section.level === 1 && normalizedContains(section.title, offer));
     // Outcome proof needs product scope in its own quote/section. A portfolio
     // title or another section sharing a citation cannot establish that scope.
     if (!adjacentOffer && (!productFocusedTitle || proofKind === "metric" || proofKind === "example")) return;
     if (terms(offer) === terms(seller.companyName)) return;
-    const headings = sections.map((section) => section.title).join(" ");
+    const headings = sectionHeadingsWithContext(artifact, sections);
     // Related articles and site navigation are not descriptions of this offer.
     // A product-focused page title must not promote those blocks into product facts.
     if (/\b(?:latest from|related (?:articles|insights|resources)|upcoming (?:events|webinars)|newsroom)\b/i.test(headings)) return;
+    // Tables, filter controls, and legal footnotes can state true numbers or
+    // constraints, but they are not standalone product capability claims.
+    if (nonNarrativeSection(sections)) return;
     let evidenceType: CompilerEvidenceType = proofKind === "mechanism" ? "workflow"
       : /\b(?:features?|capabilities|focus areas|our (?:services|solutions))\b/i.test(headings) ? "capability"
       : /\b(?:pricing|plans? and pricing)\b/i.test(headings) ? "pricing"
@@ -72,6 +121,14 @@ export function compilerEvidenceFromProductSource(input: {
       : /\b(?:implementation|deployment|migration|integration)\b/i.test(headings) ? "implementation"
       : /\b(?:how it works|workflow)\b/i.test(headings) ? "workflow"
       : /\b(?:provid(?:es?|ing)|deliver(?:s|ing)?|supports?|helps?|enables?|connects?|assess(?:es)?|reviews?|includes?)\b/i.test(text) ? "capability" : "positioning";
+    // A cited answer under an offer-specific FAQ is a direct product
+    // description. Treat it as a capability without guessing from a verb so
+    // first-party facts such as form factor, efficiency, or included AI
+    // functions survive the compiler. Tables, filters, and footnotes are not
+    // question-and-answer descriptions and therefore cannot take this path.
+    if (evidenceType === "positioning" && adjacentOffer && sectionHasQuestionAnswerShape(sections)) {
+      evidenceType = "capability";
+    }
     if (evidenceType === "positioning" && !adjacentOffer) return;
     const confidence = artifact.confidence === "high" && item.confidence === "high" ? "high" : "medium";
     const customerContext = /\b(?:customer|client|case study)\b/i.test(`${headings} ${text}`);
@@ -83,11 +140,12 @@ export function compilerEvidenceFromProductSource(input: {
     }
     const permissions = compilerEvidencePermissions("fact", confidence);
     const isOutcome = evidenceType === "customer-outcome" || evidenceType === "quantified-outcome";
-    const id = `source:${compilerDigest("claim", { url, text, evidenceType }).slice(0, 24)}`;
+    const id = `source:${compilerDigest("claim", { url, text, evidenceType, sourceSectionId: item.sourceSectionId }).slice(0, 24)}`;
     output.set(id, { id, kind: "fact", claim: text, sourceAuthority: "seller-official",
       sourceRef: url, confidence, ...permissions,
       prohibitedUses: [...new Set([...permissions.prohibitedUses, ...(!isOutcome ? ["proof-point" as const] : [])])],
-      evidenceType, subject: offer, entityRole: "seller" });
+      evidenceType, subject: offer, entityRole: "seller",
+      ...(ownedSection ? { sourceSectionId: ownedSection.id, sourceSectionTitle: ownedSection.title } : {}) });
   };
   for (const item of artifact.understanding.claims) add(item);
   for (const item of artifact.understanding.proof) add(item, item.kind);

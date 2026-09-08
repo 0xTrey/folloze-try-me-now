@@ -77,6 +77,58 @@ describe("public source content normalization", () => {
     expect(artifact.extraction.truncated).toBe(false);
   });
 
+  it("keeps each linked service card's label and description in its own cited source section", () => {
+    const artifact = normalizePublicHtmlSource({ sourceUrl: "https://www.aprio.com/audit-assurance/", html: `
+      <main><h1>Audit &amp; Assurance Solutions</h1>
+        <p>Aprio helps organizations address audit and assurance requirements with focused services.</p>
+        <h2>Our Focus Areas</h2>
+        <div class="service-card"><a href="/employee-benefit-plan-audits/">Employee Benefit Plan (EBP) Audits</a><p>Our employee benefit plan audit team helps plan sponsors meet their reporting responsibilities.</p></div>
+        <div class="service-card"><a href="/financial-audit-assurance/">Financial Audit &amp; Assurance Services</a><p>Financial audit and assurance services evaluate financial statements and reporting controls.</p></div>
+        <div class="service-card"><a href="/non-financial-audit-assurance/">Non-Financial Audit &amp; Assurance Services</a><p>Non-financial assurance work addresses reporting needs beyond financial statements.</p></div>
+        <div class="service-card"><a href="/uniform-guidance-compliance/">Uniform Guidance Compliance</a><p>Uniform Guidance compliance support helps organizations prepare for applicable federal requirements.</p></div>
+        <div class="related-content service-card"><a href="/insights/">Related insight</a><p>Unrelated editorial copy must never become a service claim.</p></div>
+      </main>` });
+
+    const cards = artifact.content.sections.filter((section) => section.title !== "Audit & Assurance Solutions");
+    expect(cards.map((section) => section.title)).toEqual([
+      "Employee Benefit Plan (EBP) Audits",
+      "Financial Audit & Assurance Services",
+      "Non-Financial Audit & Assurance Services",
+      "Uniform Guidance Compliance"
+    ]);
+    expect(cards.every((section) => section.citationIds.length === 1)).toBe(true);
+    expect(cards.map((section) => section.text)).toEqual(expect.arrayContaining([
+      expect.stringContaining("plan sponsors"),
+      expect.stringContaining("financial statements"),
+      expect.stringContaining("beyond financial statements"),
+      expect.stringContaining("federal requirements")
+    ]));
+    expect(artifact.content.text).not.toContain("Unrelated editorial copy");
+    expect(artifact.content.links.find((link) => link.label === "Uniform Guidance Compliance")?.citationIds).toEqual(
+      cards.find((section) => section.title === "Uniform Guidance Compliance")?.citationIds
+    );
+    expect(artifact.understanding.claims).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceSectionTitle: "Employee Benefit Plan (EBP) Audits",
+        sourceSectionId: cards[0]?.id
+      }),
+      expect.objectContaining({
+        sourceSectionTitle: "Uniform Guidance Compliance",
+        sourceSectionId: cards[3]?.id
+      })
+    ]));
+  });
+
+  it("leaves ambiguous linked labels unowned instead of borrowing a sibling description", () => {
+    const artifact = normalizePublicHtmlSource({ sourceUrl: "https://example.com/services", html: `
+      <main><h1>Services</h1><p>We explain several services for buyers evaluating their options.</p><h2>Focus areas</h2>
+      <div class="service-card"><a href="/one">Service One</a><a href="/two">Service Two</a><p>One shared description cannot be safely assigned to either service.</p></div>
+      </main>` });
+    expect(artifact.content.sections.map((section) => section.title)).not.toContain("Service One");
+    expect(artifact.content.sections.map((section) => section.title)).not.toContain("Service Two");
+    expect(artifact.understanding.claims.every((claim) => claim.sourceSectionTitle !== "Service One" && claim.sourceSectionTitle !== "Service Two")).toBe(true);
+  });
+
   it("turns a golden HTML article into a cited source artifact", async () => {
     const { html, expected } = await articleFixture();
     const artifact = normalizePublicHtmlSource({
@@ -212,4 +264,5 @@ describe("public source content normalization", () => {
     expect(artifact.diagnostics.failureCode).toBe("public_source_pdf_truncated");
     expect(artifact.extraction.truncated).toBe(false);
   });
+
 });

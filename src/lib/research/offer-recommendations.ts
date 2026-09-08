@@ -161,7 +161,7 @@ const genericOfferTokens = new Set([
 ]);
 
 const strongHomepageOfferPattern =
-  /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth management|managed services|digital transformation|automation|headsets?|cameras?|devices?|erp)\b/i;
+  /\b(?:services?|solutions?|products?|platform|suite|cloud|software|application|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth management|managed services|digital transformation|automation|orchestration|integration management|processors?|cpu|headsets?|cameras?|devices?|erp)\b/i;
 
 const homepageEditorialPattern =
   /\b(?:insights?|research|trends?|blog|articles?|stories|news|updates?|resources?|podcasts?|videos?|reports?|guides?|case studies|events?)\b/i;
@@ -178,6 +178,9 @@ const technicalHomepageLabelPattern =
   /\b(?:hosted runtime|runtime|audit log|compliance standards?|implementation details?|architecture|api reference|developer docs?|release notes?|security controls?)\b/i;
 const homepageUseCasePattern =
   /^(?:capture|find|automate|manage|connect|secure|analyze|analyse|improve|streamline|reduce|scale|share|organize|organise|build|create|discover|protect|simplify)\b/i;
+
+const contentOrEventPattern =
+  /\b(?:report|guide|article|research|case study|resource|video|podcast|event|webinar|summit|conference)\b/i;
 
 function isStrongHomepageOfferLabel(value: string): boolean {
   const clean = cleanLabel(value);
@@ -199,6 +202,30 @@ function isHomepageUseCaseLabel(evidence: ExtractedOfferEvidence): boolean {
   return evidence.source === "homepage" && homepageUseCasePattern.test(cleanLabel(evidence.label));
 }
 
+function hasNamedProductUrlAgreement(evidence: ExtractedOfferEvidence): boolean {
+  if (!evidence.sourceUrl) return false;
+  let url: URL;
+  try { url = new URL(evidence.sourceUrl); } catch { return false; }
+  const pathname = url.pathname.toLocaleLowerCase();
+  if (!/\/(?:products?|solutions?|services?|industries)\//i.test(pathname) || /\/(?:products?|solutions?|services?|industries)\/?$/i.test(pathname)) return false;
+  const stop = new Set([url.hostname.replace(/^www\./, "").split(".")[0]!, "the", "and", "for", "with", "a", "product", "products", "processor", "processors", "cpu", "series"]);
+  const labelTokens = cleanLabel(evidence.label).toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter((token) => token.length >= 2 && !stop.has(token));
+  const slugTokens = pathname.split(/[^a-z0-9]+/).filter((token) => token.length >= 2 && !stop.has(token));
+  const matches = labelTokens.filter((token) => slugTokens.includes(token));
+  return matches.length === labelTokens.length && labelTokens.length > 0;
+}
+
+function hasAffirmativeOfferSemantics(evidence: ExtractedOfferEvidence): boolean {
+  const key = dedupeKey(evidence.label);
+  if (/\b(?:leadership|team|people)$/i.test(key)) return false;
+  let brand = "";
+  try { brand = new URL(evidence.sourceUrl ?? "").hostname.replace(/^www\./, "").split(".")[0]!; } catch { /* No source brand to remove. */ }
+  const brandStripped = brand ? key.split(" ").filter((token) => token !== brand.toLowerCase()).join(" ") : key;
+  if (/^(?:products?|services?|solutions?|offerings?)$/i.test(brandStripped)) return false;
+  if (evidence.source === "homepage" && isHomepageUseCaseLabel(evidence)) return true;
+  return isStrongHomepageOfferLabel(evidence.label) || contentOrEventPattern.test(evidence.label) || hasNamedProductUrlAgreement(evidence);
+}
+
 function sourcePathname(value: string | undefined): string | undefined {
   if (!value?.trim()) return undefined;
   try {
@@ -212,10 +239,10 @@ function sourceRequiresExplicitOfferMarker(
   evidence: ExtractedOfferEvidence
 ): boolean {
   if (evidence.source === "homepage") return true;
-  if (evidence.source !== "official-page") return false;
+  if (evidence.source !== "official-page" && evidence.source !== "supplied-url") return false;
   const pathname = sourcePathname(evidence.sourceUrl);
   if (!pathname) return false;
-  return pathname === "/" || editorialSourcePathPattern.test(pathname);
+  return pathname === "/" || /\/(?:home(?:page)?|index)(?:\.html?)?\/?$/i.test(pathname) || editorialSourcePathPattern.test(pathname);
 }
 
 function isCompanySpecificOfferLabel(value: string): boolean {
@@ -236,6 +263,7 @@ export function isEvidenceBackedOfferEvidence(
     evidence.source !== "visitor-input" &&
     evidence.confidence >= MIN_SUPPORTED_CONFIDENCE &&
     isCompanySpecificOfferLabel(evidence.label) &&
+    hasAffirmativeOfferSemantics(evidence) &&
     (!sourceRequiresExplicitOfferMarker(evidence) || isStrongHomepageOfferLabel(evidence.label))
   );
 }

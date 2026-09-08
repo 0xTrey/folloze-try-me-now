@@ -690,6 +690,8 @@ export type WireframeCompositionReasonCode =
   | "decision-high";
 
 export interface WireframeSectionPlan {
+  /** Stable production-section identity when a V2 family plan is projected into V1. */
+  sectionId?: string;
   role: WireframeSectionRole;
   label: string;
   wordBudget: {

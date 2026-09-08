@@ -88,7 +88,7 @@ describe("objective and CTA recommendations", () => {
   });
 
   it.each([
-    ["product", "Evaluate the product", "Book a product walkthrough", "product-motion"],
+    ["product", "Generate sales conversations", "Start a product conversation", "product-motion"],
     [
       "industry",
       "Apply the industry perspective",
@@ -101,7 +101,7 @@ describe("objective and CTA recommendations", () => {
       const artifact = recommendObjectiveCtas(input(motion));
       const choice = recommended(artifact);
 
-      expect(valueOf(artifact).candidates).toHaveLength(3);
+      expect(valueOf(artifact).candidates).toHaveLength(motion === "product" ? 2 : 3);
       expect(choice).toMatchObject({
         objective,
         actionFamily: "engage",
@@ -114,6 +114,34 @@ describe("objective and CTA recommendations", () => {
       });
     }
   );
+
+  it("uses distinct product outcomes and omits an unverified resource objective", () => {
+    const artifact = recommendObjectiveCtas(input("product"));
+    expect(valueOf(artifact).candidates).toEqual([
+      expect.objectContaining({
+        id: "product-explore-use-case",
+        objective: "Build product awareness",
+        cta: { type: "explore", label: "Explore the product use case" }
+      }),
+      expect.objectContaining({
+        id: "product-book-walkthrough",
+        objective: "Generate sales conversations",
+        cta: { type: "book-meeting", label: "Start a product conversation" }
+      })
+    ]);
+    expect(valueOf(artifact).candidates).toHaveLength(2);
+    expect(JSON.stringify(artifact)).not.toContain("Drive resource engagement");
+  });
+
+  it("adds resource engagement only when a verified resource URL is supplied", () => {
+    const artifact = recommendObjectiveCtas(input("product", { resourceUrl: "https://seller.example/brief" }));
+    expect(valueOf(artifact).candidates).toHaveLength(3);
+    expect(valueOf(artifact).candidates[2]).toMatchObject({
+      id: "product-download-brief",
+      objective: "Drive resource engagement",
+      cta: { type: "download", label: "Read the product resource" }
+    });
+  });
 
   it("exposes three distinct action families for default campaign candidates", () => {
     const artifact = recommendObjectiveCtas(input("campaign"));

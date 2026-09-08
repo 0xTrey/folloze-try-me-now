@@ -511,7 +511,8 @@ const EMPTY_SECTION_BRIEF: SectionWriterBrief = {
 function sectionWritingContracts(
   input: GenericProductionEngineInput,
   evidence: readonly SectionEvidenceClaim[],
-  brief: SectionWriterBrief = EMPTY_SECTION_BRIEF
+  brief: SectionWriterBrief = EMPTY_SECTION_BRIEF,
+  allocatedSections: readonly SectionCopyCandidate[] = []
 ): Map<string, SectionWritingContract> {
   const decision = input.familyDecisionArtifact?.value;
   if (!decision) return new Map();
@@ -559,7 +560,15 @@ function sectionWritingContracts(
     if (planned && input.buildPlan) {
       // One plan supplies the writer's meaning and its eventual visual role.
       // Keep scoped evidence, including an empty scope, authoritative.
-      const allowed = new Set(planned.claimRefs);
+      const ownRefs = new Set(allocatedSections.find((section) => section.sectionId === contract.sectionId)?.evidenceRefs ?? []);
+      const reservedElsewhere = new Set(input.buildPlan.buyer.offerKind === "product-service"
+        ? allocatedSections.filter((section) => section.sectionId !== contract.sectionId && section.status !== "omitted" && section.role !== "next-action")
+          .flatMap((section) => section.evidenceRefs).filter((ref) => !ownRefs.has(ref))
+        : []);
+      // The deterministic allocation reserves distinct facts for the page.
+      // Model and repair passes may improve that argument, but may not spend a
+      // later section's only detail and leave a paraphrase of it behind.
+      const allowed = new Set(planned.claimRefs.filter((ref) => !reservedElsewhere.has(ref)));
       contract.evidence = contract.evidence.filter((claim) => allowed.has(claim.id));
       contract.evidenceRefs = contract.evidence.map(({ id }) => id);
       contract.slot = { ...contract.slot, evidenceRefs: contract.evidenceRefs };
@@ -617,13 +626,12 @@ async function applyDedicatedSectionWriters(input: {
   evidence: readonly SectionEvidenceClaim[];
   brief: SectionWriterBrief;
   writerArtifacts: readonly SectionWriterArtifact[];
+  contracts: ReadonlyMap<string, SectionWritingContract>;
 }): Promise<{
   writerArtifacts: readonly SectionWriterArtifact[];
   run?: SectionWriterRunResult;
 }> {
-  const contracts = [
-    ...sectionWritingContracts(input.engineInput, input.evidence, input.brief).values()
-  ];
+  const contracts = [...input.contracts.values()];
   if (!contracts.length) return { writerArtifacts: input.writerArtifacts };
 
   const deterministic = new Map<string, SectionCopyCandidate>();
@@ -1424,6 +1432,7 @@ export async function compileGenericProductionPage(
     completedAt: input.completedAt,
     slots,
     brief: {
+      ...(input.buyerDecisionBrief?.offerKind ? { offerKind: input.buyerDecisionBrief.offerKind } : {}),
       ...(input.buyerDecisionBrief?.product.label
         ? { offerLabel: input.buyerDecisionBrief.product.label }
         : {}),
@@ -1477,6 +1486,8 @@ export async function compileGenericProductionPage(
     plan: input.buildPlan, artifacts: initialWriterArtifacts, slots, evidence,
     targetName: familySpine?.entities?.targetName, sellerName: familySpine?.entities?.sellerName
   }) : initialWriterArtifacts;
+  const allocatedContracts = sectionWritingContracts(input, evidence, baseWriterInput.brief,
+    writerArtifacts.flatMap((artifact) => artifact.value ?? []));
   workerReceipts.push(
     ...writerArtifacts.map((artifact) =>
       workerReceipt(artifact, [
@@ -1579,7 +1590,8 @@ export async function compileGenericProductionPage(
     dependencies,
     evidence,
     brief: baseWriterInput.brief,
-    writerArtifacts
+    writerArtifacts,
+    contracts: allocatedContracts
   });
   let composedWriterArtifacts = sectionWriting.writerArtifacts;
   let provenanceRun = sectionWriting.run;
@@ -1615,6 +1627,7 @@ export async function compileGenericProductionPage(
       ...(familySpine ? { familyContext: {
         family: familySpine.family,
         sellerName: familySpine.entities?.sellerName ?? String(evidenceValue.fields.companyName?.value ?? ""),
+        ...(input.buyerDecisionBrief?.product.label ? { offerName: input.buyerDecisionBrief.product.label } : {}),
         ...(familySpine.entities?.targetName ? { targetName: familySpine.entities.targetName } : {})
       } } : {}),
       writerArtifacts: composedWriterArtifacts
@@ -1658,7 +1671,7 @@ export async function compileGenericProductionPage(
   let semanticReview = await reviewPage();
   if (semanticReview.status === "reviewed" && semanticReview.sectionsNeedingRepair.length &&
       dependencies.sectionModelClient && providerDeadline - clock() > SEMANTIC_REVIEW_TIMEOUT_MS + 1000) {
-    const contracts = sectionWritingContracts(input, evidence, baseWriterInput.brief);
+    const contracts = allocatedContracts;
     const current = new Map(composedWriterArtifacts.flatMap((artifact) => artifact.value ?? [])
       .map((section) => [section.sectionId, section]));
     const issues = semanticReview.issues;
@@ -1729,6 +1742,9 @@ export async function compileGenericProductionPage(
               sellerName:
                 familySpine.entities?.sellerName ??
                 String(evidenceValue.fields.companyName?.value ?? ""),
+              ...(input.buyerDecisionBrief?.product.label
+                ? { offerName: input.buyerDecisionBrief.product.label }
+                : {}),
               ...(familySpine.entities?.targetName
                 ? { targetName: familySpine.entities.targetName }
                 : {})
@@ -1822,7 +1838,7 @@ export async function compileGenericProductionPage(
     slots,
     sections,
     writerArtifacts: composedWriterArtifacts,
-    contracts: sectionWritingContracts(input, evidence),
+    contracts: allocatedContracts,
     ...(provenanceRun ? { run: provenanceRun } : {}),
     startedAt: input.startedAt,
     completedAt: input.completedAt

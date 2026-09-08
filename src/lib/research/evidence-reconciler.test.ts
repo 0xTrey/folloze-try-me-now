@@ -305,7 +305,7 @@ describe("reconcileLiveBriefEvidence", () => {
     );
     expect(result.value?.fields.cta?.value).toEqual({
       type: "book-meeting",
-      label: "Book a product walkthrough"
+      label: "Start a product conversation"
     });
     expect(JSON.stringify(result)).not.toContain("Bounded source summary");
     expect(JSON.stringify(result)).not.toContain("Bounded recommendation rationale");

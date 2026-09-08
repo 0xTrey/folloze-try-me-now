@@ -67,7 +67,7 @@ describe("objective CTA propagation", () => {
       campaignType: "product"
     });
     const objectives = baseline.session.objectiveRecommendations ?? [];
-    expect(objectives.length).toBeGreaterThanOrEqual(3);
+    expect(objectives.length).toBeGreaterThanOrEqual(2);
 
     const recommended = objectives.find((candidate) => candidate.recommended);
     const selected = objectives.find((candidate) => !candidate.recommended);

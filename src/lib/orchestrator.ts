@@ -42,6 +42,7 @@ import {
   type ObjectiveCtaEvidence,
   type ObjectiveCtaMotion
 } from "@/lib/generation/objective-cta-recommendations";
+import { verifiedProductResourceUrl } from "@/lib/cta-offer-contract";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import { buildRenderDesign } from "@/lib/generation/build-render-design";
 import type { GenericProductionEngineResult } from "@/lib/generation/generic-production-engine";
@@ -540,6 +541,7 @@ function objectiveRecommendationsFor(
     activeRevision: revision,
     motion,
     offerLabel: session.answers.promotedOffer,
+    resourceUrl: verifiedProductResourceUrl(session),
     evidence,
     startedAt: now,
     completedAt: now

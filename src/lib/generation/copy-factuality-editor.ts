@@ -34,14 +34,6 @@ const USABLE_ARTIFACT_STATUSES = new Set<ProductionArtifact<unknown>["status"]>(
   "timed_out"
 ]);
 
-const CHOICE_ROLES = new Set<SectionWriterSlot["role"]>([
-  "pathways",
-  "agenda",
-  "chapter-navigation",
-  "decision-support",
-  "resources"
-]);
-
 const GENERIC_FILLER_PATTERN =
   /\b(?:make progress with confidence|a better way to move forward|unlock value|drive transformation|synerg(?:y|ies)|best[- ]in[- ]class|next[- ]level|holistic approach|transform your business|seamless|transformative|robust|streamline|leverage)\b/i;
 const BANNED_PROSPECT_COPY_PATTERN =
@@ -193,6 +185,7 @@ export interface CopyFactualityEditorInput {
   familyContext?: {
     family: WireframeFamilyV2;
     sellerName: string;
+    offerName?: string;
     targetName?: string;
     competitorNames?: readonly string[];
   };
@@ -399,6 +392,7 @@ function repairCandidate(candidate: SectionCopyCandidate): {
     evidenceRefs: unique(choice.evidenceRefs)
   });
   const repairedChoices = candidate.choices?.map(repairChoice) as
+    | readonly [SectionCopyChoice, SectionCopyChoice]
     | readonly [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice]
     | undefined;
   const repaired: SectionCopyCandidate = {
@@ -464,11 +458,24 @@ function evidenceSupports(
 
 function factualityIssues(
   candidate: SectionCopyCandidate,
-  evidenceById: ReadonlyMap<string, SectionEvidenceClaim>
+  evidenceById: ReadonlyMap<string, SectionEvidenceClaim>,
+  familyContext: CopyFactualityEditorInput["familyContext"]
 ): CopyFactualityIssueCode[] {
   const issues: CopyFactualityIssueCode[] = [];
   for (const { value, evidenceRefs } of allCopyFields(candidate)) {
-    const numericClaims = [...value.matchAll(NUMERIC_CLAIM_PATTERN)].map(
+    // Digits inside the selected entity's complete name are identity, not a
+    // performance claim. Mask only the exact bounded name, never every
+    // occurrence of its number, so "Series 3 saves 3 hours" still needs proof.
+    let numericText = value;
+    const entityNames = [familyContext?.sellerName, familyContext?.offerName]
+      .filter((name): name is string => Boolean(name?.trim()))
+      .sort((left, right) => right.length - left.length);
+    for (const name of entityNames) {
+      if (!name?.trim()) continue;
+      const escaped = name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      numericText = numericText.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "giu"), " ");
+    }
+    const numericClaims = [...numericText.matchAll(NUMERIC_CLAIM_PATTERN)].map(
       (match) => match[0]
     );
     if (
@@ -615,7 +622,11 @@ function candidateIssues(
     if (!candidate.omissionReason) issues.push("missing_omission_reason");
     return stableIssues(issues);
   }
-  if (!candidate.headline?.trim() || !candidate.body?.trim()) {
+  const citedRefs = [
+    ...candidate.evidenceRefs,
+    ...(candidate.choices ?? []).flatMap((choice) => choice.evidenceRefs)
+  ];
+  if (!candidate.headline?.trim() || (!candidate.body?.trim() && !candidate.choices?.length)) {
     issues.push("missing_section_copy");
   }
   const headlineWordCount = candidate.headline?.trim()
@@ -639,28 +650,22 @@ function candidateIssues(
   const assignedRefs = new Set(slot.evidenceRefs);
   const validRef = (ref: string): boolean =>
     evidenceById.has(ref) && assignedRefs.has(ref);
-  if (candidate.evidenceRefs.some((ref) => !validRef(ref))) {
+  if (citedRefs.some((ref) => !validRef(ref))) {
     issues.push("invalid_evidence_ref");
   }
-  if (slot.claimType === "fact" && candidate.evidenceRefs.length === 0) {
+  if (slot.claimType === "fact" && citedRefs.length === 0) {
     issues.push("fact_without_evidence");
   }
-  const candidateRefs = new Set(candidate.evidenceRefs);
   if (
     candidate.choices?.some((choice) =>
-      choice.evidenceRefs.some(
-        (ref) => !validRef(ref) || !candidateRefs.has(ref)
-      )
+      choice.evidenceRefs.some((ref) => !validRef(ref))
     )
   ) {
     issues.push("choice_evidence_mismatch");
   }
 
-  if (CHOICE_ROLES.has(slot.role) && !candidate.choices) {
-    issues.push("choices_required");
-  }
   if (candidate.choices) {
-    if (candidate.choices.length !== 3) {
+    if (candidate.choices.length < 2 || candidate.choices.length > 3) {
       issues.push("choice_count_invalid");
     } else {
       const labels = candidate.choices.map(({ label }) => normalizedKey(label));
@@ -668,8 +673,9 @@ function candidateIssues(
       if (
         labels.some((label) => !label) ||
         bodies.some((body) => !body) ||
-        new Set(labels).size !== 3 ||
-        new Set(bodies).size !== 3
+        candidate.choices.some((choice) => !choice.evidenceRefs.length) ||
+        new Set(labels).size !== candidate.choices.length ||
+        new Set(bodies).size !== candidate.choices.length
       ) {
         issues.push("duplicate_choice");
       }
@@ -689,7 +695,7 @@ function candidateIssues(
   if (fields.some(({ value }) => UNSAFE_MARKUP_OR_CODE_PATTERN.test(value))) {
     issues.push("unsafe_markup_or_code");
   }
-  issues.push(...factualityIssues(candidate, evidenceById));
+  issues.push(...factualityIssues(candidate, evidenceById, familyContext));
   issues.push(
     ...swapGateIssues(candidate, slot, evidenceById, familyContext)
   );

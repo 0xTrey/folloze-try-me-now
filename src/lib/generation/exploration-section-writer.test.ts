@@ -82,7 +82,7 @@ describe("writeExplorationSections", () => {
   it("never replaces an overlong visitor claim with internal evidence wording", () => {
     const evidence = [claim("long-visitor", "The visitor wants a careful evaluation of many operating requirements across finance and accounting teams before choosing which workflow to review next", { sourceRole: "visitor" })];
     const result = writeExplorationSections(input([slot("decision-support", ["long-visitor"])], evidence));
-    expect(result.value?.[0]?.choices).toHaveLength(3);
+    expect(result.value?.[0]).toMatchObject({ status: "omitted", omissionReason: "no_current_evidence" });
     expect(JSON.stringify(result.value)).not.toContain("referenced visitor evidence");
     expect(result.value?.[0]?.evidenceRefs).toEqual([]);
   });
@@ -94,7 +94,7 @@ describe("writeExplorationSections", () => {
     const result = writeExplorationSections(input([application], evidence));
     expect(result.value?.[0]?.body).toBe(statement);
     expect(result.value?.[0]?.evidenceRefs).toEqual(["service-scope"]);
-    expect(result.value?.[0]?.choices).toHaveLength(3);
+    expect(result.value?.[0]?.choices).toBeUndefined();
     expect(result.value?.[0]?.wordCount).toBeLessThanOrEqual(72);
     expect(JSON.stringify(result.value)).not.toContain("referenced source evidence");
   });
@@ -123,7 +123,7 @@ describe("writeExplorationSections", () => {
       "source-proof"
     ]);
     expect(candidate?.wordCount).toBe(sectionCopyWordCount(candidate!));
-    expect(candidate?.wordCount).toBeGreaterThanOrEqual(pathwaySlot.wordBudget.min);
+    expect(candidate?.choices?.map(({ body }) => body)).toEqual(evidence.map(({ text }) => text));
     expect(candidate?.wordCount).toBeLessThanOrEqual(pathwaySlot.wordBudget.max);
   });
 
@@ -141,11 +141,11 @@ describe("writeExplorationSections", () => {
 
     expect(result.status).toBe("complete");
     expect(result.value?.[0]).toMatchObject({
-      headline: "Resolve the technical decision",
+      headline: "Capabilities that shape the decision",
       choices: [
-        { label: "Requirements check", evidenceRefs: ["tech-requirement"] },
-        { label: "Constraint review", evidenceRefs: ["tech-constraint"] },
-        { label: "Validation evidence", evidenceRefs: ["tech-validation"] }
+        { label: "identity requirements", evidenceRefs: ["tech-requirement"] },
+        { label: "deployment constraints", evidenceRefs: ["tech-constraint"] },
+        { label: "validation evidence", evidenceRefs: ["tech-validation"] }
       ]
     });
   });
@@ -168,15 +168,15 @@ describe("writeExplorationSections", () => {
     expect(result.value?.[0]).toMatchObject({
       headline: "A focused agenda for the session",
       choices: [
-        { label: "Opening context" },
-        { label: "Core discussion" },
-        { label: "Questions to resolve" }
+        { label: "operating model", body: evidence[0]!.text },
+        { label: "review sequence", body: evidence[1]!.text },
+        { label: "evaluation questions", body: evidence[2]!.text }
       ]
     });
     expect(JSON.stringify(result)).not.toMatch(/<html|<style|className=|```/i);
   });
 
-  it("uses bounded evaluation questions when evidence is sparse", () => {
+  it("keeps a single supported paragraph rather than inventing evaluation cards", () => {
     const evidence = [
       claim("single-source", "The brief confirms the evaluation objective")
     ];
@@ -185,16 +185,14 @@ describe("writeExplorationSections", () => {
     );
     const choices = result.value?.[0]?.choices ?? [];
 
-    expect(result).toMatchObject({
-      status: "fallback",
-      fallbackCode: "exploration_writer_sparse_evidence"
-    });
-    expect(choices).toHaveLength(3);
-    expect(choices.every(({ body }) => body.endsWith("?"))).toBe(true);
+    expect(result.status).toBe("complete");
+    expect(result.fallbackCode).toBeUndefined();
+    expect(choices).toHaveLength(0);
+    expect(result.value?.[0]?.body).toBe(evidence[0]!.text);
     expect(JSON.stringify(choices)).not.toMatch(/\buse case\b/i);
   });
 
-  it("turns cited target context into three distinct account validation paths", () => {
+  it("preserves two distinct account priorities without inventing a third", () => {
     const evidence = [
       claim(
         "target-focus",
@@ -225,12 +223,12 @@ describe("writeExplorationSections", () => {
     );
     const candidate = result.value?.[0];
 
-    expect(result.status).toBe("fallback");
-    expect(candidate?.body).toContain("Acme and Cisco");
+    expect(result.status).toBe("complete");
+    expect(candidate?.headline).toContain("Cisco");
+    expect(candidate?.body).toBeUndefined();
     expect(candidate?.choices).toEqual([
-      expect.objectContaining({ label: "Public focus", body: expect.stringMatching(/secure networking/i) }),
-      expect.objectContaining({ label: "Operating fit", body: expect.stringMatching(/cross-team operations/i) }),
-      expect.objectContaining({ label: "First decision", body: expect.stringContaining("Cisco") })
+      expect.objectContaining({ body: evidence[0]!.text, evidenceRefs: ["target-focus"] }),
+      expect.objectContaining({ body: evidence[1]!.text, evidenceRefs: ["target-context"] })
     ]);
     expect(candidate?.wordCount).toBeGreaterThanOrEqual(prioritySlot.wordBudget.min);
     expect(candidate?.wordCount).toBeLessThanOrEqual(prioritySlot.wordBudget.max);
@@ -250,9 +248,9 @@ describe("writeExplorationSections", () => {
     );
     const choices = result.value?.[0]?.choices ?? [];
 
-    expect(result.status).toBe("fallback");
-    expect(new Set(choices.map(({ label }) => label)).size).toBe(3);
-    expect(new Set(choices.map(({ body }) => body)).size).toBe(3);
+    expect(result.status).toBe("complete");
+    expect(new Set(choices.map(({ label }) => label)).size).toBe(2);
+    expect(new Set(choices.map(({ body }) => body)).size).toBe(2);
   });
 
   it("rejects slot evidence references that are not current", () => {

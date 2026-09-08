@@ -54,6 +54,10 @@ describe("build-flow benchmark", () => {
     expect(hostile.every(({ brief }) => (brief.session.evidenceItems ?? []).some(
       ({ disposition, text }) => disposition === "available" && /ignore all previous|97% reduction/i.test(text)
     ))).toBe(true);
+    // The thin fixtures contain an identity statement and one useful detail.
+    // Generic validation paragraphs must not turn them into four-section pages.
+    expect(buildFlowBenchmarkFixtures.filter(({ profile }) => profile === "thin")
+      .every(({ expectedOutcome }) => expectedOutcome === "safe-deterministic-fallback")).toBe(true);
   });
 
   it("runs the compiler and renderer, captures real trace modes, and keeps human review unclaimed", async () => {

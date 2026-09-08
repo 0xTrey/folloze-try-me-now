@@ -102,7 +102,10 @@ function contentRegion(html: string): { html: string; usedFallback: boolean } {
     const node = pending.pop()!;
     if (!("childNodes" in node)) continue;
     node.childNodes = node.childNodes.filter((child) => child.nodeName !== "#comment" &&
-      !("tagName" in child && excluded.has(child.tagName)));
+      !("tagName" in child && (excluded.has(child.tagName) ||
+        /\b(?:related|latest|news|footer|nav|menu|breadcrumb)\b/i.test(
+          `${child.attrs.find((attribute) => attribute.name === "class")?.value ?? ""} ${child.attrs.find((attribute) => attribute.name === "id")?.value ?? ""}`
+        ))));
     if ("tagName" in node && (node.tagName === "main" || node.tagName === "article")) regions.push(node);
     pending.push(...node.childNodes);
   }
@@ -119,29 +122,116 @@ interface HtmlBlock {
   level: number;
   text: string;
   order: number;
+  /** A linked card label that owns this exact description block. */
+  sourceSectionTitle?: string;
+}
+
+function isElement(node: DefaultTreeAdapterTypes.Node): node is DefaultTreeAdapterTypes.Element {
+  return "tagName" in node;
+}
+
+function childElements(node: DefaultTreeAdapterTypes.Node): DefaultTreeAdapterTypes.Element[] {
+  return "childNodes" in node
+    ? node.childNodes.filter(isElement)
+    : [];
+}
+
+function elementAttr(node: DefaultTreeAdapterTypes.Element, name: string): string | undefined {
+  return node.attrs.find((attribute) => attribute.name.toLocaleLowerCase() === name)?.value;
+}
+
+function descendants(node: DefaultTreeAdapterTypes.Node): DefaultTreeAdapterTypes.Element[] {
+  const found: DefaultTreeAdapterTypes.Element[] = [];
+  const pending = [...childElements(node)];
+  while (pending.length) {
+    const current = pending.pop()!;
+    found.push(current);
+    pending.push(...childElements(current));
+  }
+  return found;
+}
+
+function containsElement(node: DefaultTreeAdapterTypes.Element, tagName: string): boolean {
+  return descendants(node).some((child) => child.tagName === tagName);
+}
+
+function cardContainer(node: DefaultTreeAdapterTypes.Element): boolean {
+  if (!["li", "article", "div", "section"].includes(node.tagName)) return false;
+  const descriptor = `${elementAttr(node, "class") ?? ""} ${elementAttr(node, "id") ?? ""}`;
+  if (/\b(?:related|latest|news|footer|nav|menu|breadcrumb)\b/i.test(descriptor)) return false;
+  // A list item is naturally a bounded sibling. Divisions and sections need a
+  // card-like signal so an otherwise ordinary article with one link and one
+  // paragraph is not reclassified as a service card.
+  return node.tagName === "li" || node.tagName === "article" || /\b(?:card|tile|focus|service|item)\b/i.test(descriptor);
+}
+
+/**
+ * Finds only descriptions that are paired with one linked label in the same
+ * bounded card. The smallest qualifying container wins, so a surrounding card
+ * grid cannot assign one card's label to another card's description.
+ */
+function linkedCardDescriptions(document: DefaultTreeAdapterTypes.Document): Map<DefaultTreeAdapterTypes.Element, string> {
+  const owners = new Map<DefaultTreeAdapterTypes.Element, { title: string; depth: number }>();
+  const pending: Array<{ node: DefaultTreeAdapterTypes.Node; depth: number }> = [{ node: document, depth: 0 }];
+  while (pending.length) {
+    const { node, depth } = pending.pop()!;
+    for (const child of childElements(node)) pending.push({ node: child, depth: depth + 1 });
+    if (!isElement(node) || !cardContainer(node)) continue;
+    const children = descendants(node);
+    const links = children.filter((child) => child.tagName === "a");
+    const paragraphs = children.filter((child) => child.tagName === "p");
+    if (links.length !== 1 || paragraphs.length !== 1) continue;
+    const label = stripTags(serialize(links[0]!)).replace(/\s+/g, " ").slice(0, 180);
+    const description = stripTags(serialize(paragraphs[0]!));
+    if (label.length < 3 || description.length < 12 || /^(?:learn more|read more|explore|view details)$/i.test(label)) continue;
+    const current = owners.get(paragraphs[0]!);
+    if (!current || depth > current.depth) owners.set(paragraphs[0]!, { title: label, depth });
+  }
+  return new Map([...owners.entries()].map(([paragraph, owner]) => [paragraph, owner.title]));
 }
 
 function htmlBlocks(region: string): HtmlBlock[] {
+  const document = parse(region);
+  const owners = linkedCardDescriptions(document);
   const blocks: HtmlBlock[] = [];
-  const expression = /<(h[1-6]|p|li|blockquote|figcaption|caption|tr)\b[^>]*>([\s\S]*?)<\/\1>/gi;
   let order = 0;
-  for (const match of region.matchAll(expression)) {
-    const tag = (match[1] ?? "p").toLocaleLowerCase();
-    const body = match[2] ?? "";
+  const excluded = new Set(["script", "style", "template", "svg", "noscript", "nav", "header", "footer", "aside", "form"]);
+  const emit = (node: DefaultTreeAdapterTypes.Element) => {
+    const tag = node.tagName;
+    const body = serialize(node);
     const text = tag === "tr"
       ? [...body.matchAll(/<(?:th|td)\b[^>]*>([\s\S]*?)<\/(?:th|td)>/gi)]
           .map((cell) => stripTags(cell[1] ?? ""))
           .filter(Boolean)
           .join(" | ")
       : stripTags(body);
-    if (text.length < (tag.startsWith("h") ? 2 : 12)) continue;
+    if (text.length < (tag.startsWith("h") ? 2 : 12)) return;
     blocks.push({
       tag,
       level: tag.startsWith("h") ? Number.parseInt(tag.slice(1), 10) : 2,
       text: text.slice(0, tag === "tr" ? 2_000 : 12_000),
-      order: order++
+      order: order++,
+      ...(owners.get(node) ? { sourceSectionTitle: owners.get(node)! } : {})
     });
-  }
+  };
+  const walk = (node: DefaultTreeAdapterTypes.Node) => {
+    if (!isElement(node)) {
+      if ("childNodes" in node) node.childNodes.forEach(walk);
+      return;
+    }
+    if (excluded.has(node.tagName) || /\b(?:related|latest|news|footer|nav|menu|breadcrumb)\b/i.test(
+      `${elementAttr(node, "class") ?? ""} ${elementAttr(node, "id") ?? ""}`
+    )) return;
+    const isBlock = /^(?:h[1-6]|p|li|blockquote|figcaption|caption|tr)$/.test(node.tagName);
+    // Let nested paragraphs win over their list wrapper. This is necessary for
+    // linked cards, and also avoids duplicating normal list item copy.
+    if (isBlock && !(node.tagName === "li" && containsElement(node, "p"))) {
+      emit(node);
+      return;
+    }
+    childElements(node).forEach(walk);
+  };
+  walk(document);
   if (blocks.some((block) => !block.tag.startsWith("h"))) return blocks;
   const fallback = stripTags(region);
   return fallback.length >= 12
@@ -159,7 +249,7 @@ function buildSections(input: {
   let current: SourceSection | undefined;
   let citationIndex = 0;
 
-  const ensureSection = (title: string, level: number, order: number): SourceSection => {
+  const createSection = (title: string, level: number, order: number, makeCurrent = true): SourceSection => {
     const section: SourceSection = {
       id: `web_section_${sections.length + 1}`,
       title: title.slice(0, 180),
@@ -169,16 +259,18 @@ function buildSections(input: {
       citationIds: []
     };
     sections.push(section);
-    current = section;
+    if (makeCurrent) current = section;
     return section;
   };
 
   for (const block of input.blocks) {
     if (block.tag.startsWith("h")) {
-      ensureSection(block.text, block.level, sections.length);
+      createSection(block.text, block.level, sections.length);
       continue;
     }
-    const section = current ?? ensureSection(input.documentTitle ?? "Overview", 1, 0);
+    const section = block.sourceSectionTitle
+      ? createSection(block.sourceSectionTitle, Math.min(6, (current?.level ?? 1) + 1), sections.length, false)
+      : current ?? createSection(input.documentTitle ?? "Overview", 1, 0);
     const citationId = `web_citation_${++citationIndex}`;
     citations.push({
       id: citationId,
@@ -201,7 +293,7 @@ function buildSections(input: {
   };
 }
 
-function extractLinks(region: string, base: URL, citations: SourceCitation[]): SourceLink[] {
+function extractLinks(region: string, base: URL, citations: SourceCitation[], sections: SourceSection[]): SourceLink[] {
   const links: SourceLink[] = [];
   const seen = new Set<string>();
   for (const match of region.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
@@ -210,7 +302,9 @@ function extractLinks(region: string, base: URL, citations: SourceCitation[]): S
     const label = stripTags(match[2] ?? "").replace(/\s+/g, " ").slice(0, 180);
     if (!url || label.length < 2 || seen.has(`${label.toLocaleLowerCase()}|${url}`)) continue;
     seen.add(`${label.toLocaleLowerCase()}|${url}`);
-    const citation = citations.find((candidate) => candidate.excerpt.toLocaleLowerCase().includes(label.toLocaleLowerCase().slice(0, 36)))
+    const citation = sections.find((section) => section.title.toLocaleLowerCase() === label.toLocaleLowerCase())
+      ?.citationIds.map((id) => citations.find((candidate) => candidate.id === id)).find(Boolean)
+      ?? citations.find((candidate) => candidate.excerpt.toLocaleLowerCase().includes(label.toLocaleLowerCase().slice(0, 36)))
       ?? citations[0];
     links.push({
       id: `web_link_${links.length + 1}`,
@@ -325,7 +419,7 @@ export function normalizePublicHtmlSource(input: NormalizePublicHtmlSourceInput)
       ...(description ? { description } : {}),
       text: structured.text,
       sections: structured.sections,
-      links: extractLinks(region.html, base, structured.citations),
+      links: extractLinks(region.html, base, structured.citations, structured.sections),
       assets: extractAssets(region.html, base, structured.citations),
       citations: structured.citations
     },

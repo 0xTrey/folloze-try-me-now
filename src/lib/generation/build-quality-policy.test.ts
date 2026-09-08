@@ -102,4 +102,43 @@ describe("build quality policy", () => {
     ], { plan: value });
     expect(report.blockers).toContain("repeated_section_argument");
   });
+
+  it("rejects generic question cards even when their section body contains a cited fact", () => {
+    const report = evaluate([section({
+      role: "decision-support", v2Role: "evaluation-criteria", claimType: "implication",
+      headline: "Choose where the work should begin",
+      choices: [
+        { label: "Scope", body: "What does your team need?", evidenceRefs: [] },
+        { label: "Requirements", body: "Which requirements still need confirmation?", evidenceRefs: [] },
+        { label: "Next step", body: "Who can resolve the remaining questions?", evidenceRefs: [] }
+      ]
+    })]);
+    expect(report.accepted).toBe(false);
+    expect(report.blockers).toContain("unsupported_choice_copy");
+    expect(report.dimensions.buyerUsefulness).toBe("fail");
+  });
+
+  it("does not count a generic question subheader as an acceptable section introduction", () => {
+    const report = evaluate([section({
+      role: "decision-support", v2Role: "evaluation-criteria", claimType: "implication",
+      body: "What should Acme demonstrate about approvals for your first evaluation?",
+      choices: [
+        { label: "The working detail", body: evidence[0]!.text, evidenceRefs: ["offer-1"] },
+        { label: "Your requirements", body: "Which requirements should the team confirm?", evidenceRefs: [] },
+        { label: "Your next decision", body: "Who should agree on the validation sequence?", evidenceRefs: [] }
+      ]
+    })]);
+    expect(report.blockers).toContain("question_only_section_intro");
+  });
+
+  it("allows a specific interactive question grounded in the card's own permitted evidence", () => {
+    const report = evaluate([section({
+      choices: [
+        { label: "Review traceability", body: "Which governed approvals must stay traceable through each review?", evidenceRefs: ["offer-1"] },
+        { label: "Approval scope", body: "Which governed approvals should stay traceable for the reviews you own?", evidenceRefs: ["offer-1"] },
+        { label: "Review continuity", body: "Which approvals must remain traceable through the next review?", evidenceRefs: ["offer-1"] }
+      ]
+    })]);
+    expect(report.blockers).not.toContain("unsupported_choice_copy");
+  });
 });

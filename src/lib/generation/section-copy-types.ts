@@ -34,6 +34,9 @@ export interface SectionEvidenceClaim {
   kind?: EvidenceKindV2;
   /** Preserve semantic use restrictions when a ledger claim reaches a writer. */
   evidenceType?: import("./messaging-compiler-contracts").CompilerEvidenceType;
+  /** Optional ownership of the exact extracted source section. */
+  sourceSectionId?: string;
+  sourceSectionTitle?: string;
 }
 
 export interface SectionWriterSlot {
@@ -61,6 +64,7 @@ export interface SectionWriterSlot {
 
 export interface SectionWriterBrief {
   family?: WireframeFamilyV2;
+  offerKind?: "product-service" | "content" | "event";
   offerLabel?: string;
   sellerName?: string;
   targetName?: string;
@@ -152,6 +156,11 @@ export interface SectionCopyChoice {
   evidenceRefs: readonly string[];
 }
 
+/** A card surface earns exactly the number of independently cited ideas it has. */
+export type SectionCopyChoices =
+  | readonly [SectionCopyChoice, SectionCopyChoice]
+  | readonly [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice];
+
 export interface SectionCopyCandidate {
   sectionId: string;
   role: WireframeSectionRole;
@@ -162,7 +171,7 @@ export interface SectionCopyCandidate {
   eyebrow?: string;
   headline?: string;
   body?: string;
-  choices?: readonly [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice];
+  choices?: SectionCopyChoices;
   cta?: {
     type: CtaType;
     label: string;
@@ -320,8 +329,16 @@ export function validateSectionCopyCandidate(
     if (!candidate.omissionReason) issues.push("missing_omission_reason");
     return issues;
   }
-  if (!candidate.headline?.trim() || !candidate.body?.trim()) {
+  const choices = candidate.choices;
+  const hasChoices = Boolean(choices?.length);
+  if (!candidate.headline?.trim() || (!candidate.body?.trim() && !hasChoices)) {
     issues.push("missing_section_copy");
+  }
+  if (choices) {
+    if (choices.length < 2 || choices.length > 3) issues.push("invalid_choice_count");
+    if (choices.some((choice) => !choice.label?.trim() || !choice.body?.trim() || !choice.evidenceRefs.length)) {
+      issues.push("invalid_choice");
+    }
   }
   const headlineWords = textWordCount(candidate.headline);
   if (
@@ -336,12 +353,16 @@ export function validateSectionCopyCandidate(
   ) {
     issues.push("word_budget_violation");
   }
-  if (candidate.evidenceRefs.some((id) => !currentEvidenceIds.has(id))) {
+  const citedEvidenceRefs = [
+    ...candidate.evidenceRefs,
+    ...(choices ?? []).flatMap((choice) => choice.evidenceRefs)
+  ];
+  if (citedEvidenceRefs.some((id) => !currentEvidenceIds.has(id))) {
     issues.push("invalid_evidence_ref");
   }
   if (
     slot.claimType === "fact" &&
-    candidate.evidenceRefs.length === 0
+    citedEvidenceRefs.length === 0
   ) {
     issues.push("fact_without_evidence");
   }
@@ -355,8 +376,8 @@ export function validateSectionCopyCandidate(
     }
   }
   if (
-    candidate.choices &&
-    new Set(candidate.choices.map(({ label }) => label.trim().toLocaleLowerCase())).size !== 3
+    choices &&
+    new Set(choices.map(({ label }) => label.trim().toLocaleLowerCase())).size !== choices.length
   ) {
     issues.push("duplicate_choices");
   }

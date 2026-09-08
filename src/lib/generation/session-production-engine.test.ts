@@ -245,6 +245,27 @@ function renderPage(
 }
 
 describe("compileSessionProductionPage", () => {
+  it("keeps a numeric product identity when its cited capabilities omit the model number", async () => {
+    const profile = brand();
+    const currentSession = session(profile);
+    currentSession.answers.promotedOffer = "Acme Workflow Cloud Series 3";
+    currentSession.evidenceItems = currentSession.evidenceItems!.map((item) => ({
+      ...item, subject: currentSession.answers.promotedOffer
+    }));
+    const observed: SectionWritingContract[] = [];
+    const result = await compileSessionProductionPage({ session: currentSession, brand: profile,
+      providerStartedAtMs: 0, currentTimeMs: 10_000,
+      sectionModelClient: { writeSection: async (contract) => { observed.push(contract); return { sectionId: contract.sectionId, candidates: [] }; } }
+    });
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") throw new Error("numeric_product_page_missing");
+    expect(result.artifact.value?.sections.some((section) => section.role === "hero" && section.headline?.includes("Series 3"))).toBe(true);
+    expect(result.compileReceipts.some((receipt) => receipt.detailCode === "copy_unsupported_numeric_claim")).toBe(false);
+    const mechanism = observed.find((contract) => contract.role === "mechanism");
+    expect(mechanism?.evidenceRefs).toContain("fixture-offer-capability");
+    expect(mechanism?.evidenceRefs).not.toContain("fixture-offer-positioning");
+    expect(mechanism?.evidenceRefs).not.toContain("fixture-offer-workflow");
+  });
   it("renders sourced purchase answers and scopes the purchase writer to those claims", async () => {
     const profile = brand();
     const currentSession = session(profile);
@@ -370,6 +391,11 @@ describe("compileSessionProductionPage", () => {
       currentSession.answers.targetDomain = target.domain;
       currentSession.answers.messageBelief = undefined;
       currentSession.evidenceItems = [...currentSession.evidenceItems!, ...evidenceItems];
+      currentSession.evidenceItems.push({
+        ...syntheticOfferEvidence(currentSession.answers.promotedOffer!, profile.domain)[1]!,
+        id: "fixture-offer-account-escalation",
+        text: "The escalation dashboard displays unresolved exceptions and their assigned policy owners."
+      });
       const result = await compileSessionProductionPage({
         session: currentSession,
         brand: profile,
@@ -601,7 +627,6 @@ describe("compileSessionProductionPage", () => {
       { id: "name-constraint", role: "current-friction" },
       { id: "distinct-mechanism", role: "mechanism" },
       { id: "relevant-use-cases", role: "use-cases" },
-      { id: "proof-or-validation", role: "validation-plan" },
       { id: "next-action", role: "next-move" }
     ]);
     expect(observed.map(({ sectionId, role }) => ({ id: sectionId, role }))).toEqual(
@@ -612,7 +637,6 @@ describe("compileSessionProductionPage", () => {
       "name the current constraint in the buyer's language",
       "explain the seller's distinct mechanism",
       "show the most relevant use cases or workflow",
-      "Choose what to verify before taking the next step",
       "make the next action the logical continuation"
     ]);
     expect(observed.every(({ strategyJobs }) => strategyJobs.length > 0)).toBe(true);
@@ -744,6 +768,11 @@ describe("compileSessionProductionPage", () => {
     async ({ family, labels, sectionIds, copy, cta }) => {
       const profile = brand();
       const currentSession = session(profile, family);
+      currentSession.evidenceItems!.push({
+        ...syntheticOfferEvidence(currentSession.answers.promotedOffer!, profile.domain)[1]!,
+        id: "fixture-offer-capability-escalation",
+        text: "The escalation dashboard displays unresolved exceptions and their assigned policy owners."
+      });
       const target = family === "align" ? targetBrand() : undefined;
       if (target) {
         currentSession.evidenceItems = [
@@ -797,6 +826,35 @@ describe("compileSessionProductionPage", () => {
       );
     }
   );
+
+  it("shortens a thin Guide plan before writing instead of repeating two facts across three sections", async () => {
+    const profile = brand();
+    const result = await compileSessionProductionPage({ session: session(profile, "guide"), brand: profile,
+      providerStartedAtMs: 0, currentTimeMs: 10_000 });
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const page = result.artifact.value!;
+    expect(page.sections.map(({ v2Role }) => v2Role)).toEqual([
+      "market-change", "stakes", "evaluation-criteria", "solution-mapping", "evaluation-close"
+    ]);
+    expect(page.familyDecision?.sectionPlan.map(({ role }) => role)).toEqual(page.sections.map(({ v2Role }) => v2Role));
+    const explanations = page.sections.filter(({ v2Role }) => ["evaluation-criteria", "solution-mapping"].includes(v2Role ?? ""));
+    expect(explanations.every(({ evidenceRefs }) => evidenceRefs.length === 1)).toBe(true);
+    expect(new Set(explanations.flatMap(({ evidenceRefs }) => evidenceRefs)).size).toBe(2);
+    expect(explanations.every(({ body, choices }) => Boolean(body) && !choices)).toBe(true);
+  });
+
+  it("omits an unsupported validation section instead of filling it with generic homework", async () => {
+    const profile = brand();
+    const result = await compileSessionProductionPage({ session: session(profile), brand: profile,
+      providerStartedAtMs: 0, currentTimeMs: 10_000 });
+    expect(result.outcome).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    const page = result.artifact.value!;
+    expect(page.familyDecision?.sectionPlan.map(({ role }) => role)).not.toContain("validation-plan");
+    expect(page.sections.map(({ v2Role }) => v2Role)).toEqual(page.familyDecision?.sectionPlan.map(({ role }) => role));
+    expect(renderPage(session(profile), profile, page)).not.toContain("What to check in a product walkthrough");
+  });
 
   it("requests a safe deterministic page when sparse evidence cannot sustain four sections", async () => {
     const profile = brand("fallback");

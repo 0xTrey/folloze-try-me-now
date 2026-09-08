@@ -1,6 +1,7 @@
 import type { BuildExperiencePlan } from "./build-experience-plan";
 import { hasSubstantiveEvidenceUse, isValidationOnlyCopy } from "./build-quality-policy";
-import { copyContractMetadata, sectionCopyWordCount, type SectionCopyCandidate, type SectionCopyChoice, type SectionEvidenceClaim, type SectionWriterArtifact, type SectionWriterSlot } from "./section-copy-types";
+import { evidenceChoiceCandidate } from "./evidence-choice-copy";
+import { copyContractMetadata, sectionCopyWordCount, type SectionCopyCandidate, type SectionEvidenceClaim, type SectionWriterArtifact, type SectionWriterSlot } from "./section-copy-types";
 
 const normalized = (value: string) => value.replace(/\s+/g, " ").trim();
 const count = (value: string) => normalized(value).split(/\s+/).filter(Boolean).length;
@@ -10,12 +11,13 @@ const choiceRoles = new Set(["pathways", "agenda", "chapter-navigation", "decisi
 function heading(slot: SectionWriterSlot, offer: string): string {
   const named = slot.role === "hero" ? offer : slot.role === "mechanism" ? `How ${offer} works` : "";
   if (named && count(named) <= (slot.headlineWordBudget?.max ?? 10)) return named;
-  if (slot.v2Role === "evaluation-criteria") return "Requirements to plan around";
+  if (slot.v2Role === "evaluation-criteria") return "Capabilities that shape the decision";
   if (slot.v2Role === "account-relevance") return "The account's operating context";
   if (slot.v2Role === "current-friction" || slot.v2Role === "stakes") return "Where the work gets difficult";
+  if (slot.v2Role === "validation-plan") return "Further details for your evaluation";
   if (slot.role === "proof") return "Results and their conditions";
   if (slot.role === "resources") return "Continue with the source material";
-  if (choiceRoles.has(slot.role)) return "Choose the question to explore";
+  if (choiceRoles.has(slot.role)) return "Capabilities and their scope";
   return "What the workflow includes";
 }
 
@@ -60,7 +62,8 @@ export function repairBuildFallbacks(input: {
     }
     const bodyKey = normalized(current.body ?? "").toLowerCase();
     const hasDetail = hasSubstantiveEvidenceUse(current.body ?? "", claims, input.plan.buyer.product.label);
-    const sharedExplanation = slot.role === "hero" || slot.role === "mechanism" || choiceRoles.has(slot.role);
+    const sharedExplanation = slot.role === "hero" || slot.role === "mechanism" ||
+      slot.v2Role === "account-relevance" || choiceRoles.has(slot.role);
     const missingAccountFrame = slot.family === "align" && input.targetName &&
       !`${current.headline} ${current.body}`.toLowerCase().includes(input.targetName.toLowerCase());
     const needsRepair = sharedExplanation || missingAccountFrame || current.status === "omitted" || !hasDetail || isValidationOnlyCopy(current.body ?? "") ||
@@ -74,36 +77,23 @@ export function repairBuildFallbacks(input: {
     const offer = input.plan.buyer.product.label ?? "The offer";
     const headline = slot.role === "hero" && current.headline && count(current.headline) <= (slot.headlineWordBudget?.max ?? 12)
       ? current.headline : input.plan.buyer.offerKind === "event" && slot.role === "mechanism" ? "Inside the session"
-      : input.plan.buyer.offerKind === "content" && slot.role === "mechanism" ? "The idea in practice" : heading(slot, offer);
+      : input.plan.buyer.offerKind === "content" && slot.role === "mechanism" ? "The idea in practice"
+      : slot.v2Role === "priority-paths" && input.targetName ? `Priorities for ${input.targetName}` : heading(slot, offer);
     const candidates: SectionCopyCandidate[] = [];
     const context = slot.family === "align" && input.targetName && slot.v2Role !== "account-relevance"
       ? `For ${input.targetName}: ` : "";
     if (choiceRoles.has(slot.role)) {
-      // Put the source detail inside the choices, rather than repeating the
-      // mechanism paragraph above another set of generic evaluation questions.
-      const body = `${context}What should ${input.sellerName ?? "the seller"} demonstrate about ${offer} for your first evaluation?`;
-      // A decision surface may cite one detail that has not yet been
-      // explained. Once every detail is on the page, retain three useful
-      // questions rather than duplicate a capability paragraph.
       const unexplained = claims.filter((claim) => !(useCounts.get(claim.id) ?? 0));
-      for (const size of [unexplained.length ? 1 : 0]) {
-        const selected = unexplained.slice(0, size);
-        const choices: SectionCopyChoice[] = selected.map((claim, index) => ({
-          label: index === 0 ? "The working detail" : "The review sequence",
-          body: normalized(claim.text), evidenceRefs: [claim.id]
-        }));
-        const questions = [
-          { label: "Your requirements", body: "Which documented requirements should the team confirm before selecting the first workflow?", evidenceRefs: [] },
-          { label: "Your next decision", body: "Which decision owner should agree on the validation sequence before the working session?", evidenceRefs: [] },
-          { label: "Your operating context", body: "Which operating constraint should shape the first evaluation conversation?", evidenceRefs: [] }
-        ];
-        choices.push(...questions.slice(0, 3 - choices.length));
-        const candidate: SectionCopyCandidate = { sectionId: slot.id, role: slot.role, ...copyContractMetadata(slot),
-          status: "complete", headline, body, choices: choices as unknown as SectionCopyCandidate["choices"],
-          evidenceRefs: selected.map(({ id }) => id), wordCount: 0 };
-        candidate.wordCount = sectionCopyWordCount(candidate);
-        if (candidate.wordCount <= slot.wordBudget.max) { candidates.push(candidate); break; }
+      const reserved = new Set<string>();
+      const later = input.plan.sections.slice(input.plan.sections.indexOf(planned) + 1);
+      for (const next of later) {
+        const nextSlot = slots.get(next.id);
+        if (next.optional || !nextSlot || ["next-action", "seller-validation"].includes(nextSlot.role)) continue;
+        const detail = unexplained.find((claim) => next.claimRefs.includes(claim.id) && !reserved.has(claim.id));
+        if (detail) reserved.add(detail.id);
       }
+      const candidate = evidenceChoiceCandidate({ slot, claims: unexplained.filter(({ id }) => !reserved.has(id)), headline });
+      if (candidate) candidates.push(candidate);
     }
     for (const claim of claims) {
       if (choiceRoles.has(slot.role)) break;
@@ -113,18 +103,20 @@ export function repairBuildFallbacks(input: {
       const body = `${context}${text}${/[.!?]$/.test(text) ? "" : "."}${relevanceQuestion}`;
       const candidate: SectionCopyCandidate = {
         sectionId: slot.id, role: slot.role, ...copyContractMetadata(slot), status: "complete",
-        headline, body,
+        headline: slot.v2Role === "validation-plan" && claim.sourceSectionTitle && safe(claim.sourceSectionTitle) &&
+          !claim.sourceSectionTitle.includes("?") &&
+          count(claim.sourceSectionTitle) <= (slot.headlineWordBudget?.max ?? 10) ? claim.sourceSectionTitle : headline, body,
         ...(current.cta ? { cta: current.cta } : {}), evidenceRefs: [claim.id], wordCount: 0
       };
       candidate.wordCount = sectionCopyWordCount(candidate);
       if (candidate.wordCount <= slot.wordBudget.max) candidates.push(candidate);
     }
-    const next = candidates.find((candidate) => !seenBodies.has(normalized(candidate.body ?? "").toLowerCase()));
+    const next = candidates.find((candidate) => !candidate.body || !seenBodies.has(normalized(candidate.body).toLowerCase()));
     if (next) {
       repaired.set(planned.id, next);
-      seenBodies.add(normalized(next.body ?? "").toLowerCase());
+      if (next.body) seenBodies.add(normalized(next.body).toLowerCase());
       next.evidenceRefs.forEach((id) => useCounts.set(id, (useCounts.get(id) ?? 0) + 1));
-    } else if (!choiceRoles.has(slot.role) || seenBodies.has(bodyKey) || current.evidenceRefs.some((id) => !allowed.has(id)) || current.status === "omitted" || !hasDetail) {
+    } else {
       // No permitted, fitting, unexplained claim remains. The original may
       // concatenate duplicate source entries, so it is not a safe backup.
       repaired.set(planned.id, omit());

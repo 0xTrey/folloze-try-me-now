@@ -72,4 +72,30 @@ describe("section copy contracts", () => {
       validateSectionCopyCandidate(omitted, { ...slot, required: false }, 4, evidence)
     ).toEqual([]);
   });
+
+  it("allows an empty intro when two individually cited substantive cards carry the section", () => {
+    const candidate: SectionCopyCandidate = {
+      sectionId: "opening", role: "hero", status: "complete",
+      headline: "Two operating details to review", body: undefined,
+      choices: [
+        { label: "Approval ownership", body: "Named owners review approval exceptions before release.", evidenceRefs: ["seller-1"] },
+        { label: "Decision record", body: "The shared record preserves each approved decision for review.", evidenceRefs: ["seller-1"] }
+      ],
+      evidenceRefs: [], wordCount: 0
+    };
+    candidate.wordCount = sectionCopyWordCount(candidate);
+    expect(validateSectionCopyCandidate(candidate, { ...slot, wordBudget: { min: 5, max: 40 } }, 4, evidence)).toEqual([]);
+  });
+
+  it("rejects empty, duplicate, or over-limit cards", () => {
+    const malformed = completeCandidate();
+    malformed.choices = [
+      { label: "Same card", body: "Supported detail", evidenceRefs: ["seller-1"] },
+      { label: "Same card", body: "", evidenceRefs: [] }
+    ];
+    malformed.wordCount = sectionCopyWordCount(malformed);
+    expect(validateSectionCopyCandidate(malformed, slot, 4, evidence)).toEqual(expect.arrayContaining([
+      "word_budget_violation", "invalid_choice", "duplicate_choices"
+    ]));
+  });
 });

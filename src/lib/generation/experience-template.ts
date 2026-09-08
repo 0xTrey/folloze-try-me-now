@@ -16,6 +16,7 @@ import { resolveBuyerCtaOffer } from "@/lib/cta-offer-contract";
 import { EXPERIENCE_PRESENTATION_CSS } from "@/lib/generation/experience-presentation";
 import type {
   WireframeSectionRole,
+  WireframeSectionPlan,
   WireframeSelectionV1
 } from "@/lib/generation/wireframe-library";
 import type { AssetRenderPlan, AssetSemanticRole } from "@/lib/asset-allocation";
@@ -742,6 +743,26 @@ export function renderExperienceHtml(input: {
     if (role === "resources") return "supporting-resources";
     return "next-step";
   };
+  const usedFamilyAnchors = new Set<string>();
+  const familySectionAnchors = plannedSections?.map((section, index, all) => {
+    const base = anchorForRole(section.role, section.label);
+    const repeated = all.slice(0, index).some(
+      (prior) => anchorForRole(prior.role, prior.label) === base
+    );
+    if (!repeated) {
+      usedFamilyAnchors.add(base);
+      return base;
+    }
+    const stable = section.sectionId?.trim().replace(/[^a-z0-9_-]+/gi, "-");
+    const preferred = stable && stable !== base ? stable : `${base}-${index + 1}`;
+    const anchor = usedFamilyAnchors.has(preferred) ? `${preferred}-${index + 1}` : preferred;
+    usedFamilyAnchors.add(anchor);
+    return anchor;
+  });
+  const anchorForSection = (section: WireframeSectionPlan): string => {
+    const index = plannedSections?.indexOf(section) ?? -1;
+    return index >= 0 ? familySectionAnchors?.[index] ?? anchorForRole(section.role, section.label) : anchorForRole(section.role, section.label);
+  };
   const frameworkSections = [
     { id: "experience-overview", roles: ["hero"] },
     { id: "credibility-anchor", roles: ["proof"] },
@@ -767,7 +788,7 @@ export function renderExperienceHtml(input: {
   const journeyNavItems = framework
     ? plannedSections
       ? plannedSections.filter((section) => !plannedRoles || plannedRoles.has(section.role)).map((section) => ({
-          id: anchorForRole(section.role, section.label),
+          id: anchorForSection(section),
           label: familyProduction
             ? sanitizeBuyerFacingLabel(section.label, "Overview")
             : fallbackNavigation[section.role]
@@ -984,9 +1005,11 @@ export function renderExperienceHtml(input: {
             ({ role }) => role !== "hero" && role !== "next-action" && rolePlanned(role)
           )
           .map((section) => {
-            const reviewed = input.productionSections?.find((item) => item.role === section.role && item.status === "complete");
+            const reviewed = section.sectionId
+              ? input.productionSections?.find((item) => item.id === section.sectionId && item.status === "complete")
+              : input.productionSections?.find((item) => item.role === section.role && item.status === "complete");
             if (reviewed && ["pathways", "decision-support"].includes(section.role) && (reviewed.body || reviewed.choices?.length)) {
-              const sectionId = anchorForRole(section.role, section.label);
+              const sectionId = anchorForSection(section);
               const cards = reviewed.choices?.map((choice, index) => `<article><span class="lens-number">${index + 1}</span><h3>${escapeHtml(choice.label)}</h3><p>${escapeHtml(choice.body)}</p></article>`).join("");
               return `<section class="lens-lab framework-starting-points" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="starting-points"><header class="region-heading"><h2>${escapeHtml(reviewed.headline ?? section.label)}</h2>${reviewed.body ? `<p class="region-intro">${escapeHtml(reviewed.body)}</p>` : ""}</header>${cards ? `<div class="journey-grid">${cards}</div>` : ""}</section>`;
             }
@@ -997,7 +1020,7 @@ export function renderExperienceHtml(input: {
               return `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism"><div class="framework-copy"><h2>${escapeHtml(framework.mechanism.headline)}</h2><p class="region-intro">${escapeHtml(framework.mechanism.intro)}</p></div>${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media")}</section>`;
             }
             if (section.role === "proof") {
-              const sectionId = anchorForRole(section.role, section.label);
+              const sectionId = anchorForSection(section);
               const headline = sectionId === "additional-evidence"
                 ? "More evidence to carry forward"
                 : framework.credibility.headline;
@@ -1010,7 +1033,8 @@ export function renderExperienceHtml(input: {
                     `<article><span class="lens-number">${index + 1}</span><h3>${escapeHtml(choice.label)}</h3><p>${escapeHtml(choice.buyerJob)}</p></article>`
                 )
                 .join("");
-              return `<section class="lens-lab framework-starting-points" id="starting-points" data-journey-section="starting-points" data-template-primitive="starting-points"><header class="region-heading"><h2>${escapeHtml(framework.startingPoints.headline)}</h2><p class="region-intro">${escapeHtml(framework.startingPoints.intro)}</p></header><div class="journey-grid">${criteria}</div></section>`;
+              const sectionId = anchorForSection(section);
+              return `<section class="lens-lab framework-starting-points" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="starting-points"><header class="region-heading"><h2>${escapeHtml(framework.startingPoints.headline)}</h2><p class="region-intro">${escapeHtml(framework.startingPoints.intro)}</p></header><div class="journey-grid">${criteria}</div></section>`;
             }
             if (section.role === "pathways") {
               const paths = draft.sections
@@ -1019,7 +1043,8 @@ export function renderExperienceHtml(input: {
                     `<article><span class="lens-number">${index + 1}</span><h3>${escapeHtml(path.headline)}</h3><p>${escapeHtml(path.body)}</p></article>`
                 )
                 .join("");
-              return `<section class="lens-lab framework-starting-points" id="application-paths" data-journey-section="application-paths" data-template-primitive="starting-points"><header class="region-heading"><h2>${escapeHtml(draft.sectionLabels.lenses)}</h2></header><div class="journey-grid">${paths}</div></section>`;
+              const sectionId = anchorForSection(section);
+              return `<section class="lens-lab framework-starting-points" id="${sectionId}" data-journey-section="${sectionId}" data-template-primitive="starting-points"><header class="region-heading"><h2>${escapeHtml(draft.sectionLabels.lenses)}</h2></header><div class="journey-grid">${paths}</div></section>`;
             }
             if (section.role === "seller-validation") {
               return `<section class="framework-section team-value-section" id="team-value" data-journey-section="team-value"><h2>${escapeHtml(framework.teamValue.headline)}</h2><p class="region-intro">${escapeHtml(framework.teamValue.intro)}</p></section>`;

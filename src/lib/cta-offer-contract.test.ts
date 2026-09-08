@@ -1,7 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { resolveBuyerCtaOffer } from "./cta-offer-contract";
+import { resolveBuyerCtaOffer, verifiedProductResourceUrl } from "./cta-offer-contract";
 
 describe("CTA offer continuity", () => {
+  const resourceItem = (overrides: Record<string, unknown> = {}) => ({
+    id: "resource-1", type: "public-positioning" as const, label: "Audit resource",
+    text: "Audit resource", sourceUrl: "https://aprio.com/resources/audit-guide",
+    signals: [], disposition: "available" as const, evidenceType: "resource" as const,
+    confidence: "high" as const, subject: "Audit & Assurance Solutions", ...overrides
+  });
+
+  it("accepts only a current, non-excluded, same-offer public resource", () => {
+    const session = { answers: { promotedOffer: "Audit & Assurance Solutions", offerSourceUrl: "https://aprio.com/audit-assurance/" }, evidenceItems: [resourceItem()] };
+    expect(verifiedProductResourceUrl(session)).toBe("https://aprio.com/resources/audit-guide");
+    expect(verifiedProductResourceUrl({ ...session, evidenceItems: [resourceItem({ subject: "Other offer" })] })).toBeUndefined();
+    expect(verifiedProductResourceUrl({ ...session, evidenceItems: [resourceItem({ disposition: "excluded" })] })).toBeUndefined();
+    expect(verifiedProductResourceUrl({ ...session, evidenceItems: [resourceItem({ confidence: "low" })] })).toBeUndefined();
+    expect(verifiedProductResourceUrl({ ...session, evidenceItems: [resourceItem({ sourceUrl: "https://aprio.com/audit-assurance/" })] })).toBeUndefined();
+    expect(verifiedProductResourceUrl({ ...session, evidenceItems: [resourceItem({ sourceUrl: "http://localhost/private" })] })).toBeUndefined();
+  });
+
   it("never calls a scroll fallback a booked meeting", () => {
     const result = resolveBuyerCtaOffer({ intent: "book-meeting", label: "Book a demo" });
     expect(result.action).toMatchObject({ actionType: "scroll", label: "Explore the page", verification: "fallback" });

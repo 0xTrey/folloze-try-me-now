@@ -36,6 +36,64 @@ const artifact = (value: SectionCopyCandidate[]): SectionWriterArtifact => ({
 const output = (artifacts: readonly SectionWriterArtifact[]) => artifacts.flatMap((item) => item.value ?? []);
 
 describe("repairBuildFallbacks", () => {
+  it("uses distinct service facts as cards without a question subheader or generic homework", () => {
+    const facts = [
+      claim("ebp", "Employee benefit plan audits simplify compliance and plan administration."),
+      claim("federal", "Uniform Guidance compliance covers federal awards for for-profit and nonprofit organizations."),
+      claim("financial", "Financial assurance reviews financial records and internal controls.")
+    ];
+    const repaired = repairBuildFallbacks({
+      plan: plan([{ id: "applications", role: "applications", refs: facts.map(({ id }) => id) }]),
+      artifacts: [artifact([section("applications", "pathways")])],
+      slots: [slot("applications", "pathways", 90)], evidence: facts, sellerName: "Aprio"
+    });
+    const result = output(repaired)[0]!;
+    expect(result.status).toBe("complete");
+    expect(result.body ?? "").not.toContain("?");
+    expect(result.choices?.map(({ body }) => body).sort()).toEqual(facts.map(({ text }) => text).sort());
+    expect(result.choices?.every(({ evidenceRefs }) => evidenceRefs.length === 1)).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/Your requirements|Your next decision|The working detail/);
+  });
+
+  it("does not invent three choices when only one service fact is available", () => {
+    const text = "Employee benefit plan audits simplify compliance and plan administration.";
+    const result = output(repairBuildFallbacks({
+      plan: plan([{ id: "applications", role: "applications", refs: ["ebp"] }]),
+      artifacts: [artifact([section("applications", "pathways")])],
+      slots: [slot("applications", "pathways", 90)], evidence: [claim("ebp", text)]
+    }))[0]!;
+    expect(result.body).toBe(text);
+    expect(result.choices).toBeUndefined();
+  });
+
+  it("keeps verified source headings attached to their own descriptions", () => {
+    const facts = [
+      { ...claim("ebp", "Our audit team helps plan sponsors meet their reporting responsibilities."), sourceSectionId: "service-ebp", sourceSectionTitle: "Employee Benefit Plan Audits" },
+      { ...claim("federal", "Our compliance team supports federal award reporting requirements."), sourceSectionId: "service-federal", sourceSectionTitle: "Uniform Guidance Compliance" }
+    ];
+    const result = output(repairBuildFallbacks({
+      plan: plan([{ id: "applications", role: "applications", refs: facts.map(({ id }) => id) }]),
+      artifacts: [artifact([section("applications", "pathways")])],
+      slots: [slot("applications", "pathways", 90)], evidence: facts
+    }))[0]!;
+    expect(result.choices?.map(({ label, body }) => ({ label, body }))).toEqual(facts.map(({ sourceSectionTitle, text }) => ({ label: sourceSectionTitle, body: text })));
+  });
+
+  it("reserves distinct facts for later required sections before filling an earlier grid", () => {
+    const facts = [claim("one", "Review queues record the owner and decision for every request."),
+      claim("two", "Exception routing directs unresolved work to the designated policy owner."),
+      claim("three", "Approval history includes the original request and each review decision.")];
+    const refs = facts.map(({ id }) => id);
+    const result = output(repairBuildFallbacks({
+      plan: plan([{ id: "criteria", role: "evaluation-criteria", refs }, { id: "mapping", role: "solution-mapping", refs }, { id: "applications", role: "applications", refs }]),
+      artifacts: [artifact([section("criteria", "decision-support"), section("mapping", "mechanism"), section("applications", "pathways")])],
+      slots: [slot("criteria", "decision-support"), slot("mapping", "mechanism"), slot("applications", "pathways")], evidence: facts
+    }));
+    expect(result.every(({ status }) => status === "complete")).toBe(true);
+    expect(new Set(result.flatMap(({ evidenceRefs }) => evidenceRefs)).size).toBe(3);
+    expect(result.every(({ body, choices }) => Boolean(body) && !choices)).toBe(true);
+  });
+
   it("retains the complete scoped claim, keeps CTA metadata, and removes off-plan refs", () => {
     const source = "Acme Flow records the owner, decision, and exception for every approval.";
     const repaired = repairBuildFallbacks({

@@ -228,6 +228,30 @@ describe("discoverOfferEvidenceFromPages", () => {
     ]));
     expect(evidence.map(({ label }) => label)).not.toContain("AI Meeting Notes Perfectly written by AI");
   });
+
+  it("extracts processor products from Intel-style navigation and binds detail URLs", () => {
+    const evidence = discoverOfferEvidenceFromPages({
+      motion: "product",
+      graph: {
+        origin: ORIGIN,
+        pages: [page("/", `<nav>
+          <a href="/content/www/us/en/products/details/processors/core-ultra.html">Intel® Core™ Ultra Processors</a>
+          <a href="/content/www/us/en/products/details/processors/xeon.html">Intel® Xeon® Processors</a>
+          <a href="/content/www/us/en/products/details/processors/xeon/max-series.html">Intel® Xeon® CPU Max Series</a>
+          <a href="/content/www/us/en/homepage.html">Deliver AI scale</a>
+        </nav>`)]
+      }
+    });
+
+    expect(evidence.map(({ label }) => label)).toEqual(expect.arrayContaining([
+      "Intel® Core™ Ultra Processors",
+      "Intel® Xeon® Processors",
+      "Intel® Xeon® CPU Max Series"
+    ]));
+    expect(evidence.map(({ label }) => label)).not.toContain("Deliver AI scale");
+    expect(evidence.find(({ label }) => label === "Intel® Core™ Ultra Processors")?.sourceUrl)
+      .toBe(`${ORIGIN}/content/www/us/en/products/details/processors/core-ultra.html`);
+  });
 });
 
 describe("harvestOfferDiscoveryGraph", () => {

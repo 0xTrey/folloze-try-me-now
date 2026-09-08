@@ -135,6 +135,23 @@ function candidate(
 }
 
 describe("deterministic candidate evaluation", () => {
+  it("rejects duplicate or generic cited cards instead of accepting a card quota", () => {
+    const [contract] = contractsFor([slot("opening", "buyer-outcome")]);
+    const evaluated = evaluateCandidate(contract!, candidate(
+      "opening", "Evidence to examine", "", {
+        choices: [
+          { label: "Same evidence", body: "What should the team review next?", evidenceRefs: ["ev-seller-1"] },
+          { label: "Same evidence", body: "What should the team review next?", evidenceRefs: ["ev-seller-1"] }
+        ],
+        evidenceRefs: []
+      }
+    ), 0);
+    expect(evaluated.accepted).toBe(false);
+    expect(evaluated.rejections).toEqual(expect.arrayContaining([
+      "duplicate_within_section", "insufficient_specificity"
+    ]));
+  });
+
   it("accepts a candidate that satisfies its contract and cites scoped evidence", () => {
     const [contract] = contractsFor([slot("opening", "buyer-outcome")]);
     const evaluation = evaluateCandidate(

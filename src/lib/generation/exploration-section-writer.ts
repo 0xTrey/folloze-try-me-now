@@ -1,14 +1,12 @@
 import {
   copyContractMetadata,
-  sectionCopyWordCount,
   validateSectionCopyCandidate,
   type SectionCopyCandidate,
-  type SectionCopyChoice,
-  type SectionEvidenceClaim,
   type SectionWriterArtifact,
   type SectionWriterInput,
   type SectionWriterSlot
 } from "@/lib/generation/section-copy-types";
+import { evidenceChoiceCandidate } from "./evidence-choice-copy";
 import type { WireframeSectionRole } from "@/lib/generation/wireframe-library";
 
 const ownedRoles = new Set<WireframeSectionRole>([
@@ -19,412 +17,36 @@ const ownedRoles = new Set<WireframeSectionRole>([
   "resources"
 ]);
 
-const unsafeCopyPattern =
-  /<[^>]+>|```|javascript:|(?:^|\s)(?:const|let|var|function|class|import|export)\s|[.#][a-z0-9_-]+\s*\{|@media\b/i;
-const bannedCopyPattern =
-  /\b(?:unlock value|transform your business|seamless|best-in-class|make progress with confidence)\b/i;
-
-const headlines: Record<
-  Extract<
-    WireframeSectionRole,
-    "pathways" | "agenda" | "chapter-navigation" | "decision-support" | "resources"
-  >,
-  string
-> = {
-  pathways: "Choose what to evaluate first",
+const headlines: Partial<Record<WireframeSectionRole, string>> = {
+  pathways: "Capabilities and their scope",
   agenda: "A focused agenda for the session",
-  "chapter-navigation": "Move through the material",
-  "decision-support": "Compare what the decision requires",
-  resources: "Continue with the material"
-};
-
-type OwnedRole = keyof typeof headlines;
-
-function headlineForSlot(
-  slot: SectionWriterSlot,
-  input: SectionWriterInput
-): string {
-  if (slot.v2Role === "use-cases") {
-    return "Choose the buyer job that matters most";
-  }
-  if (slot.v2Role === "evaluation-criteria") {
-    return "Evaluate the solution against observable criteria";
-  }
-  if (slot.v2Role === "applications") {
-    return "See where this decision applies in practice";
-  }
-  if (slot.v2Role === "priority-paths") {
-    return "Choose the priority to validate first";
-  }
-  if (slot.v2Role === "resource") {
-    return "Continue with evidence for the next question";
-  }
-  return slot.role === "decision-support" && isTechnical(input)
-    ? "Resolve the technical decision"
-    : headlines[slot.role as OwnedRole];
-}
-
-const sectionBodies: Record<OwnedRole, string> = {
-  pathways:
-    "Compare the material and choose the question that matters most to the evaluation.",
-  agenda:
-    "Move from current context to focused evaluation questions, then identify what still needs validation.",
-  "chapter-navigation":
-    "Review the cited points in sequence while keeping unanswered questions visible.",
-  "decision-support":
-    "Compare decision requirements, constraints, and validation evidence before choosing a next step.",
-  resources:
-    "Review the available references, then confirm unanswered details before relying on them."
+  "chapter-navigation": "The ideas in sequence",
+  "decision-support": "Capabilities that shape the decision",
+  resources: "Continue with the source material"
 };
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => value.trim()))].sort();
 }
 
-function normalizedText(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function safeClaimText(claim: SectionEvidenceClaim, maxWords = 18): string | undefined {
-  const text = normalizedText(claim.text);
-  if (!text || unsafeCopyPattern.test(text) || bannedCopyPattern.test(text)) {
-    return undefined;
-  }
-  const words = text.split(/\s+/);
-  if (words.length <= maxWords) return text.replace(/[.?!]+$/, "");
-
-  const firstSentence = text.split(/(?<=[.?!])\s+/, 1)[0];
-  if (firstSentence && firstSentence.split(/\s+/).length <= maxWords) {
-    return firstSentence.replace(/[.?!]+$/, "");
-  }
-  return undefined;
-}
-
-function currentClaimsForSlot(
-  input: SectionWriterInput,
-  slot: SectionWriterSlot,
-  maxWords = 18
-): SectionEvidenceClaim[] {
-  const allowedRefs = new Set(slot.evidenceRefs);
-  const seenText = new Set<string>();
-  const claims: SectionEvidenceClaim[] = [];
-
-  for (const claim of input.evidence) {
-    if (claim.revision !== input.revision || !allowedRefs.has(claim.id)) continue;
-    const safeText = safeClaimText(claim, maxWords);
-    if (!safeText) continue;
-    const key = safeText.toLocaleLowerCase();
-    if (seenText.has(key)) continue;
-    seenText.add(key);
-    claims.push(claim);
-  }
-
-  return claims;
-}
-
-function isTechnical(input: SectionWriterInput): boolean {
-  return /\b(?:api|architecture|configuration|constraint|data|deployment|engineering|implementation|integration|platform|requirement|security|technical)\b/i.test(
-    [
-      input.objective,
-      input.brief.audience,
-      input.brief.mechanism,
-      input.brief.decisionHelp,
-      ...input.evidence.map(({ text }) => text)
-    ].join(" ")
-  );
-}
-
-function richChoiceLabels(
-  role: SectionWriterSlot["role"],
-  technical: boolean
-): readonly [string, string, string] {
-  if (role === "agenda") {
-    return ["Opening context", "Core discussion", "Questions to resolve"];
-  }
-  if (role === "chapter-navigation") {
-    return ["Start with context", "Explore the detail", "Carry it forward"];
-  }
-  if (role === "decision-support" && technical) {
-    return ["Requirements check", "Constraint review", "Validation evidence"];
-  }
-  if (role === "decision-support") {
-    return ["Outcome fit", "Operating fit", "Evidence fit"];
-  }
-  if (role === "resources") {
-    return ["Evidence to review", "Evidence to compare", "Evidence to validate"];
-  }
-  return ["Evidence focus", "Evaluation focus", "Validation focus"];
-}
-
-function richChoiceBody(
-  role: SectionWriterSlot["role"],
-  index: number,
-  claim: string,
-  technical: boolean
-): string {
-  const templates: Record<number, string> =
-    role === "agenda"
-      ? {
-          0: "Open with the supported context",
-          1: "Center the discussion on this evidence",
-          2: "Connect this evidence to the next decision"
-        }
-      : role === "chapter-navigation"
-        ? {
-            0: "Start with this material",
-            1: "Continue with this detail",
-            2: "Use this evidence to frame the questions that follow"
-          }
-        : role === "decision-support" && technical
-          ? {
-              0: "Check the requirement against this point",
-              1: "Test constraints using this material",
-              2: "Ask what validation this point requires"
-            }
-          : role === "decision-support"
-            ? {
-                0: "Compare the desired outcome with this point",
-                1: "Test operating fit using this material",
-                2: "Ask what further validation this point requires"
-              }
-            : role === "resources"
-              ? {
-                  0: "Review this material",
-                  1: "Use this point for comparison",
-                  2: "Keep this evidence available for validation"
-                }
-              : {
-                  0: "Review this point before choosing a focus",
-                  1: "Examine this evidence during the evaluation",
-                  2: "Use this point to identify the next validation need"
-                };
-  return `${templates[index]}: ${claim}.`;
-}
-
-function sparseChoices(
-  role: SectionWriterSlot["role"],
-  technical: boolean,
-  claims: readonly SectionEvidenceClaim[]
-): [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice] {
-  const definitions: readonly [
-    readonly [string, string],
-    readonly [string, string],
-    readonly [string, string]
-  ] =
-    role === "agenda"
-      ? [
-          ["Frame the topic", "What supported context should open the session?"],
-          ["Examine the material", "Which source deserves focused discussion?"],
-          ["Name open questions", "What must attendees validate before choosing a next step?"]
-        ]
-      : role === "chapter-navigation"
-        ? [
-            ["Start with context", "What does the material establish first?"],
-            ["Review the material", "Which detail should be examined next?"],
-            ["Carry questions forward", "What remains unresolved after reviewing the evidence?"]
-          ]
-        : role === "decision-support" && technical
-          ? [
-              ["Check requirements", "Which technical requirements are described here?"],
-              ["Test constraints", "Which constraints still need direct validation?"],
-              ["Define proof", "What evidence would make the technical decision supportable?"]
-            ]
-          : role === "decision-support"
-            ? [
-                ["Confirm the outcome", "What outcome does this material describe?"],
-                ["Inspect operating fit", "What operating details still need confirmation?"],
-                ["Set the evidence bar", "What evidence would support the stated objective?"]
-              ]
-            : role === "resources"
-              ? [
-                  ["Review the material", "Which source directly addresses the decision?"],
-                  ["Locate the gap", "Which unanswered question needs another source?"],
-                  ["Confirm before use", "What must be verified before relying on a resource?"]
-                ]
-              : [
-                  [
-                    "Confirm the outcome",
-                    "What outcome does this material describe, and what remains unverified?"
-                  ],
-                  [
-                    "Inspect the mechanism",
-                    "What operating details must be confirmed before this path can be evaluated?"
-                  ],
-                  [
-                    "Test decision fit",
-                    "What evidence would show whether this option fits the stated objective?"
-                  ]
-                ];
-
-  const choice = (index: 0 | 1 | 2): SectionCopyChoice => {
-    const [label, body] = definitions[index];
-    const claim = claims[index % Math.max(claims.length, 1)];
-    return {
-      label,
-      body,
-      evidenceRefs: claim ? [claim.id] : []
-    };
-  };
-  return [choice(0), choice(1), choice(2)];
-}
-
-function choicesForSlot(
-  input: SectionWriterInput,
-  slot: SectionWriterSlot,
-  claims: readonly SectionEvidenceClaim[]
-): [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice] {
-  const technical = isTechnical(input);
-  if (slot.v2Role === "priority-paths") {
-    const targetClaims = claims.filter(({ sourceRole }) => sourceRole === "target");
-    const primary = targetClaims[0];
-    if (primary) {
-      const topic = (claim: SectionEvidenceClaim): string => {
-        const selected = safeClaimText(claim)!
-          .replace(
-            /^[A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*)?\s+(?:is|are|has|have|describes?|emphasizes?|focuses? on|operates?)\s+/i,
-            ""
-          )
-          .replace(/[.!?].*$/, "")
-          .split(/\s+/)
-          .slice(0, 6);
-        while (selected.length > 2 && /^(?:and|or|with|for|to)$/i.test(selected.at(-1)!)) {
-          selected.pop();
-        }
-        return selected.join(" ");
-      };
-      const secondary = targetClaims[1] ?? primary;
-      return [
-        {
-          label: "Public focus",
-          body: `Test ${topic(primary)} against the selected objective.`,
-          evidenceRefs: [primary.id]
-        },
-        {
-          label: "Operating fit",
-          body: `Compare the supported approach with ${topic(secondary)}.`,
-          evidenceRefs: [secondary.id]
-        },
-        {
-          label: "First decision",
-          body: `Define what ${input.brief.targetName ?? "the account team"} must validate before choosing a path.`,
-          evidenceRefs: [...new Set([primary.id, secondary.id])]
-        }
-      ];
-    }
-  }
-  if (slot.v2Role === "applications") {
-    const definitions = [
-      [
-        "Operational application",
-        "Operational workflow ownership"
-      ],
-      [
-        "Cross-team application",
-        "Cross-team coordination trigger"
-      ],
-      [
-        "Expansion application",
-        "Validated expansion scope"
-      ]
-    ] as const;
-    const choice = (index: 0 | 1 | 2): SectionCopyChoice => {
-      const [label, prefix] = definitions[index];
-      const claim = claims[index % Math.max(claims.length, 1)];
-      const detail = claim ? safeClaimText(claim) : undefined;
-      return {
-        label,
-        body: `${prefix}: ${detail ?? "confirm the relevant evidence before choosing this scenario"}.`,
-        evidenceRefs: claim ? [claim.id] : []
-      };
-    };
-    return [choice(0), choice(1), choice(2)];
-  }
-  if (claims.length < 3) return sparseChoices(slot.role, technical, claims);
-
-  const labels = richChoiceLabels(slot.role, technical);
-  const choice = (index: 0 | 1 | 2): SectionCopyChoice => {
-    const claim = claims[index]!;
-    return {
-      label: labels[index],
-      body: richChoiceBody(slot.role, index, safeClaimText(claim)!, technical),
-      evidenceRefs: [claim.id]
-    };
-  };
-  return [choice(0), choice(1), choice(2)];
-}
-
-function fitCandidateToBudget(
-  candidate: SectionCopyCandidate,
-  slot: SectionWriterSlot
-): SectionCopyCandidate | undefined {
-  candidate.wordCount = sectionCopyWordCount(candidate);
-  if (candidate.wordCount > slot.wordBudget.max) return undefined;
-
-  return candidate;
-}
-
 function candidateForSlot(
   input: SectionWriterInput,
   slot: SectionWriterSlot
-): { candidate?: SectionCopyCandidate; sparse: boolean } {
-  const paragraphClaims = currentClaimsForSlot(input, slot, 60)
-    .filter((claim) => claim.kind === "seller_fact");
-  if (["evaluation-criteria", "applications", "use-cases"].includes(slot.v2Role ?? "") && paragraphClaims.length) {
-    const selected: SectionEvidenceClaim[] = [];
-    const candidate: SectionCopyCandidate = {
-      sectionId: slot.id, role: slot.role, ...copyContractMetadata(slot), status: "complete",
-      headline: slot.v2Role === "evaluation-criteria"
-        ? "What to know before you decide"
-        : "Choose where the work should begin",
-      body: "", evidenceRefs: [], wordCount: 0,
-      choices: [
-        { label: "Scope", body: "What does your team need?", evidenceRefs: [] },
-        { label: "Requirements", body: "Which requirements still need confirmation?", evidenceRefs: [] },
-        { label: "Next step", body: "Who can resolve the remaining questions?", evidenceRefs: [] }
-      ]
-    };
-    for (const claim of paragraphClaims) {
-      const nextBody = [...selected, claim].map((item) => normalizedText(item.text)).join(" ");
-      if (sectionCopyWordCount({ ...candidate, body: nextBody }) <= slot.wordBudget.max) selected.push(claim);
-    }
-    if (selected.length) {
-      candidate.body = selected.map((item) => normalizedText(item.text)).join(" ");
-      candidate.evidenceRefs = selected.map((item) => item.id);
-      return { candidate: fitCandidateToBudget(candidate, slot), sparse: false };
-    }
-  }
-  const claims = currentClaimsForSlot(input, slot);
-  const role = slot.role as OwnedRole;
-  const build = (
-    choices: [SectionCopyChoice, SectionCopyChoice, SectionCopyChoice]
-  ): SectionCopyCandidate | undefined => {
-    const evidenceRefs = unique(
-      choices.flatMap((choice) => choice.evidenceRefs)
-    );
-    return fitCandidateToBudget({
-      sectionId: slot.id,
-      role: slot.role,
-      ...copyContractMetadata(slot),
-      status: "complete",
-      headline: headlineForSlot(slot, input),
-      body:
-        slot.v2Role === "priority-paths" && input.brief.targetName
-          ? `${input.brief.sellerName ?? "The seller"} and ${input.brief.targetName} can compare the material, then choose the first priority to validate together.`
-          : sectionBodies[role],
-      choices,
-      evidenceRefs,
-      wordCount: 0
-    }, slot);
+): { candidate: SectionCopyCandidate; sparse: boolean } {
+  const allowed = new Set(slot.evidenceRefs);
+  const claims = input.evidence.filter((claim) =>
+    claim.revision === input.revision && allowed.has(claim.id) && claim.sourceRole !== "visitor");
+  const headline = slot.v2Role === "priority-paths" && input.brief.targetName
+    ? `Priorities for ${input.brief.targetName}`
+    : headlines[slot.role] ?? "Capabilities and their scope";
+  const candidate = evidenceChoiceCandidate({ slot, claims, headline });
+  if (candidate) return { candidate, sparse: false };
+  return {
+    candidate: { sectionId: slot.id, role: slot.role, ...copyContractMetadata(slot), status: "omitted",
+      evidenceRefs: [], wordCount: 0,
+      omissionReason: slot.required ? "no_current_evidence" : "unsupported_optional_slot" },
+    sparse: true
   };
-  const choices = choicesForSlot(input, slot, claims);
-  let candidate = build(choices);
-  let usedBudgetFallback = false;
-  if (!candidate && slot.family && claims.length >= 3) {
-    candidate = build(sparseChoices(slot.role, isTechnical(input), claims));
-    usedBudgetFallback = candidate !== undefined;
-  }
-
-  return { candidate, sparse: claims.length < 3 || usedBudgetFallback };
 }
 
 function failedArtifact(
@@ -499,7 +121,8 @@ export function writeExplorationSections(input: SectionWriterInput): SectionWrit
     );
     return (
       choiceRefs.some((ref) => !currentIds.has(ref) || !slot.evidenceRefs.includes(ref)) ||
-      validateSectionCopyCandidate(candidate, slot, input.revision, input.evidence).length > 0
+      validateSectionCopyCandidate(candidate, slot, input.revision, input.evidence)
+        .some((issue) => issue !== "required_section_omitted")
     );
   });
   if (hasValidationIssue) {

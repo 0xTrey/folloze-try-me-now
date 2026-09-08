@@ -306,6 +306,21 @@ export function hardGateRejections(
     }
   }
 
+  // Cards are not a layout quota. Each one must independently explain the
+  // evidence it cites, otherwise generic prompts can masquerade as content.
+  if (candidate.choices) {
+    const offer = contract.strategySubject?.offerLabel ?? contract.brief.sellerName ?? "";
+    const emptyOrGenericCard = candidate.choices.some((choice) => {
+      const cited = new Set(choice.evidenceRefs);
+      const cardEvidence = contract.evidence.filter(({ id }) => cited.has(id));
+      return !cardEvidence.length || !hasSubstantiveEvidenceUse(choice.body, cardEvidence, offer);
+    });
+    if (emptyOrGenericCard) {
+      rejections.push("insufficient_specificity");
+      reasons.push("choice_does_not_explain_its_cited_evidence");
+    }
+  }
+
   const unsupported = unsupportedCopyClaims({
     text,
     citedRefs: candidate.evidenceRefs,

@@ -169,6 +169,24 @@ export function assignBuyerJourneySections(plan: readonly SectionSlotV2[], brief
       ? { ...slot, claimType: "instruction", requiredEvidenceKinds: [], buyerJob: "Confirm the inputs, work, and output before choosing an approach" }
       : slot);
   }
+  if (explanation.length && brief.offerKind === "product-service") {
+    // Each explanatory section needs at least one distinct fact. Preserve the
+    // mechanism first; a thin source does not earn another applications grid
+    // or a second criteria section repeating the same capability.
+    const usesExplanation = (slot: SectionSlotV2) =>
+      ["mechanism", "solution-mapping", "use-cases", "applications", "shared-opportunity", "priority-paths"].includes(slot.role) ||
+      (slot.role === "validation-plan" && !brief.knowledge.proofClaims.length) ||
+      (slot.role === "evaluation-criteria" && !objections.length);
+    for (const role of ["validation-plan", "applications", "use-cases", "evaluation-criteria"] as const) {
+      if (earnedPlan.filter(usesExplanation).length <= explanation.length) break;
+      const shortened = earnedPlan.filter((slot) => slot.role !== role || !usesExplanation(slot));
+      // Preserve the structural contract when there is too little source
+      // material for four sections. The existing coherence gate then returns
+      // a supported failure instead of throwing during layout compilation.
+      if (shortened.length < 4) continue;
+      earnedPlan = shortened;
+    }
+  }
   if (objections.length && !earnedPlan.some((slot) => slot.role === "evaluation-criteria") && earnedPlan.length < 8) {
     earnedPlan.splice(Math.max(1, earnedPlan.length - 1), 0, {
       id: "buyer-purchase-questions", role: "evaluation-criteria", navigationLabel: "Purchase questions",
@@ -187,10 +205,12 @@ export function assignBuyerJourneySections(plan: readonly SectionSlotV2[], brief
   }
   return earnedPlan.map((slot, index, all) => {
     const key = roleQuestion[slot.role];
-    const pool = key === "proof" ? brief.knowledge.proofClaims : key === "risk"
+    const pool = slot.role === "validation-plan" && !brief.knowledge.proofClaims.length ? explanation
+      : key === "proof" ? brief.knowledge.proofClaims : key === "risk"
       ? objections.length ? objections : explanation
       : slot.role === "current-friction" || slot.role === "stakes" ? [...brief.knowledge.workflowContext, ...brief.knowledge.targetAccountContext]
       : slot.role === "account-relevance" ? brief.knowledge.targetAccountContext
+      : slot.role === "priority-paths" ? [...explanation, ...brief.knowledge.targetAccountContext]
       : slot.role === "resource" ? brief.knowledge.resources
       : slot.role === "first-decision" ? [...explanation, ...brief.knowledge.targetAccountContext]
       : key === "understand" ? [...brief.knowledge.productOffer, ...explanation]

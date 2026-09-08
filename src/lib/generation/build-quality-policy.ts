@@ -34,6 +34,8 @@ const BUYER_USEFULNESS_BLOCKERS = new Set([
   "no_substantive_middle_explanation",
   "repeated_section_argument",
   "insufficient_specificity",
+  "unsupported_choice_copy",
+  "question_only_section_intro",
   "prohibited_eyebrow",
   "prohibited_em_dash"
 ]);
@@ -109,6 +111,19 @@ export function evaluateBuildQuality(input: {
     } else if (section.evidenceRefs.some((id) => !permitted.has(id))) {
       issues.push("evidence_outside_plan");
     }
+    // An evidence-bearing paragraph cannot make unrelated question cards useful.
+    // Evaluate each card against its own permitted evidence, not its siblings.
+    if (section.choices?.some((choice) => {
+      const ownClaims = choice.evidenceRefs.flatMap((id) => {
+        const claim = byId.get(id);
+        return claim && permitted.has(id) ? [claim] : [];
+      });
+      return !hasSubstantiveEvidenceUse(choice.body, ownClaims, input.plan.buyer.product.label);
+    })) issues.push("unsupported_choice_copy");
+    const introSentences = (section.body ?? "").match(/[^.!?]+[.!?]*/g)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
+    if (section.choices && introSentences.length && introSentences.every((sentence) => /\?$/.test(sentence))) {
+      issues.push("question_only_section_intro");
+    }
     const argumentKey = normalize(allText);
     const bodyKey = normalize(section.body ?? "");
     const sentenceKeys = (section.body ?? "").split(/(?<=[.!?])\s+/).map(normalize).filter((sentence) => sentence.length >= 48);
@@ -123,7 +138,7 @@ export function evaluateBuildQuality(input: {
     if (assignment?.evidenceMode === "supported-facts" && section.claimType === "fact" && !substantive &&
         !["next-action", "seller-validation", "resources"].includes(section.role)) issues.push("insufficient_specificity");
     for (const code of issues) {
-      if (["unknown_evidence_ref", "evidence_outside_plan", "section_not_in_plan", "internal_narration", "prohibited_eyebrow", "prohibited_em_dash", "insufficient_specificity"].includes(code)) blockers.push(code);
+      if (["unknown_evidence_ref", "evidence_outside_plan", "section_not_in_plan", "internal_narration", "prohibited_eyebrow", "prohibited_em_dash", "insufficient_specificity", "unsupported_choice_copy", "question_only_section_intro"].includes(code)) blockers.push(code);
       else warnings.push(code);
     }
     return { id: section.sectionId, substantive, validationOnly, issues };

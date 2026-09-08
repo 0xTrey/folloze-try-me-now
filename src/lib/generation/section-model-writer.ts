@@ -153,17 +153,19 @@ function normalizeChoices(
 ): SectionCopyCandidate["choices"] | "invalid" | undefined {
   const choices = candidate.choices ?? [];
   if (!choices.length) return undefined;
-  if (choices.length !== SECTION_MODEL_BOUNDS.choices) return "invalid";
+  if (choices.length < 2 || choices.length > SECTION_MODEL_BOUNDS.choices) return "invalid";
   const bounded = choices.map((choice) => {
     const label = boundedCopy(choice?.label, SECTION_MODEL_BOUNDS.choiceLabelChars);
     const body = boundedCopy(choice?.body, SECTION_MODEL_BOUNDS.choiceBodyChars);
     if (!label || !body) return undefined;
     const refs = [...new Set(choice.evidenceRefs ?? [])].filter((ref) => allowedRefs.has(ref));
-    if (refs.length > SECTION_MODEL_BOUNDS.evidenceRefs) return undefined;
+    if (!refs.length || refs.length > SECTION_MODEL_BOUNDS.evidenceRefs) return undefined;
     return { label, body, evidenceRefs: refs };
   });
   if (bounded.some((choice) => !choice)) return "invalid";
-  return [bounded[0]!, bounded[1]!, bounded[2]!];
+  return choices.length === 2
+    ? [bounded[0]!, bounded[1]!]
+    : [bounded[0]!, bounded[1]!, bounded[2]!];
 }
 
 /**
@@ -245,7 +247,6 @@ export function normalizeModelCandidate(
 
   const choices = normalizeChoices(candidate, allowedRefs);
   if (choices === "invalid") return undefined;
-  if (["pathways", "decision-support"].includes(contract.slot.role) && !choices) return undefined;
 
   const shaped: SectionCopyCandidate = {
     ...base,

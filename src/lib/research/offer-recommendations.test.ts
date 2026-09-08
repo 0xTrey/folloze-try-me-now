@@ -476,7 +476,7 @@ describe("rankOfferRecommendations", () => {
           label,
           kind: "product",
           source: "official-page",
-          sourceUrl: `https://seller.example/products/${index}`,
+          sourceUrl: `https://seller.example/products/${label.toLowerCase().replace(/\s+/g, "-")}`,
           confidence: 0.9 - index * 0.05
         }))
       });
@@ -487,6 +487,19 @@ describe("rankOfferRecommendations", () => {
       expect(build().presentation.mode).toBe("recommendations");
     }
   );
+
+  it("requires positive offer evidence instead of admitting unfamiliar non-imperative slogans", () => {
+    const result = rankOfferRecommendations({
+      revision: 14, motion: "product", evidence: [
+        "Possibilities without limits", "A brighter tomorrow", "The future belongs here"
+      ].map((label, index) => evidence({
+        ref: `headline:${index}`, label, kind: "product", source: "official-page",
+        sourceUrl: "https://seller.example/content/en/homepage.html", confidence: 0.95
+      }))
+    });
+    expect(result.presentation.mode).toBe("freeform-with-url");
+    expect(result.presentation.candidateIds).toEqual([]);
+  });
 
   it("keeps generic taxonomy internal and requires two credible choices", () => {
     const result = rankOfferRecommendations({
@@ -528,5 +541,53 @@ describe("rankOfferRecommendations", () => {
         ({ recommendationKind }) => recommendationKind === "evidence-backed"
       )
     ).toHaveLength(1);
+  });
+
+  it("does not promote title-case homepage slogans as Intel product offers", () => {
+    const result = rankOfferRecommendations({
+      revision: 99,
+      motion: "product",
+      evidence: [
+        evidence({ ref: "intel:barriers", label: "Break Barriers Builders", kind: "product", source: "official-page", sourceUrl: "https://intel.example/content/us/en/homepage.html", confidence: 0.9 }),
+        evidence({ ref: "intel:scale", label: "Deliver AI scale", kind: "product", source: "official-page", sourceUrl: "https://intel.example/products/ai", confidence: 0.9 }),
+        evidence({ ref: "intel:network", label: "Meet the future of network performance", kind: "product", source: "official-page", sourceUrl: "https://intel.example/products/network", confidence: 0.9 }),
+        evidence({ ref: "intel:builders", label: "We break barriers so builders can move faster, from prototype to global", kind: "product", source: "official-page", sourceUrl: "https://intel.example/content/us/en/homepage.html", confidence: 0.9 })
+      ]
+    });
+
+    expect(result.presentation.mode).toBe("freeform-with-url");
+    expect(result.candidates.filter(({ recommendationKind }) => recommendationKind === "evidence-backed")).toHaveLength(0);
+  });
+
+  it("preserves named products and supported homepage use cases", () => {
+    const result = rankOfferRecommendations({
+      revision: 100,
+      motion: "product",
+      evidence: [
+        evidence({ ref: "intel:core-ultra", label: "Core Ultra", kind: "product", source: "official-page", sourceUrl: "https://intel.example/products/core-ultra", confidence: 0.9 }),
+        evidence({ ref: "intel:xeon", label: "Xeon", kind: "product", source: "official-page", sourceUrl: "https://intel.example/products/xeon", confidence: 0.9 }),
+        evidence({ ref: "home:capture", label: "Capture knowledge", kind: "solution", source: "homepage", sourceUrl: "https://intel.example/", confidence: 0.9 })
+      ]
+    });
+
+    expect(result.candidates.map(({ label }) => label)).toEqual(["Core Ultra", "Xeon", "Capture knowledge"]);
+    expect(result.candidates.filter(({ recommendationKind }) => recommendationKind === "evidence-backed")).toHaveLength(3);
+  });
+
+  it("rejects observed taxonomy, leadership, and editorial labels", () => {
+    const labels = [
+      ["Intel® Products", "https://www.intel.com/content/www/us/en/products/details.html"],
+      ["Audit & Assurance Leadership", "https://www.aprio.com/audit-assurance/"],
+      ["A look into Intel® Core™ Ultra Series 3", "https://www.intel.com/content/www/us/en/products/details/processors/core-ultra.html"]
+    ];
+    const result = rankOfferRecommendations({ revision: 101, motion: "product", evidence: labels.map(([label, sourceUrl], index) => evidence({ ref: `bad:${index}`, label, kind: "product", source: "official-page", sourceUrl, confidence: 0.9 })) });
+    expect(result.candidates.filter(({ recommendationKind }) => recommendationKind === "evidence-backed")).toHaveLength(0);
+  });
+
+  it("keeps specific services and solutions while removing only brand-level taxonomy", () => {
+    const labels = ["Audit & Assurance Solutions", "Tax Services", "International Advisory Services"];
+    const result = rankOfferRecommendations({ revision: 102, motion: "solution", evidence: labels.map((label, index) =>
+      evidence({ ref: `service:${index}`, label, kind: "solution", source: "official-page", sourceUrl: "https://www.aprio.com/audit-assurance/", confidence: 0.9 })) });
+    expect(result.candidates.filter(({ recommendationKind }) => recommendationKind === "evidence-backed").map(({ label }) => label).sort()).toEqual(labels.sort());
   });
 });

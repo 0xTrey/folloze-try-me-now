@@ -28,7 +28,7 @@ import {
   type TryMeSession
 } from "@/lib/types";
 import { config } from "@/lib/config";
-import { resolveBuyerCtaOffer, selectedBuyerCta } from "@/lib/cta-offer-contract";
+import { resolveBuyerCtaOffer, selectedBuyerCta, verifiedProductResourceUrl } from "@/lib/cta-offer-contract";
 
 function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -89,8 +89,10 @@ function primaryActionFor(
   label: string,
   sourceUrl: string | undefined
 ): ExperienceActionContract {
-  return resolveBuyerCtaOffer({ intent: selectedBuyerCta(session).type, label,
-    sourceUrl: session.answers.sourceUrl ?? session.answers.offerSourceUrl ?? session.answers.eventSource ?? sourceUrl,
+  const intent = selectedBuyerCta(session).type;
+  return resolveBuyerCtaOffer({ intent, label,
+    sourceUrl: intent === "download" ? verifiedProductResourceUrl(session)
+      : session.answers.sourceUrl ?? session.answers.offerSourceUrl ?? session.answers.eventSource ?? sourceUrl,
     meetingUrl: config.demoCtaUrl }).action;
 }
 
