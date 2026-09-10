@@ -75,31 +75,41 @@
   gap: 8px;
   list-style: none;
 }
-.summaryList li,
-.summaryList button {
-  min-height: 58px;
-  padding: 10px 12px;
+.summaryList > li { min-width: 0; }
+.summaryItem {
+  width: 100%;
+  min-height: 72px;
+  box-sizing: border-box;
+  padding: 12px 14px;
   display: grid;
-  gap: 3px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
   border: 1px solid #e4e8ee;
   border-radius: 12px;
   background: #fff;
   text-align: left;
   color: inherit;
 }
-.summaryList button {
-  width: 100%;
-  grid-template-columns: minmax(0, 1fr) auto;
+.summaryEditable {
+  appearance: none;
+  font: inherit;
   cursor: pointer;
 }
-.summaryList small {
+.summaryContent {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.summaryContent small {
   color: #65758b;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .1em;
   text-transform: uppercase;
 }
-.summaryList strong {
+.summaryContent strong {
+  display: block;
   overflow: hidden;
   font-size: 13px;
   font-weight: 650;
@@ -107,16 +117,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.summaryList button span {
-  grid-row: 1 / span 2;
-  align-self: center;
+.summaryEdit {
   color: #0077ff;
   font-size: 11px;
   font-weight: 750;
 }
 .summaryPending strong { color: #8693a6; font-weight: 550; }
-.summaryList button:not(:disabled):hover,
-.summaryList button:not(:disabled):focus-visible {
+.summaryEditable:disabled { cursor: wait; opacity: .55; }
+.summaryEditable:not(:disabled):hover,
+.summaryEditable:not(:disabled):focus-visible {
   border-color: #0077ff;
   outline: 0;
 }

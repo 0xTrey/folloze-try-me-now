@@ -80,6 +80,7 @@ export function StreamingBriefComposer({
   const descriptionId = useId();
   const summaryId = useId();
   const questionInputRef = useRef<HTMLTextAreaElement>(null);
+  const reviewRef = useRef<HTMLDetailsElement>(null);
   const copy = modeCopy[mode];
   const currentQuestion = questions.find((question) => question.id === currentQuestionId)
     ?? questions.find((question) => !answers.some((answer) => answer.questionId === question.id));
@@ -146,7 +147,7 @@ export function StreamingBriefComposer({
       ) : null}
 
       {(visibleSummary.length > 0 || completedAnswers.length > 0) && (
-        <details className={styles.review}>
+        <details ref={reviewRef} className={styles.review}>
           <summary>Review your answers</summary>
           {visibleSummary.length > 0 && (
             <section className={styles.summary} aria-labelledby={summaryId}>
@@ -158,30 +159,35 @@ export function StreamingBriefComposer({
                 {visibleSummary.map((field) => {
               const complete = Boolean(field.value?.trim());
               const content = (
-                <>
+                <span className={styles.summaryContent}>
                   <small>{field.label}</small>
                   <strong>{field.value?.trim() || "Waiting"}</strong>
-                </>
+                </span>
               );
               if (field.editable && onSummaryEdit) {
                 return (
                   <li key={field.key}>
                     <button
                       type="button"
-                      className={complete ? styles.summaryComplete : styles.summaryPending}
+                      className={`${styles.summaryItem} ${styles.summaryEditable} ${complete ? styles.summaryComplete : styles.summaryPending}`}
                       disabled={disabled}
-                      onClick={() => onSummaryEdit(field.key)}
+                      onClick={() => {
+                        if (reviewRef.current) reviewRef.current.open = false;
+                        onSummaryEdit(field.key);
+                      }}
                       aria-label={`Edit ${field.label}`}
                     >
                       {content}
-                      <span>Edit</span>
+                      <span className={styles.summaryEdit}>Edit</span>
                     </button>
                   </li>
                 );
               }
               return (
-                <li key={field.key} className={complete ? styles.summaryComplete : styles.summaryPending}>
-                  <div>{content}</div>
+                <li key={field.key}>
+                  <div className={`${styles.summaryItem} ${complete ? styles.summaryComplete : styles.summaryPending}`}>
+                    {content}
+                  </div>
                 </li>
               );
                 })}

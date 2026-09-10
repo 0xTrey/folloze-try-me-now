@@ -2,7 +2,8 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StreamingBriefComposer } from "./streaming-brief-composer";
@@ -113,30 +114,45 @@ describe("StreamingBriefComposer", () => {
     expect(screen.queryByRole("button", { name: /Enterprise architects|Revenue leaders/i })).not.toBeInTheDocument();
   });
 
-  it("lets sellers edit compact Live Brief fields from the summary", () => {
+  it("closes the review and focuses the selected Live Brief field for editing", async () => {
     const onSummaryEdit = vi.fn();
+    function EditableBrief() {
+      const [currentQuestionId, setCurrentQuestionId] = useState("goal");
+      return (
+        <StreamingBriefComposer
+          mode="unified"
+          questions={questions}
+          currentQuestionId={currentQuestionId}
+          answers={[
+            { questionId: "intent", label: "Campaign", value: "Secure AI Live" },
+            { questionId: "audience", label: "Audience", value: "Security leaders" }
+          ]}
+          summaryFields={[
+            { key: "offer", label: "Offer", value: "Secure AI Live", editable: true },
+            { key: "audience", label: "Audience", value: "Security leaders", editable: true },
+            { key: "objective", label: "Objective", value: undefined, editable: true }
+          ]}
+          onAnswer={vi.fn()}
+          onSummaryEdit={(fieldKey) => {
+            onSummaryEdit(fieldKey);
+            setCurrentQuestionId(fieldKey === "offer" ? "intent" : fieldKey === "audience" ? "audience" : "goal");
+          }}
+        />
+      );
+    }
     render(
-      <StreamingBriefComposer
-        mode="unified"
-        questions={questions}
-        currentQuestionId="goal"
-        answers={[
-          { questionId: "intent", label: "Campaign", value: "Secure AI Live" },
-          { questionId: "audience", label: "Audience", value: "Security leaders" }
-        ]}
-        summaryFields={[
-          { key: "offer", label: "Offer", value: "Secure AI Live", editable: true },
-          { key: "audience", label: "Audience", value: "Security leaders", editable: true },
-          { key: "objective", label: "Objective", value: undefined, editable: true }
-        ]}
-        onAnswer={vi.fn()}
-        onSummaryEdit={onSummaryEdit}
-      />
+      <EditableBrief />
     );
 
+    const review = screen.getByText("Review your answers").closest("details");
     fireEvent.click(screen.getByText("Review your answers"));
+    expect(review).toHaveAttribute("open");
     fireEvent.click(screen.getByRole("button", { name: "Edit Offer" }));
     expect(onSummaryEdit).toHaveBeenCalledWith("offer");
+    expect(review).not.toHaveAttribute("open");
+    await waitFor(() => {
+      expect(screen.getByLabelText("What are you taking to market?")).toHaveFocus();
+    });
   });
 
   it("clears an existing answer without leaking it into the next question", () => {
