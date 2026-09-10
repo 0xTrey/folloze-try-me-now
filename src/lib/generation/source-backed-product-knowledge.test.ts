@@ -44,6 +44,15 @@ describe("source backed product knowledge", () => {
     const a = artifact({ content: { ...artifact().content, sections: [{ id: "w", title: "How it works", level: 2, order: 1, text: "Acme Product supports workflow automation.", citationIds: ["c1"] }] } });
     expect(compilerEvidenceFromProductSource({ artifact: a, seller, offer: "Acme Product" })[0]).toMatchObject({ evidenceType: "workflow" });
   });
+  it("emits one fact when source understanding repeats a sentence as a claim and mechanism", () => {
+    clearSourceBackedProductKnowledgeCacheForTests();
+    const a = artifact();
+    a.understanding.proof = [{ id: "workflow", text: a.understanding.claims[0]!.text,
+      kind: "mechanism", confidence: "medium", citationIds: ["c1"] }];
+    const result = compilerEvidenceFromProductSource({ artifact: a, seller, offer: "Acme Product" });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ claim: "Acme Product supports workflow automation.", evidenceType: "capability" });
+  });
   it("accepts a matched customer metric as quantified outcome", () => {
     clearSourceBackedProductKnowledgeCacheForTests();
     const text = "A customer improved conversion by 24% using Acme Product.";

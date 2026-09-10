@@ -3,7 +3,7 @@ import type { ContentClaim, ContentProof, SourceArtifact } from "@/lib/content-i
 import { compilerEvidencePermissions, type CompilerEvidenceItem, type CompilerEvidenceType } from "./messaging-compiler-contracts";
 import { compilerDigest } from "./compiler-digest";
 
-const VERSION = "source-product-knowledge-v5";
+const VERSION = "source-product-knowledge-v6";
 const TTL_MS = 24 * 60 * 60_000;
 const MAX_ENTRIES = 32;
 const cache = new Map<string, { at: number; value: CompilerEvidenceItem[] }>();
@@ -60,6 +60,16 @@ function normalizedContains(value: string | undefined, phrase: string): boolean 
 const nonProductPageTitle = /^(?:home|homepage|overview|products?|services?|solutions?)$/i;
 const excludedSectionHeading = /\b(?:latest from|related (?:articles|insights|resources)|upcoming (?:events|webinars)|newsroom)\b/i;
 const capabilityLanguage = /\b(?:accelerat(?:e|es|ing)|analyz(?:e|es|ing)|automat(?:e|es|ed|ing|ically)|connect(?:s|ed|ing)?|correlat(?:e|es|ed|ing)|detect(?:s|ed|ing)?|deliver(?:s|ed|ing)?|enable(?:s|d|ing)?|enrich(?:es|ed|ing)?|guide(?:s|d|ing)?|help(?:s|ed|ing)?|identif(?:y|ies|ied|ying)|include(?:s|d|ing)?|monitor(?:s|ed|ing)?|prioritiz(?:e|es|ed|ing)|provide(?:s|d|ing)?|remediat(?:e|es|ed|ing)|review(?:s|ed|ing)?|route(?:s|d|ing)?|support(?:s|ed|ing)?|surface(?:s|d|ing)?|trigger(?:s|ed|ing)?|unif(?:y|ies|ied|ying))\b/i;
+const evidenceTypeRank: Partial<Record<CompilerEvidenceType, number>> = {
+  "quantified-outcome": 5,
+  "customer-outcome": 5,
+  workflow: 4,
+  implementation: 3,
+  security: 3,
+  pricing: 3,
+  capability: 2,
+  positioning: 1
+};
 
 /**
  * A visitor may paste an official product page while naming one promise or
@@ -173,7 +183,21 @@ export function compilerEvidenceFromProductSource(input: {
   };
   for (const item of artifact.understanding.claims) add(item);
   for (const item of artifact.understanding.proof) add(item, item.kind);
-  const value = [...output.values()].sort((a, b) => a.id.localeCompare(b.id)).slice(0, 32);
+  // The source normalizer can preserve the same sentence as both a claim and
+  // a mechanism proof. Keep one cited fact so the page compiler cannot spend
+  // the same visible sentence in multiple sections.
+  const distinct = new Map<string, CompilerEvidenceItem>();
+  for (const item of output.values()) {
+    const key = `${terms(item.sourceRef)}:${terms(item.claim)}`;
+    const current = distinct.get(key);
+    const score = (candidate: CompilerEvidenceItem) =>
+      (candidate.confidence === "high" ? 100 : 0) +
+      (candidate.evidenceType ? evidenceTypeRank[candidate.evidenceType] ?? 0 : 0);
+    if (!current || score(item) > score(current) || (score(item) === score(current) && item.id.localeCompare(current.id) < 0)) {
+      distinct.set(key, item);
+    }
+  }
+  const value = [...distinct.values()].sort((a, b) => a.id.localeCompare(b.id)).slice(0, 32);
   while (cache.size >= MAX_ENTRIES) cache.delete(cache.keys().next().value!);
   cache.set(key, { at: now, value: structuredClone(value) });
   return structuredClone(value);
