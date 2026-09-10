@@ -3,7 +3,7 @@ import type { ContentClaim, ContentProof, SourceArtifact } from "@/lib/content-i
 import { compilerEvidencePermissions, type CompilerEvidenceItem, type CompilerEvidenceType } from "./messaging-compiler-contracts";
 import { compilerDigest } from "./compiler-digest";
 
-const VERSION = "source-product-knowledge-v4";
+const VERSION = "source-product-knowledge-v5";
 const TTL_MS = 24 * 60 * 60_000;
 const MAX_ENTRIES = 32;
 const cache = new Map<string, { at: number; value: CompilerEvidenceItem[] }>();
@@ -57,6 +57,31 @@ function normalizedContains(value: string | undefined, phrase: string): boolean 
   return Boolean(needle) && haystack.includes(needle);
 }
 
+const nonProductPageTitle = /^(?:home|homepage|overview|products?|services?|solutions?)$/i;
+const excludedSectionHeading = /\b(?:latest from|related (?:articles|insights|resources)|upcoming (?:events|webinars)|newsroom)\b/i;
+const capabilityLanguage = /\b(?:accelerat(?:e|es|ing)|analyz(?:e|es|ing)|automat(?:e|es|ed|ing|ically)|connect(?:s|ed|ing)?|correlat(?:e|es|ed|ing)|detect(?:s|ed|ing)?|deliver(?:s|ed|ing)?|enable(?:s|d|ing)?|enrich(?:es|ed|ing)?|guide(?:s|d|ing)?|help(?:s|ed|ing)?|identif(?:y|ies|ied|ying)|include(?:s|d|ing)?|monitor(?:s|ed|ing)?|prioritiz(?:e|es|ed|ing)|provide(?:s|d|ing)?|remediat(?:e|es|ed|ing)|review(?:s|ed|ing)?|route(?:s|d|ing)?|support(?:s|ed|ing)?|surface(?:s|d|ing)?|trigger(?:s|ed|ing)?|unif(?:y|ies|ied|ying))\b/i;
+
+/**
+ * A visitor may paste an official product page while naming one promise or
+ * subsection from that page. The page can establish the canonical product
+ * identity only when its own title agrees with its H1 and the visitor's label
+ * appears in a separate, non-navigation section on the same cited artifact.
+ */
+function productFocusedSource(artifact: SourceArtifact, offer: string, seller: BrandProfile): boolean {
+  const title = normalize((artifact.content.title ?? "").split(/[|:]/)[0] ?? "");
+  const direct = normalizedContains(title, offer) || artifact.content.sections.some((section) =>
+    section.level === 1 && normalizedContains(section.title, offer));
+  if (direct) return true;
+  if (!title || nonProductPageTitle.test(title) || terms(title) === terms(seller.companyName) || terms(title).split(" ").length < 2) {
+    return false;
+  }
+  const titleOwnsPage = artifact.content.sections.some((section) =>
+    section.level === 1 && normalizedContains(section.title, title));
+  const offerNamesSection = artifact.content.sections.some((section) =>
+    section.level > 1 && !excludedSectionHeading.test(section.title) && normalizedContains(section.title, offer));
+  return titleOwnsPage && offerNamesSection;
+}
+
 export function clearSourceBackedProductKnowledgeCacheForTests() { cache.clear(); }
 
 /** Public, already-extracted seller material only. No new network/model calls. */
@@ -77,6 +102,7 @@ export function compilerEvidenceFromProductSource(input: {
   cache.delete(key);
   const citations = new Map(artifact.content.citations.map((citation) => [citation.id, citation]));
   const output = new Map<string, CompilerEvidenceItem>();
+  const sourceIsProductFocused = productFocusedSource(artifact, offer, seller);
   const add = (item: ContentClaim | ContentProof, proofKind?: ContentProof["kind"]) => {
     const text = normalize(item.text);
     if (!text || text.length > 400 || unsafe.test(text) || item.confidence === "low") return;
@@ -101,16 +127,14 @@ export function compilerEvidenceFromProductSource(input: {
     try { if (new URL(citation.locator.sourceUrl).origin !== new URL(url).origin) return; } catch { return; }
     const containsOffer = (value: string) => ` ${terms(value)} `.includes(` ${terms(offer)} `);
     const adjacentOffer = sections.some((section) => containsOffer(`${section.title} ${section.text}`)) || containsOffer(text);
-    const productFocusedTitle = normalizedContains((artifact.content.title ?? "").split(/[|:]/)[0], offer) ||
-      artifact.content.sections.some((section) => section.level === 1 && normalizedContains(section.title, offer));
     // Outcome proof needs product scope in its own quote/section. A portfolio
     // title or another section sharing a citation cannot establish that scope.
-    if (!adjacentOffer && (!productFocusedTitle || proofKind === "metric" || proofKind === "example")) return;
+    if (!adjacentOffer && (!sourceIsProductFocused || proofKind === "metric" || proofKind === "example")) return;
     if (terms(offer) === terms(seller.companyName)) return;
     const headings = sectionHeadingsWithContext(artifact, sections);
     // Related articles and site navigation are not descriptions of this offer.
     // A product-focused page title must not promote those blocks into product facts.
-    if (/\b(?:latest from|related (?:articles|insights|resources)|upcoming (?:events|webinars)|newsroom)\b/i.test(headings)) return;
+    if (excludedSectionHeading.test(headings)) return;
     // Tables, filter controls, and legal footnotes can state true numbers or
     // constraints, but they are not standalone product capability claims.
     if (nonNarrativeSection(sections)) return;
@@ -120,7 +144,7 @@ export function compilerEvidenceFromProductSource(input: {
       : /\b(?:security|compliance)\b/i.test(headings) ? "security"
       : /\b(?:implementation|deployment|migration|integration)\b/i.test(headings) ? "implementation"
       : /\b(?:how it works|workflow)\b/i.test(headings) ? "workflow"
-      : /\b(?:provid(?:es?|ing)|deliver(?:s|ing)?|supports?|helps?|enables?|connects?|assess(?:es)?|reviews?|includes?)\b/i.test(text) ? "capability" : "positioning";
+      : capabilityLanguage.test(text) ? "capability" : "positioning";
     // A cited answer under an offer-specific FAQ is a direct product
     // description. Treat it as a capability without guessing from a verb so
     // first-party facts such as form factor, efficiency, or included AI

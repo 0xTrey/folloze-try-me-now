@@ -99,6 +99,35 @@ describe("source backed product knowledge", () => {
       expect.objectContaining({ sourceSectionTitle: "Non-Financial Audit & Assurance Services", claim: expect.stringContaining("audit and reporting answers"), evidenceType: "capability" })
     ]));
   });
+  it("connects a selected promise to the canonical product named by the same official source page", () => {
+    const dynatraceSeller: BrandProfile = { ...seller, companyName: "Dynatrace", domain: "dynatrace.com",
+      canonicalDomain: "dynatrace.com", domainAliases: ["www.dynatrace.com"], sourceUrl: "https://www.dynatrace.com/" };
+    const sourceUrl = "https://www.dynatrace.com/solutions/runtime-vulnerability-analytics/";
+    const artifact = normalizePublicHtmlSource({ sourceUrl, html: `
+      <html><head><meta property="og:title" content="Runtime Vulnerability Analytics"></head><body><main>
+      <h1>Runtime Vulnerability Analytics</h1><p>Continuously detect and reprioritize vulnerabilities using real-time runtime context.</p>
+      <h2>Cut through vulnerability noise with runtime context</h2><p>Dynatrace continuously analyzes runtime behavior to surface only vulnerabilities that are active and reachable.</p>
+      <h3>Immediate risk visibility</h3><p>Detect and prioritize runtime risks that directly impact production services.</p>
+      <h3>Faster remediation</h3><p>Accelerate fixes with precise recommendations and agentic workflows that close the loop from detection to resolution.</p>
+      <h2>Automate the path from finding to fix</h2><p>Dynatrace automatically prioritizes findings using runtime risk, guides developers with precise fix recommendations, and validates the fix.</p>
+      <h2>Related resources</h2><p>A security blog discusses a separate vulnerability.</p>
+      </main></body></html>` });
+
+    const evidence = compilerEvidenceFromProductSource({ artifact, seller: dynatraceSeller,
+      offer: "Automate the path from finding to fix" });
+
+    expect(evidence.filter(({ evidenceType }) => evidenceType === "capability").length).toBeGreaterThanOrEqual(4);
+    expect(evidence.every(({ subject, sourceRef }) =>
+      subject === "Automate the path from finding to fix" && sourceRef === sourceUrl
+    )).toBe(true);
+    expect(evidence.map(({ sourceSectionTitle }) => sourceSectionTitle)).toEqual(expect.arrayContaining([
+      "Cut through vulnerability noise with runtime context",
+      "Immediate risk visibility",
+      "Faster remediation",
+      "Automate the path from finding to fix"
+    ]));
+    expect(evidence.some(({ sourceSectionTitle }) => sourceSectionTitle === "Related resources")).toBe(false);
+  });
   it("keeps cited product FAQ descriptions while rejecting tables and footnotes", () => {
     const intelSeller: BrandProfile = { ...seller, companyName: "Intel", domain: "intel.com", canonicalDomain: "intel.com",
       domainAliases: ["www.intel.com"], sourceUrl: "https://www.intel.com/" };

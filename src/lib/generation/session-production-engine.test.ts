@@ -3,6 +3,7 @@ import * as sectionSelection from "@/lib/generation/section-candidate-review";
 import { sectionCopyWordCount } from "@/lib/generation/section-copy-types";
 
 import { config } from "@/lib/config";
+import { normalizePublicHtmlSource } from "@/lib/content-url";
 import { buildExperienceSpec } from "@/lib/experience-contract";
 import { renderExperienceHtml } from "@/lib/generation/experience-template";
 import { applyProductionPageToDraft } from "@/lib/generation/production-draft-adapter";
@@ -854,6 +855,65 @@ describe("compileSessionProductionPage", () => {
     expect(page.familyDecision?.sectionPlan.map(({ role }) => role)).not.toContain("validation-plan");
     expect(page.sections.map(({ v2Role }) => v2Role)).toEqual(page.familyDecision?.sectionPlan.map(({ role }) => role));
     expect(renderPage(session(profile), profile, page)).not.toContain("What to check in a product walkthrough");
+  });
+
+  it("builds the Dynatrace product page when the selected offer is a promise on the canonical source", async () => {
+    const profile = brand();
+    profile.domain = "dynatrace.example";
+    profile.canonicalDomain = "dynatrace.example";
+    profile.companyName = "Dynatrace";
+    profile.sourceUrl = "https://dynatrace.example/";
+    profile.logoUrl = "https://dynatrace.example/logo.svg";
+    profile.imageUrls = ["https://dynatrace.example/product.png"];
+    const currentSession = session(profile);
+    currentSession.answers = {
+      campaignType: "product",
+      promotedOffer: "Automate the path from finding to fix",
+      promotedOfferConfirmed: true,
+      offerSourceUrl: "https://dynatrace.example/solutions/runtime-vulnerability-analytics/",
+      offerSourceTitle: "Runtime Vulnerability Analytics",
+      offerSourceConfirmed: true,
+      messageBelief: "Automate the path from finding to fix",
+      audience: "all teams",
+      objective: "Evaluate the product",
+      ctaType: "book-meeting"
+    };
+    currentSession.evidenceItems = [];
+    currentSession.sourceArtifact = normalizePublicHtmlSource({
+      sourceUrl: currentSession.answers.offerSourceUrl!,
+      html: `<main>
+        <h1>Runtime Vulnerability Analytics</h1><p>Continuously detect and reprioritize vulnerabilities using real-time runtime context.</p>
+        <h2>Cut through vulnerability noise with runtime context</h2><p>Dynatrace continuously analyzes runtime behavior to surface only vulnerabilities that are active and reachable.</p>
+        <h3>Immediate risk visibility</h3><p>Detect and prioritize runtime risks that directly impact production services.</p>
+        <h3>Faster remediation</h3><p>Accelerate fixes with precise recommendations and agentic workflows that close the loop from detection to resolution.</p>
+        <h2>Automate the path from finding to fix</h2><p>Dynatrace automatically prioritizes findings using runtime risk, guides developers with precise fix recommendations, and validates the fix.</p>
+      </main>`
+    });
+
+    const result = await compileSessionProductionPage({
+      session: currentSession,
+      brand: profile,
+      providerStartedAtMs: 0,
+      currentTimeMs: 10_000
+    });
+
+    expect(
+      result.outcome,
+      result.outcome === "production-page"
+        ? ""
+        : JSON.stringify({
+            instruction: result.instruction,
+            quality: result.buildQuality,
+            plan: result.buildPlanReceipt,
+            sections: result.buildPlan?.sections.map(({ id, role, optional, claimRefs }) => ({ id, role, optional, claimRefs })),
+            workers: result.workerReceipts
+          })
+    ).toBe("production-page");
+    if (result.outcome !== "production-page") return;
+    expect(result.buildPlanReceipt?.offerFactCount).toBeGreaterThanOrEqual(4);
+    expect(result.artifact.value?.sections.slice(1, -1).some(({ evidenceRefs }) =>
+      evidenceRefs.some((ref) => ref.startsWith("source:"))
+    )).toBe(true);
   });
 
   it("requests a safe deterministic page when sparse evidence cannot sustain four sections", async () => {
