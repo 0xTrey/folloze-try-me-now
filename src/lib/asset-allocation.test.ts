@@ -189,6 +189,45 @@ describe("global allocation", () => {
     ]);
   });
 
+  it("does not use product screenshots as filler for process or proof sections", () => {
+    const plan = allocateExperienceAssets({
+      candidates: [
+        candidate({
+          assetRef: "https://cdn.example.com/risk-dashboard.png",
+          purpose: "product",
+          altText: "Runtime risk product screen"
+        }),
+        candidate({
+          assetRef: "https://cdn.example.com/failure-rate.png",
+          purpose: "product",
+          altText: "Runtime risk product screen alternate crop"
+        })
+      ],
+      slots: [
+        {
+          sectionId: "hero",
+          semanticRole: "hero",
+          required: true,
+          rolePriority: ["product"]
+        },
+        slot("process", "process"),
+        slot("proof", "proof")
+      ],
+      hashSourceUrl
+    });
+
+    expect(plan.allocations).toHaveLength(1);
+    expect(plan.allocations[0]).toMatchObject({
+      sectionId: "hero",
+      semanticRole: "hero",
+      purpose: "product"
+    });
+    expect(plan.treatments).toEqual([
+      expect.objectContaining({ sectionId: "process", semanticRole: "process" }),
+      expect.objectContaining({ sectionId: "proof", semanticRole: "proof" })
+    ]);
+  });
+
   it("spreads distinct assets across distinct slots", () => {
     const plan = allocateExperienceAssets({
       candidates: [

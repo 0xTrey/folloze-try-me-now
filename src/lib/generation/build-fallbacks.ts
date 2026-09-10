@@ -75,10 +75,26 @@ export function repairBuildFallbacks(input: {
       continue;
     }
     const offer = input.plan.buyer.product.label ?? "The offer";
-    const headline = slot.role === "hero" && current.headline && count(current.headline) <= (slot.headlineWordBudget?.max ?? 12)
-      ? current.headline : input.plan.buyer.offerKind === "event" && slot.role === "mechanism" ? "Inside the session"
-      : input.plan.buyer.offerKind === "content" && slot.role === "mechanism" ? "The idea in practice"
-      : slot.v2Role === "priority-paths" && input.targetName ? `Priorities for ${input.targetName}` : heading(slot, offer);
+    const currentHeadline = normalized(current.headline ?? "");
+    const offerHeadlineKey = normalized(offer).replace(/[.!?]+$/, "").toLowerCase();
+    const distinctMechanismHeadline = slot.role === "mechanism" && currentHeadline &&
+      safe(currentHeadline) && count(currentHeadline) <= (slot.headlineWordBudget?.max ?? 10) &&
+      !currentHeadline.replace(/[.!?]+$/, "").toLowerCase().includes(offerHeadlineKey)
+      ? currentHeadline
+      : undefined;
+    let headline = heading(slot, offer);
+    if (slot.role === "hero" && current.headline &&
+      count(current.headline) <= (slot.headlineWordBudget?.max ?? 12)) {
+      headline = current.headline;
+    } else if (input.plan.buyer.offerKind === "event" && slot.role === "mechanism") {
+      headline = "Inside the session";
+    } else if (input.plan.buyer.offerKind === "content" && slot.role === "mechanism") {
+      headline = "The idea in practice";
+    } else if (slot.role === "mechanism") {
+      headline = distinctMechanismHeadline ?? "How the workflow moves";
+    } else if (slot.v2Role === "priority-paths" && input.targetName) {
+      headline = `Priorities for ${input.targetName}`;
+    }
     const candidates: SectionCopyCandidate[] = [];
     const context = slot.family === "align" && input.targetName && slot.v2Role !== "account-relevance"
       ? `For ${input.targetName}: ` : "";

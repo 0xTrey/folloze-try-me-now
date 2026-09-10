@@ -109,6 +109,39 @@ describe("repairBuildFallbacks", () => {
     expect(result.cta).toEqual({ type: "book-meeting", label: "Book a working session" });
   });
 
+  it("does not turn the mechanism headline into an echo of the promoted offer", () => {
+    const offer = "Automate the path from finding to fix";
+    const repaired = repairBuildFallbacks({
+      plan: {
+        ...plan([
+          { id: "hero", role: "hero", refs: ["offer-1"] },
+          { id: "mechanism", role: "mechanism", refs: ["offer-2"] }
+        ]),
+        buyer: { product: { label: offer } }
+      } as BuildExperiencePlan,
+      artifacts: [artifact([
+        {
+          ...section("hero", "hero", "Prioritize active vulnerabilities with runtime context."),
+          headline: `Explore ${offer}`
+        },
+        {
+          ...section("mechanism", "mechanism", "Prioritize, guide, and validate each fix."),
+          headline: `How ${offer} works`
+        }
+      ])],
+      slots: [slot("hero", "hero"), slot("mechanism")],
+      evidence: [
+        claim("offer-1", "Prioritize active vulnerabilities with runtime context."),
+        claim("offer-2", "Prioritize findings, guide developers, and validate each fix.")
+      ]
+    });
+    const sections = output(repaired);
+    const hero = sections.find(({ sectionId }) => sectionId === "hero")!;
+    const mechanism = sections.find(({ sectionId }) => sectionId === "mechanism")!;
+    expect(mechanism.headline).not.toContain(offer);
+    expect(mechanism.headline).not.toBe(hero.headline);
+  });
+
   it("uses distinct scoped claims for repeated middle arguments", () => {
     const repaired = repairBuildFallbacks({
       plan: plan([

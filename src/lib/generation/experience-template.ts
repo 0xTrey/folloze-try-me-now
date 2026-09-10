@@ -950,6 +950,11 @@ export function renderExperienceHtml(input: {
     `data-evidence-ids="${escapeHtml(ids.join(","))}"`;
   const rolePlanned = (...roles: WireframeSectionRole[]) =>
     !plannedRoles || roles.some((role) => plannedRoles.has(role));
+  const mechanismSteps = () => `<div class="mechanism-steps">${framework?.mechanism.steps
+    .map(
+      (step, index) => `<article ${evidenceAttribute(step.evidenceIds)}><span class="step-index">${index + 1}</span><div><h3 ${editableBlock(`mechanism.${index}.action`, "headline")}>${escapeHtml(step.action)}</h3><p ${editableBlock(`mechanism.${index}.capability`, "body")}>${escapeHtml(step.capability)}</p><strong ${editableBlock(`mechanism.${index}.output`, "outcome")}>${escapeHtml(step.output)}</strong></div></article>`
+    )
+    .join("") ?? ""}</div>`;
   // Only the flow that reaches the document may claim assets. Building both and
   // discarding one would let the unused branch consume a slot and leave the
   // rendered section without the image allocated to it.
@@ -981,11 +986,7 @@ export function renderExperienceHtml(input: {
         <div class="framework-copy">
           <h2 id="outcome-mechanism-heading" ${editableBlock("mechanism.headline", "headline")}>${escapeHtml(framework.mechanism.headline)}</h2>
           <p class="region-intro" ${editableBlock("mechanism.intro", "body")}>${escapeHtml(framework.mechanism.intro)}</p>
-          <div class="mechanism-steps">${framework.mechanism.steps
-            .map(
-              (step, index) => `<article ${evidenceAttribute(step.evidenceIds)}><span class="step-index">${index + 1}</span><div><h3 ${editableBlock(`mechanism.${index}.action`, "headline")}>${escapeHtml(step.action)}</h3><p ${editableBlock(`mechanism.${index}.capability`, "body")}>${escapeHtml(step.capability)}</p><strong ${editableBlock(`mechanism.${index}.output`, "outcome")}>${escapeHtml(step.output)}</strong></div></article>`
-            )
-            .join("")}</div>
+          ${mechanismSteps()}
         </div>
         ${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media")}
       </section>` : ""}
@@ -1017,7 +1018,7 @@ export function renderExperienceHtml(input: {
               return `<section class="framework-section urgency-section" id="why-change-now" data-journey-section="why-change-now" data-template-primitive="urgency" ${evidenceAttribute(framework.urgency.evidenceIds)}><header class="framework-heading"><h2>${escapeHtml(framework.urgency.headline)}</h2></header><p class="region-intro">${escapeHtml(framework.urgency.change)}</p></section>`;
             }
             if (section.role === "mechanism") {
-              return `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism"><div class="framework-copy"><h2>${escapeHtml(framework.mechanism.headline)}</h2><p class="region-intro">${escapeHtml(framework.mechanism.intro)}</p></div>${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media")}</section>`;
+              return `<section class="framework-section mechanism-section" id="outcome-mechanism" data-journey-section="outcome-mechanism" data-template-primitive="mechanism"><div class="framework-copy"><h2>${escapeHtml(framework.mechanism.headline)}</h2><p class="region-intro">${escapeHtml(framework.mechanism.intro)}</p>${mechanismSteps()}</div>${frameworkImage(assetAllocator, MECHANISM_MEDIA_SLOT, framework.mechanism.imageBrief, "framework-media mechanism-media")}</section>`;
             }
             if (section.role === "proof") {
               const sectionId = anchorForSection(section);

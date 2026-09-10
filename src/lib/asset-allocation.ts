@@ -354,6 +354,23 @@ function sharedTermRatio(left: string, right: string): number {
 }
 
 /**
+ * The canonical process and proof sections have a specific explanatory job.
+ * Filling either with an ordinary product screen creates a false sense of
+ * variety and can repeat the hero visual. Broader fallbacks remain available
+ * only when the slot declares them explicitly through rolePriority.
+ */
+function candidateFitsSlot(
+  candidate: AssetCandidateInput,
+  slot: AssetSlotRequest
+): boolean {
+  const guarded = (slot.sectionId === "process" && slot.semanticRole === "process")
+    || (slot.sectionId === "proof" && slot.semanticRole === "proof");
+  if (!guarded) return true;
+  return candidate.purpose === slot.semanticRole
+    || slot.rolePriority?.includes(candidate.purpose) === true;
+}
+
+/**
  * Allocates imagery across the whole experience before rendering. Slots are
  * served highest-confidence first so the strongest asset lands where it fits
  * best rather than wherever the renderer happened to ask first.
@@ -402,7 +419,7 @@ export function allocateExperienceAssets(
   const pairingsFor = (slots: readonly AssetSlotRequest[]) =>
     slots
       .flatMap((slot) =>
-        eligible.map((candidate) => ({
+        eligible.filter((candidate) => candidateFitsSlot(candidate, slot)).map((candidate) => ({
           slot,
           candidate,
           score: scoreAssetForSlot(candidate, slot)

@@ -914,6 +914,16 @@ describe("compileSessionProductionPage", () => {
     expect(result.artifact.value?.sections.slice(1, -1).some(({ evidenceRefs }) =>
       evidenceRefs.some((ref) => ref.startsWith("source:"))
     )).toBe(true);
+    const page = result.artifact.value!;
+    const mechanism = page.sections.find(({ role }) => role === "mechanism")!;
+    expect(mechanism.headline).not.toContain(currentSession.answers.promotedOffer!);
+    const html = renderPage(currentSession, profile, page);
+    const mechanismHtml = html.match(
+      /<section class="framework-section mechanism-section"[\s\S]*?<\/section>/
+    )?.[0];
+    expect(mechanismHtml).toBeDefined();
+    expect(mechanismHtml).toContain('<div class="mechanism-steps">');
+    expect(mechanismHtml?.match(/<article\b/g)).toHaveLength(3);
   });
 
   it("requests a safe deterministic page when sparse evidence cannot sustain four sections", async () => {
