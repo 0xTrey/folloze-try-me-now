@@ -13,6 +13,10 @@ import type { BrandProfile, SessionAnswers, UseCase } from "@/lib/types";
 import { verifiedBrandProfileFor } from "@/lib/verified-brand-profiles";
 import { selectWireframe } from "@/lib/generation/wireframe-library";
 import type { BuildRenderDesign } from "@/lib/generation/build-render-design";
+import {
+  brandProfileToBrandSystemEvidence,
+  compileBrandSystemV2
+} from "@/lib/brand-system";
 
 const brand: BrandProfile = {
   domain: "jitterbit.com",
@@ -175,6 +179,71 @@ describe("renderExperienceHtml", () => {
     expect(html.indexOf("Harmony-Marketecture.png")).toBeGreaterThan(
       html.indexOf("HarmonyTitle-HeroImage-Ring.jpg")
     );
+  });
+
+  it("renders production HTML from the same accessible semantic roles that passed the quality gate", () => {
+    const observedAt = "2026-09-11T20:00:00.000Z";
+    const unisysBrand: BrandProfile = {
+      ...brand,
+      domain: "unisys.com",
+      canonicalDomain: "unisys.com",
+      companyName: "Unisys",
+      sourceUrl: "https://www.unisys.com/",
+      logoUrl: "https://www.unisys.com/siteassets/homepage/unisys-logo.png",
+      primaryColor: "#003134",
+      surfaceColor: "#D161CF",
+      accentColor: "#00E58E",
+      colors: ["#003134", "#00E58E", "#D161CF"],
+      diagnostics: {
+        logo: {
+          strategy: "official-remote-portable",
+          imageCandidateCount: 1,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0
+        },
+        palette: {
+          strategy: "brandfetch",
+          confidence: "high",
+          candidateCount: 3,
+          semanticCandidateCount: 3,
+          rejectedCandidateCount: 0,
+          gradientCandidateCount: 0
+        }
+      }
+    };
+    const compiled = compileBrandSystemV2({
+      sessionId: "unisys-render-contract",
+      revision: 1,
+      activeRevision: 1,
+      identity: { name: "Unisys", canonicalDomain: "unisys.com", aliases: [] },
+      sources: [
+        brandProfileToBrandSystemEvidence(unisysBrand, {
+          revision: 1,
+          observedAt,
+          confidence: 0.85
+        })
+      ],
+      startedAt: observedAt,
+      completedAt: observedAt
+    });
+
+    expect(compiled.value?.colorRoles.surface.value).toBe("#FFFFFF");
+    expect(compiled.value?.colorRoles.action.value).toBe("#003134");
+
+    const output = renderExperienceHtml({
+      draft,
+      brand: unisysBrand,
+      brandSystem: compiled.value!,
+      useCase: "campaign",
+      answers: {}
+    });
+
+    expect(output).toContain("--brand-ink:#003134");
+    expect(output).toContain("--brand-accent:#00E58E");
+    expect(output).toContain("--brand-surface:#FFFFFF");
+    expect(output).toContain("--brand-support:#D161CF");
+    expect(output).toContain("--brand-button-bg:#003134");
+    expect(output).toContain("--brand-button-text:#FFFFFF");
   });
 
   it("places each substantive image at most once and omits unfilled media slots", () => {

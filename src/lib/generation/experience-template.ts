@@ -32,6 +32,7 @@ import type {
   UseCase
 } from "@/lib/types";
 import { config } from "@/lib/config";
+import type { BrandSystemV2 } from "@/lib/brand-system";
 import {
   brandDesignDNAFor,
   brandPresentationFor
@@ -510,6 +511,12 @@ function actionControl(
 export function renderExperienceHtml(input: {
   draft: ExperienceDraft;
   brand: BrandProfile;
+  /**
+   * The current-revision semantic brand contract used by production quality
+   * gates. When supplied, these roles are also the renderer's color authority
+   * so the final HTML cannot reintroduce an inaccessible raw profile mapping.
+   */
+  brandSystem?: BrandSystemV2;
   targetBrand?: BrandProfile;
   useCase: UseCase;
   answers: SessionAnswers;
@@ -578,31 +585,77 @@ export function renderExperienceHtml(input: {
   const neutralPreview = requiresNeutralPreviewTreatment(brand);
   const trustedDesignDna = neutralPreview ? undefined : designDna;
   const trustedPresentation = neutralPreview ? undefined : presentation;
+  const brandSystem = neutralPreview ? undefined : input.brandSystem;
+  const semanticInk = brandSystem?.colorRoles.ink.value;
+  const semanticSurface = brandSystem?.colorRoles.surface.value;
+  const semanticAccent = brandSystem?.colorRoles.accent.value;
+  const semanticAction = brandSystem?.colorRoles.action.value;
+  const semanticSupport = brandSystem?.colorRoles.support.value[0];
   const heroTheme = trustedDesignDna?.theme?.hero ?? trustedPresentation?.heroTheme ?? "light";
   const candidatePrimary = neutralPreview
     ? NEUTRAL_PREVIEW_PALETTE.primary
-    : safeColor(brand.primaryColor, "#1C293F");
-  const primary = colorLuminance(candidatePrimary) < 0.42 ? candidatePrimary : "#1C293F";
-  const accent = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.accent : safeColor(brand.accentColor, "#5B5BFF");
-  const surface = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.surface : safeColor(brand.surfaceColor, "#FFFFFF");
+    : safeColor(semanticInk ?? brand.primaryColor, "#1C293F");
+  const primary = brandSystem || colorLuminance(candidatePrimary) < 0.42
+    ? candidatePrimary
+    : "#1C293F";
+  const accent = neutralPreview
+    ? NEUTRAL_PREVIEW_PALETTE.accent
+    : safeColor(semanticAccent ?? brand.accentColor, "#5B5BFF");
+  const surface = neutralPreview
+    ? NEUTRAL_PREVIEW_PALETTE.surface
+    : safeColor(semanticSurface ?? brand.surfaceColor, "#FFFFFF");
+  const action = safeColor(semanticAction ?? accent, accent);
   const onAccent = colorLuminance(accent) > 0.42 ? "#071428" : "#FFFFFF";
-  const darkSurface = neutralPreview ? primary : safeColor(trustedDesignDna?.colors?.darkSurface ?? trustedPresentation?.darkSurfaceColor ?? primary, primary);
-  const softSurface = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.softSurface : safeColor(trustedDesignDna?.colors?.softSurface ?? trustedPresentation?.softSurfaceColor ?? surface, surface);
-  const supportingAccent = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.supportingAccent : safeColor(trustedDesignDna?.colors?.supportingAccent ?? trustedPresentation?.supportingAccentColor ?? accent, accent);
+  const onAction = colorLuminance(action) > 0.42 ? "#071428" : "#FFFFFF";
+  const semanticDarkSurface = colorLuminance(primary) <= colorLuminance(surface)
+    ? primary
+    : surface;
+  const darkSurface = neutralPreview
+    ? primary
+    : safeColor(
+        brandSystem
+          ? semanticDarkSurface
+          : trustedDesignDna?.colors?.darkSurface ?? trustedPresentation?.darkSurfaceColor ?? primary,
+        semanticDarkSurface
+      );
+  const softSurface = neutralPreview
+    ? NEUTRAL_PREVIEW_PALETTE.softSurface
+    : safeColor(brandSystem ? surface : trustedDesignDna?.colors?.softSurface ?? trustedPresentation?.softSurfaceColor ?? surface, surface);
+  const supportingAccent = neutralPreview
+    ? NEUTRAL_PREVIEW_PALETTE.supportingAccent
+    : safeColor(semanticSupport ?? trustedDesignDna?.colors?.supportingAccent ?? trustedPresentation?.supportingAccentColor ?? accent, accent);
   const lightSurfaceAccent = safeColor(
-    neutralPreview ? accent : trustedDesignDna?.colors?.lightSurfaceAccent ?? trustedPresentation?.lightSurfaceAccentColor ?? accent,
-    accent
+    neutralPreview ? accent : semanticAction ?? trustedDesignDna?.colors?.lightSurfaceAccent ?? trustedPresentation?.lightSurfaceAccentColor ?? accent,
+    action
   );
-  const lightText = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.lightText : safeColor(trustedDesignDna?.colors?.lightText ?? trustedPresentation?.lightTextColor ?? "#20324B", "#20324B");
-  const mutedText = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.mutedText : safeColor(trustedDesignDna?.colors?.mutedText ?? trustedPresentation?.mutedTextColor ?? "#66778D", "#66778D");
+  const lightText = neutralPreview
+    ? NEUTRAL_PREVIEW_PALETTE.lightText
+    : safeColor(semanticInk ?? trustedDesignDna?.colors?.lightText ?? trustedPresentation?.lightTextColor ?? "#20324B", "#20324B");
+  const mutedText = neutralPreview
+    ? NEUTRAL_PREVIEW_PALETTE.mutedText
+    : safeColor(semanticInk ?? trustedDesignDna?.colors?.mutedText ?? trustedPresentation?.mutedTextColor ?? "#66778D", "#66778D");
   const dividerColor = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.divider : safeColor(trustedDesignDna?.colors?.divider ?? trustedPresentation?.dividerColor ?? "#DCE3E9", "#DCE3E9");
-  const buttonBackground = neutralPreview ? accent : safeColor(trustedDesignDna?.buttons?.primaryBackground ?? trustedPresentation?.primaryButtonBackground ?? accent, accent);
-  const buttonText = neutralPreview ? "#FFFFFF" : safeColor(trustedDesignDna?.buttons?.primaryText ?? trustedPresentation?.primaryButtonText ?? onAccent, onAccent);
-  const buttonHover = neutralPreview ? "#3C4043" : safeColor(trustedDesignDna?.buttons?.primaryHover ?? trustedPresentation?.primaryButtonHover ?? accent, accent);
-  const buttonActive = neutralPreview ? "#202124" : safeColor(trustedDesignDna?.buttons?.primaryActive ?? trustedPresentation?.primaryButtonActive ?? buttonHover, buttonHover);
-  const secondaryButtonBorder = neutralPreview ? accent : safeColor(trustedDesignDna?.buttons?.secondaryBorder ?? trustedPresentation?.secondaryButtonBorder ?? accent, accent);
-  const secondaryButtonText = neutralPreview ? primary : safeColor(trustedDesignDna?.buttons?.secondaryText ?? trustedPresentation?.secondaryButtonText ?? primary, primary);
-  const focusColor = neutralPreview ? NEUTRAL_PREVIEW_PALETTE.focus : safeColor(trustedDesignDna?.colors?.focus ?? trustedPresentation?.focusColor ?? accent, accent);
+  const buttonBackground = neutralPreview
+    ? accent
+    : safeColor(semanticAction ?? trustedDesignDna?.buttons?.primaryBackground ?? trustedPresentation?.primaryButtonBackground ?? accent, action);
+  const buttonText = neutralPreview
+    ? "#FFFFFF"
+    : safeColor(brandSystem ? onAction : trustedDesignDna?.buttons?.primaryText ?? trustedPresentation?.primaryButtonText ?? onAccent, onAction);
+  const buttonHover = neutralPreview
+    ? "#3C4043"
+    : safeColor(semanticAction ?? trustedDesignDna?.buttons?.primaryHover ?? trustedPresentation?.primaryButtonHover ?? accent, action);
+  const buttonActive = neutralPreview
+    ? "#202124"
+    : safeColor(semanticAction ?? trustedDesignDna?.buttons?.primaryActive ?? trustedPresentation?.primaryButtonActive ?? buttonHover, action);
+  const secondaryButtonBorder = neutralPreview
+    ? accent
+    : safeColor(semanticAction ?? trustedDesignDna?.buttons?.secondaryBorder ?? trustedPresentation?.secondaryButtonBorder ?? accent, action);
+  const secondaryButtonText = neutralPreview
+    ? primary
+    : safeColor(semanticAction ?? trustedDesignDna?.buttons?.secondaryText ?? trustedPresentation?.secondaryButtonText ?? primary, action);
+  const focusColor = neutralPreview
+    ? NEUTRAL_PREVIEW_PALETTE.focus
+    : safeColor(semanticAction ?? trustedDesignDna?.colors?.focus ?? trustedPresentation?.focusColor ?? accent, action);
   const buttonRadius = safePixelValue(designDna?.buttons?.radiusPx ?? presentation?.buttonRadiusPx, 999, 0, 999);
   const buttonHeight = safePixelValue(designDna?.buttons?.heightPx ?? presentation?.buttonHeightPx, 52, 36, 80);
   const buttonBorderWidth = safePixelValue(designDna?.buttons?.borderWidthPx ?? presentation?.buttonBorderWidthPx, 1, 0, 4);

@@ -1147,6 +1147,7 @@ async function assembleExperienceArtifact(input: {
   const html = renderExperienceHtml({
     draft: webDraft,
     brand: renderBrand,
+    ...(productionPage?.brand ? { brandSystem: productionPage.brand } : {}),
     targetBrand: renderTargetBrand,
     useCase: input.session.useCase,
     answers: input.session.answers,
