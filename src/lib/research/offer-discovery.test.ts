@@ -6,6 +6,7 @@ import {
 } from "@/lib/research/offer-discovery";
 import { extractOfferEvidence } from "@/lib/research/offer-evidence";
 import { rankOfferRecommendations } from "@/lib/research/offer-recommendations";
+import { selectedOfferSourceUrl } from "@/lib/research/selected-offer-source";
 
 const ORIGIN = "https://advisory-firm.example";
 
@@ -255,6 +256,59 @@ describe("discoverOfferEvidenceFromPages", () => {
 });
 
 describe("harvestOfferDiscoveryGraph", () => {
+  it("prioritizes a promoted report detail page so a label-only campaign can recover its source", async () => {
+    const { harvestOfferDiscoveryGraph } = await import("@/lib/research/offer-discovery");
+    const reportLabel = "Unisys AI & Cloud Insights Report 2026";
+    const reportUrl = `${ORIGIN}/report/unisys-ai-cloud-insights-report-2026/`;
+    const promotedHomepage = page(
+      "/",
+      `<main>
+        <h1>Technology solutions</h1>
+        <a href="/all-solutions/">All solutions</a>
+        <a href="/solutions/artificial-intelligence/">Artificial intelligence solutions</a>
+        <section>
+          <h2>${reportLabel}</h2>
+          <p>See how leaders turn AI and cloud investment into measurable outcomes.</p>
+          <a href="/report/unisys-ai-cloud-insights-report-2026/">Download report</a>
+        </section>
+        <a href="/report/other-research-one/">Download another report</a>
+        <a href="/report/other-research-two/">Download more research</a>
+      </main>`
+    );
+    const otherReportOneUrl = `${ORIGIN}/report/other-research-one/`;
+    const otherReportTwoUrl = `${ORIGIN}/report/other-research-two/`;
+    const pages = new Map([
+      [promotedHomepage.url, promotedHomepage],
+      [`${ORIGIN}/all-solutions/`, page("/all-solutions/", "<main><h1>All solutions</h1></main>")],
+      [`${ORIGIN}/solutions/artificial-intelligence/`, page("/solutions/artificial-intelligence/", "<main><h1>Artificial intelligence solutions</h1></main>")],
+      [reportUrl, page("/report/unisys-ai-cloud-insights-report-2026/", `<main><h1>${reportLabel}</h1></main>`)],
+      [otherReportOneUrl, page("/report/other-research-one/", `<main><h1>Other research one</h1><aside><h2>${reportLabel}</h2></aside></main>`)],
+      [otherReportTwoUrl, page("/report/other-research-two/", `<main><h1>Other research two</h1><aside><h2>${reportLabel}</h2></aside></main>`)]
+    ]);
+
+    const graph = await harvestOfferDiscoveryGraph({
+      origin: ORIGIN,
+      budget: { maxPages: 4, maxLinks: 12 },
+      fetchPage: async (url) => pages.get(url)
+    });
+    const evidence = extractOfferEvidence({ motion: "solution", discoveryPages: graph });
+
+    expect(graph?.pages.map(({ url }) => url)).toEqual([
+      promotedHomepage.url,
+      reportUrl,
+      otherReportOneUrl,
+      otherReportTwoUrl
+    ]);
+    expect(evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: reportLabel, sourceUrl: reportUrl, source: "official-page" })
+    ]));
+    expect(selectedOfferSourceUrl({
+      label: reportLabel,
+      evidence,
+      sellerDomains: ["advisory-firm.example"]
+    })).toBe(reportUrl);
+  });
+
   it("builds a bounded graph from homepage and offer-path detail pages", async () => {
     const { harvestOfferDiscoveryGraph } = await import("@/lib/research/offer-discovery");
     const pages = new Map(

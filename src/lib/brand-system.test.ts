@@ -113,6 +113,60 @@ function compile(
 }
 
 describe("BrandSystemV2 compiler", () => {
+  it("repairs unsafe Brandfetch palette labels before they reach the final quality gate", () => {
+    const unisys = brandProfile({
+      domain: "unisys.com",
+      companyName: "Unisys",
+      portableLogo: portableLogo("unisys-logo"),
+      colors: ["#003134", "#00E58E", "#D161CF"],
+      primaryColor: "#003134",
+      accentColor: "#00E58E",
+      surfaceColor: "#D161CF",
+      displayFontFamily: "Inter",
+      bodyFontFamily: "Inter",
+      designDna: {
+        version: 1,
+        source: "remote-harvester",
+        confidence: "high",
+        typography: { fallback: "sans", headingWeight: 700, bodyWeight: 400 },
+        buttons: { radiusPx: 8, borderWidthPx: 1 },
+        cards: { radiusPx: 8, shadow: "none" }
+      },
+      diagnostics: {
+        logo: {
+          strategy: "brandfetch-portable",
+          imageCandidateCount: 1,
+          rejectedImageCount: 0,
+          inlineSvgCandidateCount: 0
+        },
+        palette: {
+          strategy: "brandfetch",
+          confidence: "high",
+          candidateCount: 3,
+          semanticCandidateCount: 3,
+          rejectedCandidateCount: 0,
+          gradientCandidateCount: 0
+        }
+      }
+    });
+
+    const result = compile([
+      brandProfileToBrandSystemEvidence(unisys, { revision, observedAt })
+    ], {
+      identity: { name: "Unisys", canonicalDomain: "unisys.com" }
+    });
+
+    expect(result.value?.colorRoles).toMatchObject({
+      ink: { value: "#003134" },
+      surface: { value: "#FFFFFF" },
+      accent: { value: "#00E58E" },
+      action: { value: "#003134" }
+    });
+    expect(result.value?.colorRoles.support.value).toContain("#D161CF");
+    expect(result.status).toBe("fallback");
+    expect(result.fallbackCode).toContain("accessible-color-roles");
+  });
+
   it("keeps Apple neutral-led, preserves scarce blue ratios, and trusts screenshot geometry", () => {
     const apple = brandProfile({
       domain: "apple.com",

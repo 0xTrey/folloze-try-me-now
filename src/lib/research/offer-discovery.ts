@@ -55,6 +55,9 @@ const companyDescriptorPattern = /\b(?:firm|company|provider)\b/i;
 const offerPathPattern =
   /\/(?:services?|solutions?|products?|advisory|accounting|payroll|erp|tax|audit|assurance|consulting|compliance|wealth-management|managed-services|digital-transformation|industr(?:y|ies)|offerings?)(?:\/|$)/i;
 
+const promotedContentDetailPathPattern =
+  /\/(?:reports?|guides?|ebooks?|whitepapers?|research)\/[^/?#]+(?:\/|$)/i;
+
 const nonOfferPathPattern =
   /\/(?:about|contact|locations?|careers?|jobs?|pay-invoices?|login|privacy|legal|alliance|ecosystem|insights?(?:-events)?|news|blog|articles?|resources?|customer-stories|case-stud(?:y|ies)|events?)(?:\/|$)/i;
 
@@ -291,7 +294,7 @@ function isBrandRelatedSeed(pageUrl: string, brandOriginUrl: string): boolean {
 }
 
 function isOfferPath(pathname: string): boolean {
-  if (offerPathPattern.test(pathname)) return true;
+  if (offerPathPattern.test(pathname) || promotedContentDetailPathPattern.test(pathname)) return true;
   return /\/[a-z0-9-]+-(?:services?|solutions?|products?|advisory|accounting|payroll|tax|audit|assurance|consulting|compliance|wealth-management|managed-services|digital-transformation)(?:\/|$)/i.test(
     pathname
   );
@@ -299,6 +302,10 @@ function isOfferPath(pathname: string): boolean {
 
 function isNonOfferPath(pathname: string): boolean {
   return nonOfferPathPattern.test(pathname);
+}
+
+function isPromotedContentDetailPath(pathname: string): boolean {
+  return promotedContentDetailPathPattern.test(pathname);
 }
 
 function isOfferIndexPath(pathname: string): boolean {
@@ -492,6 +499,10 @@ export function discoverOfferEvidenceFromPages(
     const base = new URL(page.url);
 
     for (const heading of extractHeadings(page.html)) {
+      // Report pages often repeat global promotion modules for other reports.
+      // Only the page H1 identifies the report owned by this URL; treating an
+      // unrelated H2 as page evidence makes exact source recovery ambiguous.
+      if (isPromotedContentDetailPath(pageUrl.pathname) && heading.level !== 1) continue;
       push({
         ref: stableId("offer-discovery", page.url, `h${heading.level}`, heading.text),
         label: heading.text,
@@ -533,7 +544,7 @@ export function discoverOfferEvidenceFromPages(
       if (!isSameOrigin(anchor.url, input.graph.origin)) continue;
 
       const anchorOnOfferPath = isOfferPath(anchorUrl.pathname);
-      if (isNonOfferPath(anchorUrl.pathname)) continue;
+      if (isNonOfferPath(anchorUrl.pathname) && !isPromotedContentDetailPath(anchorUrl.pathname)) continue;
       if (!anchorOnOfferPath && !hasExplicitOfferMarker(anchor.label)) continue;
 
       const label = acceptDiscoveredLabel(anchor.label, anchor.url);
@@ -579,7 +590,8 @@ function offerDetailUrlsFromHtml(html: string, origin: string, maxLinks: number)
     try {
       const pathname = new URL(anchor.url).pathname;
       const anchorOnOfferPath = isOfferPath(pathname);
-      if (isNonOfferPath(pathname)) continue;
+      const promotedContentDetail = isPromotedContentDetailPath(pathname);
+      if (isNonOfferPath(pathname) && !promotedContentDetail) continue;
       const explicitLabel = hasExplicitOfferMarker(anchor.label);
       if (!anchorOnOfferPath && !explicitLabel) continue;
       const key = pathname.replace(/\/+$/, "").toLowerCase();
@@ -587,7 +599,7 @@ function offerDetailUrlsFromHtml(html: string, origin: string, maxLinks: number)
       seen.add(key);
       candidates.push({
         url: anchor.url,
-        priority: isOfferIndexPath(pathname) ? 300 : anchorOnOfferPath ? 200 : 100,
+        priority: promotedContentDetail ? 400 : isOfferIndexPath(pathname) ? 300 : anchorOnOfferPath ? 200 : 100,
         order
       });
     } catch {

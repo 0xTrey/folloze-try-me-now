@@ -265,6 +265,92 @@ function contrastRatio(left: string, right: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+const MIN_BODY_TEXT_CONTRAST = 4.5;
+const MIN_UI_ACTION_CONTRAST = 3;
+const SAFE_NEUTRAL_COLORS = ["#FFFFFF", "#000000"] as const;
+
+function strongestNeutralContrast(color: string): (typeof SAFE_NEUTRAL_COLORS)[number] {
+  return [...SAFE_NEUTRAL_COLORS].sort(
+    (left, right) => contrastRatio(right, color) - contrastRatio(left, color)
+  )[0]!;
+}
+
+function repairedColorEvidence(
+  source: EvidenceValue<string>,
+  value: string
+): EvidenceValue<string> {
+  return {
+    ...source,
+    value,
+    confidence: clampConfidence(source.confidence * 0.75)
+  };
+}
+
+function repairAccessibleColorRoles(input: {
+  ink: EvidenceValue<string>;
+  surface: EvidenceValue<string>;
+  accent: EvidenceValue<string>;
+  action: EvidenceValue<string>;
+  support: readonly string[];
+}): {
+  ink: EvidenceValue<string>;
+  surface: EvidenceValue<string>;
+  action: EvidenceValue<string>;
+  support: string[];
+  repaired: boolean;
+} {
+  let { ink, surface, action } = input;
+  const support = [...input.support];
+  let repaired = false;
+
+  if (contrastRatio(ink.value, surface.value) < MIN_BODY_TEXT_CONTRAST) {
+    const surfaceIsNeutral = colorChroma(surface.value) <= 24 &&
+      (colorLuminance(surface.value) >= 0.85 || colorLuminance(surface.value) <= 0.08);
+    if (surfaceIsNeutral) {
+      const evidencedInk = [input.action.value, input.accent.value, ...support]
+        .find((color) => contrastRatio(color, surface.value) >= MIN_BODY_TEXT_CONTRAST);
+      if (evidencedInk) {
+        ink = repairedColorEvidence(ink, evidencedInk);
+        repaired = true;
+      }
+    } else {
+      const displacedSurface = surface.value;
+      const neutralSurface = strongestNeutralContrast(ink.value);
+      if (contrastRatio(ink.value, neutralSurface) >= MIN_BODY_TEXT_CONTRAST) {
+        surface = repairedColorEvidence(surface, neutralSurface);
+        if (![ink.value, surface.value, input.accent.value, action.value].includes(displacedSurface)) {
+          support.push(displacedSurface);
+        }
+        repaired = true;
+      }
+    }
+  }
+
+  if (
+    contrastRatio(ink.value, surface.value) >= MIN_BODY_TEXT_CONTRAST &&
+    contrastRatio(action.value, surface.value) < MIN_UI_ACTION_CONTRAST
+  ) {
+    const replacement = [
+      ink.value,
+      ...support,
+      strongestNeutralContrast(surface.value)
+    ].find((color) => contrastRatio(color, surface.value) >= MIN_UI_ACTION_CONTRAST)!;
+    action = repairedColorEvidence(action, replacement);
+    repaired = true;
+  }
+
+  return {
+    ink,
+    surface,
+    action,
+    support: support.filter((color, index, colors) =>
+      ![ink.value, surface.value, input.accent.value, action.value].includes(color) &&
+      colors.indexOf(color) === index
+    ),
+    repaired
+  };
+}
+
 function validDateScore(value: string): number {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
@@ -1132,8 +1218,8 @@ export function compileBrandSystemV2(
     ...selectedEvidence(selected, input.revision),
     value: canonicalColor(selected.evidence.value)!
   });
-  const ink = normalizedColorEvidence(selectedInk);
-  const surface = normalizedColorEvidence(selectedSurface);
+  let ink = normalizedColorEvidence(selectedInk);
+  let surface = normalizedColorEvidence(selectedSurface);
   const selectedAccent = selectCandidate(colorCandidates("accent"), "color", (value) =>
     Boolean(canonicalColor(value))
   );
@@ -1143,7 +1229,7 @@ export function compileBrandSystemV2(
   const selectedAction = selectCandidate(colorCandidates("action"), "color", (value) =>
     Boolean(canonicalColor(value))
   );
-  const action = selectedAction
+  let action = selectedAction
     ? normalizedColorEvidence(selectedAction)
     : { ...accent, confidence: accent.confidence * 0.8 };
   const selectedSupport = selectCandidate(
@@ -1151,13 +1237,24 @@ export function compileBrandSystemV2(
     "color",
     (values) => values.every((value) => Boolean(canonicalColor(value)))
   );
-  const supportValues = selectedSupport?.evidence.value
+  let supportValues = selectedSupport?.evidence.value
     .map(canonicalColor)
     .filter((color): color is string => Boolean(color))
     .filter((color, index, values) =>
       ![ink.value, surface.value, accent.value, action.value].includes(color) &&
       values.indexOf(color) === index
     ) ?? [];
+  const accessibleRoles = repairAccessibleColorRoles({
+    ink,
+    surface,
+    accent,
+    action,
+    support: supportValues
+  });
+  ink = accessibleRoles.ink;
+  surface = accessibleRoles.surface;
+  action = accessibleRoles.action;
+  supportValues = accessibleRoles.support;
   const support = selectedSupport
     ? {
         ...selectedEvidence(selectedSupport, input.revision),
@@ -1448,7 +1545,8 @@ export function compileBrandSystemV2(
     !controlRadius && "control-radius",
     !cardRadius && "card-radius",
     !assets.length && "missing-imagery",
-    !motionStyle && "motion"
+    !motionStyle && "motion",
+    accessibleRoles.repaired && "accessible-color-roles"
   ].filter(Boolean);
   const canonicalDomain = normalizeDomain(input.identity.canonicalDomain);
   const identityReady = Boolean(
@@ -1461,7 +1559,8 @@ export function compileBrandSystemV2(
     selectedAction &&
     ink.value !== surface.value &&
     action.value !== surface.value &&
-    contrastRatio(ink.value, surface.value) >= 3
+    contrastRatio(ink.value, surface.value) >= MIN_BODY_TEXT_CONTRAST &&
+    contrastRatio(action.value, surface.value) >= MIN_UI_ACTION_CONTRAST
   );
   const minimumBrandReady = Boolean(
     identityReady &&
