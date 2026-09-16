@@ -13,11 +13,12 @@ launch yet. The highest-value product defect was the homepage: it collapsed the
 experience into one generic campaign-page CTA even though the underlying engine
 still supported account, campaign, event, and content behavior.
 
-That entry-layer defect is fixed on the launch-prep branch. The remaining launch
-blocker is proof, not another broad rebuild. The exact candidate still needs a
-fresh four-lane cohort that meets the 95% terminal-success and 60-second p90
-gates, followed by explicit release approval, deployment, anonymous QA, and
-analytics readback.
+That entry-layer defect is fixed on the pushed launch-prep branch. The remaining
+launch blocker is proof, not another broad rebuild. The immutable preview is
+built, but Vercel deployment protection redirects signed-out visitors to login.
+The exact candidate still needs an anonymously reachable test surface, a fresh
+four-lane cohort that meets the 95% terminal-success and 60-second p90 gates,
+explicit release approval, production promotion, and analytics readback.
 
 ## Current production health
 
@@ -113,11 +114,15 @@ Verified:
 - Dedicated four-lane responsive checks passed on desktop and mobile.
 - `npm audit --audit-level=high` reports zero vulnerabilities.
 - Desktop screenshot shows all four outcome cards with no broken preview assets.
+- Candidate code commit `a6df2106b18e8940b75b543154ea058bd4bcad9b`
+  is pushed to `origin/codex/launch-prep-2026-09-16`.
+- Vercel preview deployment `dpl_AQsPiTA4BWJnUyFg2GzPai7ZaT8S` reached Ready
+  without changing the production alias.
+- A fresh signed-out browser confirmed deployment protection redirects the
+  preview and its health endpoint to Vercel login.
 
 Not yet claimed in this audit:
 
-- Push
-- Vercel deployment
 - Anonymous candidate QA
 - Candidate analytics cohort
 - Release approval
@@ -131,7 +136,7 @@ Not yet claimed in this audit:
 
 - [x] Codex runs the full unit suite, both production builds, dependency audit,
   and desktop plus mobile lane QA.
-- [ ] Codex records the exact commit, pushes the feature branch, and keeps the
+- [x] Codex records the exact commit, pushes the feature branch, and keeps the
   production branch unchanged.
 - [ ] Trey Harnden reviews the four entry promises and first generated output
   from each lane.
@@ -139,6 +144,8 @@ Not yet claimed in this audit:
 ### Fresh cohort
 
 - [ ] Codex records the candidate deployment ID, commit, and cohort start time.
+  The deployment and commit are recorded; cohort time begins only after an
+  anonymously reachable test surface exists.
 - [ ] Codex runs five complete fixtures per lane, 20 total, using the launch
   matrix in [`launch-plan.md`](./launch-plan.md).
 - [ ] Codex reports terminal success, first truthful signal p90, final preview
@@ -177,8 +184,10 @@ Not yet claimed in this audit:
 2. Historical mixed production traffic fails both gates and cannot substitute
    for a candidate cohort.
 3. Event promotion has only one recorded production sample.
-4. The launch-prep candidate has not yet been pushed, deployed, or anonymously
-   verified.
+4. The pushed preview is Ready, but Vercel deployment protection redirects
+   signed-out desktop, mobile, and health checks to Vercel login. Anonymous
+   candidate QA cannot start until Trey approves a bounded access strategy or
+   the exact candidate is promoted under the separate release gate.
 5. Trey has not approved a production promotion for this candidate.
 6. Named Marketing Ops, Legal, Sales or Growth, GTM response, and long-term
    Engineering owners are not recorded.
