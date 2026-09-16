@@ -283,7 +283,7 @@ describe("editCopyForFactuality", () => {
     const hero = slot("section-1", "hero", ["offer-1"]);
     const draft = candidate(hero, {
       headline: "Unlock value with an account thesis",
-      body: "Use the decision path to make progress with confidence."
+      body: "Use the decision path to make progress with confidence and define the operating outcome."
     });
     draft.wordCount = sectionCopyWordCount(draft);
 
@@ -298,18 +298,19 @@ describe("editCopyForFactuality", () => {
     });
     expect(receipt).toMatchObject({
       outcome: "accepted",
-      before: ["buyer_facing_jargon", "generic_filler"],
+      before: ["buyer_facing_jargon", "banned_prospect_phrase", "generic_filler"],
       after: []
     });
     expect(receipt?.repairs.map(({ code }) => code)).toEqual(
       expect.arrayContaining([
         "replaced_buyer_facing_jargon",
+        "replaced_banned_prospect_phrase",
         "replaced_generic_filler",
         "recalculated_word_count"
       ])
     );
     expect(JSON.stringify(result.value?.acceptedSections)).not.toMatch(
-      /account thesis|decision path|unlock value|make progress with confidence/i
+      /account thesis|decision path|operating outcome|unlock value|make progress with confidence/i
     );
   });
 

@@ -110,7 +110,7 @@ async function mockReadyShell(page: Page): Promise<void> {
 }
 
 async function startBuild(page: Page): Promise<void> {
-  const primary = page.locator(".unifiedPrimaryCta");
+  const primary = page.getByRole("button", { name: "Build a campaign page" });
   await expect(async () => {
     if (await page.locator(".domainStage").count()) return;
     await primary.click();

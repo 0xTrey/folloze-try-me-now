@@ -268,7 +268,7 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
     expect(metrics.horizontalOverflow).toBe(false);
     expect(metrics.duplicateJourneySections).toBe(0);
     expect(metrics.missingNavigationTargets).toBe(0);
-    expect(metrics.bannedPhraseMatches).toEqual([]);
+    expect(metrics.bannedPhraseMatches, `${fixture.id} buyer-facing phrase leak`).toEqual([]);
 
     const selectedImages = compiled.page.brand.imagery.selected;
     expect(selectedImages.map(({ role }) => role)).toContain("hero");
@@ -348,7 +348,7 @@ test("proves runtime family production and truthful brand recovery", async ({ pa
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
-  const primary = page.locator(".unifiedPrimaryCta");
+  const primary = page.getByRole("button", { name: "Build a campaign page" });
   await expect(primary).toBeVisible();
   await expect(async () => {
     if (await page.locator(".domainStage").count()) return;

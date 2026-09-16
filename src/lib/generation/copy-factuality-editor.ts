@@ -37,7 +37,7 @@ const USABLE_ARTIFACT_STATUSES = new Set<ProductionArtifact<unknown>["status"]>(
 const GENERIC_FILLER_PATTERN =
   /\b(?:make progress with confidence|a better way to move forward|unlock value|drive transformation|synerg(?:y|ies)|best[- ]in[- ]class|next[- ]level|holistic approach|transform your business|seamless|transformative|robust|streamline|leverage)\b/i;
 const BANNED_PROSPECT_COPY_PATTERN =
-  /\b(?:(?:launch|guide|align|wireframe)\s+(?:family|template)|production receipts?|quality grades?|template names?|debug language|business transformation leaders|solution overview)\b/i;
+  /\b(?:(?:launch|guide|align|wireframe)\s+(?:family|template)|production receipts?|quality grades?|template names?|debug language|business transformation leaders|solution overview|operating outcome)\b/i;
 
 const UNSAFE_MARKUP_OR_CODE_PATTERN =
   /<\/?[a-z][^>]*>|```|javascript:|(?:^|\s)(?:className|const|export|function|import|interface|let|script|var)\s*(?:=|\s)|(?:^|\s)style\s*=|\bclass\s+[a-z_$][\w$]*\s*(?:\{|extends\b)|(?:^|\s)(?:[.#][a-z][\w-]*|@media)\s*\{|(?:^|[;{]\s*)(?:background|color|display|font|margin|padding)\s*:/im;
@@ -79,7 +79,8 @@ const STYLE_REPLACEMENTS: readonly [RegExp, string][] = [
   [/\btemplate names?\b/gi, "page"],
   [/\bdebug language\b/gi, "details"],
   [/\bbusiness transformation leaders\b/gi, "business leaders"],
-  [/\bsolution overview\b/gi, "solution details"]
+  [/\bsolution overview\b/gi, "solution details"],
+  [/\boperating outcome\b/gi, "business result"]
 ];
 
 export type CopyFactualityIssueCode =

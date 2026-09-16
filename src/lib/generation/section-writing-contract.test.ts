@@ -231,6 +231,7 @@ describe("section writing contracts", () => {
   it("recognizes internal build vocabulary that must never reach a reader", () => {
     expect(containsBannedInternalPhrase("Decision Lens 2 explains the mechanism")).toBe(true);
     expect(containsBannedInternalPhrase("Prepared for the buying committee")).toBe(true);
+    expect(containsBannedInternalPhrase("Start with the operating outcome")).toBe(true);
     expect(containsBannedInternalPhrase("Cut unplanned dwell time by four hours")).toBe(false);
   });
 });

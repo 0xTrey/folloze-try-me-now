@@ -37,6 +37,7 @@ export const BANNED_INTERNAL_PHRASES: readonly RegExp[] = [
   /\bexperience receipt\b/i,
   /\bmessage spine\b/i,
   /\bnarrative arc\b/i,
+  /\boperating outcome\b/i,
   /\bprepared for\b/i,
   /\bseamless\b/i,
   /\bsection role\b/i,
