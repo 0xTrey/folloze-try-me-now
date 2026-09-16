@@ -180,7 +180,7 @@ async function startBuyerExperience(
   domain = "northpeak.com",
   options: { waitForBrief?: boolean } = {}
 ): Promise<void> {
-  const primary = page.locator(".unifiedPrimaryCta");
+  const primary = page.getByRole("button", { name: "Build a campaign page", exact: true });
   await expect(primary).toBeVisible();
   // SSR markup is clickable before React hydrates; retry until the domain stage mounts.
   await expect(async () => {
@@ -205,7 +205,8 @@ async function startBuyerExperience(
 }
 
 async function expectFirstDoorStable(page: Page): Promise<void> {
-  await expect(page.locator(".unifiedPrimaryCta")).toBeVisible();
+  await expect(page.locator("[data-entry-lane]")).toHaveCount(4);
+  await expect(page.getByRole("button", { name: "Build a campaign page", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Live Brief" })).toHaveCount(0);
   await expect(page.locator("[data-build-shell]")).toHaveCount(0);
   await expect(page.locator("section[aria-labelledby='experience-ready-title']")).toHaveCount(0);
@@ -225,40 +226,40 @@ async function releaseHeldRoutes(
   }
 }
 
-test.describe("unified guided first-run experience", () => {
+test.describe("guided first-run experience", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "Try Me Now V1 is a desktop-first experience.");
     await page.goto("/", { waitUntil: "domcontentloaded" });
   });
 
-  test("shows the open-platform story, one custom-widget door, and one campaign example (U01-U04)", async ({
+  test("shows four distinct launch lanes before identity or production actions (U01-U04)", async ({
     page
   }, testInfo) => {
-    await expect(page.getByRole("heading", { name: "Build personalized campaign pages from the tools you already use." })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Try the custom widget/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Build a personalized campaign page/i })).toBeVisible();
-    await expect(page.getByText("Bring your own AI", { exact: true })).toBeVisible();
-    await expect(page.getByText("Use Campaign Agent", { exact: true })).toBeVisible();
-    await expect(page.getByText("Build with a custom workflow", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Content Magic/i })).toHaveCount(0);
-
-    await expect(page.getByRole("button", { name: "Build a 1:1 account experience" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Launch a campaign landing page" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Make content interactive" })).toHaveCount(0);
-    await expect(page.getByText(/Aprio|ServiceNow|Cisco Hybrid Mesh|Worked Example|Watch Me Build/i)).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Build a polished buyer experience in about a minute." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Create a 1:1 account microsite" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Launch a campaign landing page" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Promote an event" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Turn content into an experience" })).toBeVisible();
+    await expect(page.locator("[data-entry-lane]")).toHaveCount(4);
+    await expect(page.getByText("Instant preview", { exact: true })).toBeVisible();
+    await expect(page.getByText("No email gate", { exact: true })).toBeVisible();
+    await expect(page.getByText("Production stays separate", { exact: true })).toBeVisible();
     await expect(page.locator('input[type="email"]')).toHaveCount(0);
     await expect(page.getByRole("dialog")).toHaveCount(0);
-
-    const example = page.getByRole("link", { name: /example personalized campaign page/i });
-    await expect(example).toHaveCount(1);
-    await expect(example).toHaveAttribute("href", "https://experience.folloze.com/northpeak-personalized-campaign-example");
-    await expect(page.getByRole("link", { name: /Northpeak account experience/i })).toHaveCount(0);
 
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: testInfo.outputPath("unified-entry-u01.png"),
       fullPage: false
     });
+
+    const eventLane = page.getByRole("button", { name: "Build an event page", exact: true });
+    await expect(async () => {
+      if (await page.locator(".domainStage").count()) return;
+      await eventLane.click();
+      await expect(page.locator(".domainStage")).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "Who is hosting this event?" })).toBeVisible();
   });
 
   test("campaign happy path: domain research starts early and brief stays editable before preview (U05-U08, U10, U22)", async ({
@@ -447,7 +448,7 @@ test.describe("unified guided first-run experience", () => {
 
     fixtureMode = "ready";
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    const primary = page.locator(".unifiedPrimaryCta");
+    const primary = page.getByRole("button", { name: "Build a campaign page", exact: true });
     await expect(async () => {
       if (await page.locator(".domainStage").count()) return;
       await primary.click();
@@ -522,7 +523,7 @@ test.describe("unified guided first-run experience", () => {
     expect(box).not.toBeNull();
     expect(box!.height).toBeGreaterThanOrEqual(36);
     await startOver.click();
-    await expect(page.locator(".unifiedPrimaryCta")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Build a campaign page", exact: true })).toBeVisible();
   });
 
   test("late poll response cannot restore session or build shell after Start over (R2)", async ({ page }) => {
@@ -549,7 +550,7 @@ test.describe("unified guided first-run experience", () => {
     await expect.poll(() => heldPollRoutes.length, { timeout: 5_000 }).toBeGreaterThan(0);
 
     await page.getByRole("button", { name: /Start over/i }).first().click();
-    await expect(page.locator(".unifiedPrimaryCta")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Build a campaign page", exact: true })).toBeVisible();
 
     const staleSession = publicSession({
       useCase: "campaign",
@@ -579,7 +580,7 @@ test.describe("unified guided first-run experience", () => {
     }
 
     await page.waitForTimeout(1_500);
-    await expect(page.locator(".unifiedPrimaryCta")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Build a campaign page", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Live Brief" })).toHaveCount(0);
     await expect(page.getByText(/Writing each step of the buyer journey/i)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Start over/i })).toHaveCount(0);
@@ -604,7 +605,7 @@ test.describe("unified guided first-run experience", () => {
     await expectFirstDoorStable(page);
 
     holdPostResponses = true;
-    const primary = page.locator(".unifiedPrimaryCta");
+    const primary = page.getByRole("button", { name: "Build a campaign page", exact: true });
     await expect(async () => {
       if (await page.locator(".domainStage").count()) return;
       await primary.click();
@@ -806,7 +807,7 @@ test.describe("unified guided first-run experience", () => {
 
     claimFixtureMode = "ready";
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    const primary = page.locator(".unifiedPrimaryCta");
+    const primary = page.getByRole("button", { name: "Build a campaign page", exact: true });
     await expect(async () => {
       if (await page.locator(".domainStage").count()) return;
       await primary.click();
@@ -860,7 +861,7 @@ test.describe("unified guided first-run experience", () => {
   });
 
   test("keyboard focus reaches the primary CTA and domain field", async ({ page }) => {
-    const primary = page.locator(".unifiedPrimaryCta");
+    const primary = page.getByRole("button", { name: "Build a campaign page", exact: true });
     await expect(primary).toBeVisible();
     await primary.focus();
     await expect(primary).toBeFocused();

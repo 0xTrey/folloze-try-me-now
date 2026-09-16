@@ -68,7 +68,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .sectionKicker { display: inline-block; color: var(--fz-accent); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 
 .entryStage {
-  width: 100%;
+  width: min(100%,1560px);
   min-height: calc(100vh - 72px);
   margin: 0 auto;
   padding: 72px clamp(24px,3.6vw,64px) 54px;
@@ -76,22 +76,36 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   flex-direction: column;
   gap: 42px;
 }
-.entryContent {
-  width: min(100%,1040px);
-  margin-inline: auto;
-  display: grid;
-  grid-template-columns: minmax(0,1fr) minmax(310px,420px);
-  grid-template-areas:
-    "paths action"
-    "example example";
-  column-gap: 46px;
-  row-gap: 42px;
-  align-items: stretch;
-}
-.entryHero { width: 100%; text-align: left; }
-.entryHero h1 { width: 100%; max-width: none; margin: 0; color: var(--fz-ink); font-family: var(--font-display), sans-serif; font-size: clamp(48px,6vw,72px); font-weight: 650; letter-spacing: -.06em; line-height: .97; text-wrap: wrap; }
+.entryHero { width: min(100%,980px); text-align: left; }
+.entryHero h1 { width: 100%; max-width: none; margin: 0; color: var(--fz-ink); font-family: var(--font-display), sans-serif; font-size: clamp(48px,6vw,78px); font-weight: 650; letter-spacing: -.06em; line-height: .97; text-wrap: balance; }
 .entryHero h1 em { color: var(--fz-accent); font-style: normal; }
-.entryHero p { width: 100%; max-width: none; margin: 28px 0 0; color: var(--fz-body); font-size: clamp(18px,2vw,21px); line-height: 1.55; }
+.entryHero p { width: min(100%,820px); margin: 24px 0 0; color: var(--fz-body); font-size: clamp(18px,2vw,21px); line-height: 1.55; }
+.entryPromise { margin-top:24px;display:flex;align-items:center;flex-wrap:wrap;gap:10px; }
+.entryPromise span { min-height:34px;padding:7px 11px;display:inline-flex;align-items:center;gap:7px;color:var(--fz-body);border:1px solid var(--fz-border);border-radius:999px;background:#fff;font-size:12px;font-weight:720; }
+.entryPromise svg { color:var(--fz-success); }
+.entryLaneGrid { width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px; }
+.entryLaneCard { min-width:0;padding:26px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(230px,.95fr);grid-template-areas:"copy preview" "transformation preview" "action preview";gap:18px 24px;align-items:start;position:relative;overflow:hidden;border:1px solid var(--fz-border);border-radius:24px;background:linear-gradient(145deg,#fff 0%,#f7fbff 100%);box-shadow:0 18px 58px rgba(7,20,40,.07); }
+.entryLaneCard::before { content:"";width:5px;position:absolute;inset:0 auto 0 0;background:var(--lane-accent,var(--fz-accent)); }
+.entryLaneCard.is-abm { --lane-accent:#0077ff; }
+.entryLaneCard.is-campaign { --lane-accent:#1746c7; }
+.entryLaneCard.is-event { --lane-accent:#e85d45; }
+.entryLaneCard.is-content { --lane-accent:#0f8a5f; }
+.entryLaneCopy { min-width:0;grid-area:copy; }
+.entryLaneHeading { min-width:0;display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:start;gap:11px;color:var(--lane-accent); }
+.entryLaneHeading h2 { margin:0;color:var(--fz-ink);font:620 clamp(25px,2.2vw,34px)/1.03 var(--font-display),sans-serif;letter-spacing:-.04em;text-wrap:balance; }
+.entryLaneIndex { width:30px;height:30px;display:grid;place-items:center;color:#fff;border-radius:9px;background:var(--lane-accent);font-size:12px;font-weight:850; }
+.entryLaneHeading>svg { margin-top:5px; }
+.entryLaneCopy>p { margin:15px 0 0;color:var(--fz-body);font-size:14px;line-height:1.55; }
+.entryLanePreview { min-width:0;height:230px;grid-area:preview;overflow:hidden;border:1px solid color-mix(in srgb,var(--lane-accent) 18%,var(--fz-border));border-radius:16px;background:#fff;box-shadow:0 13px 34px rgba(7,20,40,.12); }
+.entryLanePreview img { width:100%;height:100%;display:block;object-fit:cover;object-position:top; }
+.entryLaneTransformation { min-width:0;margin:0;grid-area:transformation;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:10px; }
+.entryLaneTransformation>div { min-width:0; }
+.entryLaneTransformation dt { color:var(--fz-muted-strong);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase; }
+.entryLaneTransformation dd { margin:4px 0 0;color:var(--fz-ink);font-size:12px;font-weight:720;line-height:1.3; }
+.entryLaneTransformation>svg { color:var(--lane-accent); }
+.entryLaneAction { min-height:48px;padding:12px 16px;grid-area:action;display:flex;align-items:center;justify-content:space-between;gap:14px;color:#fff;border:1px solid var(--lane-accent);border-radius:14px;background:var(--lane-accent);cursor:pointer;font-size:13px;font-weight:780;transition:transform .16s var(--ease),box-shadow .16s var(--ease); }
+.entryLaneAction:hover:not(:disabled),.entryLaneAction:focus-visible:not(:disabled) { transform:translateY(-2px);box-shadow:0 12px 28px color-mix(in srgb,var(--lane-accent) 24%,transparent); }
+.entryLaneAction:disabled { cursor:wait;opacity:.55; }
 
 .domainStage { min-height: calc(100vh - 72px); padding: clamp(42px,6vw,84px) clamp(22px,8vw,130px); background: linear-gradient(135deg,#fff 0%,#fff 62%,var(--fz-canvas) 100%); }
 .textBack { margin: 0 0 clamp(52px,8vw,100px) -8px; padding-inline: 8px; color: var(--fz-muted-strong); }
@@ -1171,21 +1185,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
     padding: 46px 16px 36px;
     gap: 30px;
   }
-  .entryContent {
-    width: min(100%,620px);
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "action"
-      "paths"
-      "example";
-    row-gap: 30px;
-  }
   .entryHero { margin: 0; text-align: left; }
   .entryHero h1 { font-size: clamp(40px,12vw,54px); line-height: .99; }
   .entryHero p { margin-top: 22px; font-size: 17px; }
-  .unifiedAction { min-height: 360px; padding: 28px; border-radius: 22px; }
-  .entryPaths { margin: 0; }
-  .entryPaths > li { padding: 24px 0; }
+  .entryLaneGrid { grid-template-columns:1fr; }
+  .entryLaneCard { grid-template-columns:1fr;grid-template-areas:"copy" "preview" "transformation" "action"; }
+  .entryLanePreview { height:min(56vw,300px); }
   .domainStageGrid { grid-template-columns:1fr;gap:32px; }
   .domainInput { margin-top:0; }
   .domainPromise { margin-top: 20px; }

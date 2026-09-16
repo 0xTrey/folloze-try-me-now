@@ -62,7 +62,7 @@ describe("resume flow", () => {
     await screen.findByRole("heading", { name: "We couldn't reopen this experience." });
     expect(screen.queryByRole("button", { name: "Edit Brief" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start a new experience" }));
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Build personalized campaign pages from the tools you already use." })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Build a polished buyer experience in about a minute." })).toBeInTheDocument());
     expect(window.location.search).toBe("");
   });
 

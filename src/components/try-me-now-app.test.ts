@@ -9,8 +9,8 @@ import {
   ctaValueForSession,
   defaultPersonalizationVariantFor,
   describePreviewAnalyticsEvent,
-  entryPathOptions,
-  personalizedCampaignExample,
+  ENTRY_LANES,
+  entryLaneOptions,
   getAssemblyPreviewKey,
   getBuildPanelCopy,
   getGuidedQuestionCopy,
@@ -155,38 +155,37 @@ describe("Try Me Now experience copy", () => {
     }))).toBe(false);
   });
 
-  it("routes each watch-example action to a verified public Folloze board", () => {
-    expect(entryPathOptions.abm).toMatchObject({
-      title: "Build a 1:1 account experience",
-      actionLabel: "Build a 1:1 account experience",
-      exampleLabel: "See a Northpeak account experience",
-      exampleUrl: "https://experience.folloze.com/northpeak--folloze",
+  it("keeps four launch lanes mapped to the existing typed generation contracts", () => {
+    expect(ENTRY_LANES).toEqual(["abm", "campaign", "event", "content"]);
+    expect(entryLaneOptions.abm).toMatchObject({
+      title: "Create a 1:1 account microsite",
+      actionLabel: "Build an account microsite",
+      useCase: "abm",
       previewImage: "/entry/abm-preview.webp",
       previewAlt: "Northpeak account experience tailored for a named buyer account"
     });
-    expect(entryPathOptions.campaign).toMatchObject({
+    expect(entryLaneOptions.campaign).toMatchObject({
       title: "Launch a campaign landing page",
-      actionLabel: "Launch a campaign landing page",
-      exampleLabel: "See a Northpeak personalized campaign",
-      exampleUrl: "https://experience.folloze.com/northpeak-personalized-campaign-example",
+      actionLabel: "Build a campaign page",
+      useCase: "campaign",
+      campaignMode: "campaign",
       previewAlt: "Northpeak-branded personalized campaign landing page"
     });
-    expect(entryPathOptions.content).toMatchObject({
-      eyebrow: "Content Magic",
-      title: "Make content interactive",
-      actionLabel: "Make content interactive",
-      exampleLabel: "See a Northpeak Content Magic example",
-      exampleUrl: "https://experience.folloze.com/northpeak-personalized-campaign-example",
+    expect(entryLaneOptions.event).toMatchObject({
+      title: "Promote an event",
+      actionLabel: "Build an event page",
+      useCase: "campaign",
+      campaignMode: "event",
+      previewImage: "/entry/event-promotion-preview.svg"
+    });
+    expect(entryLaneOptions.content).toMatchObject({
+      title: "Turn content into an experience",
+      actionLabel: "Start Content Magic",
+      useCase: "content",
       previewImage: "/entry/content-preview.webp"
     });
-    expect(JSON.stringify(entryPathOptions)).not.toMatch(/Aprio|ServiceNow|Cisco|aprio-for-georgia-pacific|servicenow-ai-platform|cisco-hmf/i);
-  });
-
-  it("exposes one generically labeled personalized campaign example", () => {
-    expect(personalizedCampaignExample).toEqual({
-      label: "View an example personalized campaign page",
-      href: "https://experience.folloze.com/northpeak-personalized-campaign-example"
-    });
+    expect(Object.values(entryLaneOptions).map((option) => option.index)).toEqual(["1", "2", "3", "4"]);
+    expect(JSON.stringify(entryLaneOptions)).not.toMatch(/Aprio|ServiceNow|Cisco|aprio-for-georgia-pacific|servicenow-ai-platform|cisco-hmf/i);
   });
 
   it("turns one event sentence into the existing event campaign contract", () => {

@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Building2,
+  CalendarDays,
   Check,
   CircleCheck,
   ChevronDown,
@@ -44,8 +45,7 @@ import {
   AudienceEvidenceTray,
   InstantBrandLockStrip,
   type AnalyticsSignal,
-  type CtaValue,
-  type EntryPathOption
+  type CtaValue
 } from "@/components/try-me-now-enhancements";
 import { BrandHelpRecovery } from "@/components/brand-help-recovery";
 import { usePreviewForegroundSeconds } from "@/components/use-preview-foreground-seconds";
@@ -239,6 +239,25 @@ type BuildMoment = {
 
 type CampaignEntryMode = "campaign" | "event";
 
+export const ENTRY_LANES = ["abm", "campaign", "event", "content"] as const;
+export type EntryLane = (typeof ENTRY_LANES)[number];
+
+type EntryLaneOption = {
+  id: EntryLane;
+  index: string;
+  title: string;
+  description: string;
+  actionLabel: string;
+  inputLabel: string;
+  outputLabel: string;
+  previewImage: string;
+  previewAlt: string;
+  useCase: UseCase;
+  campaignMode?: CampaignEntryMode;
+  eventSurface: string;
+  icon: typeof Target;
+};
+
 const useCaseContent: Record<
   UseCase,
   {
@@ -254,7 +273,7 @@ const useCaseContent: Record<
   }
 > = {
   abm: {
-    number: "01",
+    number: "1",
     kicker: "1:1 ABM",
     title: "Build a 1:1 account experience",
     description: "Add your company and one target account. Folloze builds a personalized buyer experience for that account.",
@@ -265,7 +284,7 @@ const useCaseContent: Record<
     className: "portalEditorial"
   },
   campaign: {
-    number: "02",
+    number: "2",
     kicker: "Campaign",
     title: "Launch a campaign landing page",
     description: "Add one offer and audience. Folloze builds a branded campaign page with a measurable next step.",
@@ -276,7 +295,7 @@ const useCaseContent: Record<
     className: "portalCobalt"
   },
   content: {
-    number: "03",
+    number: "3",
     kicker: "Content",
     title: "Make content interactive",
     description: "Add a public URL or PDF. Folloze turns the source into a guided, buyer-ready experience.",
@@ -286,6 +305,12 @@ const useCaseContent: Record<
     icon: FileText,
     className: "portalTerminal"
   }
+};
+
+const eventDomainContent = {
+  ...useCaseContent.campaign,
+  domainTitle: "Who is hosting this event?",
+  domainBody: "Enter the company domain. Folloze will match the host brand, then ask for the event details buyers need before they register."
 };
 
 const objectives: Record<UseCase, string[]> = {
@@ -313,60 +338,64 @@ export function shouldAutoConfirmSource(session: Pick<PublicTryMeSession, "useCa
   );
 }
 
-const NORTHPEAK_ACCOUNT_EXAMPLE_URL = "https://experience.folloze.com/northpeak--folloze";
-const NORTHPEAK_CAMPAIGN_EXAMPLE_URL = "https://experience.folloze.com/northpeak-personalized-campaign-example";
-
-/** One worked campaign example for the unified entry, never a primary CTA. */
-export const personalizedCampaignExample = {
-  label: "View an example personalized campaign page",
-  href: NORTHPEAK_CAMPAIGN_EXAMPLE_URL
-} as const;
-
-export const entryPathOptions: Record<UseCase, EntryPathOption> = {
+export const entryLaneOptions: Record<EntryLane, EntryLaneOption> = {
   abm: {
     id: "abm",
-    index: "01",
-    eyebrow: "1:1 ABM",
-    title: "Build a 1:1 account experience",
-    description: "Add your company and one target account. Folloze builds a personalized buyer experience for that account.",
-    actionLabel: "Build a 1:1 account experience",
-    exampleLabel: "See a Northpeak account experience",
-    exampleUrl: NORTHPEAK_ACCOUNT_EXAMPLE_URL,
-    demoSteps: ["Company + account", "Public account context", "1:1 buyer experience"],
+    index: "1",
+    title: "Create a 1:1 account microsite",
+    description: "Give Folloze your company and one target account. Get a buyer-ready microsite that connects public account context to a decision that matters.",
+    actionLabel: "Build an account microsite",
+    inputLabel: "Company + target account",
+    outputLabel: "Personalized account microsite",
     previewImage: "/entry/abm-preview.webp",
     previewAlt: "Northpeak account experience tailored for a named buyer account",
-    accent: "#0077ff",
-    tone: "paper"
+    useCase: "abm",
+    eventSurface: "account_microsite",
+    icon: Target
   },
   campaign: {
     id: "campaign",
-    index: "02",
-    eyebrow: "Campaign",
+    index: "2",
     title: "Launch a campaign landing page",
-    description: "Add one offer and audience. Folloze builds a branded campaign page with a measurable next step.",
-    actionLabel: "Launch a campaign landing page",
-    exampleLabel: "See a Northpeak personalized campaign",
-    exampleUrl: NORTHPEAK_CAMPAIGN_EXAMPLE_URL,
-    demoSteps: ["Offer + audience", "Buyer objective", "Campaign landing page"],
+    description: "Start with one offer and one audience. Get a branded landing page with a clear promise, proof path, and measurable next step.",
+    actionLabel: "Build a campaign page",
+    inputLabel: "Offer + audience",
+    outputLabel: "Campaign landing page",
     previewImage: "/entry/campaign-preview.webp",
     previewAlt: "Northpeak-branded personalized campaign landing page",
-    accent: "#0048de",
-    tone: "cobalt"
+    useCase: "campaign",
+    campaignMode: "campaign",
+    eventSurface: "campaign_page",
+    icon: Megaphone
+  },
+  event: {
+    id: "event",
+    index: "3",
+    title: "Promote an event",
+    description: "Add the event and the audience you want in the room. Get a focused registration page built around why they should attend.",
+    actionLabel: "Build an event page",
+    inputLabel: "Event + audience",
+    outputLabel: "Registration landing page",
+    previewImage: "/entry/event-promotion-preview.svg",
+    previewAlt: "Event promotion page with date, speaker, agenda, and registration path",
+    useCase: "campaign",
+    campaignMode: "event",
+    eventSurface: "event_promotion",
+    icon: CalendarDays
   },
   content: {
     id: "content",
-    index: "03",
-    eyebrow: "Content Magic",
-    title: "Make content interactive",
-    description: "Turn a public URL or PDF into a guided, source-grounded buyer experience.",
-    actionLabel: "Make content interactive",
-    exampleLabel: "See a Northpeak Content Magic example",
-    exampleUrl: NORTHPEAK_CAMPAIGN_EXAMPLE_URL,
-    demoSteps: ["Public URL or PDF", "Source understanding", "Interactive experience"],
+    index: "4",
+    title: "Turn content into an experience",
+    description: "Bring a public URL or PDF. Get a source-grounded interactive experience that helps buyers find the decision inside the content.",
+    actionLabel: "Start Content Magic",
+    inputLabel: "Public URL or PDF",
+    outputLabel: "Interactive content experience",
     previewImage: "/entry/content-preview.webp",
     previewAlt: "Northpeak source turned into an interactive content experience",
-    accent: "#091019",
-    tone: "ink"
+    useCase: "content",
+    eventSurface: "content_magic",
+    icon: FileText
   }
 };
 
@@ -1026,10 +1055,10 @@ export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
       summary: `${targetName} now has a ${brandName} story for ${lowercaseInitial(audience)}, with one job: ${lowercaseInitial(objective)}.`,
       counterpart: targetName,
       receipts: [
-        { number: "01", label: trimLabel(brandPresentation.label, 40) },
-        { number: "02", label: `${trimLabel(targetName, 24)} context mapped` },
-        { number: "03", label: `${trimLabel(audience, 30)} in focus` },
-        { number: "04", label: `${trimLabel(objective, 30)} path composed` }
+        { number: "1", label: trimLabel(brandPresentation.label, 40) },
+        { number: "2", label: `${trimLabel(targetName, 24)} context mapped` },
+        { number: "3", label: `${trimLabel(audience, 30)} in focus` },
+        { number: "4", label: `${trimLabel(objective, 30)} path composed` }
       ]
     };
   }
@@ -1041,10 +1070,10 @@ export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
       summary: `${sourceName} is now a guided ${brandName} path for ${lowercaseInitial(audience)}, built to ${lowercaseInitial(objective)}.`,
       counterpart: sourceName,
       receipts: [
-        { number: "01", label: trimLabel(brandPresentation.label, 40) },
-        { number: "02", label: `${trimLabel(sourceName, 30)} transformed` },
-        { number: "03", label: `${trimLabel(audience, 30)} lens applied` },
-        { number: "04", label: `${trimLabel(objective, 30)} path composed` }
+        { number: "1", label: trimLabel(brandPresentation.label, 40) },
+        { number: "2", label: `${trimLabel(sourceName, 30)} transformed` },
+        { number: "3", label: `${trimLabel(audience, 30)} lens applied` },
+        { number: "4", label: `${trimLabel(objective, 30)} path composed` }
       ]
     };
   }
@@ -1055,10 +1084,10 @@ export function getRevealCopy(session: PublicTryMeSession): RevealCopy {
     summary: `A private ${campaignType.toLowerCase()} preview for ${lowercaseInitial(audience)}, built to ${lowercaseInitial(objective)}.`,
     counterpart: campaignType,
     receipts: [
-      { number: "01", label: trimLabel(brandPresentation.label, 40) },
-      { number: "02", label: `${campaignType} framed` },
-      { number: "03", label: `${trimLabel(audience, 30)} in focus` },
-      { number: "04", label: `${trimLabel(objective, 30)} path composed` }
+      { number: "1", label: trimLabel(brandPresentation.label, 40) },
+      { number: "2", label: `${campaignType} framed` },
+      { number: "3", label: `${trimLabel(audience, 30)} in focus` },
+      { number: "4", label: `${trimLabel(objective, 30)} path composed` }
     ]
   };
 }
@@ -1687,36 +1716,50 @@ export function UseCasePortals({
   disabled?: boolean;
 }) {
   return (
-    <div className="unifiedEntry" aria-label="Start building a personalized campaign page">
-      <section className="unifiedAction" aria-labelledby="unified-action-title">
-        <h2 id="unified-action-title">Try the custom widget</h2>
-        <p>Start with your company. The widget researches the brand, asks only for missing context, and builds one finished personalized campaign page.</p>
-        <button
-          type="button"
-          className="unifiedPrimaryCta"
-          disabled={disabled}
-          onClick={() => {
-            captureUnifiedProductEvent("unified_entry_started", {
-              properties: { entry_surface: "homepage", device_class: "desktop" }
-            });
-            onSelect("campaign", "campaign");
-          }}
-        >
-          <strong>Build a personalized campaign page</strong>
-          <ArrowRight size={20} aria-hidden="true" />
-        </button>
-      </section>
-
-      <a
-        className="campaignExampleLink"
-        href={personalizedCampaignExample.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={() => track("example_opened", { useCase: "campaign" })}
-      >
-        {personalizedCampaignExample.label}
-        <ExternalLink size={18} aria-hidden="true" />
-      </a>
+    <div className="entryLaneGrid" aria-label="Choose what you want to build">
+      {ENTRY_LANES.map((lane) => {
+        const option = entryLaneOptions[lane];
+        const Icon = option.icon;
+        return (
+          <article className={`entryLaneCard is-${lane}`} data-entry-lane={lane} key={lane}>
+            <div className="entryLaneCopy">
+              <div className="entryLaneHeading">
+                <span className="entryLaneIndex" aria-hidden="true">{option.index}</span>
+                <h2>{option.title}</h2>
+                <Icon size={20} aria-hidden="true" />
+              </div>
+              <p>{option.description}</p>
+            </div>
+            <div className="entryLanePreview">
+              <Image
+                src={option.previewImage}
+                alt={option.previewAlt}
+                width={720}
+                height={380}
+                loading="lazy"
+              />
+            </div>
+            <dl className="entryLaneTransformation">
+              <div><dt>You add</dt><dd>{option.inputLabel}</dd></div>
+              <ArrowRight size={16} aria-hidden="true" />
+              <div><dt>Folloze builds</dt><dd>{option.outputLabel}</dd></div>
+            </dl>
+            <button
+              type="button"
+              className="entryLaneAction"
+              disabled={disabled}
+              onClick={() => {
+                captureUnifiedProductEvent("unified_entry_started", {
+                  properties: { entry_surface: option.eventSurface, device_class: "desktop" }
+                });
+                onSelect(option.useCase, option.campaignMode);
+              }}
+            >
+              {option.actionLabel}<ArrowRight size={18} aria-hidden="true" />
+            </button>
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -1743,7 +1786,7 @@ function DomainStart({
   error?: string;
 }) {
   const portal = campaignMode === "event"
-    ? useCaseContent.content
+    ? eventDomainContent
     : useCase === "campaign"
       ? {
           ...useCaseContent.campaign,
@@ -3483,8 +3526,8 @@ export function TryMeNowApp() {
     setPersonalizationRequest(undefined);
     setPersonalizationStatus("idle");
     setPersonalizationError("");
-    track("path_selected", { useCase: selected });
-    track("use_case_selected", { useCase: selected });
+    track("path_selected", { useCase: selected, entryMode: selectedCampaignMode ?? "campaign" });
+    track("use_case_selected", { useCase: selected, entryMode: selectedCampaignMode ?? "campaign" });
   }, [bumpResetGeneration, resetSessionScopedRefs]);
 
   const resetExperience = useCallback(() => {
@@ -4429,11 +4472,15 @@ export function TryMeNowApp() {
     context: event.context
   }));
   const headerStatus = !useCase
-    ? "Build a personalized campaign page in about a minute"
+    ? "Build a buyer experience in about a minute"
     : !session
-      ? useCase === "content"
-        ? "Content Magic selected"
-        : "Personalized campaign page selected"
+      ? useCase === "abm"
+        ? "1:1 account microsite selected"
+        : useCase === "content"
+          ? "Content Magic selected"
+          : campaignEntryMode === "event"
+            ? "Event promotion selected"
+            : "Campaign landing page selected"
       : showBuildShell
         ? session.buildProgress?.failure
           ? "The build stopped before it finished"
@@ -4465,20 +4512,18 @@ export function TryMeNowApp() {
       {!useCase && resumeStatus === "idle" && (
         <section className="entryStage">
           <div className="entryHero">
-            <h1>Build personalized campaign pages from the tools you already use.</h1>
-            <p>Folloze is built to be open. Bring your own AI, use Folloze Campaign Agent, or connect a custom workflow, then turn those inputs into finished, on-brand campaign pages.</p>
+            <h1>Build a polished buyer experience in about a minute.</h1>
+            <p>Choose the outcome. Give Folloze the public context it needs. Explore the microsite or landing page before you decide whether to save it.</p>
+            <div className="entryPromise" aria-label="Try Me Now promise">
+              <span><CircleCheck size={15} />Instant preview</span>
+              <span><ShieldCheck size={15} />No email gate</span>
+              <span><Layers3 size={15} />Production stays separate</span>
+            </div>
           </div>
-          <div className="entryContent">
-          <ol className="entryPaths" aria-label="Ways to build with Folloze">
-            <li><span className="entryPathNumber">1</span><span><strong>Bring your own AI</strong><small>Create in ChatGPT, Claude, Copilot, Gemini, or your own agent.</small></span></li>
-            <li><span className="entryPathNumber">2</span><span><strong>Use Campaign Agent</strong><small>Build directly inside Folloze.</small></span></li>
-            <li><span className="entryPathNumber">3</span><span><strong>Build with a custom workflow</strong><small>Start from Slack, Teams, or a custom widget like the one to the right.</small></span></li>
-          </ol>
           <UseCasePortals
             onSelect={selectUseCase}
             disabled={!interactionReady}
           />
-          </div>
         </section>
       )}
 

@@ -649,23 +649,27 @@ describe("guided campaign workspace", () => {
     ]);
   });
 
-  it("offers one open-platform custom-widget entry and one campaign example", () => {
+  it("offers four distinct launch lanes and maps them to the existing generation contracts", () => {
     const onSelect = vi.fn();
     render(<UseCasePortals onSelect={onSelect} />);
 
-    expect(screen.getByRole("heading", { name: /Try the custom widget/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Build a personalized campaign page/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Watch one build/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Content Magic/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Aprio|ServiceNow|Cisco Hybrid Mesh/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Northpeak account experience/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /example personalized campaign page/i })).toHaveAttribute(
-      "href",
-      "https://experience.folloze.com/northpeak-personalized-campaign-example"
-    );
+    expect(screen.getByRole("heading", { name: "Create a 1:1 account microsite" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Launch a campaign landing page" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Promote an event" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Turn content into an experience" })).toBeInTheDocument();
+    expect(screen.getByAltText(/event promotion page/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Build a personalized campaign page/i }));
-    expect(onSelect).toHaveBeenCalledWith("campaign", "campaign");
+    fireEvent.click(screen.getByRole("button", { name: /Build an account microsite/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Build a campaign page/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Build an event page/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Start Content Magic/i }));
+
+    expect(onSelect.mock.calls).toEqual([
+      ["abm", undefined],
+      ["campaign", "campaign"],
+      ["campaign", "event"],
+      ["content", undefined]
+    ]);
   });
 
   it("starts building Content Magic from its source without asking audience or goal questions", () => {
