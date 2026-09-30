@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/maintenance/lead-reconciliation",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/maintenance/trace-cleanup",

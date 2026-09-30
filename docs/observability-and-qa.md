@@ -102,6 +102,11 @@ reference so console-only evidence can still be located.
 
 ## Database migration and retention
 
+Lead reconciliation runs every 30 minutes at minutes 0 and 30. This lets Neon
+suspend between scans when there is no other traffic. Background recovery of a
+stuck claim can wait up to 30 minutes; the normal claim flow is unchanged.
+Upload cleanup remains every 15 minutes, and trace cleanup remains daily.
+
 The additive migration is
 [`db/migrations/008_create_try_me_traces.sql`](../db/migrations/008_create_try_me_traces.sql).
 The existing migration runner applies every unapplied numbered migration in
